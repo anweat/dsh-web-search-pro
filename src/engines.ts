@@ -7,6 +7,8 @@
 
 import type { WebSearchResult, WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web'
 import { httpGet, runCli, jsYaml, stripTags, capText, decodeRedirectUrl } from './util.ts'
+import type { PlaywrightManager } from './playwright.ts'
+import { PLATFORM_SEARCH_SPECS } from './platform-search.ts'
 
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
@@ -36,6 +38,8 @@ export interface EngineDeps {
   enableCli: boolean
   opencliEnabled: boolean
   agentReachEnabled: boolean
+  /** Browser manager for Playwright-driven platform search (Chinese communities). */
+  pw?: PlaywrightManager
   /** True when this call originates from the ctx.web provider (avoid seam recursion). */
   skipSeam: boolean
 }
@@ -407,6 +411,23 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
   }
 }
 
+// ── Chinese community search via Playwright (logged-in browser) ────────────
+
+export function playwrightPlatformEngine(platform: string, deps: EngineDeps): Engine {
+  const spec = PLATFORM_SEARCH_SPECS[platform]
+  return {
+    id: 'playwright-' + platform,
+    label: (spec?.label ?? platform) + ' (Playwright)',
+    available: () => !!spec && !!deps.pw,
+    async search(query, count, signal) {
+      if (!spec || !deps.pw) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      const sources = await deps.pw.searchResults(spec.url(query), spec, { signal, count })
+      if (!sources.length) throw new EngineError('no results on ' + spec.label + ' (login state or selectors may need updating)', 'ENGINE_EMPTY', false)
+      return { sources }
+    },
+  }
+}
+
 // ── RSS feed (platform tool) ────────────────────────────────────────────────
 
 export function rssEngine(url: string): Engine {
@@ -436,10 +457,17 @@ export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
     case 'reddit': return [opencliEngine('reddit', deps)]
     case 'instagram': return [opencliEngine('instagram', deps)]
     case 'facebook': return [opencliEngine('facebook', deps)]
+    // Chinese communities (MediaCrawler-style): Playwright drives the logged-in search page.
+    case 'zhihu': return [playwrightPlatformEngine('zhihu', deps)]
+    case 'weibo': return [playwrightPlatformEngine('weibo', deps)]
+    case 'douban': return [playwrightPlatformEngine('douban', deps)]
+    case 'tieba': return [playwrightPlatformEngine('tieba', deps)]
+    case 'douyin': return [playwrightPlatformEngine('douyin', deps)]
+    case 'kuaishou': return [playwrightPlatformEngine('kuaishou', deps)]
     default: return []
   }
 }
 
 export const SEARCH_ENGINE_IDS = ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube'] as const
-export const PLATFORM_IDS = ['github', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss'] as const
+export const PLATFORM_IDS = ['github', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou'] as const
 

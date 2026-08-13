@@ -5,6 +5,7 @@
  * @module web-search-pro/engines
  */
 import type { WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web';
+import type { PlaywrightManager } from './playwright.ts';
 export interface SearchOutcome {
     /** Provider-generated answer/summary text, when any. */
     content?: string;
@@ -29,6 +30,8 @@ export interface EngineDeps {
     enableCli: boolean;
     opencliEnabled: boolean;
     agentReachEnabled: boolean;
+    /** Browser manager for Playwright-driven platform search (Chinese communities). */
+    pw?: PlaywrightManager;
     /** True when this call originates from the ctx.web provider (avoid seam recursion). */
     skipSeam: boolean;
 }
@@ -45,8 +48,9 @@ export declare function v2exEngine(): Engine;
 export declare function youtubeEngine(deps: EngineDeps): Engine;
 export declare function opencliEngine(platform: string, deps: EngineDeps): Engine;
 export declare function agentReachEngine(platform: string, deps: EngineDeps): Engine;
+export declare function playwrightPlatformEngine(platform: string, deps: EngineDeps): Engine;
 export declare function rssEngine(url: string): Engine;
 /** Build the ordered engine list for a platform search. */
 export declare function platformEngines(platform: string, deps: EngineDeps): Engine[];
 export declare const SEARCH_ENGINE_IDS: readonly ["seam", "exa", "ddg", "bing", "jina", "github", "bilibili", "v2ex", "youtube"];
-export declare const PLATFORM_IDS: readonly ["github", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss"];
+export declare const PLATFORM_IDS: readonly ["github", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss", "zhihu", "weibo", "douban", "tieba", "douyin", "kuaishou"];

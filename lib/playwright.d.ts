@@ -10,6 +10,7 @@
  * @module web-search-pro/playwright
  */
 import type { ExtractRule } from './extract.ts';
+import { type PlatformSearchSpec } from './platform-search.ts';
 export interface PlaywrightConfig {
     enabled: boolean;
     headless: boolean;
@@ -51,4 +52,14 @@ export declare class PlaywrightManager {
         htmlPath: string;
         usedRule: string | undefined;
     }>;
+    /** Drive one platform's search page and extract its result list (Chinese communities). */
+    searchResults(url: string, spec: PlatformSearchSpec, opts: {
+        signal: AbortSignal | undefined;
+        count: number;
+        waitMs?: number;
+    }): Promise<{
+        url: string;
+        title: string;
+        snippet?: string;
+    }[]>;
 }

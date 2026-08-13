@@ -14,6 +14,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { resolvePlaywright, uid, capText } from './util.ts'
 import type { ExtractRule } from './extract.ts'
+import { searchPlatformResults, type PlatformSearchSpec } from './platform-search.ts'
 
 export interface PlaywrightConfig {
   enabled: boolean
@@ -143,6 +144,35 @@ export class PlaywrightManager {
       }
     } catch (error) {
       throw new Error('playwright snapshot failed for ' + url + ': ' + String(error).slice(0, 300))
+    } finally {
+      opts.signal?.removeEventListener('abort', onAbort)
+      await context.close().catch(() => {})
+    }
+  }
+
+  /** Drive one platform's search page and extract its result list (Chinese communities). */
+  async searchResults(
+    url: string,
+    spec: PlatformSearchSpec,
+    opts: { signal: AbortSignal | undefined; count: number; waitMs?: number },
+  ): Promise<{ url: string; title: string; snippet?: string }[]> {
+    const browser = await this.ensure()
+    const context = await browser.newContext(this.config.storageStatePath ? { storageState: this.config.storageStatePath } : {})
+    const page = await context.newPage()
+    const onAbort = () => void page.close().catch(() => {})
+    if (opts.signal?.aborted) onAbort()
+    else opts.signal?.addEventListener('abort', onAbort)
+    try {
+      page.setDefaultTimeout(25_000)
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {})
+      if (opts.waitMs) await page.waitForTimeout(opts.waitMs)
+      // scroll once to trigger lazy lists, then extract
+      await page.mouse?.wheel(0, 2000).catch(() => {})
+      await page.waitForTimeout(800)
+      return await searchPlatformResults(page, spec, opts.count)
+    } catch (error) {
+      throw new Error('playwright platform search failed for ' + url + ': ' + String(error).slice(0, 300))
     } finally {
       opts.signal?.removeEventListener('abort', onAbort)
       await context.close().catch(() => {})

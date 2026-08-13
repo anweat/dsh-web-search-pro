@@ -71,7 +71,7 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   // 4. Services.
-  const router = new SearchRouter(ctx, resolved, store, dynamic)
+  const router = new SearchRouter(ctx, resolved, store, dynamic, pw)
   const fetchSvc = new FetchService(store, dynamic, pw)
 
   // 5. Tools.

@@ -16,6 +16,7 @@ import {
 } from './engines.ts'
 import { normQuery, capText } from './util.ts'
 import { LruCache } from './memory-cache.ts'
+import type { PlaywrightManager } from './playwright.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -57,6 +58,7 @@ export class SearchRouter {
     private readonly config: ResolvedConfig,
     private readonly store: Store,
     private readonly dynamic: () => ResolvedConfig = () => config,
+    private readonly pw?: PlaywrightManager,
     private readonly memory = new LruCache<RouterSearchResult>(config.memoryCacheEntries),
   ) {}
 
@@ -85,6 +87,7 @@ export class SearchRouter {
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
+      ...this.pw !== undefined ? { pw: this.pw } : {},
       skipSeam,
     }
   }
@@ -102,6 +105,7 @@ export class SearchRouter {
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
+      ...this.pw !== undefined ? { pw: this.pw } : {},
       skipSeam,
     }
   }
