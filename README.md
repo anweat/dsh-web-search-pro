@@ -25,7 +25,7 @@ dsh --profile web
 |---|---|
 | `web_search_pro` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史 |
 | `web_fetch_pro` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存 |
-| `web_platform_search` | GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS |
+| `web_platform_search` | 16 平台：GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手（Playwright 登录态） |
 | `web_snapshot` | Playwright 全页截图 + HTML + 文本落盘 |
 | `web_history` / `web_cache_clear` / `web_search_stats` | 持久历史 / 清缓存 / 存储统计 |
 | `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove） |
@@ -63,7 +63,7 @@ dsh --profile web
 | agent-reach | agent-reach 后端 | `uv tool install agent-reach` / `pip install agent-reach` |
 | playwright | 渲染/截图后端 | `npm i -g playwright && playwright install chromium` |
 
-## 引擎
+## 平台与引擎
 
 `seam`（ctx.web/DeepSeek 原生）· `exa` · `ddg` · `bing` · `jina` · `github` · `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；`multi` 并行融合。
 
@@ -79,3 +79,4 @@ pnpm build        # tsc src → lib
 ## License
 
 MIT
+
