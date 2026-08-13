@@ -165,7 +165,9 @@ export function parseRss(xml: string, count = 20): WebSearchSource[] {
     }
     const linkMatch = /<link[^>]*href="([^"]+)"/i.exec(block) ?? /<link[^>]*>([\s\S]*?)<\/link>/i.exec(block)
     const title = grab('title')
-    const link = linkMatch ? (linkMatch[1] ?? stripTags(linkMatch[2] ?? '')) : undefined
+    // Atom feeds (arXiv) use <id> as the canonical URL.
+    const idMatch = /<id[^>]*>([\s\S]*?)<\/id>/i.exec(block)
+    const link = linkMatch ? (linkMatch[1] ?? stripTags(linkMatch[2] ?? '')) : (idMatch ? stripTags(idMatch[1] ?? '') : undefined)
     const description = grab('description') ?? grab('summary') ?? grab('content')
     const pubDate = grab('pubDate') ?? grab('published') ?? grab('updated')
     if (!link || !/^https?:\/\//i.test(link)) continue
@@ -413,6 +415,61 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
   }
 }
 
+// ── Academic verticals (public APIs, no login) ─────────────────────────────
+
+export function arxivEngine(): Engine {
+  return {
+    id: 'arxiv', label: 'arXiv',
+    available: () => true,
+    async search(query, count, signal) {
+      const res = await httpGet(
+        'http://export.arxiv.org/api/query?search_query=all:' + encodeURIComponent(query) + '&start=0&max_results=' + Math.min(count, 20),
+        { signal, timeoutMs: 30_000 },
+      )
+      if (!res.ok) throw new EngineError('arXiv HTTP ' + res.status, 'ENGINE_ERROR')
+      const sources = parseRss(res.text, count)
+      if (!sources.length) throw new EngineError('arXiv returned no results', 'ENGINE_EMPTY', true)
+      return { sources }
+    },
+  }
+}
+
+export function pubmedEngine(): Engine {
+  return {
+    id: 'pubmed', label: 'PubMed',
+    available: () => true,
+    async search(query, count, signal) {
+      const n = Math.min(Math.max(count, 1), 20)
+      const esearch = await httpGet(
+        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=' + encodeURIComponent(query) + '&retmax=' + n + '&retmode=json',
+        { signal, timeoutMs: 30_000 },
+      )
+      if (!esearch.ok) throw new EngineError('PubMed esearch HTTP ' + esearch.status, 'ENGINE_ERROR')
+      const ids: string[] = (JSON.parse(esearch.text) as any)?.esearchresult?.idlist ?? []
+      if (!ids.length) throw new EngineError('PubMed returned no results', 'ENGINE_EMPTY', true)
+      const sources: WebSearchSource[] = ids.map(id => ({ url: 'https://pubmed.ncbi.nlm.nih.gov/' + id + '/', title: 'PubMed ' + id }))
+      const esummary = await httpGet(
+        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=' + ids.join(','),
+        { signal, timeoutMs: 30_000 },
+      )
+      if (esummary.ok) {
+        const result = (JSON.parse(esummary.text) as any)?.result ?? {}
+        return {
+          sources: ids.map(id => {
+            const doc = result[id]
+            return {
+              url: 'https://pubmed.ncbi.nlm.nih.gov/' + id + '/',
+              ...doc?.title ? { title: String(doc.title) } : { title: 'PubMed ' + id },
+              ...doc?.pubdate ? { publishedAt: String(doc.pubdate) } : {},
+            }
+          }),
+        }
+      }
+      return { sources }
+    },
+  }
+}
+
 // ── Chinese community search via Playwright (logged-in browser) ────────────
 
 export function playwrightPlatformEngine(platform: string, deps: EngineDeps): Engine {
@@ -468,6 +525,8 @@ export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
     case 'instagram': return [opencliEngine('instagram', deps)]
     case 'facebook': return [opencliEngine('facebook', deps)]
     // Chinese communities (MediaCrawler-style): Playwright drives the logged-in search page.
+    case 'arxiv': return [arxivEngine()]
+    case 'pubmed': return [pubmedEngine()]
     case 'zhihu': return [playwrightPlatformEngine('zhihu', deps)]
     case 'weibo': return [playwrightPlatformEngine('weibo', deps)]
     case 'douban': return [playwrightPlatformEngine('douban', deps)]
@@ -478,6 +537,6 @@ export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
   }
 }
 
-export const SEARCH_ENGINE_IDS = ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube'] as const
-export const PLATFORM_IDS = ['github', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou'] as const
+export const SEARCH_ENGINE_IDS = ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed'] as const
+export const PLATFORM_IDS = ['github', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed'] as const
 

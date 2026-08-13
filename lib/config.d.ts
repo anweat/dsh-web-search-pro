@@ -12,6 +12,14 @@ export interface Config {
     memoryCacheEntries: number;
     /** Reciprocal Rank Fusion constant for multi-engine merging. */
     rrfConstant: number;
+    /** Max recency bonus added to a source's fusion score (0..1). */
+    freshnessBoost: number;
+    /** Days over which the recency bonus decays to zero. */
+    freshnessDays: number;
+    /** Max authority-domain bonus added to a source's fusion score (0..1). */
+    authorityBoost: number;
+    /** Extra authority domains (beyond the built-in .edu/.gov/.org and the curated list). */
+    authorityDomains: string[];
     /** Default cap on returned sources per search. */
     searchMaxResults: number;
     /** Cooperative per-call timeout budget in ms. */

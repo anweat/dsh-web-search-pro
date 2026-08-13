@@ -16,6 +16,14 @@ export interface Config {
   memoryCacheEntries: number
   /** Reciprocal Rank Fusion constant for multi-engine merging. */
   rrfConstant: number
+  /** Max recency bonus added to a source's fusion score (0..1). */
+  freshnessBoost: number
+  /** Days over which the recency bonus decays to zero. */
+  freshnessDays: number
+  /** Max authority-domain bonus added to a source's fusion score (0..1). */
+  authorityBoost: number
+  /** Extra authority domains (beyond the built-in .edu/.gov/.org and the curated list). */
+  authorityDomains: string[]
   /** Default cap on returned sources per search. */
   searchMaxResults: number
   /** Cooperative per-call timeout budget in ms. */
@@ -65,6 +73,10 @@ export const Config: z<Config> = z.object({
   ttlSeconds: z.number().default(3600),
   memoryCacheEntries: z.number().default(128),
   rrfConstant: z.number().default(60),
+  freshnessBoost: z.number().default(0.2),
+  freshnessDays: z.number().default(30),
+  authorityBoost: z.number().default(0.25),
+  authorityDomains: z.array(z.string()).default([]),
   searchMaxResults: z.number().default(8),
   timeoutMs: z.number().default(30_000),
   engines: z.array(z.string()).default(['ddg', 'bing', 'exa', 'seam', 'jina']),

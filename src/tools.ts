@@ -319,12 +319,13 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_rule',
-    description: 'Manage persistent per-site extraction rules (userscript-style): contentSelectors and removeSelectors applied when fetching/snapshotting pages from that hostname. Rules survive restarts in SQLite and override built-ins.',
+    description: 'Manage persistent per-site extraction rules (userscript-style): contentSelectors and removeSelectors applied when fetching/snapshotting pages from that hostname. Rules survive restarts in SQLite and override built-ins. Supports list/upsert/remove plus export/import as a JSON rule pack.',
     parameters: {
-      action: { type: 'string', required: true, description: 'list, upsert, or remove.' },
+      action: { type: 'string', required: true, description: 'list, upsert, remove, export, or import.' },
       hostname: { type: 'string', description: 'Site hostname, e.g. example.com (required for upsert/remove).' },
       contentSelectors: { type: 'string', description: 'Comma-separated CSS selectors for the main content (upsert).' },
       removeSelectors: { type: 'string', description: 'Comma-separated CSS selectors to remove before extraction (upsert).' },
+      rulesJson: { type: 'string', description: 'JSON array of {hostname, content, remove?} rules to import (action=import).' },
     },
     output: {
       schema: {
@@ -348,10 +349,23 @@ export function registerTools(deps: ToolDeps): void {
     },
     timeoutMs: 10_000,
     async execute(args) {
-      const action = args.action as 'list' | 'upsert' | 'remove'
-      if (!['list', 'upsert', 'remove'].includes(action)) throw new Error('action must be list, upsert, or remove')
-      if (action === 'list') {
+      const action = args.action as 'list' | 'upsert' | 'remove' | 'export' | 'import'
+      if (!['list', 'upsert', 'remove', 'export', 'import'].includes(action)) throw new Error('action must be list, upsert, remove, export, or import')
+      if (action === 'list' || action === 'export') {
         return { rules: store.listRules().map(r => ({ hostname: r.hostname, content: r.content, ...r.remove ? { remove: r.remove } : {} })) }
+      }
+      if (action === 'import') {
+        if (!args.rulesJson) throw new Error('rulesJson is required for import')
+        let parsed: unknown
+        try { parsed = JSON.parse(args.rulesJson) } catch { throw new Error('rulesJson is not valid JSON') }
+        if (!Array.isArray(parsed)) throw new Error('rulesJson must be a JSON array')
+        let count = 0
+        for (const item of parsed as { hostname?: string; content?: string; remove?: string }[]) {
+          if (typeof item?.hostname !== 'string' || typeof item?.content !== 'string') continue
+          store.upsertRule(item.hostname, item.content, item.remove)
+          count++
+        }
+        return { message: 'Imported ' + count + ' rules', rules: store.listRules().map(r => ({ hostname: r.hostname, content: r.content, ...r.remove ? { remove: r.remove } : {} })) }
       }
       if (!args.hostname) throw new Error('hostname is required for ' + action)
       if (action === 'upsert') {

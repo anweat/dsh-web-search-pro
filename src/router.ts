@@ -11,8 +11,8 @@ import type { Store } from './store.ts'
 import type { ResolvedConfig } from './config.ts'
 import {
   seamEngine, exaEngine, ddgEngine, bingEngine, jinaSearchEngine, githubEngine,
-  bilibiliEngine, v2exEngine, youtubeEngine, platformEngines, rssEngine, EngineError,
-  type Engine, type EngineDeps, type SearchOutcome,
+  bilibiliEngine, v2exEngine, youtubeEngine, arxivEngine, pubmedEngine, platformEngines,
+  rssEngine, EngineError, type Engine, type EngineDeps, type SearchOutcome,
 } from './engines.ts'
 import { normQuery, capText } from './util.ts'
 import { LruCache } from './memory-cache.ts'
@@ -50,6 +50,8 @@ const ENGINE_FACTORIES: Record<string, (deps: any, config: ResolvedConfig) => En
   bilibili: (deps) => bilibiliEngine(deps),
   v2ex: () => v2exEngine(),
   youtube: (deps) => youtubeEngine(deps),
+  arxiv: () => arxivEngine(),
+  pubmed: () => pubmedEngine(),
 }
 
 export class SearchRouter {
@@ -183,18 +185,38 @@ export class SearchRouter {
         return { id, outcome: await engine.search(query, count, signal) }
       }))
       enginesTried.push(...ids)
-      // Reciprocal Rank Fusion: each engine's rank order contributes
-      // 1/(k + rank); sources are ranked by summed score, so a source highly
-      // ranked by several engines beats one ranked by a single engine.
+      // Reciprocal Rank Fusion + freshness/authority signals (Argo-style
+      // evidence credibility): each engine's rank order contributes 1/(k+rank);
+      // recency and authoritative domains add a bounded bonus so a recent,
+      // trustworthy source can edge out an older, lower-authority one.
       const k = Math.max(cfg.rrfConstant, 1)
       const scores = new Map<string, number>()
       const entries = new Map<string, { url: string; title?: string; snippet?: string; publishedAt?: string }>()
+      const freshnessBoost = Math.min(Math.max(cfg.freshnessBoost, 0), 1)
+      const authorityBoost = Math.min(Math.max(cfg.authorityBoost, 0), 1)
+      const freshnessDays = Math.max(cfg.freshnessDays, 1)
+      const authorityDomains = [...cfg.authorityDomains, 'github.com', 'wikipedia.org', 'arxiv.org', 'pubmed.ncbi.nlm.nih.gov', 'stackoverflow.com', 'developer.mozilla.org']
       for (const r of results) {
         if (r.status !== 'fulfilled') continue
         r.value.outcome.sources.forEach((s, rank) => {
           if (!s.url) return
-          const score = scores.get(s.url) ?? 0
-          scores.set(s.url, score + 1 / (k + rank + 1))
+          let score = scores.get(s.url) ?? 0
+          score += 1 / (k + rank + 1)
+          if (freshnessBoost > 0 && s.publishedAt) {
+            const published = Date.parse(s.publishedAt)
+            if (!Number.isNaN(published)) {
+              const ageDays = (Date.now() - published) / 86400_000
+              if (ageDays >= 0) score += freshnessBoost * Math.max(0, 1 - ageDays / freshnessDays)
+            }
+          }
+          if (authorityBoost > 0) {
+            let host = ''
+            try { host = new URL(s.url).hostname.toLowerCase() } catch { /* ignore */ }
+            const isAuthority = authorityDomains.some(d => host === d || host.endsWith('.' + d))
+              || /(^|\.)(edu|gov|org)$/.test(host)
+            if (isAuthority) score += authorityBoost
+          }
+          scores.set(s.url, score)
           if (!entries.has(s.url)) {
             entries.set(s.url, { url: s.url, ...s.title ? { title: s.title } : {}, ...s.snippet ? { snippet: s.snippet } : {}, ...s.publishedAt ? { publishedAt: s.publishedAt } : {} })
           }

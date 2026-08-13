@@ -269,11 +269,14 @@ bundle 行按包 main 解析到 lib）。我只改了 `api-proxy.ts` 源码、�
 - [x] 内存 LRU 缓存层（7.3.2）
 - [x] web_deps 依赖检测/安装工具（7.3.3）
 - [x] 设置卡内配置页（7.3.4）
-- [ ] freshness/权威域打分（在 RRF 之上）
-- [ ] 打包为 npm bundle（`dsh.bundle` manifest）走 `dsh plugin add` 分发
-- [ ] 搜索历史/缓存管理 Web 面板（slot 系统）
-- [ ] 更多垂直源：知乎/豆瓣/雪球/学术（arXiv/PubMed）/代码（GitHub code search API）
-- [ ] `web_rule` 升级为"规则包"（按站点导入/导出 JSON）
+- [x] 中文社区平台搜索（7.3.4.2）+ 登录态复用 + 选择器可配置（7.3.4.3）
+- [x] freshness/权威域打分（RRF 之上；`freshnessBoost/freshnessDays/authorityBoost/authorityDomains`）
+- [x] 更多垂直源：学术 arXiv（Atom API）/ PubMed（E-utilities，已实测）
+- [x] `web_rule` 升级为"规则包"（export/import JSON）
+- [x] npm bundle 分发（<https://github.com/anweat/dsh-web-search-pro>）
+- [ ] 发布到 npm registry（需 npm 账号/token，待确认）
+- [ ] 搜索历史/缓存管理 Web 面板（client 插件 slot）
+- [ ] 更多垂直源：雪球（需 cookie）/ GitHub code search（gh search code）/ 豆瓣读书电影
 - [ ] 卡片内"安装"按钮（需 @Remote+typert+apiproxy 放行，见 7.3.3）
 
 ---
