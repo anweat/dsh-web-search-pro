@@ -1,0 +1,28 @@
+{
+  // Build config: compiles src/ (TS, .ts-relative imports) to lib/ (ESM JS + .d.ts).
+  // @deepseek-ai/* stay bare specifiers and resolve at runtime from the installed
+  // dependencies (Cordis brands are global-symbol keyed, so a plugin's own copies
+  // interoperate with the harness's copies by design).
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "lib",
+    "rootDir": "src",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": false,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
