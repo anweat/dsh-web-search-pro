@@ -80,3 +80,14 @@ pnpm build        # tsc src → lib
 
 MIT
 
+
+## 中文社区平台登录态
+
+zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都被风控，
+所以走 **Playwright 驱动登录态浏览器**（借鉴 MediaCrawler 思路、MIT 独立实现，未用其签名算法）：
+
+1. 登录一次保存登录态：`node scripts/save-login.mjs all login-state.json`
+2. 在 `$DSH_HOME/settings.yaml` 里设 `playwright.storageStatePath`
+3. 站点改版时无需改代码，用 `platformRules` 按平台覆盖结果选择器
+
+详见 [LOGIN.md](./LOGIN.md)。
