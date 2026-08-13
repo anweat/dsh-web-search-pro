@@ -50,6 +50,8 @@ export declare function bingEngine(): Engine;
 export declare function parseRss(xml: string, count?: number): WebSearchSource[];
 export declare function jinaSearchEngine(deps: EngineDeps): Engine;
 export declare function githubEngine(deps: EngineDeps): Engine;
+export declare function githubCodeEngine(deps: EngineDeps): Engine;
+export declare function githubIssuesEngine(deps: EngineDeps): Engine;
 export declare function bilibiliEngine(deps: EngineDeps): Engine;
 export declare function v2exEngine(): Engine;
 export declare function youtubeEngine(deps: EngineDeps): Engine;
@@ -62,4 +64,4 @@ export declare function rssEngine(url: string): Engine;
 /** Build the ordered engine list for a platform search. */
 export declare function platformEngines(platform: string, deps: EngineDeps): Engine[];
 export declare const SEARCH_ENGINE_IDS: readonly ["seam", "exa", "ddg", "bing", "jina", "github", "bilibili", "v2ex", "youtube", "arxiv", "pubmed"];
-export declare const PLATFORM_IDS: readonly ["github", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss", "zhihu", "weibo", "douban", "tieba", "douyin", "kuaishou", "arxiv", "pubmed"];
+export declare const PLATFORM_IDS: readonly ["github", "github-code", "github-issues", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss", "zhihu", "weibo", "douban", "tieba", "douyin", "kuaishou", "arxiv", "pubmed"];

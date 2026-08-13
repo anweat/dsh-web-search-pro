@@ -249,6 +249,44 @@ export function githubEngine(deps: EngineDeps): Engine {
   }
 }
 
+// ── GitHub code / issues search (gh CLI) ────────────────────────────────────
+
+export function githubCodeEngine(deps: EngineDeps): Engine {
+  return {
+    id: 'github-code', label: 'GitHub 代码',
+    available: () => deps.enableCli,
+    async search(query, count, signal) {
+      const res = await runCli('gh', ['search', 'code', query, '--limit', String(Math.min(count, 15)), '--json', 'repository,path,url'], { timeoutMs: 30_000, signal })
+      if (res.code !== 0) throw new EngineError('gh code search failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
+      const rows = JSON.parse(res.stdout) as { path?: string; repository?: { nameWithOwner?: string }; url?: string }[]
+      const sources: WebSearchSource[] = rows.map(r => ({
+        url: r.url ?? '',
+        ...(r.path && r.repository?.nameWithOwner) ? { title: r.repository.nameWithOwner + ' / ' + r.path } : { title: r.path ?? 'code match' },
+        ...r.repository?.nameWithOwner ? { snippet: '仓库: ' + r.repository.nameWithOwner } : {},
+      })).filter(s => /^https?:\/\//i.test(s.url))
+      return { sources }
+    },
+  }
+}
+
+export function githubIssuesEngine(deps: EngineDeps): Engine {
+  return {
+    id: 'github-issues', label: 'GitHub Issues',
+    available: () => deps.enableCli,
+    async search(query, count, signal) {
+      const res = await runCli('gh', ['search', 'issues', query, '--limit', String(Math.min(count, 15)), '--json', 'repository,title,url,state,commentsCount'], { timeoutMs: 30_000, signal })
+      if (res.code !== 0) throw new EngineError('gh issue search failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
+      const rows = JSON.parse(res.stdout) as { title?: string; url?: string; state?: string; repository?: { nameWithOwner?: string }; commentsCount?: number }[]
+      const sources: WebSearchSource[] = rows.map(r => ({
+        url: r.url ?? '',
+        ...r.title ? { title: r.title } : {},
+        ...(r.state || r.repository?.nameWithOwner) ? { snippet: '[' + (r.state ?? '') + ']' + (r.repository?.nameWithOwner ? ' · ' + r.repository.nameWithOwner : '') } : {},
+      })).filter(s => /^https?:\/\//i.test(s.url))
+      return { sources }
+    },
+  }
+}
+
 // ── Bilibili (bili CLI) ─────────────────────────────────────────────────────
 
 export function bilibiliEngine(deps: EngineDeps): Engine {
@@ -516,6 +554,8 @@ export function rssEngine(url: string): Engine {
 export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
   switch (platform) {
     case 'github': return [githubEngine(deps)]
+    case 'github-code': return [githubCodeEngine(deps)]
+    case 'github-issues': return [githubIssuesEngine(deps)]
     case 'bilibili': return [bilibiliEngine(deps)]
     case 'youtube': return [youtubeEngine(deps)]
     case 'v2ex': return [v2exEngine()]
@@ -538,5 +578,5 @@ export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
 }
 
 export const SEARCH_ENGINE_IDS = ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed'] as const
-export const PLATFORM_IDS = ['github', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed'] as const
+export const PLATFORM_IDS = ['github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed'] as const
 

@@ -25,7 +25,7 @@ dsh --profile web
 |---|---|
 | `web_search_pro` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史 |
 | `web_fetch_pro` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存 |
-| `web_platform_search` | 16 平台：GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手（Playwright 登录态） |
+| `web_platform_search` | 20 平台：GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手（Playwright 登录态） |
 | `web_snapshot` | Playwright 全页截图 + HTML + 文本落盘 |
 | `web_history` / `web_cache_clear` / `web_search_stats` | 持久历史 / 清缓存 / 存储统计 |
 | `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove） |
@@ -91,3 +91,4 @@ zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都�
 3. 站点改版时无需改代码，用 `platformRules` 按平台覆盖结果选择器
 
 详见 [LOGIN.md](./LOGIN.md)。
+

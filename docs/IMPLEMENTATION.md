@@ -272,11 +272,12 @@ bundle 行按包 main 解析到 lib）。我只改了 `api-proxy.ts` 源码、�
 - [x] 中文社区平台搜索（7.3.4.2）+ 登录态复用 + 选择器可配置（7.3.4.3）
 - [x] freshness/权威域打分（RRF 之上；`freshnessBoost/freshnessDays/authorityBoost/authorityDomains`）
 - [x] 更多垂直源：学术 arXiv（Atom API）/ PubMed（E-utilities，已实测）
+- [x] 更多垂直源：GitHub 代码（gh search code）/ GitHub issues（gh search issues，已实测）
 - [x] `web_rule` 升级为"规则包"（export/import JSON）
 - [x] npm bundle 分发（<https://github.com/anweat/dsh-web-search-pro>）
 - [ ] 发布到 npm registry（需 npm 账号/token，待确认）
 - [ ] 搜索历史/缓存管理 Web 面板（client 插件 slot）
-- [ ] 更多垂直源：雪球（需 cookie）/ GitHub code search（gh search code）/ 豆瓣读书电影
+- [ ] 更多垂直源：雪球（需 cookie）/ 豆瓣读书电影（JS 渲染，需 playwright 登录态细化）
 - [ ] 卡片内"安装"按钮（需 @Remote+typert+apiproxy 放行，见 7.3.3）
 
 ---
