@@ -32,6 +32,13 @@ export interface EngineDeps {
     agentReachEnabled: boolean;
     /** Browser manager for Playwright-driven platform search (Chinese communities). */
     pw?: PlaywrightManager;
+    /** Per-platform selector overrides (settings.yaml `platformRules`). */
+    platformRules?: Record<string, {
+        item: string;
+        title: string;
+        link: string;
+        text?: string;
+    }>;
     /** True when this call originates from the ctx.web provider (avoid seam recursion). */
     skipSeam: boolean;
 }

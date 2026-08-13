@@ -38,6 +38,13 @@ export interface Config {
     providerId: string;
     /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
     registerProvider: boolean;
+    /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
+    platformRules?: Record<string, {
+        item: string;
+        title: string;
+        link: string;
+        text?: string;
+    }>;
     /** Playwright rendering options. */
     playwright: {
         enabled: boolean;

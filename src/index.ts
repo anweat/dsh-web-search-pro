@@ -113,7 +113,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({
     name: 'tool:web-search-pro',
     order: 112,
-    text: 'For web research prefer the persistent enhanced tools: web_search_pro (multi-engine search with caching and history), web_platform_search (GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS…), web_fetch_pro (readable extraction with per-site rules), and web_snapshot (headless-browser capture). Cite the relevant URLs as markdown links in your answer. Before relying on a platform backend, run web_deps action=check to see which external CLIs are installed.',
+    text: 'For web research prefer the persistent enhanced tools: web_search_pro (multi-engine search with caching and history), web_platform_search (GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS/知乎/微博/豆瓣/贴吧/抖音/快手…), web_fetch_pro (readable extraction with per-site rules), and web_snapshot (headless-browser capture). Cite the relevant URLs as markdown links in your answer. Before relying on a platform backend, run web_deps action=check to see which external CLIs are installed. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) need the user to log in once to reuse their browser login state — if they return no results, tell the user to run scripts/save-login.mjs and set playwright.storageStatePath.',
   })
 
   // 7. Apply marker for diagnostics (proves live registration).

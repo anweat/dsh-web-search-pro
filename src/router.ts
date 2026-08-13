@@ -88,6 +88,7 @@ export class SearchRouter {
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
       ...this.pw !== undefined ? { pw: this.pw } : {},
+      ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
       skipSeam,
     }
   }
@@ -106,6 +107,7 @@ export class SearchRouter {
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
       ...this.pw !== undefined ? { pw: this.pw } : {},
+      ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
       skipSeam,
     }
   }

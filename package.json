@@ -11,7 +11,7 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
-  "files": ["lib", "cordis.patch.yml", "README.md", "LICENSE"],
+  "files": ["lib", "cordis.patch.yml", "README.md", "LOGIN.md", "scripts", "LICENSE"],
   "engines": { "node": "^22.19 || >=24" },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -40,6 +40,8 @@ export interface EngineDeps {
   agentReachEnabled: boolean
   /** Browser manager for Playwright-driven platform search (Chinese communities). */
   pw?: PlaywrightManager
+  /** Per-platform selector overrides (settings.yaml `platformRules`). */
+  platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
   /** True when this call originates from the ctx.web provider (avoid seam recursion). */
   skipSeam: boolean
 }
@@ -414,15 +416,23 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
 // ── Chinese community search via Playwright (logged-in browser) ────────────
 
 export function playwrightPlatformEngine(platform: string, deps: EngineDeps): Engine {
-  const spec = PLATFORM_SEARCH_SPECS[platform]
+  const builtin = PLATFORM_SEARCH_SPECS[platform]
   return {
     id: 'playwright-' + platform,
-    label: (spec?.label ?? platform) + ' (Playwright)',
-    available: () => !!spec && !!deps.pw,
+    label: (builtin?.label ?? platform) + ' (Playwright)',
+    available: () => !!builtin && !!deps.pw,
     async search(query, count, signal) {
-      if (!spec || !deps.pw) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      if (!builtin || !deps.pw) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      const override = deps.platformRules?.[platform]
+      const spec = { ...builtin, ...override ?? {} } as typeof builtin
       const sources = await deps.pw.searchResults(spec.url(query), spec, { signal, count })
-      if (!sources.length) throw new EngineError('no results on ' + spec.label + ' (login state or selectors may need updating)', 'ENGINE_EMPTY', false)
+      if (!sources.length) {
+        throw new EngineError(
+          builtin.label + ' 未取到结果：该平台需要浏览器登录态（复用你已登录的浏览器）。运行 node scripts/save-login.mjs 登录一次并设置 playwright.storageStatePath；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
+          'ENGINE_EMPTY',
+          false,
+        )
+      }
       return { sources }
     },
   }

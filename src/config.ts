@@ -42,6 +42,8 @@ export interface Config {
   providerId: string
   /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
   registerProvider: boolean
+  /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
+  platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
   /** Playwright rendering options. */
   playwright: {
     enabled: boolean
@@ -76,6 +78,12 @@ export const Config: z<Config> = z.object({
   agentReachEnabled: z.boolean().default(true),
   providerId: z.string().default('web-search-pro'),
   registerProvider: z.boolean().default(false),
+  platformRules: z.dict(z.object({
+    item: z.string(),
+    title: z.string(),
+    link: z.string(),
+    text: z.string(),
+  })),
   playwright: z.object({
     enabled: z.boolean().default(true),
     headless: z.boolean().default(true),
