@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { SearchRouter } from './router.ts';
 import type { FetchService } from './fetch.ts';
 import type { Store } from './store.ts';
-import type { PlaywrightManager } from './playwright.ts';
+import type { BrowserService } from './browser-service.ts';
 import type { ResolvedConfig } from './config.ts';
 export interface ToolDeps {
     ctx: Context;
@@ -17,7 +17,7 @@ export interface ToolDeps {
     store: Store;
     router: SearchRouter;
     fetch: FetchService;
-    pw: PlaywrightManager;
+    browser: BrowserService;
 }
 export declare function formatSources(sources: {
     url: string;

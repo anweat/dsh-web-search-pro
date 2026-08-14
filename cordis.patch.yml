@@ -1,11 +1,20 @@
-# dsh-web-search-pro bundle patch — installs the plugin as one more row over
-# the active profile. Install with:
-#   dsh plugin --profile <name> add dsh-web-search-pro
-# then boot the profile (the web profile has HMR disabled, so a restart applies it).
+# dsh-web-search-pro bundle patch.
 #
-# Live-config: the $DSH_HOME/settings.yaml `web-search-pro:` section overlays
-# this entry without a reload (keys / engines / ttl / maxResults).
+# Install (self-contained — also pulls in dsh-browser as a dependency):
+#   dsh plugin --profile <name> add dsh-web-search-pro
+#
+# The patch inserts BOTH rows: browser (the dsh-browser runtime this plugin
+# injects) and web-search-pro. dsh-browser is declared as a regular
+# dependency in package.json, so pnpm installs it; because dsh plugin
+# reconcile only auto-mounts DIRECT dependencies' patches, the parent plugin
+# inserts the child's row here so one command activates both.
 - insert:
+    - id: browser
+      name: dsh-browser
+      config:
+        channel: chromium
+        headless: true
+        opencliEnabled: true
     - id: web-search-pro
       name: dsh-web-search-pro
       config:

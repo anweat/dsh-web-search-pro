@@ -7,13 +7,14 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add dsh-web-search-pro
+dsh plugin --profile web add dsh-web-search-pro   # 自动装 dsh-browser（dependency）+ 自动挂载 browser 行（本 patch）
 # 或本地目录 / tarball：
 dsh plugin --profile web add ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
 dsh --profile web
 ```
 
+> dsh-browser 需先发布到 npm（本地测试可用 `dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro` 一条命令显式列两个）。
 > 依赖 `@deepseek-ai/*` 已发布到 npm（`^0.1.0-rc.6`，与社区 dsh-cc-tui 一致）。
 > 若你的 harness 是本地源码 checkout（如 `0.1.0-rc.5`），版本号可能有出入——用
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
@@ -119,3 +120,4 @@ web_platform_search 就能直接搜它——不需要改代码：
           title: '.thread-title a'
           link: '.thread-title a'
           cookie: 'sessionid=abc123; csrftoken=xyz'
+

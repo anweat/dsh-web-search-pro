@@ -9,7 +9,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { SearchRouter } from './router.ts'
 import type { FetchService } from './fetch.ts'
 import type { Store } from './store.ts'
-import type { PlaywrightManager } from './playwright.ts'
+import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig } from './config.ts'
 import { mergedRules } from './fetch.ts'
 import { SEARCH_ENGINE_IDS, PLATFORM_IDS } from './engines.ts'
@@ -23,7 +23,7 @@ export interface ToolDeps {
   store: Store
   router: SearchRouter
   fetch: FetchService
-  pw: PlaywrightManager
+  browser: BrowserService
 }
 
 function sourceLine(s: { url: string; title?: string; snippet?: string; publishedAt?: string }): string {
@@ -45,7 +45,7 @@ export function formatSources(sources: { url: string; title?: string; snippet?: 
 }
 
 export function registerTools(deps: ToolDeps): void {
-  const { ctx, config, dynamic, store, router, fetch: fetchSvc, pw } = deps
+  const { ctx, config, dynamic, store, router, fetch: fetchSvc, browser } = deps
 
   ctx.tools.register(defineTool({
     name: 'web_search_pro',
@@ -153,7 +153,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_platform_search',
-    description: 'Search a specific platform: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set playwright.storageStatePath), and selectors are tunable via settings.yaml platformRules. Results are persisted to the search history.',
+    description: 'Search a specific platform: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set the dsh-browser storageStatePath), and selectors are tunable via settings.yaml platformRules. Results are persisted to the search history.',
     parameters: {
       platform: { type: 'string', required: true, description: 'Platform: ' + PLATFORM_IDS.join(', ') + '.' },
       query: { type: 'string', required: true, description: 'The search query (feed URL for rss).' },
@@ -217,7 +217,7 @@ export function registerTools(deps: ToolDeps): void {
     timeoutMs: config.timeoutMs + 60_000,
     async execute(args, exec) {
       const rules = mergedRules(store)
-      const shot = await pw.snapshot(args.url, rules, {
+      const shot = await browser.snapshot(args.url, rules, {
         signal: exec.signal,
         outDir: config.playwright.snapshotDir,
       })
@@ -470,10 +470,10 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_deps',
-    description: 'Detect or install the external tools this plugin shells out to (gh, bili, yt-dlp, opencli, agent-reach, mcporter, playwright). check reports which are present and how to install them; install runs the package-manager command for one backend. Prefer check first; install only when the user asks.',
+    description: 'Detect or install the external tools this plugin shells out to (gh, bili, yt-dlp, agent-reach, mcporter). Playwright/chromium and opencli are bundled in the dsh-browser plugin, not listed here. check reports which are present and how to install them; install runs the package-manager command for one backend. Prefer check first; install only when the user asks.',
     parameters: {
       action: { type: 'string', required: true, description: 'check (default) or install.' },
-      backend: { type: 'string', description: 'Dependency id to install (gh, bili, yt-dlp, opencli, agent-reach, mcporter, playwright).' },
+      backend: { type: 'string', description: 'Dependency id to install (gh, bili, yt-dlp, agent-reach, mcporter).' },
       installer: { type: 'string', description: 'Package manager: winget, choco, uv, pipx, pip, or npm.' },
     },
     output: {
@@ -526,9 +526,7 @@ function defaultInstallerFor(backend: string): string {
     case 'bili': return 'uv'
     case 'yt-dlp': return 'uv'
     case 'agent-reach': return 'uv'
-    case 'opencli': return 'npm'
     case 'mcporter': return 'npm'
-    case 'playwright': return 'npm'
     default: throw new Error('unknown backend: ' + backend)
   }
 }

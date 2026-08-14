@@ -8,7 +8,7 @@ import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
 import { LruCache } from './memory-cache.ts';
-import type { PlaywrightManager } from './playwright.ts';
+import type { BrowserService } from './browser-service.ts';
 export interface RouterSearchOptions {
     query: string;
     /** Engine ids to try, in order. Defaults to config.engines. */
@@ -39,9 +39,9 @@ export declare class SearchRouter {
     private readonly config;
     private readonly store;
     private readonly dynamic;
-    private readonly pw?;
+    private readonly browser?;
     private readonly memory;
-    constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, pw?: PlaywrightManager | undefined, memory?: LruCache<RouterSearchResult>);
+    constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | undefined, memory?: LruCache<RouterSearchResult>);
     /** Resolve a key through credentials first, then process env. */
     private resolveKey;
     private deps;

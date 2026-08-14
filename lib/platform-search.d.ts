@@ -32,9 +32,3 @@ export declare function parseCookieString(cookie: string, url: string): {
     domain: string;
     path: string;
 }[];
-/** Drive one platform's search page and extract results. */
-export declare function searchPlatformResults(page: any, spec: PlatformSearchSpec, count: number): Promise<{
-    url: string;
-    title: string;
-    snippet?: string;
-}[]>;

@@ -5,7 +5,7 @@
  * @module web-search-pro/engines
  */
 import type { WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web';
-import type { PlaywrightManager } from './playwright.ts';
+import type { BrowserService } from './browser-service.ts';
 import type { CustomPlatformSpec } from './config.ts';
 export interface SearchOutcome {
     /** Provider-generated answer/summary text, when any. */
@@ -31,8 +31,8 @@ export interface EngineDeps {
     enableCli: boolean;
     opencliEnabled: boolean;
     agentReachEnabled: boolean;
-    /** Browser manager for Playwright-driven platform search (Chinese communities). */
-    pw?: PlaywrightManager;
+    /** Browser service (dsh-browser) for Playwright platform search + bundled opencli. */
+    browser?: BrowserService;
     /** Per-platform selector overrides (settings.yaml `platformRules`). */
     platformRules?: Record<string, {
         item: string;

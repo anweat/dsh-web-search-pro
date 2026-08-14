@@ -6,7 +6,7 @@
 
 import type { Store } from './store.ts'
 import type { ResolvedConfig } from './config.ts'
-import type { PlaywrightManager } from './playwright.ts'
+import type { BrowserService } from './browser-service.ts'
 import type { ExtractRule } from './extract.ts'
 import { extractText, BUILTIN_RULES } from './extract.ts'
 import { httpGet, capText } from './util.ts'
@@ -63,7 +63,7 @@ export class FetchService {
   constructor(
     private readonly store: Store,
     private readonly config: ResolvedConfig | (() => ResolvedConfig),
-    private readonly pw: PlaywrightManager,
+    private readonly browser: BrowserService,
   ) {}
 
   private cfg(): ResolvedConfig {
@@ -184,7 +184,7 @@ export class FetchService {
   }
 
   private async fetchPlaywright(url: string, opts: FetchOptions, maxChars: number, rules: ExtractRule[]): Promise<FetchResult> {
-    const rendered = await this.pw.render(url, rules, { signal: opts.signal, maxChars })
+    const rendered = await this.browser.render(url, rules, { signal: opts.signal, maxChars })
     return {
       url,
       ...rendered.title ? { title: rendered.title } : {},

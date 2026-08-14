@@ -67,16 +67,10 @@ export interface Config {
     }>;
     /** User-defined custom platform search: url template + selectors + optional cookie. */
     customPlatforms?: Record<string, CustomPlatformSpec>;
-    /** Playwright rendering options. */
+    /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
     playwright: {
+        /** Gate the playwright fallback backend in web_fetch_pro. */
         enabled: boolean;
-        headless: boolean;
-        /** 'chromium' | 'msedge' */
-        channel: string;
-        /** Path to a Playwright storageState JSON (persisted login state). */
-        storageStatePath?: string;
-        /** Explicit playwright module path (defaults to global npm root). */
-        modulePath?: string;
         /** Directory for web_snapshot artifacts; defaults to <dbDir>/snapshots. */
         snapshotDir?: string;
     };
@@ -89,10 +83,7 @@ export interface ResolvedConfig extends Config {
     exaApiKeyEnv: string;
     jinaApiKey?: string;
     jinaApiKeyEnv: string;
-    playwright: Required<Pick<Config['playwright'], 'enabled' | 'headless' | 'channel' | 'snapshotDir'>> & {
-        storageStatePath?: string;
-        modulePath?: string;
-    };
+    playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
 }
 /** Default database path under the harness home. */
 export declare function defaultDbPath(): string;

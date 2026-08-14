@@ -67,16 +67,10 @@ export interface Config {
   platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
   /** User-defined custom platform search: url template + selectors + optional cookie. */
   customPlatforms?: Record<string, CustomPlatformSpec>
-  /** Playwright rendering options. */
+  /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
   playwright: {
+    /** Gate the playwright fallback backend in web_fetch_pro. */
     enabled: boolean
-    headless: boolean
-    /** 'chromium' | 'msedge' */
-    channel: string
-    /** Path to a Playwright storageState JSON (persisted login state). */
-    storageStatePath?: string
-    /** Explicit playwright module path (defaults to global npm root). */
-    modulePath?: string
     /** Directory for web_snapshot artifacts; defaults to <dbDir>/snapshots. */
     snapshotDir?: string
   }
@@ -122,10 +116,6 @@ export const Config: z<Config> = z.object({
   })),
   playwright: z.object({
     enabled: z.boolean().default(true),
-    headless: z.boolean().default(true),
-    channel: z.string().default('msedge'),
-    storageStatePath: z.string(),
-    modulePath: z.string(),
     snapshotDir: z.string(),
   }),
   verbose: z.boolean().default(false),
@@ -137,10 +127,7 @@ export interface ResolvedConfig extends Config {
   exaApiKeyEnv: string
   jinaApiKey?: string
   jinaApiKeyEnv: string
-  playwright: Required<Pick<Config['playwright'], 'enabled' | 'headless' | 'channel' | 'snapshotDir'>> & {
-    storageStatePath?: string
-    modulePath?: string
-  }
+  playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
 }
 
 /** Default database path under the harness home. */
@@ -161,11 +148,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     jinaApiKeyEnv: config.jinaApiKeyEnv ?? 'JINA_API_KEY',
     playwright: {
       enabled: pw.enabled ?? true,
-      headless: pw.headless ?? true,
-      channel: pw.channel ?? 'msedge',
       snapshotDir,
-      ...pw.storageStatePath !== undefined ? { storageStatePath: pw.storageStatePath } : {},
-      ...pw.modulePath !== undefined ? { modulePath: pw.modulePath } : {},
     },
   }
 }

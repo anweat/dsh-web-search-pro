@@ -24,13 +24,13 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { Config, resolveConfig, type ResolvedConfig } from './config.ts'
 import { Store } from './store.ts'
-import { PlaywrightManager } from './playwright.ts'
+import type { BrowserService } from './browser-service.ts'
 import { SearchRouter } from './router.ts'
 import { FetchService } from './fetch.ts'
 import { registerTools } from './tools.ts'
 
 export const name = 'web-search-pro'
-export const inject = ['tools', 'systemPrompt']
+export const inject = ['tools', 'systemPrompt', 'browser']
 
 export { Config }
 export type { Config as WebSearchProConfig } from './config.ts'
@@ -49,9 +49,8 @@ export function apply(ctx: Context, config: Config): void {
   const store = new Store(dbPath)
   ctx.effect(() => () => store.close())
 
-  // 2. Playwright manager (browser closed on unload).
-  const pw = new PlaywrightManager(resolved.playwright)
-  ctx.effect(() => () => void pw.close())
+  // 2. Browser service (provided by dsh-browser; inject: ['browser']).
+  const browser = ctx.get('browser') as BrowserService
 
   // 3. Hot-reloadable config source: while a settings service exists, the
   //    $DSH_HOME/settings.yaml `web-search-pro:` section (validated against the
@@ -71,11 +70,11 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   // 4. Services.
-  const router = new SearchRouter(ctx, resolved, store, dynamic, pw)
-  const fetchSvc = new FetchService(store, dynamic, pw)
+  const router = new SearchRouter(ctx, resolved, store, dynamic, browser)
+  const fetchSvc = new FetchService(store, dynamic, browser)
 
   // 5. Tools.
-  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, pw })
+  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser })
 
   // 5. Optional ctx.web provider registration: the built-in web_search /
   //    web_fetch tools route through this plugin when configured via
@@ -113,7 +112,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({
     name: 'tool:web-search-pro',
     order: 112,
-    text: 'For web research prefer the persistent enhanced tools: web_search_pro (multi-engine search with caching and history), web_platform_search (GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS/知乎/微博/豆瓣/贴吧/抖音/快手…), web_fetch_pro (readable extraction with per-site rules), and web_snapshot (headless-browser capture). Cite the relevant URLs as markdown links in your answer. Before relying on a platform backend, run web_deps action=check to see which external CLIs are installed. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) need the user to log in once to reuse their browser login state — if they return no results, tell the user to run scripts/save-login.mjs and set playwright.storageStatePath.',
+    text: 'For web research prefer the persistent enhanced tools: web_search_pro (multi-engine search with caching and history), web_platform_search (GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS/知乎/微博/豆瓣/贴吧/抖音/快手…), web_fetch_pro (readable extraction with per-site rules), and web_snapshot (headless-browser capture). Cite the relevant URLs as markdown links in your answer. The browser runtime (Playwright + chromium) and opencli are bundled in the dsh-browser plugin — no global CLIs needed; use browser_open/browser_click/browser_type/browser_scroll/browser_read/browser_screenshot for interactive multi-step browsing. Before relying on a remaining external CLI backend (gh/bili/yt-dlp/agent-reach), run web_deps action=check. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) need the user to log in once to reuse their browser login state — if they return no results, tell the user to run scripts/save-login.mjs and set the dsh-browser storageStatePath.',
   })
 
   // 7. Apply marker for diagnostics (proves live registration).
@@ -127,7 +126,7 @@ export function apply(ctx: Context, config: Config): void {
         tools: TOOL_NAMES,
         provider: resolved.registerProvider ? resolved.providerId : undefined,
         engines: resolved.engines,
-        playwright: resolved.playwright.channel + (resolved.playwright.headless ? '' : '+headed'),
+        browser: 'injected',
       }) + '\n', 'utf8')
     } catch { /* marker is best-effort */ }
   }
