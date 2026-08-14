@@ -40,7 +40,7 @@
     "@deepseek-ai/dsh-credentials": "^0.1.0-rc.6",
     "js-yaml": "^4.1.0",
     "jsdom": "^30.0.0",
-    "dsh-browser": "^0.1.0"
+    "@anweat/dsh-browser": "^0.1.1"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

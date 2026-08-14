@@ -10,7 +10,7 @@
 # inserts the child's row here so one command activates both.
 - insert:
     - id: browser
-      name: dsh-browser
+      name: '@anweat/dsh-browser'
       config:
         channel: chromium
         headless: true
