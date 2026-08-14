@@ -74,6 +74,8 @@ export declare class Store {
     listQueries(opts: {
         kind?: QueryKind;
         query?: string;
+        engine?: string;
+        platform?: string;
         limit?: number;
     }): QueryRecord[];
     clearCache(opts: {

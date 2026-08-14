@@ -12,7 +12,7 @@ import type { ResolvedConfig } from './config.ts'
 import {
   seamEngine, exaEngine, ddgEngine, bingEngine, jinaSearchEngine, githubEngine,
   bilibiliEngine, v2exEngine, youtubeEngine, arxivEngine, pubmedEngine, platformEngines,
-  rssEngine, EngineError, type Engine, type EngineDeps, type SearchOutcome,
+  rssEngine, customPlatformEngine, EngineError, type Engine, type EngineDeps, type SearchOutcome,
 } from './engines.ts'
 import { normQuery, capText } from './util.ts'
 import { LruCache } from './memory-cache.ts'
@@ -91,6 +91,7 @@ export class SearchRouter {
       agentReachEnabled: cfg.agentReachEnabled,
       ...this.pw !== undefined ? { pw: this.pw } : {},
       ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
+      ...cfg.customPlatforms !== undefined ? { customPlatforms: cfg.customPlatforms } : {},
       skipSeam,
     }
   }
@@ -110,6 +111,7 @@ export class SearchRouter {
       agentReachEnabled: cfg.agentReachEnabled,
       ...this.pw !== undefined ? { pw: this.pw } : {},
       ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
+      ...cfg.customPlatforms !== undefined ? { customPlatforms: cfg.customPlatforms } : {},
       skipSeam,
     }
   }
@@ -281,9 +283,10 @@ export class SearchRouter {
     opts: { signal?: AbortSignal; fresh?: boolean },
   ): Promise<RouterSearchResult> {
     const nq = normQuery(query || url || platform)
-    const engines = platform === 'rss' && url
-      ? [rssEngine(url)]
-      : platformEngines(platform, this.depsSync(true))
+    const custom = this.dynamic().customPlatforms?.[platform]
+    const engines = custom
+      ? [customPlatformEngine(platform, custom, this.depsSync(true))]
+      : (platform === 'rss' && url ? [rssEngine(url)] : platformEngines(platform, this.depsSync(true)))
     if (!engines.length) throw new Error('unsupported platform: ' + platform)
 
     if (!opts.fresh) {

@@ -150,14 +150,15 @@ export class PlaywrightManager {
     }
   }
 
-  /** Drive one platform's search page and extract its result list (Chinese communities). */
+  /** Drive one platform's search page and extract its result list (Chinese communities / custom platforms). */
   async searchResults(
     url: string,
     spec: PlatformSearchSpec,
-    opts: { signal: AbortSignal | undefined; count: number; waitMs?: number },
+    opts: { signal: AbortSignal | undefined; count: number; waitMs?: number; cookies?: { name: string; value: string; domain: string; path: string }[] },
   ): Promise<{ url: string; title: string; snippet?: string }[]> {
     const browser = await this.ensure()
     const context = await browser.newContext(this.config.storageStatePath ? { storageState: this.config.storageStatePath } : {})
+    if (opts.cookies?.length) await context.addCookies(opts.cookies).catch(() => {})
     const page = await context.newPage()
     const onAbort = () => void page.close().catch(() => {})
     if (opts.signal?.aborted) onAbort()

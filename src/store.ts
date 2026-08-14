@@ -173,7 +173,7 @@ export class Store {
     )
   }
 
-  listQueries(opts: { kind?: QueryKind; query?: string; limit?: number }): QueryRecord[] {
+  listQueries(opts: { kind?: QueryKind; query?: string; engine?: string; platform?: string; limit?: number }): QueryRecord[] {
     const limit = Math.min(Math.max(opts.limit ?? 20, 1), 200)
     const clauses: string[] = []
     const params: (string | number)[] = []
@@ -181,6 +181,10 @@ export class Store {
     if (kind) { clauses.push('kind = ?'); params.push(kind) }
     const q = opts.query
     if (q) { clauses.push('(query LIKE ? OR url LIKE ?)'); params.push(`%${q}%`, `%${q}%`) }
+    const engine = opts.engine
+    if (engine) { clauses.push('engine = ?'); params.push(engine) }
+    const platform = opts.platform
+    if (platform) { clauses.push('platform = ?'); params.push(platform) }
     const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''
     return this.db.prepare(`SELECT * FROM queries ${where} ORDER BY ts DESC LIMIT ${limit}`).all(...params) as unknown as QueryRecord[]
   }

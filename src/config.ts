@@ -7,6 +7,19 @@ import path from 'node:path'
 import os from 'node:os'
 import z from '@deepseek-ai/schemastery'
 
+/** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
+export interface CustomPlatformSpec {
+  name: string
+  /** Search-page URL template; `{query}` is replaced with the URL-encoded query. */
+  url: string
+  item: string
+  title: string
+  link: string
+  text?: string
+  /** Optional raw Cookie header (`a=b; c=d`); cookies are applied to the URL's domain. */
+  cookie?: string
+}
+
 export interface Config {
   /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
   dbPath?: string
@@ -52,6 +65,8 @@ export interface Config {
   registerProvider: boolean
   /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
   platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
+  /** User-defined custom platform search: url template + selectors + optional cookie. */
+  customPlatforms?: Record<string, CustomPlatformSpec>
   /** Playwright rendering options. */
   playwright: {
     enabled: boolean
@@ -95,6 +110,15 @@ export const Config: z<Config> = z.object({
     title: z.string(),
     link: z.string(),
     text: z.string(),
+  })),
+  customPlatforms: z.dict(z.object({
+    name: z.string(),
+    url: z.string(),
+    item: z.string(),
+    title: z.string(),
+    link: z.string(),
+    text: z.string(),
+    cookie: z.string(),
   })),
   playwright: z.object({
     enabled: z.boolean().default(true),

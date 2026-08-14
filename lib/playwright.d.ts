@@ -52,11 +52,17 @@ export declare class PlaywrightManager {
         htmlPath: string;
         usedRule: string | undefined;
     }>;
-    /** Drive one platform's search page and extract its result list (Chinese communities). */
+    /** Drive one platform's search page and extract its result list (Chinese communities / custom platforms). */
     searchResults(url: string, spec: PlatformSearchSpec, opts: {
         signal: AbortSignal | undefined;
         count: number;
         waitMs?: number;
+        cookies?: {
+            name: string;
+            value: string;
+            domain: string;
+            path: string;
+        }[];
     }): Promise<{
         url: string;
         title: string;

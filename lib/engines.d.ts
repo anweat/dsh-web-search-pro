@@ -6,6 +6,7 @@
  */
 import type { WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web';
 import type { PlaywrightManager } from './playwright.ts';
+import type { CustomPlatformSpec } from './config.ts';
 export interface SearchOutcome {
     /** Provider-generated answer/summary text, when any. */
     content?: string;
@@ -39,6 +40,8 @@ export interface EngineDeps {
         link: string;
         text?: string;
     }>;
+    /** User-defined custom platforms (settings.yaml `customPlatforms`). */
+    customPlatforms?: Record<string, CustomPlatformSpec>;
     /** True when this call originates from the ctx.web provider (avoid seam recursion). */
     skipSeam: boolean;
 }
@@ -59,6 +62,7 @@ export declare function opencliEngine(platform: string, deps: EngineDeps): Engin
 export declare function agentReachEngine(platform: string, deps: EngineDeps): Engine;
 export declare function arxivEngine(): Engine;
 export declare function pubmedEngine(): Engine;
+export declare function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps: EngineDeps): Engine;
 export declare function playwrightPlatformEngine(platform: string, deps: EngineDeps): Engine;
 export declare function rssEngine(url: string): Engine;
 /** Build the ordered engine list for a platform search. */

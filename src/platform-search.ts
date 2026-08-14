@@ -59,6 +59,18 @@ export const PLATFORM_SEARCH_SPECS: Record<string, PlatformSearchSpec> = {
   },
 }
 
+/** Parse a raw Cookie header ("a=b; c=d") into Playwright cookies for the URL's domain. */
+export function parseCookieString(cookie: string, url: string): { name: string; value: string; domain: string; path: string }[] {
+  let domain = ''
+  try { domain = new URL(url).hostname } catch { /* domain stays empty; caller must handle */ }
+  return cookie.split(';').map(p => p.trim()).filter(Boolean).map(p => {
+    const eq = p.indexOf('=')
+    const name = eq >= 0 ? p.slice(0, eq).trim() : p.trim()
+    const value = eq >= 0 ? p.slice(eq + 1).trim() : ''
+    return { name, value, domain, path: '/' }
+  }).filter(c => c.name.length > 0 && c.domain.length > 0)
+}
+
 /** Serialize a spec for the in-page extractor (page.evaluate arg). */
 function specArg(spec: PlatformSearchSpec): Record<string, unknown> {
   return { item: spec.item, title: spec.title, link: spec.link, text: spec.text ?? '' }

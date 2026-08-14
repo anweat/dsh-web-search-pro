@@ -25,6 +25,13 @@ export interface PlatformSearchSpec {
 }
 /** Best-effort search-page specs for Chinese community platforms. */
 export declare const PLATFORM_SEARCH_SPECS: Record<string, PlatformSearchSpec>;
+/** Parse a raw Cookie header ("a=b; c=d") into Playwright cookies for the URL's domain. */
+export declare function parseCookieString(cookie: string, url: string): {
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+}[];
 /** Drive one platform's search page and extract results. */
 export declare function searchPlatformResults(page: any, spec: PlatformSearchSpec, count: number): Promise<{
     url: string;

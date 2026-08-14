@@ -8,7 +8,8 @@
 import type { WebSearchResult, WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web'
 import { httpGet, runCli, jsYaml, stripTags, capText, decodeRedirectUrl } from './util.ts'
 import type { PlaywrightManager } from './playwright.ts'
-import { PLATFORM_SEARCH_SPECS } from './platform-search.ts'
+import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } from './platform-search.ts'
+import type { CustomPlatformSpec } from './config.ts'
 
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
@@ -42,6 +43,8 @@ export interface EngineDeps {
   pw?: PlaywrightManager
   /** Per-platform selector overrides (settings.yaml `platformRules`). */
   platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
+  /** User-defined custom platforms (settings.yaml `customPlatforms`). */
+  customPlatforms?: Record<string, CustomPlatformSpec>
   /** True when this call originates from the ctx.web provider (avoid seam recursion). */
   skipSeam: boolean
 }
@@ -503,6 +506,33 @@ export function pubmedEngine(): Engine {
           }),
         }
       }
+      return { sources }
+    },
+  }
+}
+
+// ── User-defined custom platform (url template + selectors + cookie) ───────
+
+export function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps: EngineDeps): Engine {
+  const searchSpec: PlatformSearchSpec = {
+    id: 'custom-' + id,
+    label: spec.name,
+    url: () => spec.url,
+    item: spec.item,
+    title: spec.title,
+    link: spec.link,
+    ...spec.text ? { text: spec.text } : {},
+  }
+  return {
+    id: 'custom-' + id,
+    label: spec.name + ' (自定义)',
+    available: () => !!deps.pw,
+    async search(query, count, signal) {
+      if (!deps.pw) throw new EngineError('custom platform search unavailable (no playwright)', 'ENGINE_UNAVAILABLE', false)
+      const url = spec.url.replace(/{query}/g, encodeURIComponent(query))
+      const cookies = spec.cookie ? parseCookieString(spec.cookie, url) : undefined
+      const sources = await deps.pw.searchResults(url, searchSpec, { signal, count, cookies })
+      if (!sources.length) throw new EngineError('自定义平台 ' + spec.name + ' 未取到结果：检查 url 的 {query} 占位、item/title/link 选择器，或补充 cookie。', 'ENGINE_EMPTY', false)
       return { sources }
     },
   }
