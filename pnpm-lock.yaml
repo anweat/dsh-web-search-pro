@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@anweat/dsh-browser':
-        specifier: ^0.1.1
-        version: 0.1.1(b6nzleejznykjypjubilix76n4)
+        specifier: ^0.1.2
+        version: 0.1.3(b6nzleejznykjypjubilix76n4)
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
         version: 4.0.1
@@ -51,8 +51,8 @@ importers:
 
 packages:
 
-  '@anweat/dsh-browser@0.1.1':
-    resolution: {integrity: sha512-FIZS3TXdgkbunzZQM30XmfIRBub51tqsKnw4Y4mNWdsHP/QcX+l1L9ZnBuRrmpIQgFfIq+xomFl+oW3ndK2ypA==}
+  '@anweat/dsh-browser@0.1.3':
+    resolution: {integrity: sha512-YDNcR7xRw2cUSCn2xCTNRRtb2dpSsStAt9zXWUx+GLiUze93DyWnxSKCeJFiufyA4vzQZi9Z0R3mbTe9CzFsSg==}
     engines: {node: ^22.19 || >=24}
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1
@@ -475,7 +475,7 @@ packages:
 
 snapshots:
 
-  '@anweat/dsh-browser@0.1.1(b6nzleejznykjypjubilix76n4)':
+  '@anweat/dsh-browser@0.1.3(b6nzleejznykjypjubilix76n4)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1
       '@deepseek-ai/dsh-tools': 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
