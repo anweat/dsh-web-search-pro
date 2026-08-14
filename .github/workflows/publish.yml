@@ -1,0 +1,145 @@
+# Publish to npm (and attach tarball to a GitHub Release) for dsh-web-search-pro.
+#
+# Modeled on the official deepseek-harness release.yml pattern:
+#   - pack runs WITHOUT registry credentials on every run — it builds, verifies
+#     the tag/version match, and uploads the exact tarball bytes;
+#   - publish is explicit: a v* tag push or a manual dispatch with
+#     publish=true. It consumes the packed bytes (never a rebuild) and is the
+#     only step that can write to the npm registry;
+#   - publish runs are serialized so two versions cannot race dist-tags.
+#
+# One-time setup (repo owner):
+#   1. npm account → Access Tokens → generate an "Automation" token
+#      (automation tokens bypass 2FA prompts during CI).
+#   2. GitHub repo → Settings → Secrets and variables → Actions →
+#      New repository secret: NPM_TOKEN = the token from step 1.
+#   3. Optional: Settings → Environments → npm-publish → add required
+#      reviewers so publication needs a human approval.
+#
+# Trigger a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+# or run the workflow manually with "publish" checked.
+
+name: Publish to npm
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to npm (must run from a v* tag). Leave unchecked for a dry-run pack.'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write        # create the GitHub Release
+  id-token: write        # npm provenance (sigstore OIDC)
+
+concurrency:
+  # Pack runs per ref; publish is globally serialized (shared dist-tag state).
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '22'
+
+jobs:
+  pack:
+    name: Build and pack tarball
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release version
+        run: |
+          pkg_version=$(node -p "require('./package.json').version")
+          echo "package.json version: $pkg_version"
+          # On a tag push, the tag must match package.json (v0.1.0 == 0.1.0).
+          if [[ "$GITHUB_REF_NAME" == v* ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$pkg_version" ]]; then
+              echo "::error::tag v$tag_version does not match package.json version $pkg_version" >&2
+              exit 1
+            fi
+          fi
+          echo "PKG_VERSION=$pkg_version" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Pack tarball
+        run: pnpm pack --pack-destination dist
+
+      - name: Show tarball contents
+        run: tar -tzf dist/*.tgz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: dist/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to npm
+    if: github.event_name == 'push' || inputs.publish
+    needs: pack
+    runs-on: ubuntu-24.04
+    environment: npm-publish
+    concurrency:
+      group: Release-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write    # provenance
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-tarball
+          path: dist
+
+      - name: Publish tarball
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish dist/*.tgz --provenance --access public
+
+  release:
+    name: GitHub Release with tarball
+    if: github.event_name == 'push'   # v* tag pushes only
+    needs: pack
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-tarball
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tgz
+          generate_release_notes: true
+
