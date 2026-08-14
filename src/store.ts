@@ -226,6 +226,29 @@ export class Store {
     this.db.prepare('DELETE FROM queries WHERE id = ?').run(id)
   }
 
+  /** Delete one query and its results; returns whether it existed. */
+  deleteQuery(id: string): boolean {
+    const row = this.db.prepare('SELECT id FROM queries WHERE id = ?').get(id) as { id: string } | undefined
+    if (!row) return false
+    this.removeQuery(id)
+    return true
+  }
+
+  /** Most-used engines, desc. */
+  topEngines(limit = 8): { engine: string; count: number }[] {
+    return this.db.prepare('SELECT engine, COUNT(*) AS count FROM queries WHERE engine IS NOT NULL GROUP BY engine ORDER BY count DESC LIMIT ?').all(limit) as unknown as { engine: string; count: number }[]
+  }
+
+  /** Most-frequent queries, desc. */
+  topQueries(limit = 8): { query: string; count: number }[] {
+    return this.db.prepare('SELECT query, COUNT(*) AS count FROM queries WHERE query IS NOT NULL GROUP BY query ORDER BY count DESC LIMIT ?').all(limit) as unknown as { query: string; count: number }[]
+  }
+
+  /** Per-kind record counts. */
+  kindCounts(): { kind: string; count: number }[] {
+    return this.db.prepare('SELECT kind, COUNT(*) AS count FROM queries GROUP BY kind ORDER BY count DESC').all() as unknown as { kind: string; count: number }[]
+  }
+
   stats(): { dbSizeBytes: number; queries: number; results: number; pages: number; rules: number } {
     const count = (sql: string): number => (this.db.prepare(sql).get() as { c: number }).c
     let dbSizeBytes = 0

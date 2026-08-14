@@ -87,6 +87,23 @@ export declare class Store {
         pages: number;
     };
     private removeQuery;
+    /** Delete one query and its results; returns whether it existed. */
+    deleteQuery(id: string): boolean;
+    /** Most-used engines, desc. */
+    topEngines(limit?: number): {
+        engine: string;
+        count: number;
+    }[];
+    /** Most-frequent queries, desc. */
+    topQueries(limit?: number): {
+        query: string;
+        count: number;
+    }[];
+    /** Per-kind record counts. */
+    kindCounts(): {
+        kind: string;
+        count: number;
+    }[];
     stats(): {
         dbSizeBytes: number;
         queries: number;

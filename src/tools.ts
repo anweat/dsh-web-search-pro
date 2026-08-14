@@ -324,10 +324,11 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_cache_clear',
-    description: 'Purge persisted search results / page snapshots from the SQLite store (by age and/or engine). Returns removed counts.',
+    description: 'Purge persisted search results / page snapshots from the SQLite store (by age and/or engine), or delete one query by id. Returns removed counts.',
     parameters: {
       olderThanDays: { type: 'number', description: 'Only purge records older than N days; omit to purge everything.' },
       engine: { type: 'string', description: 'Only purge records from this engine.' },
+      queryId: { type: 'string', description: 'Delete one query (and its saved results) by id from web_history.' },
     },
     output: {
       schema: {
@@ -343,6 +344,11 @@ export function registerTools(deps: ToolDeps): void {
     },
     timeoutMs: 20_000,
     async execute(args) {
+      if (args.queryId) {
+        const deleted = store.deleteQuery(args.queryId)
+        if (!deleted) throw new Error('query id not found: ' + args.queryId)
+        return { removedQueries: 1, removedResults: 1, removedPages: 0 }
+      }
       const removed = store.clearCache({
         ...args.olderThanDays != null ? { olderThanDays: args.olderThanDays } : {},
         ...args.engine ? { engine: args.engine } : {},
@@ -414,7 +420,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_search_stats',
-    description: 'Report the persistent store state: database size and record counts per table, plus configured engines.',
+    description: 'Report the persistent store state: database size, per-table counts, per-kind counts, top engines and queries, plus configured engines.',
     parameters: {},
     output: {
       schema: {
@@ -428,26 +434,37 @@ export function registerTools(deps: ToolDeps): void {
           pages: { type: 'number', required: true },
           rules: { type: 'number', required: true },
           engines: { type: 'array', required: true, items: { type: 'string' } },
+          kindCounts: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, count: { type: 'number', required: true } } } },
+          topEngines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { engine: { type: 'string', required: true }, count: { type: 'number', required: true } } } },
+          topQueries: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { query: { type: 'string', required: true }, count: { type: 'number', required: true } } } },
         },
       },
       render: (_args, value) => {
-        const v = value as { dbPath: string; dbSizeBytes: number; queries: number; results: number; pages: number; rules: number; engines: string[] }
-        return [{ type: 'text', text: [
+        const v = value as { dbPath: string; dbSizeBytes: number; queries: number; results: number; pages: number; rules: number; engines: string[]; kindCounts: { kind: string; count: number }[]; topEngines: { engine: string; count: number }[]; topQueries: { query: string; count: number }[] }
+        const lines = [
           'Database: ' + v.dbPath,
           'Size: ' + (v.dbSizeBytes / 1024).toFixed(1) + ' KB',
-          'Queries: ' + v.queries,
-          'Result rows: ' + v.results,
-          'Page snapshots: ' + v.pages,
-          'Custom rules: ' + v.rules,
+          'Queries: ' + v.queries + ' · Result rows: ' + v.results + ' · Page snapshots: ' + v.pages + ' · Custom rules: ' + v.rules,
           'Engines: ' + v.engines.join(', '),
-        ].join('\n') }]
+          'Per kind: ' + (v.kindCounts.map(k => k.kind + '=' + k.count).join(', ') || '-'),
+          'Top engines: ' + (v.topEngines.map(e => e.engine + '(' + e.count + ')').join(', ') || '-'),
+          'Top queries: ' + (v.topQueries.map(q => JSON.stringify(q.query) + '(' + q.count + ')').join(', ') || '-'),
+        ]
+        return [{ type: 'text', text: lines.join('\n') }]
       },
     },
     timeoutMs: 10_000,
     isConcurrencySafe: () => true,
     async execute() {
       const stats = store.stats()
-      return { dbPath: config.dbPath, ...stats, engines: dynamic().engines }
+      return {
+        dbPath: config.dbPath,
+        ...stats,
+        engines: dynamic().engines,
+        kindCounts: store.kindCounts(),
+        topEngines: store.topEngines(),
+        topQueries: store.topQueries(),
+      }
     },
   }))
 
