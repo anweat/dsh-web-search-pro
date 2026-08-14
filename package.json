@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-search-pro",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Enhanced, persistent web search plugin for DeepSeek Harness — multi-engine routing (DeepSeek/Exa/DDG/Bing/Jina + GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS), SQLite+LRU cache, userscript-style extraction, and Playwright rendering.",
   "license": "MIT",
   "type": "module",
