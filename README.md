@@ -92,3 +92,30 @@ zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都�
 
 详见 [LOGIN.md](./LOGIN.md)。
 
+
+## 历史管理
+
+web_history 支持：kind/query/engine/platform 过滤、replay（用 queryId 回放已存结果）、
+export（把过滤后的历史+结果写成 JSON 文件）。
+
+## 自定义平台（解析 cookie 去搜索）
+
+在 settings.yaml 里定义任意站点（URL 模板 + 结果选择器 + 可选 Cookie），
+web_platform_search 就能直接搜它——不需要改代码：
+
+    web-search-pro:
+      customPlatforms:
+        mybili:
+          name: '我的B站'
+          url: 'https://search.bilibili.com/all?keyword={query}'
+          item: '.bili-video-card'
+          title: '.bili-video-card__info--tit'
+          link: 'a'
+        # 需要登录的站点补 cookie（a=b; c=d，自动应用到 url 域名）
+        myforum:
+          name: '某论坛'
+          url: 'https://forum.example.com/search?q={query}'
+          item: '.thread'
+          title: '.thread-title a'
+          link: '.thread-title a'
+          cookie: 'sessionid=abc123; csrftoken=xyz'

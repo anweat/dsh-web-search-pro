@@ -274,6 +274,8 @@ bundle 行按包 main 解析到 lib）。我只改了 `api-proxy.ts` 源码、�
 - [x] 更多垂直源：学术 arXiv（Atom API）/ PubMed（E-utilities，已实测）
 - [x] 更多垂直源：GitHub 代码（gh search code）/ GitHub issues（gh search issues，已实测）
 - [x] `web_rule` 升级为"规则包"（export/import JSON）
+- [x] 历史管理增强：`web_history` 支持 engine/platform 过滤 + replay（queryId 回放已存结果）+ export（写 JSON 文件）
+- [x] 自定义平台扩展：`customPlatforms` 配置（url 模板 + 选择器 + 可选 cookie），`web_platform_search` 直接搜任意自定义站点
 - [x] npm bundle 分发（<https://github.com/anweat/dsh-web-search-pro>）
 - [ ] 发布到 npm registry（需 npm 账号/token，待确认）
 - [ ] 搜索历史/缓存管理 Web 面板（client 插件 slot）
