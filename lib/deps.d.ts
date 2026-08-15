@@ -1,6 +1,6 @@
 /**
  * External dependency detection and install for the CLI/platform backends.
- * Most backends shell out to tools installed outside DSH (gh, bili, yt-dlp,
+ * Most backends shell out to tools installed outside DSH (bili, yt-dlp,
  * opencli, agent-reach, playwright, mcporter). This module reports which are
  * present and how to install them; the web_deps tool exposes it to the model.
  *

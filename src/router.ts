@@ -82,10 +82,12 @@ export class SearchRouter {
     const web = this.ctx.get('web') as WebRuntime | undefined
     const exaApiKey = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
     const jinaApiKey = await this.resolveKey(cfg.jinaApiKeyEnv, cfg.jinaApiKey)
+    const githubToken = await this.resolveKey(cfg.githubTokenEnv, cfg.githubToken)
     return {
       ...web !== undefined ? { web } : {},
       ...exaApiKey ? { exaApiKey } : {},
       ...jinaApiKey ? { jinaApiKey } : {},
+      ...githubToken ? { githubToken } : {},
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
@@ -102,10 +104,12 @@ export class SearchRouter {
     const web = this.ctx.get('web') as WebRuntime | undefined
     const exaApiKey = cfg.exaApiKey || process.env[cfg.exaApiKeyEnv]
     const jinaApiKey = cfg.jinaApiKey || process.env[cfg.jinaApiKeyEnv]
+    const githubToken = cfg.githubToken || process.env[cfg.githubTokenEnv] || process.env.GH_TOKEN
     return {
       ...web !== undefined ? { web } : {},
       ...exaApiKey ? { exaApiKey } : {},
       ...jinaApiKey ? { jinaApiKey } : {},
+      ...githubToken ? { githubToken } : {},
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
@@ -284,9 +288,13 @@ export class SearchRouter {
   ): Promise<RouterSearchResult> {
     const nq = normQuery(query || url || platform)
     const custom = this.dynamic().customPlatforms?.[platform]
+    // Async deps (not depsSync): platform engines may need credentials-resolved
+    // keys (e.g. githubToken from the credentials service), which the sync path
+    // cannot reach. platformSearch is async, so awaiting is free.
+    const deps = await this.deps(true)
     const engines = custom
-      ? [customPlatformEngine(platform, custom, this.depsSync(true))]
-      : (platform === 'rss' && url ? [rssEngine(url)] : platformEngines(platform, this.depsSync(true)))
+      ? [customPlatformEngine(platform, custom, deps)]
+      : (platform === 'rss' && url ? [rssEngine(url)] : platformEngines(platform, deps))
     if (!engines.length) throw new Error('unsupported platform: ' + platform)
 
     if (!opts.fresh) {
@@ -306,6 +314,7 @@ export class SearchRouter {
 
     const enginesTried: string[] = []
     let outcome: SearchOutcome | undefined
+    let lastError: unknown
     for (const engine of engines) {
       enginesTried.push(engine.id)
       if (!engine.available()) continue
@@ -314,9 +323,13 @@ export class SearchRouter {
         break
       } catch (error) {
         if (opts.signal?.aborted) throw error
+        lastError = error
       }
     }
-    if (!outcome) throw new Error('platform ' + platform + ' unavailable (tried: ' + enginesTried.join(', ') + ')')
+    if (!outcome) {
+      const reason = lastError instanceof Error && lastError.message ? ': ' + lastError.message : ''
+      throw new Error('platform ' + platform + ' unavailable (tried: ' + enginesTried.join(', ') + ')' + reason)
+    }
 
     const queryId = this.store.recordQuery({
       kind: 'platform',

@@ -3,7 +3,7 @@
  *
  * - Multi-backend search routing with automatic fallback (agent-reach style):
  *   ctx.web seam / Exa / DuckDuckGo / Bing / Jina + platform backends
- *   (gh, bili-cli, yt-dlp, sov2ex, opencli, agent-reach).
+ *   (bili-cli, yt-dlp, sov2ex, opencli, agent-reach).
  * - Persistent SQLite store (MediaCrawler style): search queries + results,
  *   page snapshots, and user-extended per-site extraction rules survive
  *   restarts and are reused within a configurable TTL.

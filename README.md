@@ -57,7 +57,6 @@ dsh --profile web
 
 | 依赖 | 用途 | 安装 |
 |---|---|---|
-| gh | GitHub 后端 | `winget install GitHub.cli` / `choco install gh` |
 | bili-cli | B站后端 | `uv tool install bili-cli` / `pipx install bili-cli` |
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
 | opencli | 小红书/Twitter/Reddit/IG/FB | `npm i -g opencli` |
@@ -66,7 +65,7 @@ dsh --profile web
 
 ## 平台与引擎
 
-`seam`（ctx.web/DeepSeek 原生）· `exa` · `ddg` · `bing` · `jina` · `github` · `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；`multi` 并行融合。
+`seam`（ctx.web/DeepSeek 原生）· `exa` · `ddg` · `bing` · `jina` · `github`（REST 搜索 API，免 CLI；可选 `$GITHUB_TOKEN`/`githubToken` 提升限额并解锁代码搜索）· `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；`multi` 并行融合。
 
 ## 开发
 

@@ -126,6 +126,7 @@ export function registerTools(deps: ToolDeps): void {
           source: { type: 'string', required: true },
           fromCache: { type: 'boolean', required: true },
           statusCode: { type: 'number' },
+          usedRule: { type: 'string' },
         },
       },
       render: (_args, value) => {

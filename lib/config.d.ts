@@ -48,7 +48,11 @@ export interface Config {
     jinaApiKey?: string;
     /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
     jinaApiKeyEnv?: string;
-    /** Allow CLI backends (gh / bili / yt-dlp / opencli / agent-reach). */
+    /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
+    githubToken?: string;
+    /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
+    githubTokenEnv?: string;
+    /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
     enableCliBackends: boolean;
     /** Allow opencli browser-session backends. */
     opencliEnabled: boolean;
@@ -83,6 +87,7 @@ export interface ResolvedConfig extends Config {
     exaApiKeyEnv: string;
     jinaApiKey?: string;
     jinaApiKeyEnv: string;
+    githubTokenEnv: string;
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
 }
 /** Default database path under the harness home. */
