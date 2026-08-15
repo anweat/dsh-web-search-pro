@@ -53,7 +53,11 @@ export interface Config {
   jinaApiKey?: string
   /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
   jinaApiKeyEnv?: string
-  /** Allow CLI backends (gh / bili / yt-dlp / opencli / agent-reach). */
+  /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
+  githubToken?: string
+  /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
+  githubTokenEnv?: string
+  /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
   enableCliBackends: boolean
   /** Allow opencli browser-session backends. */
   opencliEnabled: boolean
@@ -94,6 +98,8 @@ export const Config: z<Config> = z.object({
   exaApiKeyEnv: z.string().default('EXA_API_KEY'),
   jinaApiKey: z.string().role('secret'),
   jinaApiKeyEnv: z.string().default('JINA_API_KEY'),
+  githubToken: z.string().role('secret'),
+  githubTokenEnv: z.string().default('GITHUB_TOKEN'),
   enableCliBackends: z.boolean().default(true),
   opencliEnabled: z.boolean().default(true),
   agentReachEnabled: z.boolean().default(true),
@@ -127,6 +133,7 @@ export interface ResolvedConfig extends Config {
   exaApiKeyEnv: string
   jinaApiKey?: string
   jinaApiKeyEnv: string
+  githubTokenEnv: string
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
 }
 
@@ -146,6 +153,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     dbPath,
     exaApiKeyEnv: config.exaApiKeyEnv ?? 'EXA_API_KEY',
     jinaApiKeyEnv: config.jinaApiKeyEnv ?? 'JINA_API_KEY',
+    githubTokenEnv: config.githubTokenEnv ?? 'GITHUB_TOKEN',
     playwright: {
       enabled: pw.enabled ?? true,
       snapshotDir,

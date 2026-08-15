@@ -36,6 +36,8 @@ export interface EngineDeps {
   web?: WebRuntime
   exaApiKey?: string
   jinaApiKey?: string
+  /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
+  githubToken?: string
   enableCli: boolean
   opencliEnabled: boolean
   agentReachEnabled: boolean
@@ -227,45 +229,81 @@ export function jinaSearchEngine(deps: EngineDeps): Engine {
   }
 }
 
-// ── GitHub (gh CLI) ─────────────────────────────────────────────────────────
+// ── GitHub (REST search API; no gh CLI needed) ──────────────────────────────
+
+const GITHUB_API = 'https://api.github.com'
+
+/** Best-effort auth token: deps (config/credentials) → $GITHUB_TOKEN → $GH_TOKEN. */
+function githubTokenOf(deps: EngineDeps): string | undefined {
+  return deps.githubToken || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || undefined
+}
+
+/**
+ * One GitHub REST search call with a UA + optional bearer token. Anonymous
+ * rate limit is 10 req/min, authenticated 30 req/min (search API).
+ */
+async function githubApiGet(path: string, deps: EngineDeps, signal?: AbortSignal, timeoutMs = 30_000): Promise<any> {
+  const token = githubTokenOf(deps)
+  const headers: Record<string, string> = {
+    'accept': 'application/vnd.github+json',
+    'x-github-api-version': '2022-11-28',
+    ...token ? { 'authorization': 'Bearer ' + token } : {},
+  }
+  const res = await httpGet(GITHUB_API + path, { headers, signal, timeoutMs })
+  if (res.status === 401 || res.status === 403) {
+    throw new EngineError(
+      'GitHub API ' + res.status + (token ? ' (token rejected or rate-limited)' : ' (set $GITHUB_TOKEN for higher limits / authenticated search)'),
+      'ENGINE_ERROR',
+      false,
+    )
+  }
+  if (!res.ok) throw new EngineError('GitHub API HTTP ' + res.status, 'ENGINE_ERROR')
+  return JSON.parse(res.text)
+}
 
 export function githubEngine(deps: EngineDeps): Engine {
   return {
     id: 'github',
     label: 'GitHub',
-    available: () => deps.enableCli,
+    available: () => true,
     async search(query, count, signal) {
-      const res = await runCli('gh', ['search', 'repos', query, '--limit', String(Math.min(count, 15)), '--json', 'fullName,url,description,stargazersCount,language,updatedAt'], { timeoutMs: 30_000, signal })
-      if (res.code !== 0) throw new EngineError('gh search failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
-      const rows = JSON.parse(res.stdout) as { fullName?: string; url?: string; description?: string; stargazersCount?: number; language?: string }[]
-      const sources: WebSearchSource[] = rows.map(r => {
-        const stars = r.stargazersCount != null ? ' ⭐' + r.stargazersCount : ''
-        const lang = r.language ? ' [' + r.language + ']' : ''
+      const q = encodeURIComponent(query)
+      const data = await githubApiGet('/search/repositories?q=' + q + '&per_page=' + Math.min(count, 15) + '&sort=stars&order=desc', deps, signal)
+      const sources: WebSearchSource[] = (data.items ?? []).map(r => {
+        const meta: string[] = []
+        if (r.stargazers_count != null) meta.push('⭐' + r.stargazers_count)
+        if (r.language) meta.push('[' + r.language + ']')
+        if (r.forks_count != null) meta.push('forks ' + r.forks_count)
         return {
-          url: r.url ?? 'https://github.com/' + (r.fullName ?? ''),
-          ...r.fullName ? { title: r.fullName } : {},
-          ...(r.description ?? r.fullName) ? { snippet: capText((r.description ?? '') + stars + lang, 400) } : {},
+          url: r.html_url ?? '',
+          ...r.full_name ? { title: r.full_name } : {},
+          ...(r.description || meta.length) ? { snippet: capText((r.description ?? '') + (meta.length ? (r.description ? ' — ' : '') + meta.join(' ') : ''), 400) } : {},
+          ...r.updated_at ? { publishedAt: String(r.updated_at).slice(0, 10) } : {},
         }
-      })
+      }).filter(s => /^https?:\/\//i.test(s.url))
+      if (!sources.length) throw new EngineError('GitHub returned no results', 'ENGINE_EMPTY', true)
       return { sources }
     },
   }
 }
 
-// ── GitHub code / issues search (gh CLI) ────────────────────────────────────
+// ── GitHub code / issues search (REST search API) ───────────────────────────
 
 export function githubCodeEngine(deps: EngineDeps): Engine {
   return {
     id: 'github-code', label: 'GitHub 代码',
-    available: () => deps.enableCli,
+    available: () => true,
     async search(query, count, signal) {
-      const res = await runCli('gh', ['search', 'code', query, '--limit', String(Math.min(count, 15)), '--json', 'repository,path,url'], { timeoutMs: 30_000, signal })
-      if (res.code !== 0) throw new EngineError('gh code search failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
-      const rows = JSON.parse(res.stdout) as { path?: string; repository?: { nameWithOwner?: string }; url?: string }[]
-      const sources: WebSearchSource[] = rows.map(r => ({
-        url: r.url ?? '',
-        ...(r.path && r.repository?.nameWithOwner) ? { title: r.repository.nameWithOwner + ' / ' + r.path } : { title: r.path ?? 'code match' },
-        ...r.repository?.nameWithOwner ? { snippet: '仓库: ' + r.repository.nameWithOwner } : {},
+      // Code search requires authentication — surface a clear hint when no token.
+      if (!githubTokenOf(deps)) {
+        throw new EngineError('GitHub code search requires authentication: set $GITHUB_TOKEN (or config githubToken)', 'ENGINE_UNAVAILABLE', false)
+      }
+      const q = encodeURIComponent(query)
+      const data = await githubApiGet('/search/code?q=' + q + '&per_page=' + Math.min(count, 15), deps, signal)
+      const sources: WebSearchSource[] = (data.items ?? []).map(r => ({
+        url: r.html_url ?? '',
+        ...(r.repository?.full_name && r.path) ? { title: r.repository.full_name + ' / ' + r.path } : { title: r.path ?? 'code match' },
+        ...r.repository?.full_name ? { snippet: '仓库: ' + r.repository.full_name } : {},
       })).filter(s => /^https?:\/\//i.test(s.url))
       return { sources }
     },
@@ -275,16 +313,25 @@ export function githubCodeEngine(deps: EngineDeps): Engine {
 export function githubIssuesEngine(deps: EngineDeps): Engine {
   return {
     id: 'github-issues', label: 'GitHub Issues',
-    available: () => deps.enableCli,
+    available: () => true,
     async search(query, count, signal) {
-      const res = await runCli('gh', ['search', 'issues', query, '--limit', String(Math.min(count, 15)), '--json', 'repository,title,url,state,commentsCount'], { timeoutMs: 30_000, signal })
-      if (res.code !== 0) throw new EngineError('gh issue search failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
-      const rows = JSON.parse(res.stdout) as { title?: string; url?: string; state?: string; repository?: { nameWithOwner?: string }; commentsCount?: number }[]
-      const sources: WebSearchSource[] = rows.map(r => ({
-        url: r.url ?? '',
-        ...r.title ? { title: r.title } : {},
-        ...(r.state || r.repository?.nameWithOwner) ? { snippet: '[' + (r.state ?? '') + ']' + (r.repository?.nameWithOwner ? ' · ' + r.repository.nameWithOwner : '') } : {},
-      })).filter(s => /^https?:\/\//i.test(s.url))
+      const q = encodeURIComponent(query)
+      const data = await githubApiGet('/search/issues?q=' + q + '&per_page=' + Math.min(count, 15) + '&sort=updated&order=desc', deps, signal)
+      const sources: WebSearchSource[] = (data.items ?? []).map(r => {
+        const meta: string[] = []
+        if (r.state) meta.push('[' + r.state + ']')
+        if (r.repository_url) {
+          const repo = r.repository_url.replace(/^https?:\/\/api\.github\.com\/repos\//, '')
+          if (repo) meta.push(repo)
+        }
+        if (r.comments != null) meta.push(r.comments + ' comments')
+        return {
+          url: r.html_url ?? '',
+          ...r.title ? { title: r.title } : {},
+          ...meta.length ? { snippet: capText(meta.join(' · '), 300) } : {},
+          ...r.updated_at ? { publishedAt: String(r.updated_at).slice(0, 10) } : {},
+        }
+      }).filter(s => /^https?:\/\//i.test(s.url))
       return { sources }
     },
   }
