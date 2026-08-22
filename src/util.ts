@@ -11,6 +11,7 @@ import crypto from 'node:crypto'
 import path from 'node:path'
 import { load as yamlLoad } from 'js-yaml'
 import { JSDOM } from 'jsdom'
+import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect } from './safe-http.ts'
 
 /** js-yaml parser (npm dep). */
 export const jsYaml: { load(input: string): unknown } = { load: (input: string) => yamlLoad(input) }
@@ -87,7 +88,7 @@ export interface HttpResult {
  */
 export async function httpGet(
   url: string,
-  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string } = { signal: undefined },
+  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number } = { signal: undefined },
 ): Promise<HttpResult> {
   const controller = new AbortController()
   const timer = opts.timeoutMs ? setTimeout(() => controller.abort(new Error('dsh-web-search-pro: request timed out')), opts.timeoutMs) : undefined
@@ -95,26 +96,41 @@ export async function httpGet(
   if (opts.signal?.aborted) onAbort()
   else opts.signal?.addEventListener('abort', onAbort)
   try {
-    const res = await fetch(url, {
-      redirect: opts.redirect ?? 'follow',
-      signal: controller.signal,
-      method: opts.method ?? 'GET',
-      ...opts.body !== undefined ? { body: opts.body } : {},
-      headers: {
-        'user-agent': userAgent(),
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
-        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        ...opts.headers,
-      },
-    })
-    const buf = Buffer.from(await res.arrayBuffer())
+    let current = (await assertResolvedPublicUrl(url)).href
+    let method = opts.method ?? 'GET'
+    let body = opts.body
+    let requestHeaders: Record<string, string> = { ...opts.headers }
+    let res: Response | undefined
+    for (let redirects = 0; redirects <= 5; redirects++) {
+      res = await fetch(current, {
+        redirect: 'manual', signal: controller.signal, method,
+        ...body !== undefined ? { body } : {},
+        headers: {
+          'user-agent': userAgent(),
+          'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          ...requestHeaders,
+        },
+      })
+      const location = res.headers.get('location')
+      if (![301, 302, 303, 307, 308].includes(res.status) || !location) break
+      if (opts.redirect === 'error') throw new Error('HTTP redirect is not allowed')
+      if (redirects === 5) throw new Error('too many HTTP redirects')
+      const from = new URL(current)
+      const target = await assertResolvedPublicUrl(new URL(location, current))
+      requestHeaders = stripSensitiveHeadersForRedirect(requestHeaders, from, target)
+      current = target.href
+      if (res.status === 303 || ((res.status === 301 || res.status === 302) && method !== 'GET' && method !== 'HEAD')) { method = 'GET'; body = undefined }
+    }
+    if (!res) throw new Error('HTTP request did not produce a response')
+    const buf = await readBoundedBody(res, opts.maxBytes ?? 8 * 1024 * 1024)
     const contentType = res.headers.get('content-type')
     const text = decodeText(buf, contentType ?? undefined)
     return {
       status: res.status,
       ok: res.ok,
       text,
-      finalUrl: res.url,
+      finalUrl: current,
       ...contentType != null ? { contentType } : {},
     }
   } finally {

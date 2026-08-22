@@ -10,6 +10,7 @@ import { httpGet, runCli, jsYaml, stripTags, capText, decodeRedirectUrl } from '
 import type { BrowserService } from './browser-service.ts'
 import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } from './platform-search.ts'
 import type { CustomPlatformSpec } from './config.ts'
+import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
 
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
@@ -22,7 +23,12 @@ export interface Engine {
   label: string
   /** Cheap local availability check; must not do network I/O. */
   available(): boolean
-  search(query: string, count: number, signal?: AbortSignal): Promise<SearchOutcome>
+  search(query: string, count: number, signal?: AbortSignal, options?: EngineSearchOptions): Promise<SearchOutcome>
+}
+
+export interface EngineSearchOptions {
+  exa?: Omit<ExaSearchRequest, 'query' | 'numResults'>
+  browser?: { authProfile?: string; rulePack?: string }
 }
 
 export class EngineError extends Error {
@@ -68,7 +74,7 @@ export function seamEngine(deps: EngineDeps): Engine {
     id: 'seam',
     label: 'DeepSeek 原生搜索 (ctx.web)',
     available: () => !!deps.web && !deps.skipSeam,
-    async search(query, count, signal) {
+    async search(query, count, signal, options) {
       if (!deps.web) throw new EngineError('ctx.web seam unavailable', 'ENGINE_UNAVAILABLE')
       const result: WebSearchResult = await withTimeout(
         deps.web.search({ query, maxResults: count }, signal),
@@ -80,30 +86,64 @@ export function seamEngine(deps: EngineDeps): Engine {
   }
 }
 
-// ── Exa (API key) ────────────────────────────────────────────────────────────
+// ── Exa (native API, with connected MCP fallback) ───────────────────────────
+
+/** Parse mcporter's human-readable Exa response into the router's native source shape. */
+export function parseMcporterExaSearch(output: string, count: number): WebSearchSource[] {
+  const sources: WebSearchSource[] = []
+  for (const block of output.split(/\r?\n---\r?\n/g)) {
+    const url = /^URL:\s*(https?:\/\/\S+)\s*$/im.exec(block)?.[1]
+    if (!url) continue
+    const title = /^Title:\s*(.+?)\s*$/im.exec(block)?.[1]?.trim()
+    const publishedAt = /^Published:\s*(.+?)\s*$/im.exec(block)?.[1]?.trim()
+    const highlights = /(?:^|\r?\n)Highlights:\s*([\s\S]*)$/i.exec(block)?.[1]
+      ?.replace(/\r?\n\s*\.\.\.\s*$/g, '')
+      .trim()
+    sources.push({
+      url,
+      ...title ? { title } : {},
+      ...highlights ? { snippet: capText(stripTags(highlights), 400) } : {},
+      ...publishedAt && publishedAt !== 'N/A' ? { publishedAt } : {},
+    })
+    if (sources.length >= count) break
+  }
+  return sources
+}
 
 export function exaEngine(deps: EngineDeps): Engine {
   const key = () => deps.exaApiKey || process.env.EXA_API_KEY
   return {
     id: 'exa',
     label: 'Exa',
-    available: () => (key()?.length ?? 0) > 0,
-    async search(query, count, signal) {
-      const res = await httpGet('https://api.exa.ai/search', {
-        method: 'POST',
-        headers: { 'x-api-key': key()!, 'content-type': 'application/json' },
-        body: JSON.stringify({ query, numResults: Math.min(count, 10), type: 'auto', contents: { text: false, highlights: true } }),
-        signal,
-        timeoutMs: 30_000,
-      })
-      if (!res.ok) throw new EngineError('Exa API error HTTP ' + res.status, 'ENGINE_ERROR')
-      const data = JSON.parse(res.text) as { results?: { title?: string; url?: string; publishedDate?: string; highlights?: string[] }[] }
-      const sources: WebSearchSource[] = (data.results ?? []).map(r => ({
-        url: r.url ?? '',
-        ...r.title ? { title: r.title } : {},
-        ...(r.highlights?.length ? { snippet: capText(r.highlights.join(' '), 400) } : {}),
-        ...r.publishedDate ? { publishedAt: r.publishedDate } : {},
-      })).filter(s => s.url.length > 0)
+    // A literal key enables the native client. In CLI-enabled profiles,
+    // mcporter can use the user's existing Exa MCP connection without copying
+    // credentials into this process.
+    available: () => (key()?.length ?? 0) > 0 || deps.enableCli,
+    async search(query, count, signal, options) {
+      const apiKey = key()
+      if (apiKey) {
+        const data = await new ExaClient({ apiKey }).search({ query, numResults: Math.min(count, 100), type: 'auto', ...options?.exa }, signal)
+        const sources: WebSearchSource[] = data.map(r => ({
+          url: r.url,
+          ...r.title ? { title: r.title } : {},
+          ...(r.highlights?.length ? { snippet: capText(r.highlights.join(' '), 400) } : {}),
+          ...r.publishedDate ? { publishedAt: r.publishedDate } : {},
+        }))
+        return { sources }
+      }
+      if (!deps.enableCli) throw new EngineError('Exa unavailable: configure EXA_API_KEY or enable CLI backends with mcporter', 'ENGINE_UNAVAILABLE', false)
+      const result = await runCli('mcporter', [
+        'call',
+        'exa.web_search_exa',
+        'query=' + query,
+        'numResults=' + String(Math.min(count, 100)),
+      ], { timeoutMs: 60_000, signal, maxOutput: 4 * 1024 * 1024 })
+      if (result.code !== 0) {
+        const detail = result.stderr.trim() || result.stdout.trim() || 'exit ' + result.code
+        throw new EngineError('Exa MCP search failed: ' + capText(detail, 300), 'ENGINE_ERROR', true)
+      }
+      const sources = parseMcporterExaSearch(result.stdout, count)
+      if (!sources.length) throw new EngineError('Exa MCP returned no parseable results', 'ENGINE_EMPTY', true)
       return { sources }
     },
   }
@@ -574,11 +614,11 @@ export function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps:
     id: 'custom-' + id,
     label: spec.name + ' (自定义)',
     available: () => !!deps.browser,
-    async search(query, count, signal) {
+    async search(query, count, signal, options) {
       if (!deps.browser) throw new EngineError('custom platform search unavailable (no browser service)', 'ENGINE_UNAVAILABLE', false)
       const url = spec.url.replace(/{query}/g, encodeURIComponent(query))
       const cookies = spec.cookie ? parseCookieString(spec.cookie, url) : undefined
-      const sources = await deps.browser.searchResults(url, searchSpec, { signal, count, cookies })
+      const sources = await deps.browser.searchResults(url, searchSpec, { signal, count, cookies, ...options?.browser })
       if (!sources.length) throw new EngineError('自定义平台 ' + spec.name + ' 未取到结果：检查 url 的 {query} 占位、item/title/link 选择器，或补充 cookie。', 'ENGINE_EMPTY', false)
       return { sources }
     },
@@ -593,11 +633,11 @@ export function playwrightPlatformEngine(platform: string, deps: EngineDeps): En
     id: 'playwright-' + platform,
     label: (builtin?.label ?? platform) + ' (Playwright)',
     available: () => !!builtin && !!deps.browser,
-    async search(query, count, signal) {
+    async search(query, count, signal, options) {
       if (!builtin || !deps.browser) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
       const override = deps.platformRules?.[platform]
       const spec = { ...builtin, ...override ?? {} } as typeof builtin
-      const sources = await deps.browser.searchResults(spec.url(query), spec, { signal, count })
+      const sources = await deps.browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
       if (!sources.length) {
         throw new EngineError(
           builtin.label + ' 未取到结果：该平台需要浏览器登录态（复用你已登录的浏览器）。运行 node scripts/save-login.mjs 登录一次并设置 dsh-browser 的 storageStatePath；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',

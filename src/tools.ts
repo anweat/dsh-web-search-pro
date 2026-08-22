@@ -56,6 +56,12 @@ export function registerTools(deps: ToolDeps): void {
       count: { type: 'number', description: 'Max results (1-20). Defaults to ' + String(config.searchMaxResults) + '.' },
       fresh: { type: 'boolean', description: 'Bypass the TTL cache and force a live search.' },
       multi: { type: 'boolean', description: 'Query all requested engines in parallel and merge results (slower, broader).' },
+      exaType: { type: 'string', description: 'Exa mode: instant, fast, auto, deep-lite, deep, or deep-reasoning.' },
+      includeDomains: { type: 'string', description: 'Exa only: comma-separated domain allowlist.' },
+      excludeDomains: { type: 'string', description: 'Exa only: comma-separated domain denylist.' },
+      startPublishedDate: { type: 'string', description: 'Exa only: inclusive ISO published-date lower bound.' },
+      endPublishedDate: { type: 'string', description: 'Exa only: inclusive ISO published-date upper bound.' },
+      category: { type: 'string', description: 'Exa only: search category.' },
     },
     output: {
       schema: {
@@ -94,6 +100,14 @@ export function registerTools(deps: ToolDeps): void {
         fresh: args.fresh ?? false,
         multi: args.multi ?? dynamic().parallelEngines,
         signal: exec.signal,
+        ...(args.exaType || args.includeDomains || args.excludeDomains || args.startPublishedDate || args.endPublishedDate || args.category) ? { exa: {
+          ...args.exaType ? { type: args.exaType as 'instant' | 'fast' | 'auto' | 'deep-lite' | 'deep' | 'deep-reasoning' } : {},
+          ...args.includeDomains ? { includeDomains: args.includeDomains.split(',').map(s => s.trim()).filter(Boolean) } : {},
+          ...args.excludeDomains ? { excludeDomains: args.excludeDomains.split(',').map(s => s.trim()).filter(Boolean) } : {},
+          ...args.startPublishedDate ? { startPublishedDate: args.startPublishedDate } : {},
+          ...args.endPublishedDate ? { endPublishedDate: args.endPublishedDate } : {},
+          ...args.category ? { category: args.category } : {},
+        } } : {},
       })
       return {
         ...result.content ? { content: result.content } : {},
@@ -102,6 +116,33 @@ export function registerTools(deps: ToolDeps): void {
         enginesTried: result.enginesTried,
         fromCache: result.fromCache,
       }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'web_exa_contents',
+    description: 'Fetch full text for up to 100 URLs through the native Exa /contents API in one batch. Requires the configured Exa API key.',
+    parameters: {
+      urls: { type: 'array', required: true, items: { type: 'string' }, description: 'HTTP(S) URLs to fetch, maximum 100.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          results: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, text: { type: 'string' }, publishedDate: { type: 'string' } } } },
+        },
+      },
+      render: (_args, value) => {
+        const v = value as { results: { url: string; title?: string; text?: string }[] }
+        return [{ type: 'text', text: v.results.map(row => (row.title ? '# ' + row.title + '\n' : '') + row.url + '\n\n' + (row.text ?? '')).join('\n\n---\n\n') }]
+      },
+    },
+    timeoutMs: config.timeoutMs + 30_000,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      if (!args.urls.length || args.urls.length > 100) throw new Error('urls must contain 1-100 entries')
+      const results = await router.exaContents(args.urls, exec.signal)
+      return { results: results.map(row => ({ url: row.url, ...row.title ? { title: row.title } : {}, ...row.text ? { text: row.text } : {}, ...row.publishedDate ? { publishedDate: row.publishedDate } : {} })) }
     },
   }))
 
@@ -160,6 +201,8 @@ export function registerTools(deps: ToolDeps): void {
       query: { type: 'string', required: true, description: 'The search query (feed URL for rss).' },
       url: { type: 'string', description: 'Feed URL when platform is rss.' },
       count: { type: 'number', description: 'Max results (1-20).' },
+      authProfile: { type: 'string', description: 'Named, domain-scoped dsh-browser auth profile.' },
+      rulePack: { type: 'string', description: 'Named, domain-scoped dsh-browser enhancement rule pack.' },
     },
     output: {
       schema: {
@@ -181,7 +224,7 @@ export function registerTools(deps: ToolDeps): void {
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       if (!PLATFORM_IDS.includes(args.platform as never)) throw new Error('unsupported platform: ' + args.platform)
-      const result = await router.platformSearch(args.platform, args.query, args.url, args.count ?? 8, { signal: exec.signal })
+      const result = await router.platformSearch(args.platform, args.query, args.url, args.count ?? 8, { signal: exec.signal, ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {} })
       return { platform: args.platform, sources: result.sources, engine: result.engine, fromCache: result.fromCache }
     },
   }))
@@ -466,6 +509,33 @@ export function registerTools(deps: ToolDeps): void {
         topEngines: store.topEngines(),
         topQueries: store.topQueries(),
       }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'web_backend_status',
+    description: 'Side-effect-free backend diagnostics: configured native search engines, availability probes, cooldown state, and local CLI dependency health. Does not make search requests or expose credentials.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
+          cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' } } } },
+        },
+      },
+      render: (_args, value) => {
+        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string }[] }
+        const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
+        lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '')))
+        return [{ type: 'text', text: lines.join('\n') }]
+      },
+    },
+    timeoutMs: 20_000,
+    isConcurrencySafe: () => true,
+    async execute() {
+      const cli = await detectDeps()
+      return { engines: router.backendDiagnostics(), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })) }
     },
   }))
 

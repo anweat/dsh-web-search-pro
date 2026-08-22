@@ -38,11 +38,15 @@ export interface BrowserService {
         signal?: AbortSignal;
         maxChars?: number;
         waitMs?: number;
+        authProfile?: string;
+        rulePack?: string;
     }): Promise<BrowserRenderResult>;
     snapshot(url: string, rules: readonly RenderRule[], opts: {
         signal?: AbortSignal;
         outDir: string;
         maxChars?: number;
+        authProfile?: string;
+        rulePack?: string;
     }): Promise<BrowserSnapshotResult>;
     searchResults(url: string, spec: {
         item: string;
@@ -59,6 +63,8 @@ export interface BrowserService {
             domain: string;
             path: string;
         }[];
+        authProfile?: string;
+        rulePack?: string;
     }): Promise<BrowserSearchItem[]>;
     opencli(args: string[], opts?: {
         timeoutMs?: number;

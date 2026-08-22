@@ -11,6 +11,7 @@ import type { ExtractRule } from './extract.ts'
 import { extractText, BUILTIN_RULES } from './extract.ts'
 import { httpGet, capText } from './util.ts'
 import { LruCache } from './memory-cache.ts'
+import { assertSafePublicUrl } from './safe-http.ts'
 
 export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright'
 
@@ -44,7 +45,7 @@ export function normalizeUrl(raw: string): string {
   } catch {
     throw new Error('url is not a valid URL')
   }
-  return parsed.href
+  return assertSafePublicUrl(parsed).href
 }
 
 /** All rules: user (DB) first, then built-ins; user rules win on ties. */

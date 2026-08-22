@@ -43,6 +43,7 @@ export declare function httpGet(url: string, opts?: {
     redirect?: 'follow' | 'error';
     method?: string;
     body?: string;
+    maxBytes?: number;
 }): Promise<HttpResult>;
 /** Decode bytes honoring charset; UTF-8 first with GBK fallback on garbage. */
 export declare function decodeText(buf: Buffer, contentType?: string): string;

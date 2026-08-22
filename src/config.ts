@@ -20,6 +20,13 @@ export interface CustomPlatformSpec {
   cookie?: string
 }
 
+export interface BrowserBinding {
+  /** Named dsh-browser auth profile. */
+  authProfile?: string
+  /** Named dsh-browser enhancement rule pack. */
+  rulePack?: string
+}
+
 export interface Config {
   /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
   dbPath?: string
@@ -71,6 +78,8 @@ export interface Config {
   platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
   /** User-defined custom platform search: url template + selectors + optional cookie. */
   customPlatforms?: Record<string, CustomPlatformSpec>
+  /** Per-platform binding to domain-scoped dsh-browser auth/rule profiles. */
+  browserBindings?: Record<string, BrowserBinding>
   /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
   playwright: {
     /** Gate the playwright fallback backend in web_fetch_pro. */
@@ -119,6 +128,10 @@ export const Config: z<Config> = z.object({
     link: z.string(),
     text: z.string(),
     cookie: z.string(),
+  })),
+  browserBindings: z.dict(z.object({
+    authProfile: z.string(),
+    rulePack: z.string(),
   })),
   playwright: z.object({
     enabled: z.boolean().default(true),
