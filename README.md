@@ -37,6 +37,9 @@ dsh --profile web
 | GitHub/B站/Reddit 等平台 | `web_platform_search` | Reddit 等 OpenCLI 平台需要 Chrome 扩展在线；中文受限站点使用 AuthProfile |
 | 登录后页面或私有论坛 | `browserBindings` + AuthProfile | Cookie 保存在本地 storageState，按域名授权，默认只读 |
 | 页面改版、懒加载 | `platformRules` 或 RulePack | 优先改选择器；需要等待/点击/滚动时再使用有界 RulePack |
+| 模型生成多步页面操作 | `browser_recipe_run` | 只读 wait/extract/assert/screenshot 直接运行；点击、输入等变更动作一次性审批 |
+| 外部模型生成油猴脚本 | `browser_script_validate` → `browser_userscript_run` | 强制 `@match`、`@grant none`、禁用 `@require`；每次执行原生审批 |
+| OpenCLI 站点适配器或浏览器桥 | `browser_opencli_status` / `browser_opencli_run` | 明确使用 Chrome；通用 argv 网关始终一次性审批 |
 
 先运行 `web_backend_status` 判断后端是否 ready。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。
 
@@ -52,7 +55,19 @@ dsh --profile web
 | `web_history` / `web_cache_clear` / `web_search_stats` | 持久历史 / 清缓存 / 存储统计 |
 | `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove） |
 | `web_backend_status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态 |
-| `web_deps` | 检测/安装外部依赖（gh/bili/yt-dlp/opencli/agent-reach/mcporter/playwright） |
+| `web_deps` | 检测/安装搜索后端的外部依赖（gh/bili/yt-dlp/agent-reach/mcporter）；浏览器依赖由 dsh-browser 管理 |
+
+## 浏览器脚本与自动化分层
+
+`dsh-browser >= 0.1.6` 提供三种不同风险等级的入口：
+
+1. **内置只读脚本**：`article-clean`、`links`、`jsonld`、`forms`，适合稳定抽取；先用 `browser_script_catalog` 查看。
+2. **Recipe**：最多 25 步的结构化 Playwright 操作，支持 wait/click/fill/type/press/select/check/hover/scroll/extract/assert/screenshot。只读步骤无需审批，含页面交互时触发一次性审批。
+3. **外部 UserScript**：适合外部模型生成站点专项逻辑。先 `browser_script_validate` 查看 SHA-256、域名范围与能力提示，再 `browser_userscript_run`；它在页面主世界运行，并非安全沙箱，因此每次执行都要求 DSH 原生审批。
+
+OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序是 **站点 adapter → network/extract → DOM 操作**；先运行 `browser_opencli_status`。`browser_opencli_run` 接受 argv 数组而非 shell 字符串，可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令，但始终审批。
+
+更完整的 AuthProfile、脚本元数据与 OpenCLI 示例见 [LOGIN.md](./LOGIN.md)。
 
 ## 配置
 

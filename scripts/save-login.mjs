@@ -7,10 +7,8 @@
  *   例：node scripts/save-login.mjs all login-state.json   # 依次登录所有平台，合并到一个文件
  *
  * 会打开一个可见浏览器窗口；请在窗口里完成登录（扫码/账号密码），回到终端按回车，
- * 再继续下一个平台。结束后把输出文件路径填到 settings.yaml：
- *   playwright.storageStatePath: 'login-state.json'
- * 之后 web_platform_search 的中文社区平台（zhihu/weibo/douban/tieba/douyin/kuaishou）
- * 就会复用这份登录态驱动搜索结果页。
+ * 再继续下一个平台。结束后把输出文件声明为 dsh-browser 的命名
+ * AuthProfile，并通过 web-search-pro.browserBindings 绑定到平台。
  */
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
@@ -34,14 +32,19 @@ function globalNpmRoot() {
 }
 
 function resolvePlaywright() {
+  const local = createRequire(import.meta.url)
+  try {
+    const browserPackage = local.resolve('@anweat/dsh-browser/package.json')
+    return createRequire(browserPackage)('playwright')
+  } catch { /* compatibility fallbacks below */ }
   const anchors = [
-    path.join(globalNpmRoot(), 'playwright', 'package.json'),
     'playwright/package.json',
+    path.join(globalNpmRoot(), 'playwright', 'package.json'),
   ]
   for (const anchor of anchors) {
     try { return createRequire(anchor)('playwright') } catch { /* next */ }
   }
-  throw new Error('未找到 playwright，先运行：npm i -g playwright && playwright install chromium')
+  throw new Error('未找到 Playwright。请先安装 @anweat/dsh-browser，并调用 browser_install 安装 Chromium。')
 }
 
 function waitForEnter(question) {
@@ -55,7 +58,10 @@ async function main() {
   const which = process.argv[2] || 'all'
   const out = path.resolve(process.argv[3] || 'login-state.json')
   const { chromium } = resolvePlaywright()
-  const browser = await chromium.launch({ headless: false, channel: 'msedge' })
+  const configuredChannel = String(process.env.DSH_BROWSER_CHANNEL || '').trim()
+  const launchOptions = { headless: false }
+  if (configuredChannel && configuredChannel !== 'chromium') launchOptions.channel = configuredChannel
+  const browser = await chromium.launch(launchOptions)
   const context = await browser.newContext()
   const platforms = which === 'all' ? Object.keys(LOGIN_PAGES) : [which]
   for (const p of platforms) {
@@ -69,8 +75,9 @@ async function main() {
   const state = await context.storageState()
   fs.writeFileSync(out, JSON.stringify(state, null, 2), 'utf8')
   console.log('已保存登录态到 ' + out)
-  console.log('在 $DSH_HOME/settings.yaml 里设置：')
-  console.log('  playwright.storageStatePath: ' + out)
+  console.log('请在 dsh-browser 的 authProfiles 中引用该绝对路径：')
+  console.log('  storageStatePath: ' + out)
+  console.log('并通过 web-search-pro.browserBindings 为目标平台绑定该 AuthProfile。')
   await browser.close()
 }
 
