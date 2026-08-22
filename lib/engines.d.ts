@@ -7,6 +7,7 @@
 import type { WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web';
 import type { BrowserService } from './browser-service.ts';
 import type { CustomPlatformSpec } from './config.ts';
+import { type ExaSearchRequest } from './exa-client.ts';
 export interface SearchOutcome {
     /** Provider-generated answer/summary text, when any. */
     content?: string;
@@ -17,7 +18,14 @@ export interface Engine {
     label: string;
     /** Cheap local availability check; must not do network I/O. */
     available(): boolean;
-    search(query: string, count: number, signal?: AbortSignal): Promise<SearchOutcome>;
+    search(query: string, count: number, signal?: AbortSignal, options?: EngineSearchOptions): Promise<SearchOutcome>;
+}
+export interface EngineSearchOptions {
+    exa?: Omit<ExaSearchRequest, 'query' | 'numResults'>;
+    browser?: {
+        authProfile?: string;
+        rulePack?: string;
+    };
 }
 export declare class EngineError extends Error {
     readonly code: string;
@@ -48,6 +56,8 @@ export interface EngineDeps {
     skipSeam: boolean;
 }
 export declare function seamEngine(deps: EngineDeps): Engine;
+/** Parse mcporter's human-readable Exa response into the router's native source shape. */
+export declare function parseMcporterExaSearch(output: string, count: number): WebSearchSource[];
 export declare function exaEngine(deps: EngineDeps): Engine;
 export declare function ddgEngine(): Engine;
 export declare function bingEngine(): Engine;

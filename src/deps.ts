@@ -50,7 +50,7 @@ const DEPS: Omit<DepInfo, 'available' | 'path'>[] = [
     ],
   },
   {
-    id: 'mcporter', label: 'mcporter', usedBy: '（预留：Exa MCP 后端）',
+    id: 'mcporter', label: 'mcporter', usedBy: 'Exa MCP fallback',
     installs: [
       { installer: 'npm', command: 'npm i -g mcporter' },
     ],

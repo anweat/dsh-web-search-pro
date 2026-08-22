@@ -12,11 +12,14 @@ import type { ResolvedConfig } from './config.ts'
 import {
   seamEngine, exaEngine, ddgEngine, bingEngine, jinaSearchEngine, githubEngine,
   bilibiliEngine, v2exEngine, youtubeEngine, arxivEngine, pubmedEngine, platformEngines,
-  rssEngine, customPlatformEngine, EngineError, type Engine, type EngineDeps, type SearchOutcome,
+  rssEngine, customPlatformEngine, EngineError, type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions,
 } from './engines.ts'
 import { normQuery, capText } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
+import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
+import { BackendRegistry, type BackendDiagnostic } from './backend-registry.ts'
+import { ExaClient, type ExaResult } from './exa-client.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -30,6 +33,8 @@ export interface RouterSearchOptions {
   signal: AbortSignal | undefined
   /** True when called from the ctx.web provider (prevents seam recursion). */
   skipSeam?: boolean
+  /** Native Exa search controls; ignored by other engines. */
+  exa?: EngineSearchOptions['exa']
 }
 
 export interface RouterSearchResult {
@@ -55,6 +60,8 @@ const ENGINE_FACTORIES: Record<string, (deps: any, config: ResolvedConfig) => En
 }
 
 export class SearchRouter {
+  private readonly backends: BackendRegistry<{ query: string; count: number; signal?: AbortSignal; skipSeam: boolean; options?: EngineSearchOptions }, SearchOutcome>
+
   constructor(
     private readonly ctx: Context,
     private readonly config: ResolvedConfig,
@@ -62,7 +69,42 @@ export class SearchRouter {
     private readonly dynamic: () => ResolvedConfig = () => config,
     private readonly browser?: BrowserService,
     private readonly memory = new LruCache<RouterSearchResult>(config.memoryCacheEntries),
-  ) {}
+  ) {
+    this.backends = new BackendRegistry({ cooldownMs: 30_000 })
+    for (const id of Object.keys(ENGINE_FACTORIES)) {
+      this.backends.register({
+        id,
+        probe: () => {
+          try {
+            const engine = this.buildSync(id, false)
+            if (engine.available()) return { available: true }
+            // Credential resolution is asynchronous. A configured credentials service
+            // means Exa may still be available even when no literal/env key is visible.
+            if (id === 'exa' && this.ctx.get('credentials')) return { available: true, reason: 'credential resolution deferred until execution' }
+            return { available: false, reason: engine.label + ' unavailable' }
+          } catch (error) {
+            return { available: false, reason: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        run: async input => {
+          const engine = await this.build(id, input.skipSeam)
+          if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
+          return engine.search(input.query, input.count, input.signal, input.options)
+        },
+      })
+    }
+  }
+
+  backendDiagnostics(): BackendDiagnostic[] {
+    return this.backends.diagnostics()
+  }
+
+  async exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]> {
+    const cfg = this.dynamic()
+    const key = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
+    if (!key) throw new Error('Exa is unavailable: configure exaApiKey or ' + cfg.exaApiKeyEnv)
+    return new ExaClient({ apiKey: key }).contents(urls, signal)
+  }
 
   /** Resolve a key through credentials first, then process env. */
   private async resolveKey(ref: string, literal?: string): Promise<string | undefined> {
@@ -147,19 +189,17 @@ export class SearchRouter {
       .filter((id, i, arr) => arr.indexOf(id) === i)
     const nq = normQuery(query)
     const count = Math.min(Math.max(opts.count, 1), 20)
+    const cacheKey = createSearchCacheKey({ query, engines: ids, count, multi: opts.multi, ...opts.exa ? { exa: opts.exa as Record<string, unknown> } : {} })
 
     // 1. In-process LRU cache, then SQLite.
     if (!opts.fresh) {
-      for (const id of ids) {
-        const hot = this.memory.get(id + '|' + nq, cfg.ttlSeconds * 1000)
-        if (hot) return { ...hot, fromCache: true, enginesTried: [id] }
-      }
-      for (const id of ids) {
-        const cached = this.store.getCachedSearch(id, nq, cfg.ttlSeconds)
-        if (cached) {
+      const hot = this.memory.get(cacheKey, cfg.ttlSeconds * 1000)
+      if (hot) return { ...hot, fromCache: true }
+      const cached = this.store.getCachedQuery('search', cacheKey, cfg.ttlSeconds)
+      if (cached) {
           const rows = this.store.resultsForQuery(cached.id)
           if (rows.length) {
-            let detail: { content?: string } | undefined
+            let detail: { content?: string; engine?: string; enginesTried?: string[] } | undefined
             if (cached.detail) { try { detail = JSON.parse(cached.detail) } catch { /* ignore */ } }
             return {
               ...detail?.content ? { content: detail.content } : {},
@@ -169,12 +209,11 @@ export class SearchRouter {
                 ...r.snippet ? { snippet: r.snippet } : {},
                 ...r.published ? { publishedAt: r.published } : {},
               })),
-              engine: id,
-              enginesTried: [id],
+              engine: detail?.engine ?? ids[0] ?? 'unknown',
+              enginesTried: detail?.enginesTried ?? ids,
               fromCache: true,
             }
           }
-        }
       }
     }
 
@@ -188,7 +227,7 @@ export class SearchRouter {
       const results = await Promise.allSettled(ids.map(async (id) => {
         const engine = await this.build(id, opts.skipSeam ?? false)
         if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
-        return { id, outcome: await engine.search(query, count, signal) }
+        return { id, outcome: await engine.search(query, count, signal, opts.exa ? { exa: opts.exa } : undefined) }
       }))
       enginesTried.push(...ids)
       // Reciprocal Rank Fusion + freshness/authority signals (Argo-style
@@ -228,26 +267,26 @@ export class SearchRouter {
           }
         })
       }
-      if (!scores.size) throw new Error('all engines failed: ' + enginesTried.join(', '))
+      if (!scores.size) {
+        const failures = results.map((r, index) => ids[index] + ': ' + (r.status === 'rejected' ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : 'empty')).join('; ')
+        throw new Error('all engines failed: ' + failures)
+      }
       const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, count)
       outcome = { sources: ranked.map(([url]) => entries.get(url)!) }
       usedId = 'multi(' + ids.join('+') + ')'
     } else {
-      for (const id of ids) {
-        enginesTried.push(id)
-        const engine = await this.build(id, opts.skipSeam ?? false)
-        if (!engine.available()) continue
-        try {
-          outcome = await engine.search(query, count, signal)
-          usedId = id
-          break
-        } catch (error) {
-          if (signal?.aborted) throw error
-          // keep trying the next engine on failure
-        }
-      }
-      if (!outcome || !usedId) {
-        throw new Error('no engine produced results (tried: ' + enginesTried.join(', ') + ')')
+      try {
+        const selected = await this.backends.runSelected(
+          { query, count, signal, skipSeam: opts.skipSeam ?? false, ...opts.exa ? { options: { exa: opts.exa } } : {} },
+          { preferred: ids },
+        )
+        outcome = selected.value
+        usedId = selected.id
+        enginesTried.push(...ids.slice(0, Math.max(ids.indexOf(selected.id) + 1, 1)))
+      } catch (error) {
+        if (signal?.aborted) throw error
+        enginesTried.push(...ids)
+        throw error
       }
     }
 
@@ -257,7 +296,8 @@ export class SearchRouter {
       query: nq,
       engine: usedId,
       status: 'ok',
-      ...outcome.content ? { detail: JSON.stringify({ content: outcome.content }) } : {},
+      cacheKey,
+      detail: JSON.stringify({ ...outcome.content ? { content: outcome.content } : {}, engine: usedId, enginesTried }),
     })
     this.store.recordResults(queryId, outcome.sources, usedId)
 
@@ -274,7 +314,7 @@ export class SearchRouter {
       fromCache: false,
     }
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).
-    this.memory.set(usedId + '|' + nq, result)
+    this.memory.set(cacheKey, result)
     return result
   }
 
@@ -284,9 +324,14 @@ export class SearchRouter {
     query: string,
     url: string | undefined,
     count: number,
-    opts: { signal?: AbortSignal; fresh?: boolean },
+    opts: { signal?: AbortSignal; fresh?: boolean; authProfile?: string; rulePack?: string },
   ): Promise<RouterSearchResult> {
     const nq = normQuery(query || url || platform)
+    const boundedCount = Math.min(Math.max(count, 1), 20)
+    const binding = this.dynamic().browserBindings?.[platform]
+    const authProfile = opts.authProfile ?? binding?.authProfile
+    const rulePack = opts.rulePack ?? binding?.rulePack
+    const cacheKey = createPlatformCacheKey({ platform, query: query || url || platform, ...url ? { url } : {}, count: boundedCount, ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} })
     const custom = this.dynamic().customPlatforms?.[platform]
     // Async deps (not depsSync): platform engines may need credentials-resolved
     // keys (e.g. githubToken from the credentials service), which the sync path
@@ -298,7 +343,7 @@ export class SearchRouter {
     if (!engines.length) throw new Error('unsupported platform: ' + platform)
 
     if (!opts.fresh) {
-      const cached = this.store.getCachedSearch('platform-' + platform, nq, this.dynamic().ttlSeconds)
+      const cached = this.store.getCachedQuery('platform', cacheKey, this.dynamic().ttlSeconds)
       if (cached) {
         const rows = this.store.resultsForQuery(cached.id)
         if (rows.length) {
@@ -319,7 +364,7 @@ export class SearchRouter {
       enginesTried.push(engine.id)
       if (!engine.available()) continue
       try {
-        outcome = await engine.search(query || 'latest', Math.min(Math.max(count, 1), 20), opts.signal)
+        outcome = await engine.search(query || 'latest', boundedCount, opts.signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
         break
       } catch (error) {
         if (opts.signal?.aborted) throw error
@@ -337,6 +382,7 @@ export class SearchRouter {
       platform,
       engine: enginesTried.at(-1) ?? 'unknown',
       status: 'ok',
+      cacheKey,
     })
     this.store.recordResults(queryId, outcome.sources, 'platform-' + platform)
     return { sources: outcome.sources, engine: platform, enginesTried, fromCache: false }

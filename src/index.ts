@@ -34,10 +34,14 @@ export const inject = ['tools', 'systemPrompt', 'browser']
 
 export { Config }
 export type { Config as WebSearchProConfig } from './config.ts'
+export { ExaClient } from './exa-client.ts'
+export type { ExaSearchRequest, ExaSearchType, ExaResult } from './exa-client.ts'
+export { BackendRegistry } from './backend-registry.ts'
+export type { Backend, BackendDiagnostic, BackendProbe } from './backend-registry.ts'
 
 const TOOL_NAMES = [
-  'web_search_pro', 'web_fetch_pro', 'web_platform_search', 'web_snapshot',
-  'web_history', 'web_cache_clear', 'web_rule', 'web_search_stats', 'web_deps',
+  'web_search_pro', 'web_exa_contents', 'web_fetch_pro', 'web_platform_search', 'web_snapshot',
+  'web_history', 'web_cache_clear', 'web_rule', 'web_search_stats', 'web_backend_status', 'web_deps',
 ]
 
 export function apply(ctx: Context, config: Config): void {

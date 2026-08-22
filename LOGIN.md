@@ -16,16 +16,29 @@ node scripts/save-login.mjs all login-state.json
 node scripts/save-login.mjs zhihu login-state.json
 ```
 
-然后把文件路径填到 `$DSH_HOME/settings.yaml`：
+然后在 dsh-browser 的部署配置中创建命名、按域名授权的 AuthProfile：
 
 ```yaml
+# cordis.yml 中的 dsh-browser 插件行
+- id: browser
+  name: '@anweat/dsh-browser'
+  config:
+    authProfiles:
+      china-community:
+        storageStatePath: 'D:/secrets/login-state.json'
+        allowedDomains: [zhihu.com, weibo.com, douban.com, baidu.com, douyin.com, kuaishou.com]
+        persistState: false
+
+# $DSH_HOME/settings.yaml
+---
 web-search-pro:
-  playwright:
-    storageStatePath: 'login-state.json'   # 绝对路径更稳
+  browserBindings:
+    zhihu: { authProfile: china-community }
+    weibo: { authProfile: china-community }
 ```
 
 > storageState 是 Playwright 的标准登录态文件（cookies + origins），
-> 同一份文件可同时含多个站点的登录态（脚本会依次登录并合并）。
+> 同一份文件可含多个站点登录态，但每个 AuthProfile 必须显式给出 `allowedDomains`；访问其他域名会被拒绝。`persistState` 默认 false，只有明确开启才会原子回写新 Cookie/localStorage。
 
 ## 方式二：用 Cookie 插件导出
 
@@ -40,6 +53,34 @@ web-search-pro:
 ```
 
 每个 cookie 至少需要 `name` `value` `domain` `path`（可补 `expires` `httpOnly` `secure`）。
+
+不要把 Cookie JSON 作为模型工具参数传入；导入到本地 storageState 文件后只在配置中引用路径。
+
+## 受控脚本增强（RulePack V2）
+
+dsh-browser 可配置命名 RulePack。它支持有界的 `waitFor` / `click` / `scroll` / `wait` 步骤；可选 init script 只能引用本地文件，必须提供 SHA-256，且文件不超过 64KB。RulePack 同样按 `matches` 限域，不接受模型直接提交任意 JavaScript。
+
+```yaml
+rulePacks:
+  zhihu-enhanced:
+    matches: [zhihu.com]
+    initScriptPath: 'D:/dsh/rules/zhihu-init.js'
+    initScriptSha256: '<64位sha256>'
+    steps:
+      - { type: waitFor, selector: '.SearchResult-Card', timeoutMs: 10000 }
+      - { type: scroll, deltaY: 1600, repeat: 2, waitMs: 300 }
+```
+
+## OpenCLI 社区平台
+
+Reddit / 小红书 / Twitter / Instagram / Facebook 走 OpenCLI Browser Bridge，使用当前 Chrome 扩展会话，不读取或导出 Cookie。`dsh-browser` 已包含 OpenCLI CLI，但 Chrome 扩展必须已安装并连接：
+
+```bash
+opencli doctor
+opencli reddit search "DeepSeek Harness" -f yaml
+```
+
+若 `doctor` 显示 daemon 正常但 extension disconnected，请启动安装了 OpenCLI 扩展的 Chrome profile；不要把 Quark 或禁用扩展的 Playwright 临时 profile 当作替代。只有需要在终端独立诊断时，才需要额外全局安装 `@jackwener/opencli`。
 
 ## 结果选择器可配置
 

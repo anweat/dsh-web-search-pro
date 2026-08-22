@@ -7,8 +7,11 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
+import { type EngineSearchOptions } from './engines.ts';
 import { LruCache } from './memory-cache.ts';
 import type { BrowserService } from './browser-service.ts';
+import { type BackendDiagnostic } from './backend-registry.ts';
+import { type ExaResult } from './exa-client.ts';
 export interface RouterSearchOptions {
     query: string;
     /** Engine ids to try, in order. Defaults to config.engines. */
@@ -21,6 +24,8 @@ export interface RouterSearchOptions {
     signal: AbortSignal | undefined;
     /** True when called from the ctx.web provider (prevents seam recursion). */
     skipSeam?: boolean;
+    /** Native Exa search controls; ignored by other engines. */
+    exa?: EngineSearchOptions['exa'];
 }
 export interface RouterSearchResult {
     content?: string;
@@ -41,7 +46,10 @@ export declare class SearchRouter {
     private readonly dynamic;
     private readonly browser?;
     private readonly memory;
+    private readonly backends;
     constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | undefined, memory?: LruCache<RouterSearchResult>);
+    backendDiagnostics(): BackendDiagnostic[];
+    exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]>;
     /** Resolve a key through credentials first, then process env. */
     private resolveKey;
     private deps;
@@ -57,6 +65,8 @@ export declare class SearchRouter {
     platformSearch(platform: string, query: string, url: string | undefined, count: number, opts: {
         signal?: AbortSignal;
         fresh?: boolean;
+        authProfile?: string;
+        rulePack?: string;
     }): Promise<RouterSearchResult>;
     /**
      * ctx.web provider adapter: route the seam request through this router.

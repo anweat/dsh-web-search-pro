@@ -16,8 +16,8 @@ importers:
         version: 30.0.1
     devDependencies:
       '@anweat/dsh-browser':
-        specifier: ^0.1.4
-        version: 0.1.4(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-tools@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-system-prompt@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/schemastery@3.18.1)
+        specifier: ^0.1.5
+        version: 0.1.5(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-tools@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-system-prompt@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/schemastery@3.18.1)
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
         version: 4.0.1
@@ -51,8 +51,8 @@ importers:
 
 packages:
 
-  '@anweat/dsh-browser@0.1.4':
-    resolution: {integrity: sha512-TdHjblzzc5rzGiHZq70A9fBxmxKYUjsc8EdMd1V2WN8gDAxNR6t4jXTP/Y0l3gD9YUXZ1yr+8l4fFBp9GiBxzQ==}
+  '@anweat/dsh-browser@0.1.5':
+    resolution: {integrity: sha512-2S91VjCt6+hWPXBmS/1vQeYiUwwAj6Yrg7ddDe1PMQv4Hq2qvomGJ7Bcy3SjBenPf9XfWufLCkn80Eueig7YgQ==}
     engines: {node: ^22.19 || >=24}
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1
@@ -400,7 +400,7 @@ packages:
 
 snapshots:
 
-  '@anweat/dsh-browser@0.1.4(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-tools@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-system-prompt@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/schemastery@3.18.1)':
+  '@anweat/dsh-browser@0.1.5(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-tools@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-system-prompt@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/schemastery@3.18.1)':
     dependencies:
       '@jackwener/opencli': 1.8.6
       playwright: 1.62.1

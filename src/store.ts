@@ -23,6 +23,7 @@ export interface QueryRecord {
   status: string
   ts: string
   detail?: string
+  cacheKey?: string
 }
 
 export interface SourceRow {
@@ -67,8 +68,8 @@ CREATE TABLE IF NOT EXISTS queries (
   url TEXT,
   status TEXT NOT NULL,
   ts TEXT NOT NULL,
-  detail TEXT
-);
+	  detail TEXT
+	);
 CREATE TABLE IF NOT EXISTS results (
   id TEXT PRIMARY KEY,
   query_id TEXT NOT NULL,
@@ -112,6 +113,9 @@ export class Store {
     this.db = new DatabaseSync(dbPath)
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec(SCHEMA)
+    const columns = this.db.prepare('PRAGMA table_info(queries)').all() as unknown as { name: string }[]
+    if (!columns.some(column => column.name === 'cache_key')) this.db.exec('ALTER TABLE queries ADD COLUMN cache_key TEXT')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_queries_cache ON queries(kind, cache_key, ts)')
   }
 
   close(): void {
@@ -123,8 +127,8 @@ export class Store {
     const id = input.id ?? uid()
     const ts = new Date().toISOString()
     this.db.prepare(
-      'INSERT OR REPLACE INTO queries (id, kind, query, engine, platform, url, status, ts, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(id, input.kind, input.query ?? null, input.engine ?? null, input.platform ?? null, input.url ?? null, input.status, ts, input.detail ?? null)
+      'INSERT OR REPLACE INTO queries (id, kind, query, engine, platform, url, status, ts, detail, cache_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(id, input.kind, input.query ?? null, input.engine ?? null, input.platform ?? null, input.url ?? null, input.status, ts, input.detail ?? null, input.cacheKey ?? null)
     return id
   }
 
@@ -135,6 +139,16 @@ export class Store {
        WHERE kind = 'search' AND engine = ? AND query = ? AND status = 'ok'
          AND ts > ? ORDER BY ts DESC LIMIT 1`,
     ).get(engine, normQuery, new Date(Date.now() - ttlSeconds * 1000).toISOString()) as { id: string; detail: string | null } | undefined
+    if (!row) return undefined
+    return { id: row.id, ...row.detail != null ? { detail: row.detail } : {} }
+  }
+
+  /** Look up a fresh cached operation by kind and its complete input fingerprint. */
+  getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): { id: string; detail?: string } | undefined {
+    const row = this.db.prepare(
+      `SELECT id, detail FROM queries WHERE kind = ? AND cache_key = ? AND status = 'ok'
+       AND ts > ? ORDER BY ts DESC LIMIT 1`,
+    ).get(kind, cacheKey, new Date(Date.now() - ttlSeconds * 1000).toISOString()) as { id: string; detail: string | null } | undefined
     if (!row) return undefined
     return { id: row.id, ...row.detail != null ? { detail: row.detail } : {} }
   }

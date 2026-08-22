@@ -2,7 +2,7 @@
 
 增强型、可持久化的扩展网页搜索插件 for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）。
 
-一个 DSH **bundle 插件**，把多引擎网页搜索、平台搜索、持久化缓存、脚本猫式按站提取、Playwright 渲染打包成模型可直接调用的 9 个工具。灵感来自 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)、[Agent-Reach](https://github.com/Panniantong/Agent-Reach)、脚本猫/油猴 userscript、opencli 与 playwright。
+一个 DSH **bundle 插件**，把多引擎网页搜索、平台搜索、持久化缓存、受控按站增强和 Playwright 渲染打包成模型可直接调用的 11 个工具。路由控制面借鉴 Agent-Reach 的后端探测、顺序选择和失败冷却思路，核心逻辑为本项目原生 TypeScript 实现。
 
 ## 安装
 
@@ -14,22 +14,44 @@ dsh plugin --profile web add ./dsh-web-search-pro
 dsh --profile web
 ```
 
-> dsh-browser 需先发布到 npm（本地测试可用 `dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro` 一条命令显式列两个）。
+> npm 安装会解析 `@anweat/dsh-browser`；本地联调可用 `dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro` 一条命令显式列两个。
 > 依赖 `@deepseek-ai/*` 已发布到 npm（`^0.1.0-rc.6`，与社区 dsh-cc-tui 一致）。
 > 若你的 harness 是本地源码 checkout（如 `0.1.0-rc.5`），版本号可能有出入——用
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
 > 里对齐版本后重装即可。
 
-## 工具（9 个）
+## 快速使用与适用情形
+
+安装并重启后，直接在 DSH 会话里要求模型调用工具即可：
+
+```text
+请调用 web_backend_status 检查后端，然后用 web_search_pro 搜索
+"DeepSeek Harness community feedback"，指定 exa、fresh=true、返回 8 条来源。
+```
+
+| 情形 | 推荐入口 | 说明 |
+|---|---|---|
+| 日常网页搜索 | `web_search_pro` | 默认按配置顺序回退；需要强制刷新时传 `fresh=true` |
+| 语义研究、社区观点 | `web_search_pro` + `exa` | 有 API Key 时走原生 Exa API；只有 Exa MCP 连接时自动经 `mcporter` 回退 |
+| 已知 URL 的批量正文 | `web_exa_contents` | 直接调用 Exa `/contents`，必须配置 `EXA_API_KEY` |
+| GitHub/B站/Reddit 等平台 | `web_platform_search` | Reddit 等 OpenCLI 平台需要 Chrome 扩展在线；中文受限站点使用 AuthProfile |
+| 登录后页面或私有论坛 | `browserBindings` + AuthProfile | Cookie 保存在本地 storageState，按域名授权，默认只读 |
+| 页面改版、懒加载 | `platformRules` 或 RulePack | 优先改选择器；需要等待/点击/滚动时再使用有界 RulePack |
+
+先运行 `web_backend_status` 判断后端是否 ready。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。
+
+## 工具（11 个）
 
 | 工具 | 作用 |
 |---|---|
 | `web_search_pro` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史 |
+| `web_exa_contents` | 原生 Exa `/contents` 批量正文抓取（1-100 URL） |
 | `web_fetch_pro` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存 |
 | `web_platform_search` | 20 平台：GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手（Playwright 登录态） |
 | `web_snapshot` | Playwright 全页截图 + HTML + 文本落盘 |
 | `web_history` / `web_cache_clear` / `web_search_stats` | 持久历史 / 清缓存 / 存储统计 |
 | `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove） |
+| `web_backend_status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态 |
 | `web_deps` | 检测/安装外部依赖（gh/bili/yt-dlp/opencli/agent-reach/mcporter/playwright） |
 
 ## 配置
@@ -40,12 +62,16 @@ dsh --profile web
 
    ```yaml
    web-search-pro:
-     exaApiKey: 'sk-...'       # 或环境变量 EXA_API_KEY / .credentials.yaml
-     jinaApiKey: 'jina_...'    # 或环境变量 JINA_API_KEY
+     exaApiKeyEnv: EXA_API_KEY # 推荐：运行环境或凭据服务，不把密钥写入配置
+     jinaApiKeyEnv: JINA_API_KEY
      engines: [ddg, bing, exa, seam, jina]
      parallelEngines: false
      ttlSeconds: 3600
      searchMaxResults: 8
+     browserBindings:
+       zhihu:
+         authProfile: china-community
+         rulePack: zhihu-enhanced
    ```
 
 2. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
@@ -59,18 +85,22 @@ dsh --profile web
 |---|---|---|
 | bili-cli | B站后端 | `uv tool install bili-cli` / `pipx install bili-cli` |
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
-| opencli | 小红书/Twitter/Reddit/IG/FB | `npm i -g opencli` |
+| opencli | 小红书/Twitter/Reddit/IG/FB | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
 | agent-reach | agent-reach 后端 | `uv tool install agent-reach` / `pip install agent-reach` |
-| playwright | 渲染/截图后端 | `npm i -g playwright && playwright install chromium` |
+| mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |
+| playwright | 渲染/截图后端 | 由 dsh-browser 内置；缺 Chromium 时调用 `browser_install` |
 
 ## 平台与引擎
 
-`seam`（ctx.web/DeepSeek 原生）· `exa` · `ddg` · `bing` · `jina` · `github`（REST 搜索 API，免 CLI；可选 `$GITHUB_TOKEN`/`githubToken` 提升限额并解锁代码搜索）· `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；`multi` 并行融合。
+`seam`（ctx.web/DeepSeek 原生）· `exa` · `ddg` · `bing` · `jina` · `github`（REST 搜索 API，免 CLI；可选 `$GITHUB_TOKEN`/`githubToken` 提升限额并解锁代码搜索）· `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；失败后短时冷却，`web_backend_status` 可查看原因；`multi` 并行融合。
+
+Exa 优先使用原生 API 客户端：`web_search_pro` 可传 `exaType`、域名包含/排除、发布时间范围和 category。若没有裸 API Key、但启用了 CLI 后端且 Exa MCP 已连接，搜索会自动通过 `mcporter` 完成；该兼容路径只支持 query + 结果数，高级筛选和 `web_exa_contents` 仍要求 `EXA_API_KEY`。不同选项、结果数、引擎顺序和单/多引擎模式使用不同缓存指纹。
 
 ## 开发
 
 ```bash
 pnpm install
+pnpm test
 pnpm build        # tsc src → lib
 ```
 
@@ -87,8 +117,8 @@ zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都�
 所以走 **Playwright 驱动登录态浏览器**（借鉴 MediaCrawler 思路、MIT 独立实现，未用其签名算法）：
 
 1. 登录一次保存登录态：`node scripts/save-login.mjs all login-state.json`
-2. 在 `$DSH_HOME/settings.yaml` 里设 `playwright.storageStatePath`
-3. 站点改版时无需改代码，用 `platformRules` 按平台覆盖结果选择器
+2. 在 dsh-browser 配置中声明按域名隔离的 `authProfiles`
+3. 在 `browserBindings` 把平台绑定到 profile；站点改版时用 `platformRules` 或 dsh-browser `rulePacks`
 
 详见 [LOGIN.md](./LOGIN.md)。
 
@@ -98,9 +128,9 @@ zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都�
 web_history 支持：kind/query/engine/platform 过滤、replay（用 queryId 回放已存结果）、
 export（把过滤后的历史+结果写成 JSON 文件）。
 
-## 自定义平台（解析 cookie 去搜索）
+## 自定义平台
 
-在 settings.yaml 里定义任意站点（URL 模板 + 结果选择器 + 可选 Cookie），
+在 settings.yaml 里定义任意站点（URL 模板 + 结果选择器），
 web_platform_search 就能直接搜它——不需要改代码：
 
     web-search-pro:
@@ -111,12 +141,16 @@ web_platform_search 就能直接搜它——不需要改代码：
           item: '.bili-video-card'
           title: '.bili-video-card__info--tit'
           link: 'a'
-        # 需要登录的站点补 cookie（a=b; c=d，自动应用到 url 域名）
+        # 需要登录时优先通过 browserBindings 绑定命名 authProfile。
         myforum:
           name: '某论坛'
           url: 'https://forum.example.com/search?q={query}'
           item: '.thread'
           title: '.thread-title a'
           link: '.thread-title a'
-          cookie: 'sessionid=abc123; csrftoken=xyz'
+      browserBindings:
+        myforum:
+          authProfile: forum
+
+旧版 `customPlatforms.*.cookie` 仍兼容，但会让 Cookie 明文进入配置；新配置应使用 dsh-browser 的命名 AuthProfile，状态文件不要提交到仓库。
 

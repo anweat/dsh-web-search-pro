@@ -16,6 +16,7 @@ export interface QueryRecord {
     status: string;
     ts: string;
     detail?: string;
+    cacheKey?: string;
 }
 export interface SourceRow {
     id: string;
@@ -57,6 +58,11 @@ export declare class Store {
     }): string;
     /** Look up a fresh cached search by (engine, normalized query). */
     getCachedSearch(engine: string, normQuery: string, ttlSeconds: number): {
+        id: string;
+        detail?: string;
+    } | undefined;
+    /** Look up a fresh cached operation by kind and its complete input fingerprint. */
+    getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): {
         id: string;
         detail?: string;
     } | undefined;
