@@ -28,6 +28,8 @@ export interface EngineDeps {
     web?: WebRuntime;
     exaApiKey?: string;
     jinaApiKey?: string;
+    /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
+    githubToken?: string;
     enableCli: boolean;
     opencliEnabled: boolean;
     agentReachEnabled: boolean;
