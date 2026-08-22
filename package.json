@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-search-pro",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Enhanced, persistent web search plugin for DeepSeek Harness — multi-engine routing (DeepSeek/Exa/DDG/Bing/Jina + GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS), SQLite+LRU cache, userscript-style extraction, and Playwright rendering.",
   "license": "MIT",
   "type": "module",
@@ -32,7 +32,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@anweat/dsh-browser": "^0.1.3",
+    "@anweat/dsh-browser": "^0.1.4",
     "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
@@ -63,7 +63,7 @@
     "jsdom": "^30.0.0"
   },
   "devDependencies": {
-    "@anweat/dsh-browser": "^0.1.3",
+    "@anweat/dsh-browser": "^0.1.4",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
