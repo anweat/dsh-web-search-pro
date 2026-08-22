@@ -1,20 +1,11 @@
 # dsh-web-search-pro bundle patch.
 #
-# Install (self-contained — also pulls in dsh-browser as a dependency):
-#   dsh plugin --profile <name> add dsh-web-search-pro
+# Install BOTH bundles (DSH activates only DIRECT dependencies' bundle layers):
+#   dsh plugin --profile <name> add @anweat/dsh-browser dsh-web-search-pro
 #
-# The patch inserts BOTH rows: browser (the dsh-browser runtime this plugin
-# injects) and web-search-pro. dsh-browser is declared as a regular
-# dependency in package.json, so pnpm installs it; because dsh plugin
-# reconcile only auto-mounts DIRECT dependencies' patches, the parent plugin
-# inserts the child's row here so one command activates both.
+# @anweat/dsh-browser is declared as a peerDependency: it provides the browser
+# service that this plugin injects (inject: ['browser']).
 - insert:
-    - id: browser
-      name: '@anweat/dsh-browser'
-      config:
-        channel: chromium
-        headless: true
-        opencliEnabled: true
     - id: web-search-pro
       name: dsh-web-search-pro
       config:
