@@ -34,11 +34,11 @@ dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
 
 升级完成后需要**完整停止并重新启动 Web profile**；仅刷新网页不会重新扫描插件的 `client.js`。随后依次检查：
 
-1. `browser_status`：确认 OpenCLI/Playwright 状态和 `automationMode` 符合预期。
+1. `browser_status`：确认 OpenCLI、`playwright | patchright` 运行时、`automationMode` 与 `usagePolicy` 符合预期。
 2. `web_backend_status`：确认搜索、CLI、Agent Reach 与浏览器后端是否 ready。
-3. 打开 `设置 → 插件 → 插件配置 → Web Search Pro`：确认可视化面板已加载。
+3. 打开 `设置 → 插件 → 插件配置`：确认“Web Search Pro”和“浏览器自动化”两张卡片都已加载；后者负责自由度、运行时、OpenCLI 与调用缓冲。
 
-> `automationMode` 属于 dsh-browser，升级不会自动改写现有审批策略。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile。
+> `automationMode` 和防止过度调用的 `usagePolicy` 都属于 dsh-browser，升级不会自动改写现有配置。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile，并且仍受并发、突发、页数/深度和 429/503 退避保护。
 
 若 Clash/TUN 使用 fake-IP DNS，原生 HTTP 后端可能看到 `198.18.0.0/15` 或 `fdfe:dcba:9876::/96`。可在可视化面板的高级设置中启用 `allowProxyFakeIp`；默认关闭。该开关只信任这两个代理网段的 **DNS 解析结果**，字面 fake-IP URL、localhost 和其他私网地址仍会被 SSRF 防护拒绝。
 
@@ -61,7 +61,8 @@ dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
 | 页面改版、懒加载 | `platformRules` 或 RulePack | 优先改选择器；需要等待/点击/滚动时再使用有界 RulePack |
 | 模型生成多步页面操作 | `browser_recipe_run` | 只读步骤直接运行；页面交互按 dsh-browser 的 `automationMode` 决定拒绝/审批/直通 |
 | 外部模型生成油猴脚本 | `browser_script_validate` → `browser_userscript_run` | 强制 `@match`、`@grant none`、禁用 `@require`；仅 `unrestricted` 跳过审批 |
-| OpenCLI 站点适配器或浏览器桥 | `browser_opencli_status` / `browser_opencli_run` | 明确使用 Chrome；仅 `unrestricted` 跳过通用 argv 审批 |
+| 有限泛爬取 | `browser_crawl` | 匿名、默认同源；调用参数不能突破浏览器插件的页数/深度预算 |
+| OpenCLI 站点适配器或浏览器桥 | `browser_opencli_status` → `browser_opencli_catalog` → `browser_opencli_run` | 先发现精确 adapter；仅 `unrestricted` 跳过通用 argv 审批 |
 
 先运行 `web_backend_status` 判断后端是否 ready。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。
 
@@ -87,9 +88,9 @@ dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
 2. **Recipe**：最多 25 步的结构化 Playwright 操作，支持 wait/click/fill/type/press/select/check/hover/scroll/extract/assert/screenshot；交互步骤由自动化模式决定审批。
 3. **外部 UserScript**：适合外部模型生成站点专项逻辑。先 `browser_script_validate` 查看 SHA-256、域名范围与能力提示，再 `browser_userscript_run`；它在页面主世界运行，并非安全沙箱。
 
-工具自由度由 dsh-browser 的 `automationMode` 控制：`read-only` 隐藏或拒绝页面及 Web Search Pro 写操作；`standard`（默认）对交互、写 Recipe、外部脚本、OpenCLI、缓存/规则变更和安装操作审批；`autonomous` 直通页面交互、写 Recipe 以及本地缓存/规则变更，但安装、外部脚本和通用 OpenCLI 仍审批；`unrestricted` 为隔离测试 profile 提供无审批运行。所有模式仍保留域名、参数、大小和步骤上限校验。
+工具自由度由 dsh-browser 的 `automationMode` 控制：`read-only` 隐藏或拒绝页面及 Web Search Pro 写操作；`standard`（默认）对交互、写 Recipe、外部脚本、OpenCLI、缓存/规则变更和安装操作审批；`autonomous` 直通页面交互、写 Recipe 以及本地缓存/规则变更，但安装、外部脚本和通用 OpenCLI 仍审批；`unrestricted` 为隔离测试 profile 提供无审批运行。所有模式仍保留域名、参数、大小和步骤上限校验，并始终应用 dsh-browser 的调用缓冲、退避与爬取预算。
 
-OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序是 **站点 adapter → network/extract → DOM 操作**；先运行 `browser_opencli_status`。`browser_opencli_run` 接受 argv 数组而非 shell 字符串，可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令；仅 `unrestricted` 跳过审批。
+OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序是 **`browser_opencli_catalog` 查精确 adapter → network/extract → DOM 操作**；先运行 `browser_opencli_status`。`browser_opencli_run` 接受 argv 数组而非 shell 字符串，可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令；仅 `unrestricted` 跳过审批。
 
 更完整的 AuthProfile、脚本元数据与 OpenCLI 示例见 [LOGIN.md](./LOGIN.md)。
 
@@ -101,7 +102,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
    - Exa、Jina、GitHub 密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器。
    - `platformRules`、`customPlatforms`、`browserBindings` 与 Playwright 设置使用 JSON 对象编辑器；格式或数值范围无效时会阻止保存。
-   - 浏览器工具的审批自由度仍由 `dsh-browser.automationMode` 管辖；用 `browser_status` 查看当前模式。Web Search Pro 面板只管理搜索插件自己的后端开关，不会绕过 dsh-browser 的审批策略。
+   - 浏览器工具的审批自由度由 `dsh-browser.automationMode` 管辖，调用缓冲由 `dsh-browser.usagePolicy` 管辖；用 `browser_status` 查看当前状态。Web Search Pro 面板只管理搜索插件自己的后端开关，不会绕过浏览器插件的审批或资源策略。
    - `allowProxyFakeIp` 仅用于明确采用 Clash/TUN fake-IP DNS 的环境；普通网络保持关闭。
    - 更新带客户端面板的插件版本后需要重启 Web profile，让 DSH 客户端模块扫描器重新装载 `client.js`。
 
@@ -135,7 +136,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | opencli | 小红书/Twitter/Reddit/IG/FB | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
 | agent-reach | agent-reach 后端 | `uv tool install agent-reach` / `pip install agent-reach` |
 | mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |
-| playwright | 渲染/截图后端 | 由 dsh-browser 内置；缺 Chromium 时调用 `browser_install` |
+| playwright / patchright | 渲染/截图后端 | 由 dsh-browser 内置；默认 Playwright，兼容场景可显式切 Patchright；缺 Chromium 时调用 `browser_install` |
 
 ## 平台与引擎
 
