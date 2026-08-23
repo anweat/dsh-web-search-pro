@@ -96,7 +96,7 @@
     "jsdom": "^30.0.0"
   },
   "devDependencies": {
-    "@anweat/dsh-browser": "^0.1.7",
+    "@anweat/dsh-browser": "^0.1.8",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-locale": "^0.1.1-rc.2",
