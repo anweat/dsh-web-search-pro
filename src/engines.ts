@@ -640,7 +640,7 @@ export function playwrightPlatformEngine(platform: string, deps: EngineDeps): En
       const sources = await deps.browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
       if (!sources.length) {
         throw new EngineError(
-          builtin.label + ' 未取到结果：该平台需要浏览器登录态（复用你已登录的浏览器）。运行 node scripts/save-login.mjs 登录一次并设置 dsh-browser 的 storageStatePath；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
+          builtin.label + ' 未取到结果：该平台需要浏览器登录态。运行 node scripts/save-login.mjs 登录一次，在 dsh-browser 中声明按域名授权的 AuthProfile，并通过 browserBindings.' + platform + ' 绑定；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
           'ENGINE_EMPTY',
           false,
         )
