@@ -4,16 +4,19 @@
   // dependencies (Cordis brands are global-symbol keyed, so a plugin's own copies
   // interoperate with the harness's copies by design).
   "compilerOptions": {
-    "target": "es2024",
+    "target": "ES2022",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "module": "esnext",
     "moduleResolution": "bundler",
     "declaration": true,
+    "declarationDir": "lib/types",
     "sourceMap": true,
     "outDir": "lib",
     "rootDir": "src",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "jsx": "react-jsx",
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
     "verbatimModuleSyntax": false,
@@ -22,7 +25,9 @@
     "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "types": ["node"]
+    "types": ["node"],
+    "isolatedModules": true,
+    "noEmitOnError": true
   },
   "include": ["src"]
 }
