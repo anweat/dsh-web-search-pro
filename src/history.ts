@@ -22,7 +22,6 @@ export function replayHistory(store: Store, id: string): HistoryReplay {
       ...row.snippet ? { snippet: row.snippet } : {},
       ...row.published ? { publishedAt: row.published } : {},
     }))
-    if (!sources.length) throw new Error('no saved sources for ' + record.kind + ' query id ' + id)
     return { record, sources }
   }
   const page = store.pageForQuery(id)

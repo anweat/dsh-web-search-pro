@@ -64,7 +64,7 @@ export declare const zh: {
     readonly platformRules: "平台选择器覆盖（JSON）";
     readonly platformRulesHint: "按平台设置 item/title/link/text 选择器。";
     readonly customPlatforms: "自定义平台（JSON）";
-    readonly customPlatformsHint: "按平台定义搜索 URL、选择器和可选 Cookie。";
+    readonly customPlatformsHint: "按平台定义搜索 URL 与选择器；登录态请通过浏览器绑定引用 AuthProfile。";
     readonly browserBindings: "浏览器绑定（JSON）";
     readonly browserBindingsHint: "把平台绑定到 dsh-browser AuthProfile 与 RulePack。";
     readonly verbose: "详细诊断日志";

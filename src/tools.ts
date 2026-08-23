@@ -12,7 +12,7 @@ import type { Store } from './store.ts'
 import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig } from './config.ts'
 import { mergedRules } from './fetch.ts'
-import { SEARCH_ENGINE_IDS, PLATFORM_IDS } from './engines.ts'
+import { SEARCH_ENGINE_IDS, PLATFORM_IDS, isPlatformSupported } from './engines.ts'
 import { detectDeps, installDep } from './deps.ts'
 import { replayHistory } from './history.ts'
 
@@ -196,9 +196,9 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_platform_search',
-    description: 'Search a specific platform: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set the dsh-browser storageStatePath), and selectors are tunable via settings.yaml platformRules. Results are persisted to the search history.',
+    description: 'Search a built-in or configured custom platform. Built-ins: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set the dsh-browser storageStatePath), and selectors are tunable via settings.yaml platformRules. Results are persisted to the search history.',
     parameters: {
-      platform: { type: 'string', required: true, description: 'Platform: ' + PLATFORM_IDS.join(', ') + '.' },
+      platform: { type: 'string', required: true, description: 'Built-in platform (' + PLATFORM_IDS.join(', ') + ') or a configured customPlatforms key.' },
       query: { type: 'string', required: true, description: 'The search query (feed URL for rss).' },
       url: { type: 'string', description: 'Feed URL when platform is rss.' },
       count: { type: 'number', description: 'Max results (1-20).' },
@@ -224,7 +224,9 @@ export function registerTools(deps: ToolDeps): void {
     timeoutMs: config.timeoutMs + 30_000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      if (!PLATFORM_IDS.includes(args.platform as never)) throw new Error('unsupported platform: ' + args.platform)
+      if (!isPlatformSupported(args.platform, dynamic().customPlatforms)) {
+        throw new Error('unsupported platform: ' + args.platform)
+      }
       const result = await router.platformSearch(args.platform, args.query, args.url, args.count ?? 8, { signal: exec.signal, ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {} })
       return { platform: args.platform, sources: result.sources, engine: result.engine, fromCache: result.fromCache }
     },
@@ -232,7 +234,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_snapshot',
-    description: 'Render a page in a headless browser (Playwright, optional persisted login state), extract readable text with per-site rules, and save a full-page screenshot + HTML to disk. Returns file paths. Use for JS-heavy pages or when you need a visual capture.',
+    description: 'Render a page in a headless browser (Playwright, optional persisted login state), extract readable text with per-site rules, and save HTML plus an optional full-page screenshot. Returns file paths. Use for JS-heavy pages or when you need a visual capture.',
     parameters: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to snapshot.' },
       screenshot: { type: 'boolean', description: 'Save a full-page PNG screenshot (default true).' },
@@ -265,6 +267,7 @@ export function registerTools(deps: ToolDeps): void {
       const shot = await browser.snapshot(args.url, rules, {
         signal: exec.signal,
         outDir: config.playwright.snapshotDir,
+        screenshot: args.screenshot ?? true,
       })
       const out: { url: string; title?: string; text: string; screenshotPath?: string; htmlPath?: string } = {
         url: args.url,
@@ -272,7 +275,7 @@ export function registerTools(deps: ToolDeps): void {
         text: shot.text,
         htmlPath: shot.htmlPath,
       }
-      if (args.screenshot !== false) out.screenshotPath = shot.screenshotPath
+      if (args.screenshot !== false && shot.screenshotPath) out.screenshotPath = shot.screenshotPath
       const queryId = store.recordQuery({ kind: 'snapshot', url: args.url, query: shot.title ?? args.url, engine: 'playwright', status: 'ok', detail: JSON.stringify({ screenshotPath: out.screenshotPath, htmlPath: shot.htmlPath }) })
       store.savePage({
         queryId,
@@ -413,9 +416,9 @@ export function registerTools(deps: ToolDeps): void {
     timeoutMs: 20_000,
     async execute(args) {
       if (args.queryId) {
-        const deleted = store.deleteQuery(args.queryId)
-        if (!deleted) throw new Error('query id not found: ' + args.queryId)
-        return { removedQueries: 1, removedResults: 1, removedPages: 0 }
+        const removed = store.deleteQuery(args.queryId)
+        if (!removed) throw new Error('query id not found: ' + args.queryId)
+        return { removedQueries: removed.queries, removedResults: removed.results, removedPages: removed.pages }
       }
       const removed = store.clearCache({
         ...args.olderThanDays != null ? { olderThanDays: args.olderThanDays } : {},
@@ -565,10 +568,10 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_deps',
-    description: 'Detect or install the external tools this plugin shells out to (gh, bili, yt-dlp, agent-reach, mcporter). Playwright/chromium and opencli are bundled in the dsh-browser plugin, not listed here. check reports which are present and how to install them; install runs the package-manager command for one backend. Prefer check first; install only when the user asks.',
+    description: 'Detect or install the external tools this plugin shells out to (bili, yt-dlp, agent-reach, mcporter). Playwright/chromium and opencli are bundled in the dsh-browser plugin, not listed here. GitHub uses the native REST API and needs no CLI. check reports which tools are present and how to install them; install runs the package-manager command for one backend. Prefer check first; install only when the user asks.',
     parameters: {
       action: { type: 'string', required: true, description: 'check (default) or install.' },
-      backend: { type: 'string', description: 'Dependency id to install (gh, bili, yt-dlp, agent-reach, mcporter).' },
+      backend: { type: 'string', description: 'Dependency id to install (bili, yt-dlp, agent-reach, mcporter).' },
       installer: { type: 'string', description: 'Package manager: winget, choco, uv, pipx, pip, or npm.' },
     },
     output: {
@@ -617,7 +620,6 @@ export function registerTools(deps: ToolDeps): void {
 
 function defaultInstallerFor(backend: string): string {
   switch (backend) {
-    case 'gh': return 'winget'
     case 'bili': return 'uv'
     case 'yt-dlp': return 'uv'
     case 'agent-reach': return 'uv'

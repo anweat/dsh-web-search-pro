@@ -82,3 +82,5 @@ export declare function rssEngine(url: string, allowProxyFakeIp?: boolean): Engi
 export declare function platformEngines(platform: string, deps: EngineDeps): Engine[];
 export declare const SEARCH_ENGINE_IDS: readonly ["seam", "exa", "ddg", "bing", "jina", "github", "bilibili", "v2ex", "youtube", "arxiv", "pubmed"];
 export declare const PLATFORM_IDS: readonly ["github", "github-code", "github-issues", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss", "zhihu", "weibo", "douban", "tieba", "douyin", "kuaishou", "arxiv", "pubmed"];
+/** Whether web_platform_search may route this built-in or configured custom id. */
+export declare function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean;

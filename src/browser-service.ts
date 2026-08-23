@@ -21,7 +21,7 @@ export interface BrowserRenderResult {
 export interface BrowserSnapshotResult {
   title: string
   text: string
-  screenshotPath: string
+  screenshotPath?: string
   htmlPath: string
   usedRule?: string
 }
@@ -41,7 +41,7 @@ export interface BrowserCliResult {
 
 export interface BrowserService {
   render(url: string, rules: readonly RenderRule[], opts?: { signal?: AbortSignal; maxChars?: number; waitMs?: number; authProfile?: string; rulePack?: string }): Promise<BrowserRenderResult>
-  snapshot(url: string, rules: readonly RenderRule[], opts: { signal?: AbortSignal; outDir: string; maxChars?: number; authProfile?: string; rulePack?: string }): Promise<BrowserSnapshotResult>
+  snapshot(url: string, rules: readonly RenderRule[], opts: { signal?: AbortSignal; outDir: string; maxChars?: number; authProfile?: string; rulePack?: string; screenshot?: boolean }): Promise<BrowserSnapshotResult>
   searchResults(url: string, spec: { item: string; title: string; link: string; text?: string }, opts?: { signal?: AbortSignal; count?: number; waitMs?: number; cookies?: { name: string; value: string; domain: string; path: string }[]; authProfile?: string; rulePack?: string }): Promise<BrowserSearchItem[]>
   opencli(args: string[], opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<BrowserCliResult>
   close(): Promise<void>

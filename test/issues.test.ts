@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { parseRss, rssEngine } from '../src/engines.ts'
+import { FetchService } from '../src/fetch.ts'
 import { replayHistory } from '../src/history.ts'
 import { assertResolvedPublicUrl, assertSafePublicUrl } from '../src/safe-http.ts'
 import { Store } from '../src/store.ts'
@@ -76,6 +77,18 @@ test('history replay returns sources for searches and exact pages for fetches', 
   }
 })
 
+test('history replay preserves a successful search with zero results', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-empty-history-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  try {
+    const search = store.recordQuery({ kind: 'search', query: 'no hits', engine: 'test', status: 'ok' })
+    assert.deepEqual(replayHistory(store, search).sources, [])
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('legacy page cache schema migrates without losing cached content', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-page-migration-'))
   const dbPath = path.join(dir, 'store.db')
@@ -109,7 +122,7 @@ test('deleting one history record removes its linked page without removing newer
     const second = store.recordQuery({ kind: 'fetch', url: 'https://example.com/page', query: 'Second', engine: 'http', status: 'ok' })
     store.savePage({ queryId: second, url: 'https://example.com/page', text: 'second', source: 'http' })
 
-    assert.equal(store.deleteQuery(first), true)
+    assert.deepEqual(store.deleteQuery(first), { queries: 1, results: 0, pages: 1 })
     assert.equal(store.pageForQuery(first), undefined)
     assert.equal(store.pageForQuery(second)?.text, 'second')
     assert.equal(store.getPage('https://example.com/page', 60)?.text, 'second')
@@ -129,6 +142,67 @@ test('engine-scoped cache clearing reports exact query, result, and page counts'
     store.savePage({ queryId: fetch, url: 'https://example.com/page', text: 'page', source: 'test' })
 
     assert.deepEqual(store.clearCache({ engine: 'test' }), { queries: 2, results: 2, pages: 1 })
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('engine-and-age scoped cache clearing preserves unattributed legacy pages', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-cache-legacy-scope-'))
+  const dbPath = path.join(dir, 'store.db')
+  const legacy = new DatabaseSync(dbPath)
+  legacy.exec(`
+    CREATE TABLE pages (
+      id TEXT PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT, text TEXT,
+      html_path TEXT, screenshot_path TEXT, status INTEGER, fetched_at TEXT NOT NULL, source TEXT
+    );
+    INSERT INTO pages VALUES ('legacy-page', 'https://example.com/legacy', 'Legacy', 'preserved', NULL, NULL, 200, '2020-01-01T00:00:00.000Z', 'http');
+  `)
+  legacy.close()
+  const store = new Store(dbPath)
+  try {
+    store.recordQuery({ kind: 'search', query: 'q', engine: 'test', status: 'ok' })
+    // clearCache uses a strict `ts < cutoff` predicate; cross a millisecond so
+    // the freshly inserted fixture is unambiguously older than the cutoff.
+    await new Promise(resolve => setTimeout(resolve, 5))
+    const removed = store.clearCache({ engine: 'test', olderThanDays: 0 })
+    assert.equal(removed.queries, 1)
+    assert.equal(removed.pages, 0)
+    assert.equal(store.getPage('https://example.com/legacy', 315_360_000)?.text, 'preserved')
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('fetch memory cache respects maxChars and does not cross persist semantics', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-fetch-memory-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  let renders = 0
+  const browser = {
+    async render(_url: string, _rules: unknown, opts: { maxChars?: number }) {
+      renders++
+      const maxChars = opts.maxChars ?? 200_000
+      return {
+        title: 'Long page',
+        text: 'x'.repeat(maxChars) + `\n\n(Content truncated at ${maxChars} characters.)`,
+        html: '<main>long page</main>',
+      }
+    },
+  }
+  const config = { ttlSeconds: 60, playwright: { enabled: true } }
+  const fetch = new FetchService(store, config as never, browser as never)
+  try {
+    await fetch.fetchPage('https://example.com/page', {
+      mode: 'playwright', signal: undefined, maxChars: 5_000, fresh: false, persist: false,
+    })
+    const smaller = await fetch.fetchPage('https://example.com/page', {
+      mode: 'playwright', signal: undefined, maxChars: 1_000, fresh: false, persist: true,
+    })
+    assert.match(smaller.text, /Content truncated at 1000 characters/)
+    assert.equal(store.listQueries({ kind: 'fetch' }).length, 1)
+    assert.equal(renders, 2)
   } finally {
     store.close()
     fs.rmSync(dir, { recursive: true, force: true })

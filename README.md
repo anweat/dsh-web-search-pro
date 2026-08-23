@@ -7,7 +7,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@^0.1.7 dsh-web-search-pro@^0.1.7
+dsh plugin --profile web add @anweat/dsh-browser@^0.1.8 dsh-web-search-pro@^0.1.8
 # 或本地目录 / tarball：
 dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
@@ -22,11 +22,11 @@ dsh --profile web
 
 ## 从旧版本升级
 
-升级 Web Search Pro 时应同时升级浏览器插件。`dsh-web-search-pro >= 0.1.6` 要求 `@anweat/dsh-browser >= 0.1.7`；旧版 browser 不包含完整的 Recipe、外部 userscript、OpenCLI Bridge 和四级 `automationMode` 能力。
+升级 Web Search Pro 时应同时升级浏览器插件。`dsh-web-search-pro >= 0.1.8` 要求 `@anweat/dsh-browser >= 0.1.8`；旧版 browser 不包含 `web_snapshot screenshot=false`、Web Search Pro 写操作的四级审批策略等本版契约。
 
 ```bash
 # npm 安装：显式升级两个包，避免 profile 锁文件继续保留旧版 browser
-dsh plugin --profile web add @anweat/dsh-browser@^0.1.7 dsh-web-search-pro@^0.1.7
+dsh plugin --profile web add @anweat/dsh-browser@^0.1.8 dsh-web-search-pro@^0.1.8
 
 # 本地 checkout 联调：两个目录一起重新挂载
 dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
@@ -73,21 +73,21 @@ dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
 | `web_exa_contents` | 原生 Exa `/contents` 批量正文抓取（1-100 URL） |
 | `web_fetch_pro` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存 |
 | `web_platform_search` | 20 平台：GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手（Playwright 登录态） |
-| `web_snapshot` | Playwright 全页截图 + HTML + 文本落盘 |
+| `web_snapshot` | Playwright HTML + 文本落盘；`screenshot=false` 时不生成 PNG |
 | `web_history` / `web_cache_clear` / `web_search_stats` | 持久历史 / 清缓存 / 存储统计 |
 | `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove） |
 | `web_backend_status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态 |
-| `web_deps` | 检测/安装搜索后端的外部依赖（gh/bili/yt-dlp/agent-reach/mcporter）；浏览器依赖由 dsh-browser 管理 |
+| `web_deps` | 检测/安装搜索后端的外部依赖（bili/yt-dlp/agent-reach/mcporter）；浏览器依赖由 dsh-browser 管理 |
 
 ## 浏览器脚本与自动化分层
 
-`dsh-browser >= 0.1.7` 提供三类脚本入口：
+`dsh-browser >= 0.1.8` 提供三类脚本入口：
 
 1. **内置只读脚本**：`article-clean`、`links`、`jsonld`、`forms`，适合稳定抽取；先用 `browser_script_catalog` 查看。
 2. **Recipe**：最多 25 步的结构化 Playwright 操作，支持 wait/click/fill/type/press/select/check/hover/scroll/extract/assert/screenshot；交互步骤由自动化模式决定审批。
 3. **外部 UserScript**：适合外部模型生成站点专项逻辑。先 `browser_script_validate` 查看 SHA-256、域名范围与能力提示，再 `browser_userscript_run`；它在页面主世界运行，并非安全沙箱。
 
-工具自由度由 dsh-browser 的 `automationMode` 控制：`read-only` 仅暴露 10 个读取/校验工具；`standard`（默认）对交互、写 Recipe、外部脚本、OpenCLI 和安装操作审批；`autonomous` 直通页面交互和写 Recipe；`unrestricted` 为隔离测试 profile 提供完全无审批运行，但仍保留域名、参数、大小和步骤上限校验。
+工具自由度由 dsh-browser 的 `automationMode` 控制：`read-only` 隐藏或拒绝页面及 Web Search Pro 写操作；`standard`（默认）对交互、写 Recipe、外部脚本、OpenCLI、缓存/规则变更和安装操作审批；`autonomous` 直通页面交互、写 Recipe 以及本地缓存/规则变更，但安装、外部脚本和通用 OpenCLI 仍审批；`unrestricted` 为隔离测试 profile 提供无审批运行。所有模式仍保留域名、参数、大小和步骤上限校验。
 
 OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序是 **站点 adapter → network/extract → DOM 操作**；先运行 `browser_opencli_status`。`browser_opencli_run` 接受 argv 数组而非 shell 字符串，可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令；仅 `unrestricted` 跳过审批。
 

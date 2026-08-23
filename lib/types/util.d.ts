@@ -59,8 +59,9 @@ export interface CliResult {
     timedOut: boolean;
 }
 /**
- * Run an external CLI (opencli / gh / bili / yt-dlp / agent-reach / npm).
- * Windows cmd wrappers are handled via ComSpec.
+ * Run an external CLI (opencli / bili / yt-dlp / agent-reach / npm).
+ * cross-spawn resolves Windows cmd wrappers without interpolating argv into a
+ * shell command line, preserving argument boundaries and metacharacters.
  */
 export declare function runCli(bin: string, args: string[], opts?: {
     timeoutMs?: number;

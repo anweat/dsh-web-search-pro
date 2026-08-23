@@ -10,6 +10,7 @@ import { parseMcporterExaSearch } from '../src/engines.ts'
 import { BackendRegistry } from '../src/backend-registry.ts'
 import { Store } from '../src/store.ts'
 import { SearchRouter } from '../src/router.ts'
+import { runCli } from '../src/util.ts'
 
 test('cache fingerprints cover mode, engine order, count, and Exa options', () => {
   const base = { query: '  New   Query ', engines: ['exa', 'ddg'], count: 5, multi: true }
@@ -133,4 +134,18 @@ test('backend registry honors override, records failure, and cools down retryabl
   const diagnostics = registry.diagnostics()
   assert.equal(diagnostics.find(v => v.id === 'primary')?.state, 'cooldown')
   assert.match(diagnostics.find(v => v.id === 'primary')?.lastError ?? '', /rate limited/)
+})
+
+test('external CLI argv is passed verbatim without cmd.exe metacharacter execution', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-cli-argv-'))
+  const script = path.join(dir, 'argv.mjs')
+  fs.writeFileSync(script, 'process.stdout.write(JSON.stringify(process.argv.slice(2)))', 'utf8')
+  const args = ['hello world', 'a" & echo CMD_INJECTION_PROBE & "b', '100% literal']
+  try {
+    const result = await runCli(process.execPath, [script, ...args], { signal: undefined, timeoutMs: 5_000 })
+    assert.equal(result.code, 0)
+    assert.deepEqual(JSON.parse(result.stdout), args)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })

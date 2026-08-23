@@ -97,8 +97,12 @@ export declare class Store {
         pages: number;
     };
     private removeQuery;
-    /** Delete one query and its results; returns whether it existed. */
-    deleteQuery(id: string): boolean;
+    /** Delete one query and its linked rows; returns exact counts when it existed. */
+    deleteQuery(id: string): {
+        queries: number;
+        results: number;
+        pages: number;
+    } | undefined;
     /** Most-used engines, desc. */
     topEngines(limit?: number): {
         engine: string;

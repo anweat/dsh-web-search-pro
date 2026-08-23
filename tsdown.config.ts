@@ -36,6 +36,15 @@ export default {
       if (CLIENT_EXTERNALS.includes(source as (typeof CLIENT_EXTERNALS)[number])) return null
       throw new Error(`client bundle purity: "${source}" is not available in the DSH client module table`)
     },
+    generateBundle(_options, bundle) {
+      for (const output of Object.values(bundle)) {
+        if (output.type !== 'asset' || !output.fileName.endsWith('.map')) continue
+        const raw = typeof output.source === 'string' ? output.source : Buffer.from(output.source).toString('utf8')
+        const sourceMap = JSON.parse(raw) as Record<string, unknown>
+        delete sourceMap.sourcesContent
+        output.source = JSON.stringify(sourceMap)
+      }
+    },
   }],
   outputOptions: {
     entryFileNames: 'client.js',

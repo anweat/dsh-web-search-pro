@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-search-pro",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Enhanced, persistent web search plugin for DeepSeek Harness — multi-engine routing (DeepSeek/Exa/DDG/Bing/Jina + GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS), SQLite+LRU cache, userscript-style extraction, and Playwright rendering.",
   "license": "MIT",
   "type": "module",
@@ -39,8 +39,8 @@
     "prepare": "pnpm run build"
   },
   "peerDependencies": {
+    "@anweat/dsh-browser": ">=0.1.8 <0.2.0",
     "@deepseek-ai/cordis": "^4.0.1",
-    "@anweat/dsh-browser": "^0.1.7",
     "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-locale": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
@@ -91,32 +91,33 @@
     }
   },
   "dependencies": {
+    "cross-spawn": "7.0.6",
     "js-yaml": "^4.1.0",
     "jsdom": "^30.0.0"
   },
   "devDependencies": {
     "@anweat/dsh-browser": "^0.1.7",
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-locale": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-ui-settings": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-ui-settings-plugins": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.1",
-    "typescript": "^5.6.0",
-    "@types/node": "^22.0.0",
-    "@types/js-yaml": "^4.0.9",
-    "@deepseek-ai/dsh-web": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-system-prompt": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-web": "^0.1.1-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.1",
     "react": "^18.2.0",
     "react-dom": "18.2.0",
-    "tsdown": "^0.22.2"
+    "tsdown": "^0.22.2",
+    "typescript": "^5.6.0"
   },
   "dsh": {
     "client": {

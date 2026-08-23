@@ -280,8 +280,10 @@ export class Store {
       const predicate = engine ? 'ts < ? AND engine = ?' : 'ts < ?'
       const params = engine ? [since, engine] : [since]
       const r = this.db.prepare(`SELECT COUNT(*) AS c FROM results WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})`).get(...params) as { c: number }
-      const p = this.db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate}) OR (query_id IS NULL AND fetched_at < ?)`).get(...params, since) as { c: number }
-      this.db.prepare(`DELETE FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate}) OR (query_id IS NULL AND fetched_at < ?)`).run(...params, since)
+      const legacyPredicate = engine ? '' : ' OR (query_id IS NULL AND fetched_at < ?)'
+      const pageParams = engine ? params : [...params, since]
+      const p = this.db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})${legacyPredicate}`).get(...pageParams) as { c: number }
+      this.db.prepare(`DELETE FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})${legacyPredicate}`).run(...pageParams)
       this.db.prepare(`DELETE FROM results WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})`).run(...params)
       this.db.prepare(`DELETE FROM queries WHERE ${predicate}`).run(...params)
       removed = { queries: rows.length, results: r.c, pages: p.c }
@@ -295,12 +297,14 @@ export class Store {
     this.db.prepare('DELETE FROM queries WHERE id = ?').run(id)
   }
 
-  /** Delete one query and its results; returns whether it existed. */
-  deleteQuery(id: string): boolean {
+  /** Delete one query and its linked rows; returns exact counts when it existed. */
+  deleteQuery(id: string): { queries: number; results: number; pages: number } | undefined {
     const row = this.db.prepare('SELECT id FROM queries WHERE id = ?').get(id) as { id: string } | undefined
-    if (!row) return false
+    if (!row) return undefined
+    const results = (this.db.prepare('SELECT COUNT(*) AS c FROM results WHERE query_id = ?').get(id) as { c: number }).c
+    const pages = (this.db.prepare('SELECT COUNT(*) AS c FROM pages WHERE query_id = ?').get(id) as { c: number }).c
     this.removeQuery(id)
-    return true
+    return { queries: 1, results, pages }
   }
 
   /** Most-used engines, desc. */

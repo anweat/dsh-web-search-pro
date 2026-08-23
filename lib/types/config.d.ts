@@ -12,7 +12,7 @@ export interface CustomPlatformSpec {
     title: string;
     link: string;
     text?: string;
-    /** Optional raw Cookie header (`a=b; c=d`); cookies are applied to the URL's domain. */
+    /** Legacy raw Cookie header; prefer a domain-scoped dsh-browser AuthProfile. */
     cookie?: string;
 }
 export interface BrowserBinding {

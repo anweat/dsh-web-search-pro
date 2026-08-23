@@ -73,7 +73,9 @@ async function main() {
     await page.close()
   }
   const state = await context.storageState()
-  fs.writeFileSync(out, JSON.stringify(state, null, 2), 'utf8')
+  fs.writeFileSync(out, JSON.stringify(state, null, 2), { encoding: 'utf8', mode: 0o600 })
+  // mode only applies when creating a file; tighten an existing file too.
+  try { fs.chmodSync(out, 0o600) } catch { /* Windows ACLs may not expose POSIX modes */ }
   console.log('已保存登录态到 ' + out)
   console.log('请在 dsh-browser 的 authProfiles 中引用该绝对路径：')
   console.log('  storageStatePath: ' + out)

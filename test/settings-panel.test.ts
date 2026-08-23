@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import { WebSearchSettingsController } from '../src/client/form.ts'
+import { FIELD_SPECS, WebSearchSettingsController } from '../src/client/form.ts'
+
+test('settings panel covers every non-secret Web Search Pro configuration field', () => {
+  assert.deepEqual(FIELD_SPECS.map(spec => spec.field), [
+    'engines', 'parallelEngines', 'searchMaxResults', 'timeoutMs',
+    'exaApiKeyEnv', 'jinaApiKeyEnv', 'githubTokenEnv',
+    'enableCliBackends', 'opencliEnabled', 'agentReachEnabled', 'providerId', 'registerProvider', 'playwright',
+    'ttlSeconds', 'memoryCacheEntries', 'rrfConstant', 'freshnessBoost', 'freshnessDays', 'authorityBoost',
+    'authorityDomains', 'dbPath', 'allowProxyFakeIp', 'platformRules', 'customPlatforms', 'browserBindings', 'verbose',
+  ])
+})
 
 class ScopeStub implements SettingsScope<Record<string, unknown>> {
   readonly writes: string[] = []

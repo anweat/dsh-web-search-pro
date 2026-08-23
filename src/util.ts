@@ -6,9 +6,10 @@
  */
 
 import { createRequire } from 'node:module'
-import { spawn, execFileSync, type ChildProcess } from 'node:child_process'
+import { execFileSync, type ChildProcess } from 'node:child_process'
 import crypto from 'node:crypto'
 import path from 'node:path'
+import crossSpawn from 'cross-spawn'
 import { load as yamlLoad } from 'js-yaml'
 import { JSDOM } from 'jsdom'
 import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect } from './safe-http.ts'
@@ -175,17 +176,10 @@ export interface CliResult {
   timedOut: boolean
 }
 
-/** Quote one argument for cmd.exe /c command lines. */
-function quoteArg(arg: string): string {
-  if (/[^\w@%+=:,./-]/.test(arg)) {
-    return '"' + arg.replace(/"/g, '\\"') + '"'
-  }
-  return arg
-}
-
 /**
- * Run an external CLI (opencli / gh / bili / yt-dlp / agent-reach / npm).
- * Windows cmd wrappers are handled via ComSpec.
+ * Run an external CLI (opencli / bili / yt-dlp / agent-reach / npm).
+ * cross-spawn resolves Windows cmd wrappers without interpolating argv into a
+ * shell command line, preserving argument boundaries and metacharacters.
  */
 export function runCli(
   bin: string,
@@ -211,17 +205,11 @@ export function runCli(
       if (child.exitCode === null) child.kill()
       finish(-1, false)
     }
-    if (process.platform === 'win32') {
-      const cmd = [quoteArg(bin), ...args.map(quoteArg)].join(' ')
-      child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', cmd], {
-        windowsVerbatimArguments: true,
-        env: { ...process.env, ...opts.env },
-        cwd: opts.cwd,
-        windowsHide: true,
-      })
-    } else {
-      child = spawn(bin, args, { env: { ...process.env, ...opts.env }, cwd: opts.cwd })
-    }
+    child = crossSpawn(bin, args, {
+      env: { ...process.env, ...opts.env },
+      cwd: opts.cwd,
+      windowsHide: process.platform === 'win32',
+    })
     child.stdout?.on('data', (d: Buffer) => { if (stdout.length < maxOutput) stdout += d.toString('utf8') })
     child.stderr?.on('data', (d: Buffer) => { if (stderr.length < maxOutput) stderr += d.toString('utf8') })
     child.on('error', () => finish(-1, false))

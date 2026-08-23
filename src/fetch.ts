@@ -74,9 +74,10 @@ export class FetchService {
   async fetchPage(url: string, opts: FetchOptions): Promise<FetchResult> {
     const normalized = normalizeUrl(url)
     const maxChars = Math.min(Math.max(opts.maxChars, 1_000), 500_000)
+    const memoryKey = ['page', normalized, opts.mode, maxChars, opts.persist ? 'persist' : 'ephemeral'].join('|')
 
     if (!opts.fresh) {
-      const hot = this.memory.get('page|' + normalized, this.cfg().ttlSeconds * 1000)
+      const hot = this.memory.get(memoryKey, this.cfg().ttlSeconds * 1000)
       if (hot) return { ...hot, fromCache: true }
       const cached = this.store.getPage(normalized, this.cfg().ttlSeconds)
       if (cached && cached.text) {
@@ -88,7 +89,7 @@ export class FetchService {
           fromCache: true,
           ...cached.status !== undefined ? { statusCode: cached.status } : {},
         }
-        this.memory.set('page|' + normalized, page)
+        this.memory.set(memoryKey, page)
         return page
       }
     }
@@ -123,7 +124,7 @@ export class FetchService {
       throw new Error('all fetch backends failed for ' + normalized)
     }
 
-    this.memory.set('page|' + normalized, result)
+    this.memory.set(memoryKey, result)
     if (opts.persist) {
       const queryId = this.store.recordQuery({
         kind: 'fetch',

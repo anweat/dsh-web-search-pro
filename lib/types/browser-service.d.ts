@@ -18,7 +18,7 @@ export interface BrowserRenderResult {
 export interface BrowserSnapshotResult {
     title: string;
     text: string;
-    screenshotPath: string;
+    screenshotPath?: string;
     htmlPath: string;
     usedRule?: string;
 }
@@ -47,6 +47,7 @@ export interface BrowserService {
         maxChars?: number;
         authProfile?: string;
         rulePack?: string;
+        screenshot?: boolean;
     }): Promise<BrowserSnapshotResult>;
     searchResults(url: string, spec: {
         item: string;

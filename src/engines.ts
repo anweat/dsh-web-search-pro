@@ -706,3 +706,9 @@ export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
 export const SEARCH_ENGINE_IDS = ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed'] as const
 export const PLATFORM_IDS = ['github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed'] as const
 
+/** Whether web_platform_search may route this built-in or configured custom id. */
+export function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean {
+  return PLATFORM_IDS.includes(platform as typeof PLATFORM_IDS[number])
+    || Object.hasOwn(customPlatforms ?? {}, platform)
+}
+
