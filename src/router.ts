@@ -48,15 +48,15 @@ export interface RouterSearchResult {
 const ENGINE_FACTORIES: Record<string, (deps: any, config: ResolvedConfig) => Engine> = {
   seam: (_deps) => seamEngine(_deps),
   exa: (deps) => exaEngine(deps),
-  ddg: () => ddgEngine(),
-  bing: () => bingEngine(),
+  ddg: (deps) => ddgEngine(deps.allowProxyFakeIp),
+  bing: (deps) => bingEngine(deps.allowProxyFakeIp),
   jina: (deps) => jinaSearchEngine(deps),
   github: (deps) => githubEngine(deps),
   bilibili: (deps) => bilibiliEngine(deps),
-  v2ex: () => v2exEngine(),
+  v2ex: (deps) => v2exEngine(deps.allowProxyFakeIp),
   youtube: (deps) => youtubeEngine(deps),
-  arxiv: () => arxivEngine(),
-  pubmed: () => pubmedEngine(),
+  arxiv: (deps) => arxivEngine(deps.allowProxyFakeIp),
+  pubmed: (deps) => pubmedEngine(deps.allowProxyFakeIp),
 }
 
 export class SearchRouter {
@@ -133,6 +133,7 @@ export class SearchRouter {
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
+      allowProxyFakeIp: cfg.allowProxyFakeIp,
       ...this.browser !== undefined ? { browser: this.browser } : {},
       ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
       ...cfg.customPlatforms !== undefined ? { customPlatforms: cfg.customPlatforms } : {},
@@ -155,6 +156,7 @@ export class SearchRouter {
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
+      allowProxyFakeIp: cfg.allowProxyFakeIp,
       ...this.browser !== undefined ? { browser: this.browser } : {},
       ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
       ...cfg.customPlatforms !== undefined ? { customPlatforms: cfg.customPlatforms } : {},
@@ -339,7 +341,7 @@ export class SearchRouter {
     const deps = await this.deps(true)
     const engines = custom
       ? [customPlatformEngine(platform, custom, deps)]
-      : (platform === 'rss' && url ? [rssEngine(url)] : platformEngines(platform, deps))
+      : (platform === 'rss' && url ? [rssEngine(url, deps.allowProxyFakeIp)] : platformEngines(platform, deps))
     if (!engines.length) throw new Error('unsupported platform: ' + platform)
 
     if (!opts.fresh) {
@@ -364,7 +366,7 @@ export class SearchRouter {
       enginesTried.push(engine.id)
       if (!engine.available()) continue
       try {
-        outcome = await engine.search(query || 'latest', boundedCount, opts.signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
+        outcome = await engine.search(platform === 'rss' ? query : query || 'latest', boundedCount, opts.signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
         break
       } catch (error) {
         if (opts.signal?.aborted) throw error

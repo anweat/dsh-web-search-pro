@@ -14,6 +14,7 @@ import type { ResolvedConfig } from './config.ts'
 import { mergedRules } from './fetch.ts'
 import { SEARCH_ENGINE_IDS, PLATFORM_IDS } from './engines.ts'
 import { detectDeps, installDep } from './deps.ts'
+import { replayHistory } from './history.ts'
 
 export interface ToolDeps {
   ctx: Context
@@ -272,7 +273,9 @@ export function registerTools(deps: ToolDeps): void {
         htmlPath: shot.htmlPath,
       }
       if (args.screenshot !== false) out.screenshotPath = shot.screenshotPath
+      const queryId = store.recordQuery({ kind: 'snapshot', url: args.url, query: shot.title ?? args.url, engine: 'playwright', status: 'ok', detail: JSON.stringify({ screenshotPath: out.screenshotPath, htmlPath: shot.htmlPath }) })
       store.savePage({
+        queryId,
         url: args.url,
         ...shot.title ? { title: shot.title } : {},
         text: shot.text,
@@ -280,7 +283,6 @@ export function registerTools(deps: ToolDeps): void {
         ...out.screenshotPath ? { screenshotPath: out.screenshotPath } : {},
         source: 'playwright',
       })
-      store.recordQuery({ kind: 'snapshot', url: args.url, query: shot.title ?? args.url, engine: 'playwright', status: 'ok', detail: JSON.stringify({ screenshotPath: out.screenshotPath, htmlPath: shot.htmlPath }) })
       return out
     },
   }))
@@ -294,8 +296,8 @@ export function registerTools(deps: ToolDeps): void {
       engine: { type: 'string', description: 'Filter by engine id (e.g. ddg, github, multi(...)).' },
       platform: { type: 'string', description: 'Filter by platform (e.g. github, zhihu, arxiv).' },
       limit: { type: 'number', description: 'Max rows (1-200, default 20).' },
-      replay: { type: 'string', description: 'A query id from web_history records; returns that query saved result sources.' },
-      export: { type: 'boolean', description: 'Write the filtered history (with results) to a JSON file and return its path.' },
+      replay: { type: 'string', description: 'A query id from web_history records; returns saved sources or the exact persisted fetch/snapshot page.' },
+      export: { type: 'boolean', description: 'Write the filtered history with sources/pages to a JSON file and return its path.' },
     },
     output: {
       schema: {
@@ -304,11 +306,12 @@ export function registerTools(deps: ToolDeps): void {
         properties: {
           records: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, kind: { type: 'string' }, query: { type: 'string' }, engine: { type: 'string' }, platform: { type: 'string' }, url: { type: 'string' }, status: { type: 'string' }, ts: { type: 'string' } } } },
           replayedSources: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' } } } },
+          replayedPage: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, text: { type: 'string' }, htmlPath: { type: 'string' }, screenshotPath: { type: 'string' }, status: { type: 'number' }, fetchedAt: { type: 'string', required: true }, source: { type: 'string' } } },
           exportPath: { type: 'string' },
         },
       },
       render: (_args, value) => {
-        const v = value as { records: { id?: string; kind: string; query?: string; engine?: string; platform?: string; url?: string; status: string; ts: string }[]; replayedSources?: { url: string; title?: string; snippet?: string }[]; exportPath?: string }
+        const v = value as { records: { id?: string; kind: string; query?: string; engine?: string; platform?: string; url?: string; status: string; ts: string }[]; replayedSources?: { url: string; title?: string; snippet?: string }[]; replayedPage?: { url: string; title?: string; text?: string; htmlPath?: string; screenshotPath?: string; source?: string }; exportPath?: string }
         const parts: string[] = []
         if (v.records.length) {
           parts.push(v.records.map(r => {
@@ -320,6 +323,16 @@ export function registerTools(deps: ToolDeps): void {
           parts.push('No history records found.')
         }
         if (v.replayedSources?.length) parts.push('Replayed sources:\n' + v.replayedSources.map(s => '- [' + (s.title ?? s.url) + '](' + s.url + ')' + (s.snippet ? ' — ' + s.snippet : '')).join('\n'))
+        if (v.replayedPage) {
+          const page = v.replayedPage
+          parts.push([
+            page.title ? 'Title: ' + page.title : undefined,
+            page.text,
+            '— Replayed page: ' + page.url + (page.source ? ' · ' + page.source : ''),
+            page.htmlPath ? 'HTML: ' + page.htmlPath : undefined,
+            page.screenshotPath ? 'Screenshot: ' + page.screenshotPath : undefined,
+          ].filter(Boolean).join('\n\n'))
+        }
         if (v.exportPath) parts.push('Exported to: ' + v.exportPath)
         return [{ type: 'text', text: parts.join('\n\n') }]
       },
@@ -346,11 +359,15 @@ export function registerTools(deps: ToolDeps): void {
         status: r.status,
         ts: r.ts,
       }))
-      const out: { records: typeof mapped; replayedSources?: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; exportPath?: string } = { records: mapped }
+      const out: { records: typeof mapped; replayedSources?: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; replayedPage?: { url: string; title?: string; text?: string; htmlPath?: string; screenshotPath?: string; status?: number; fetchedAt: string; source?: string }; exportPath?: string } = { records: mapped }
       if (args.replay) {
-        const rows = store.resultsForQuery(args.replay)
-        if (!rows.length) throw new Error('no saved results for query id ' + args.replay)
-        out.replayedSources = rows.map(r => ({ url: r.url, ...r.title ? { title: r.title } : {}, ...r.snippet ? { snippet: r.snippet } : {}, ...r.published ? { publishedAt: r.published } : {} }))
+        const replay = replayHistory(store, args.replay)
+        if (replay.sources) {
+          out.replayedSources = replay.sources
+        } else {
+          const page = replay.page
+          out.replayedPage = { url: page.url, ...page.title ? { title: page.title } : {}, ...page.text ? { text: page.text } : {}, ...page.htmlPath ? { htmlPath: page.htmlPath } : {}, ...page.screenshotPath ? { screenshotPath: page.screenshotPath } : {}, ...page.status !== undefined ? { status: page.status } : {}, fetchedAt: page.fetchedAt, ...page.source ? { source: page.source } : {} }
+        }
       }
       if (args.export) {
         const { default: fs } = await import('node:fs')
@@ -358,7 +375,14 @@ export function registerTools(deps: ToolDeps): void {
         const outDir = path.dirname(config.dbPath)
         fs.mkdirSync(outDir, { recursive: true })
         const exportPath = path.join(outDir, 'history-export-' + Date.now() + '.json')
-        const payload = mapped.map(r => ({ ...r, results: store.resultsForQuery(r.id).map(s => ({ url: s.url, ...s.title ? { title: s.title } : {}, ...s.snippet ? { snippet: s.snippet } : {} })) }))
+        const payload = mapped.map(r => {
+          const page = store.pageForQuery(r.id)
+          return {
+            ...r,
+            results: store.resultsForQuery(r.id).map(s => ({ url: s.url, ...s.title ? { title: s.title } : {}, ...s.snippet ? { snippet: s.snippet } : {} })),
+            ...page ? { page } : {},
+          }
+        })
         fs.writeFileSync(exportPath, JSON.stringify(payload, null, 2), 'utf8')
         out.exportPath = exportPath
       }

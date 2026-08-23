@@ -48,6 +48,8 @@ export interface Config {
   searchMaxResults: number
   /** Cooperative per-call timeout budget in ms. */
   timeoutMs: number
+  /** Trust Clash/TUN fake-IP DNS ranges while retaining all other SSRF checks. */
+  allowProxyFakeIp: boolean
   /** Ordered engine list for web_search_pro. */
   engines: string[]
   /** Query all requested engines in parallel and merge. */
@@ -101,6 +103,7 @@ export const Config: z<Config> = z.object({
   authorityDomains: z.array(z.string()).default([]),
   searchMaxResults: z.number().default(8),
   timeoutMs: z.number().default(30_000),
+  allowProxyFakeIp: z.boolean().default(false),
   engines: z.array(z.string()).default(['ddg', 'bing', 'exa', 'seam', 'jina']),
   parallelEngines: z.boolean().default(false),
   exaApiKey: z.string().role('secret'),

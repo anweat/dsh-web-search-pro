@@ -31,6 +31,7 @@ export interface SourceRow {
 }
 export interface PageRecord {
     id: string;
+    queryId?: string;
     url: string;
     title?: string;
     text?: string;
@@ -74,9 +75,12 @@ export declare class Store {
         extra?: string;
     }[], engine: string): void;
     resultsForQuery(queryId: string): SourceRow[];
+    queryById(id: string): QueryRecord | undefined;
     /** Fresh page snapshot by URL, or undefined. */
     getPage(url: string, ttlSeconds: number): PageRecord | undefined;
     savePage(input: Omit<PageRecord, 'id' | 'fetchedAt'>): void;
+    /** Exact persisted fetch/snapshot for a history query; legacy rows fall back by URL. */
+    pageForQuery(queryId: string): PageRecord | undefined;
     listQueries(opts: {
         kind?: QueryKind;
         query?: string;

@@ -44,6 +44,7 @@ export declare function httpGet(url: string, opts?: {
     method?: string;
     body?: string;
     maxBytes?: number;
+    allowProxyFakeIp?: boolean;
 }): Promise<HttpResult>;
 /** Decode bytes honoring charset; UTF-8 first with GBK fallback on garbage. */
 export declare function decodeText(buf: Buffer, contentType?: string): string;

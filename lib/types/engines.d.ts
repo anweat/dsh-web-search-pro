@@ -41,6 +41,7 @@ export interface EngineDeps {
     enableCli: boolean;
     opencliEnabled: boolean;
     agentReachEnabled: boolean;
+    allowProxyFakeIp: boolean;
     /** Browser service (dsh-browser) for Playwright platform search + bundled opencli. */
     browser?: BrowserService;
     /** Per-platform selector overrides (settings.yaml `platformRules`). */
@@ -59,8 +60,8 @@ export declare function seamEngine(deps: EngineDeps): Engine;
 /** Parse mcporter's human-readable Exa response into the router's native source shape. */
 export declare function parseMcporterExaSearch(output: string, count: number): WebSearchSource[];
 export declare function exaEngine(deps: EngineDeps): Engine;
-export declare function ddgEngine(): Engine;
-export declare function bingEngine(): Engine;
+export declare function ddgEngine(allowProxyFakeIp?: boolean): Engine;
+export declare function bingEngine(allowProxyFakeIp?: boolean): Engine;
 /** Parse RSS/Atom XML into sources (used by bing engine and rss platform). */
 export declare function parseRss(xml: string, count?: number): WebSearchSource[];
 export declare function jinaSearchEngine(deps: EngineDeps): Engine;
@@ -68,15 +69,15 @@ export declare function githubEngine(deps: EngineDeps): Engine;
 export declare function githubCodeEngine(deps: EngineDeps): Engine;
 export declare function githubIssuesEngine(deps: EngineDeps): Engine;
 export declare function bilibiliEngine(deps: EngineDeps): Engine;
-export declare function v2exEngine(): Engine;
+export declare function v2exEngine(allowProxyFakeIp?: boolean): Engine;
 export declare function youtubeEngine(deps: EngineDeps): Engine;
 export declare function opencliEngine(platform: string, deps: EngineDeps): Engine;
 export declare function agentReachEngine(platform: string, deps: EngineDeps): Engine;
-export declare function arxivEngine(): Engine;
-export declare function pubmedEngine(): Engine;
+export declare function arxivEngine(allowProxyFakeIp?: boolean): Engine;
+export declare function pubmedEngine(allowProxyFakeIp?: boolean): Engine;
 export declare function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps: EngineDeps): Engine;
 export declare function playwrightPlatformEngine(platform: string, deps: EngineDeps): Engine;
-export declare function rssEngine(url: string): Engine;
+export declare function rssEngine(url: string, allowProxyFakeIp?: boolean): Engine;
 /** Build the ordered engine list for a platform search. */
 export declare function platformEngines(platform: string, deps: EngineDeps): Engine[];
 export declare const SEARCH_ENGINE_IDS: readonly ["seam", "exa", "ddg", "bing", "jina", "github", "bilibili", "v2ex", "youtube", "arxiv", "pubmed"];

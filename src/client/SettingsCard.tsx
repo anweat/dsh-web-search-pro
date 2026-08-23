@@ -100,6 +100,7 @@ export function SettingsCard(props: SettingsCardProps) {
               {text('authorityBoost', 'authorityBoost', 'boostHint', 'number')}
               {text('authorityDomains', 'authorityDomains', 'authorityDomainsHint')}
               {text('dbPath', 'dbPath', 'dbPathHint')}
+              {toggle('allowProxyFakeIp', 'allowProxyFakeIp', 'allowProxyFakeIpHint')}
               {json('platformRules', 'platformRules', 'platformRulesHint')}
               {json('customPlatforms', 'customPlatforms', 'customPlatformsHint', 7)}
               {json('browserBindings', 'browserBindings', 'browserBindingsHint', 7)}

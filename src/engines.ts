@@ -47,6 +47,7 @@ export interface EngineDeps {
   enableCli: boolean
   opencliEnabled: boolean
   agentReachEnabled: boolean
+  allowProxyFakeIp: boolean
   /** Browser service (dsh-browser) for Playwright platform search + bundled opencli. */
   browser?: BrowserService
   /** Per-platform selector overrides (settings.yaml `platformRules`). */
@@ -151,13 +152,13 @@ export function exaEngine(deps: EngineDeps): Engine {
 
 // ── DuckDuckGo HTML (no key) ────────────────────────────────────────────────
 
-export function ddgEngine(): Engine {
+export function ddgEngine(allowProxyFakeIp = false): Engine {
   return {
     id: 'ddg',
     label: 'DuckDuckGo',
     available: () => true,
     async search(query, count, signal) {
-      const res = await httpGet('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), { signal, timeoutMs: 30_000 })
+      const res = await httpGet('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), { signal, timeoutMs: 30_000, allowProxyFakeIp })
       if (!res.ok) throw new EngineError('DuckDuckGo HTTP ' + res.status, 'ENGINE_ERROR')
       const sources: WebSearchSource[] = []
       const blockRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>)?/g
@@ -179,7 +180,7 @@ export function ddgEngine(): Engine {
 
 // ── Bing RSS (no key) ───────────────────────────────────────────────────────
 
-export function bingEngine(): Engine {
+export function bingEngine(allowProxyFakeIp = false): Engine {
   return {
     id: 'bing',
     label: 'Bing',
@@ -187,7 +188,7 @@ export function bingEngine(): Engine {
     async search(query, count, signal) {
       const res = await httpGet(
         'https://www.bing.com/search?q=' + encodeURIComponent(query) + '&format=rss&count=' + Math.min(count, 20),
-        { signal, timeoutMs: 30_000 },
+        { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
       if (!res.ok) throw new EngineError('Bing HTTP ' + res.status, 'ENGINE_ERROR')
       const sources: WebSearchSource[] = parseRss(res.text, count)
@@ -204,15 +205,16 @@ export function parseRss(xml: string, count = 20): WebSearchSource[] {
   let m: RegExpExecArray | null
   while ((m = itemRe.exec(xml)) !== null) {
     const block = m[2] ?? ''
+    const clean = (value: string): string => stripTags(decodeCdata(value)).trim()
     const grab = (tag: string): string | undefined => {
       const t = new RegExp('<' + tag + '(?:[^>]*)>([\\s\\S]*?)<\\/' + tag + '>', 'i').exec(block)
-      return t ? decodeCdata(stripTags(t[1]!)) : undefined
+      return t ? clean(t[1]!) : undefined
     }
     const linkMatch = /<link[^>]*href="([^"]+)"/i.exec(block) ?? /<link[^>]*>([\s\S]*?)<\/link>/i.exec(block)
     const title = grab('title')
     // Atom feeds (arXiv) use <id> as the canonical URL.
     const idMatch = /<id[^>]*>([\s\S]*?)<\/id>/i.exec(block)
-    const link = linkMatch ? (linkMatch[1] ?? stripTags(linkMatch[2] ?? '')) : (idMatch ? stripTags(idMatch[1] ?? '') : undefined)
+    const link = linkMatch ? clean(linkMatch[1] ?? linkMatch[2] ?? '') : (idMatch ? clean(idMatch[1] ?? '') : undefined)
     const description = grab('description') ?? grab('summary') ?? grab('content')
     const pubDate = grab('pubDate') ?? grab('published') ?? grab('updated')
     if (!link || !/^https?:\/\//i.test(link)) continue
@@ -244,7 +246,7 @@ export function jinaSearchEngine(deps: EngineDeps): Engine {
       const headers: Record<string, string> = {}
       const k = key()
       if (k) headers['authorization'] = 'Bearer ' + k
-      const res = await httpGet('https://s.jina.ai/?q=' + encodeURIComponent(query), { headers, signal, timeoutMs: 30_000 })
+      const res = await httpGet('https://s.jina.ai/?q=' + encodeURIComponent(query), { headers, signal, timeoutMs: 30_000, allowProxyFakeIp: deps.allowProxyFakeIp })
       if (res.status === 401 && !k) throw new EngineError('Jina AI requires an API key (set jinaApiKey or $JINA_API_KEY)', 'ENGINE_UNAVAILABLE', false)
       if (!res.ok) throw new EngineError('Jina search HTTP ' + res.status, 'ENGINE_ERROR')
       const sources: WebSearchSource[] = []
@@ -289,7 +291,7 @@ async function githubApiGet(path: string, deps: EngineDeps, signal?: AbortSignal
     'x-github-api-version': '2022-11-28',
     ...token ? { 'authorization': 'Bearer ' + token } : {},
   }
-  const res = await httpGet(GITHUB_API + path, { headers, signal, timeoutMs })
+  const res = await httpGet(GITHUB_API + path, { headers, signal, timeoutMs, allowProxyFakeIp: deps.allowProxyFakeIp })
   if (res.status === 401 || res.status === 403) {
     throw new EngineError(
       'GitHub API ' + res.status + (token ? ' (token rejected or rate-limited)' : ' (set $GITHUB_TOKEN for higher limits / authenticated search)'),
@@ -406,13 +408,13 @@ export function bilibiliEngine(deps: EngineDeps): Engine {
 
 // ── V2EX (sov2ex community search API) ──────────────────────────────────────
 
-export function v2exEngine(): Engine {
+export function v2exEngine(allowProxyFakeIp = false): Engine {
   return {
     id: 'v2ex',
     label: 'V2EX (sov2ex)',
     available: () => true,
     async search(query, count, signal) {
-      const res = await httpGet('https://www.sov2ex.com/api/search?q=' + encodeURIComponent(query) + '&size=' + Math.min(count, 15), { signal, timeoutMs: 25_000 })
+      const res = await httpGet('https://www.sov2ex.com/api/search?q=' + encodeURIComponent(query) + '&size=' + Math.min(count, 15), { signal, timeoutMs: 25_000, allowProxyFakeIp })
       if (!res.ok) throw new EngineError('sov2ex HTTP ' + res.status, 'ENGINE_ERROR')
       const parsed = JSON.parse(res.text) as {
         hits?: { _source?: { id?: string | number; title?: string; content?: string; created?: string | number; node?: { title?: string } } }[] | { hits?: { _source?: { id?: string | number; title?: string; content?: string; created?: string | number; node?: { title?: string } } }[] }
@@ -545,14 +547,14 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
 
 // ── Academic verticals (public APIs, no login) ─────────────────────────────
 
-export function arxivEngine(): Engine {
+export function arxivEngine(allowProxyFakeIp = false): Engine {
   return {
     id: 'arxiv', label: 'arXiv',
     available: () => true,
     async search(query, count, signal) {
       const res = await httpGet(
         'http://export.arxiv.org/api/query?search_query=all:' + encodeURIComponent(query) + '&start=0&max_results=' + Math.min(count, 20),
-        { signal, timeoutMs: 30_000 },
+        { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
       if (!res.ok) throw new EngineError('arXiv HTTP ' + res.status, 'ENGINE_ERROR')
       const sources = parseRss(res.text, count)
@@ -562,7 +564,7 @@ export function arxivEngine(): Engine {
   }
 }
 
-export function pubmedEngine(): Engine {
+export function pubmedEngine(allowProxyFakeIp = false): Engine {
   return {
     id: 'pubmed', label: 'PubMed',
     available: () => true,
@@ -570,7 +572,7 @@ export function pubmedEngine(): Engine {
       const n = Math.min(Math.max(count, 1), 20)
       const esearch = await httpGet(
         'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=' + encodeURIComponent(query) + '&retmax=' + n + '&retmode=json',
-        { signal, timeoutMs: 30_000 },
+        { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
       if (!esearch.ok) throw new EngineError('PubMed esearch HTTP ' + esearch.status, 'ENGINE_ERROR')
       const ids: string[] = (JSON.parse(esearch.text) as any)?.esearchresult?.idlist ?? []
@@ -578,7 +580,7 @@ export function pubmedEngine(): Engine {
       const sources: WebSearchSource[] = ids.map(id => ({ url: 'https://pubmed.ncbi.nlm.nih.gov/' + id + '/', title: 'PubMed ' + id }))
       const esummary = await httpGet(
         'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=' + ids.join(','),
-        { signal, timeoutMs: 30_000 },
+        { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
       if (esummary.ok) {
         const result = (JSON.parse(esummary.text) as any)?.result ?? {}
@@ -652,16 +654,23 @@ export function playwrightPlatformEngine(platform: string, deps: EngineDeps): En
 
 // ── RSS feed (platform tool) ────────────────────────────────────────────────
 
-export function rssEngine(url: string): Engine {
+export function rssEngine(url: string, allowProxyFakeIp = false): Engine {
   return {
     id: 'rss',
     label: 'RSS ' + url,
     available: () => /^https?:\/\//i.test(url),
-    async search(_query, count, signal) {
-      const res = await httpGet(url, { signal, timeoutMs: 25_000 })
+    async search(query, count, signal) {
+      const res = await httpGet(url, { signal, timeoutMs: 25_000, allowProxyFakeIp })
       if (!res.ok) throw new EngineError('RSS HTTP ' + res.status, 'ENGINE_ERROR')
-      const sources = parseRss(res.text, count)
-      if (!sources.length) throw new EngineError('RSS feed has no items', 'ENGINE_EMPTY', false)
+      const parsed = parseRss(res.text, 500)
+      const needle = query.trim().toLocaleLowerCase()
+      const sources = (needle
+        ? parsed.filter(source => [source.title, source.snippet, source.url]
+          .some(value => value?.toLocaleLowerCase().includes(needle)))
+        : parsed).slice(0, count)
+      if (!sources.length) {
+        throw new EngineError(needle ? 'RSS feed returned no items matching query' : 'RSS feed has no items', 'ENGINE_EMPTY', false)
+      }
       return { sources }
     },
   }
@@ -675,15 +684,15 @@ export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
     case 'github-issues': return [githubIssuesEngine(deps)]
     case 'bilibili': return [bilibiliEngine(deps)]
     case 'youtube': return [youtubeEngine(deps)]
-    case 'v2ex': return [v2exEngine()]
+    case 'v2ex': return [v2exEngine(deps.allowProxyFakeIp)]
     case 'xiaohongshu': return [opencliEngine('xiaohongshu', deps)]
     case 'twitter': return [opencliEngine('twitter', deps), agentReachEngine('twitter', deps)]
     case 'reddit': return [opencliEngine('reddit', deps)]
     case 'instagram': return [opencliEngine('instagram', deps)]
     case 'facebook': return [opencliEngine('facebook', deps)]
     // Chinese communities (MediaCrawler-style): Playwright drives the logged-in search page.
-    case 'arxiv': return [arxivEngine()]
-    case 'pubmed': return [pubmedEngine()]
+    case 'arxiv': return [arxivEngine(deps.allowProxyFakeIp)]
+    case 'pubmed': return [pubmedEngine(deps.allowProxyFakeIp)]
     case 'zhihu': return [playwrightPlatformEngine('zhihu', deps)]
     case 'weibo': return [playwrightPlatformEngine('weibo', deps)]
     case 'douban': return [playwrightPlatformEngine('douban', deps)]
