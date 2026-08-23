@@ -37,9 +37,9 @@ dsh --profile web
 | GitHub/B站/Reddit 等平台 | `web_platform_search` | Reddit 等 OpenCLI 平台需要 Chrome 扩展在线；中文受限站点使用 AuthProfile |
 | 登录后页面或私有论坛 | `browserBindings` + AuthProfile | Cookie 保存在本地 storageState，按域名授权，默认只读 |
 | 页面改版、懒加载 | `platformRules` 或 RulePack | 优先改选择器；需要等待/点击/滚动时再使用有界 RulePack |
-| 模型生成多步页面操作 | `browser_recipe_run` | 只读 wait/extract/assert/screenshot 直接运行；点击、输入等变更动作一次性审批 |
-| 外部模型生成油猴脚本 | `browser_script_validate` → `browser_userscript_run` | 强制 `@match`、`@grant none`、禁用 `@require`；每次执行原生审批 |
-| OpenCLI 站点适配器或浏览器桥 | `browser_opencli_status` / `browser_opencli_run` | 明确使用 Chrome；通用 argv 网关始终一次性审批 |
+| 模型生成多步页面操作 | `browser_recipe_run` | 只读步骤直接运行；页面交互按 dsh-browser 的 `automationMode` 决定拒绝/审批/直通 |
+| 外部模型生成油猴脚本 | `browser_script_validate` → `browser_userscript_run` | 强制 `@match`、`@grant none`、禁用 `@require`；仅 `unrestricted` 跳过审批 |
+| OpenCLI 站点适配器或浏览器桥 | `browser_opencli_status` / `browser_opencli_run` | 明确使用 Chrome；仅 `unrestricted` 跳过通用 argv 审批 |
 
 先运行 `web_backend_status` 判断后端是否 ready。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。
 
@@ -59,13 +59,15 @@ dsh --profile web
 
 ## 浏览器脚本与自动化分层
 
-`dsh-browser >= 0.1.6` 提供三种不同风险等级的入口：
+`dsh-browser >= 0.1.7` 提供三类脚本入口：
 
 1. **内置只读脚本**：`article-clean`、`links`、`jsonld`、`forms`，适合稳定抽取；先用 `browser_script_catalog` 查看。
-2. **Recipe**：最多 25 步的结构化 Playwright 操作，支持 wait/click/fill/type/press/select/check/hover/scroll/extract/assert/screenshot。只读步骤无需审批，含页面交互时触发一次性审批。
-3. **外部 UserScript**：适合外部模型生成站点专项逻辑。先 `browser_script_validate` 查看 SHA-256、域名范围与能力提示，再 `browser_userscript_run`；它在页面主世界运行，并非安全沙箱，因此每次执行都要求 DSH 原生审批。
+2. **Recipe**：最多 25 步的结构化 Playwright 操作，支持 wait/click/fill/type/press/select/check/hover/scroll/extract/assert/screenshot；交互步骤由自动化模式决定审批。
+3. **外部 UserScript**：适合外部模型生成站点专项逻辑。先 `browser_script_validate` 查看 SHA-256、域名范围与能力提示，再 `browser_userscript_run`；它在页面主世界运行，并非安全沙箱。
 
-OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序是 **站点 adapter → network/extract → DOM 操作**；先运行 `browser_opencli_status`。`browser_opencli_run` 接受 argv 数组而非 shell 字符串，可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令，但始终审批。
+工具自由度由 dsh-browser 的 `automationMode` 控制：`read-only` 仅暴露 10 个读取/校验工具；`standard`（默认）对交互、写 Recipe、外部脚本、OpenCLI 和安装操作审批；`autonomous` 直通页面交互和写 Recipe；`unrestricted` 为隔离测试 profile 提供完全无审批运行，但仍保留域名、参数、大小和步骤上限校验。
+
+OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序是 **站点 adapter → network/extract → DOM 操作**；先运行 `browser_opencli_status`。`browser_opencli_run` 接受 argv 数组而非 shell 字符串，可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令；仅 `unrestricted` 跳过审批。
 
 更完整的 AuthProfile、脚本元数据与 OpenCLI 示例见 [LOGIN.md](./LOGIN.md)。
 

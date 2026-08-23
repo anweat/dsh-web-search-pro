@@ -23,6 +23,7 @@ node scripts/save-login.mjs zhihu login-state.json
 - id: browser
   name: '@anweat/dsh-browser'
   config:
+    automationMode: standard # read-only | standard | autonomous | unrestricted
     authProfiles:
       china-community:
         storageStatePath: 'D:/secrets/login-state.json'
@@ -86,7 +87,7 @@ rulePacks:
 }
 ```
 
-`wait`、`extract`、`assert`、`screenshot` 是只读路径；一旦包含 `click`、`fill`、`type`、`press`、`select`、`check`、`hover` 或 `scroll`，DSH 会在执行前发起一次性审批。
+`wait`、`extract`、`assert`、`screenshot` 是只读路径；一旦包含 `click`、`fill`、`type`、`press`、`select`、`check`、`hover` 或 `scroll`，`standard` 会发起一次性审批，`autonomous` / `unrestricted` 直接执行，`read-only` 拒绝。
 
 ## 外部模型生成 UserScript
 
@@ -111,7 +112,7 @@ return { heading: document.querySelector('h1')?.textContent || '' }
 - 必须声明 HTTP(S) `@match`，`@exclude` 生效；目标 URL 不匹配时拒绝。
 - 只允许 `@grant none`，拒绝 `@require`，源码上限 64KB，输出与运行时间有界。
 - 验证结果包含 SHA-256 和静态能力提示，但能力提示不是安全证明。
-- 脚本运行在目标页主世界，能读写页面并使用该页已有登录态；因此 `browser_userscript_run` 每次都进入 DSH 原生一次性审批。不要批准未检查的源码，也不要让脚本回传 Cookie、令牌、表单值等秘密。
+- 脚本运行在目标页主世界，能读写页面并使用该页已有登录态；除 `unrestricted` 外，`browser_userscript_run` 会进入 DSH 原生一次性审批。无审批测试也不要让脚本回传 Cookie、令牌、表单值等秘密。
 
 常见只读任务优先用 `browser_script_catalog` 中的内置 `article-clean`、`links`、`jsonld`、`forms`，无需提交任意脚本。
 
@@ -130,7 +131,7 @@ opencli browser research close
 
 每个 `opencli browser` 子命令都必须显式给出 session 名（上例为 `research`），同名会话复用标签页状态。优先使用已有站点 adapter；没有 adapter 时优先 `network` / `extract`，最后再使用 `state` / `find` / `click` / `fill` 等 DOM 操作。
 
-模型内先用 `browser_opencli_status` 检查 daemon、扩展和 profile；高级调用使用 `browser_opencli_run({ args: [...] })`。argv 示例：`["browser", "research", "state"]`。这个通用入口可能触发发帖、删除等站点 adapter，所以无论看起来是否只读都要求一次性审批。
+模型内先用 `browser_opencli_status` 检查 daemon、扩展和 profile；高级调用使用 `browser_opencli_run({ args: [...] })`。argv 示例：`["browser", "research", "state"]`。这个通用入口可能触发发帖、删除等站点 adapter，所以除隔离测试用的 `unrestricted` 外都要求一次性审批。
 
 若 `doctor` 显示 daemon 正常但 extension disconnected，请显式启动安装了 OpenCLI Browser Bridge 的 Chrome；不要把 Quark 或禁用扩展的 Playwright 临时 profile 当作替代。只有需要在终端独立诊断时，才需要额外全局安装 `@jackwener/opencli`。
 
