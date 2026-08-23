@@ -20,6 +20,26 @@ dsh --profile web
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
 > 里对齐版本后重装即可。
 
+## 从旧版本升级
+
+升级 Web Search Pro 时应同时升级浏览器插件。`dsh-web-search-pro >= 0.1.6` 要求 `@anweat/dsh-browser >= 0.1.7`；旧版 browser 不包含完整的 Recipe、外部 userscript、OpenCLI Bridge 和四级 `automationMode` 能力。
+
+```bash
+# npm 安装：显式升级两个包，避免 profile 锁文件继续保留旧版 browser
+dsh plugin --profile web add @anweat/dsh-browser@^0.1.7 dsh-web-search-pro@^0.1.6
+
+# 本地 checkout 联调：两个目录一起重新挂载
+dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
+```
+
+升级完成后需要**完整停止并重新启动 Web profile**；仅刷新网页不会重新扫描插件的 `client.js`。随后依次检查：
+
+1. `browser_status`：确认 OpenCLI/Playwright 状态和 `automationMode` 符合预期。
+2. `web_backend_status`：确认搜索、CLI、Agent Reach 与浏览器后端是否 ready。
+3. 打开 `设置 → 插件 → 插件配置 → Web Search Pro`：确认可视化面板已加载。
+
+> `automationMode` 属于 dsh-browser，升级不会自动改写现有审批策略。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile。
+
 ## 快速使用与适用情形
 
 安装并重启后，直接在 DSH 会话里要求模型调用工具即可：
