@@ -75,7 +75,14 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 三层，越靠前越日常：
 
-1. **`$DSH_HOME/settings.yaml` → `web-search-pro:` 段**（热重载，改完即生效）：
+1. **DSH 可视化面板**：打开 `设置 → 插件 → 插件配置 → Web Search Pro`。面板按搜索策略、服务凭据、运行时后端和高级规则分组；修改先保留为本地草稿，点击“保存”后写入 `settings.yaml` 并热更新，支持放弃修改和逐字段恢复部署值。
+
+   - Exa、Jina、GitHub 密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器。
+   - `platformRules`、`customPlatforms`、`browserBindings` 与 Playwright 设置使用 JSON 对象编辑器；格式或数值范围无效时会阻止保存。
+   - 浏览器工具的审批自由度仍由 `dsh-browser.automationMode` 管辖；用 `browser_status` 查看当前模式。Web Search Pro 面板只管理搜索插件自己的后端开关，不会绕过 dsh-browser 的审批策略。
+   - 更新带客户端面板的插件版本后需要重启 Web profile，让 DSH 客户端模块扫描器重新装载 `client.js`。
+
+2. **`$DSH_HOME/settings.yaml` → `web-search-pro:` 段**（热重载，改完即生效）：
 
    ```yaml
    web-search-pro:
@@ -91,8 +98,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
          rulePack: zhihu-enhanced
    ```
 
-2. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
-3. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`（`exaApiKeyEnv`/`jinaApiKeyEnv` 引用）。
+3. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
+4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`（`exaApiKeyEnv`/`jinaApiKeyEnv` 引用）。
 
 ## 外部依赖（按需）
 
