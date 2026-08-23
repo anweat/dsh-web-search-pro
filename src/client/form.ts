@@ -8,7 +8,7 @@ export type SettingField =
   | 'providerId' | 'registerProvider' | 'playwright'
   | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant'
   | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains'
-  | 'dbPath' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose'
+  | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose'
 
 export type CredentialId = 'exa' | 'jina' | 'github'
 
@@ -128,6 +128,7 @@ export const FIELD_SPECS: readonly FieldSpec[] = [
   numberField('authorityBoost', { min: 0, max: 1 }),
   csvField('authorityDomains'),
   textField('dbPath'),
+  booleanField('allowProxyFakeIp'),
   jsonField('platformRules'),
   jsonField('customPlatforms'),
   jsonField('browserBindings'),

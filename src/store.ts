@@ -40,6 +40,7 @@ export interface SourceRow {
 
 export interface PageRecord {
   id: string
+  queryId?: string
   url: string
   title?: string
   text?: string
@@ -83,7 +84,8 @@ CREATE TABLE IF NOT EXISTS results (
 );
 CREATE TABLE IF NOT EXISTS pages (
   id TEXT PRIMARY KEY,
-  url TEXT UNIQUE NOT NULL,
+  query_id TEXT,
+  url TEXT NOT NULL,
   title TEXT,
   text TEXT,
   html_path TEXT,
@@ -105,6 +107,8 @@ CREATE INDEX IF NOT EXISTS idx_queries_kind ON queries(kind);
 CREATE INDEX IF NOT EXISTS idx_pages_url ON pages(url);
 `
 
+const PAGE_COLUMNS = 'id, query_id AS queryId, url, title, text, html_path AS htmlPath, screenshot_path AS screenshotPath, status, fetched_at AS fetchedAt, source'
+
 export class Store {
   private db: DatabaseSync
 
@@ -115,7 +119,32 @@ export class Store {
     this.db.exec(SCHEMA)
     const columns = this.db.prepare('PRAGMA table_info(queries)').all() as unknown as { name: string }[]
     if (!columns.some(column => column.name === 'cache_key')) this.db.exec('ALTER TABLE queries ADD COLUMN cache_key TEXT')
+    const pageColumns = this.db.prepare('PRAGMA table_info(pages)').all() as unknown as { name: string }[]
+    if (!pageColumns.some(column => column.name === 'query_id')) {
+      this.db.exec(`
+        BEGIN;
+        CREATE TABLE pages_v2 (
+          id TEXT PRIMARY KEY,
+          query_id TEXT,
+          url TEXT NOT NULL,
+          title TEXT,
+          text TEXT,
+          html_path TEXT,
+          screenshot_path TEXT,
+          status INTEGER,
+          fetched_at TEXT NOT NULL,
+          source TEXT
+        );
+        INSERT INTO pages_v2 (id, query_id, url, title, text, html_path, screenshot_path, status, fetched_at, source)
+          SELECT id, NULL, url, title, text, html_path, screenshot_path, status, fetched_at, source FROM pages;
+        DROP TABLE pages;
+        ALTER TABLE pages_v2 RENAME TO pages;
+        COMMIT;
+      `)
+    }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_queries_cache ON queries(kind, cache_key, ts)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_url ON pages(url)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_query ON pages(query_id)')
   }
 
   close(): void {
@@ -168,23 +197,40 @@ export class Store {
     ).all(queryId) as unknown as SourceRow[]
   }
 
+  queryById(id: string): QueryRecord | undefined {
+    return this.db.prepare('SELECT * FROM queries WHERE id = ?').get(id) as unknown as QueryRecord | undefined
+  }
+
   /** Fresh page snapshot by URL, or undefined. */
   getPage(url: string, ttlSeconds: number): PageRecord | undefined {
     const row = this.db.prepare(
-      `SELECT * FROM pages WHERE url = ? AND fetched_at > ? ORDER BY fetched_at DESC LIMIT 1`,
+      `SELECT ${PAGE_COLUMNS} FROM pages WHERE url = ? AND fetched_at > ? ORDER BY fetched_at DESC LIMIT 1`,
     ).get(url, new Date(Date.now() - ttlSeconds * 1000).toISOString()) as unknown as PageRecord | undefined
     return row
   }
 
   savePage(input: Omit<PageRecord, 'id' | 'fetchedAt'>): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO pages (id, url, title, text, html_path, screenshot_path, status, fetched_at, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pages (id, query_id, url, title, text, html_path, screenshot_path, status, fetched_at, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      uid(), input.url, input.title ?? null, input.text ?? null,
+      uid(), input.queryId ?? null, input.url, input.title ?? null, input.text ?? null,
       input.htmlPath ?? null, input.screenshotPath ?? null, input.status ?? null,
       new Date().toISOString(), input.source ?? null,
     )
+  }
+
+  /** Exact persisted fetch/snapshot for a history query; legacy rows fall back by URL. */
+  pageForQuery(queryId: string): PageRecord | undefined {
+    const exact = this.db.prepare(
+      `SELECT ${PAGE_COLUMNS} FROM pages WHERE query_id = ? ORDER BY fetched_at DESC LIMIT 1`,
+    ).get(queryId) as unknown as PageRecord | undefined
+    if (exact) return exact
+    const query = this.queryById(queryId)
+    if (!query?.url) return undefined
+    return this.db.prepare(
+      `SELECT ${PAGE_COLUMNS} FROM pages WHERE query_id IS NULL AND url = ? ORDER BY fetched_at DESC LIMIT 1`,
+    ).get(query.url) as unknown as PageRecord | undefined
   }
 
   listQueries(opts: { kind?: QueryKind; query?: string; engine?: string; platform?: string; limit?: number }): QueryRecord[] {
@@ -204,16 +250,20 @@ export class Store {
   }
 
   clearCache(opts: { olderThanDays?: number; engine?: string }): { queries: number; results: number; pages: number } {
-    const cutoff = opts.olderThanDays
-      ? new Date(Date.now() - opts.olderThanDays * 86400_000).toISOString()
+    const cutoff = opts.olderThanDays !== undefined
+      ? new Date(Date.now() - Math.max(opts.olderThanDays, 0) * 86400_000).toISOString()
       : undefined
     let removed: { queries: number; results: number; pages: number } = { queries: 0, results: 0, pages: 0 }
     if (opts.olderThanDays === undefined) {
       const engine = opts.engine
       if (engine) {
-        const ids = this.db.prepare(`SELECT id FROM queries WHERE engine = ?`).all(engine) as { id: string }[]
-        for (const r of ids) this.removeQuery(r.id)
-        removed.queries = ids.length
+        const q = this.db.prepare('SELECT COUNT(*) AS c FROM queries WHERE engine = ?').get(engine) as { c: number }
+        const r = this.db.prepare('SELECT COUNT(*) AS c FROM results WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').get(engine) as { c: number }
+        const p = this.db.prepare('SELECT COUNT(*) AS c FROM pages WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').get(engine) as { c: number }
+        this.db.prepare('DELETE FROM pages WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').run(engine)
+        this.db.prepare('DELETE FROM results WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').run(engine)
+        this.db.prepare('DELETE FROM queries WHERE engine = ?').run(engine)
+        removed = { queries: q.c, results: r.c, pages: p.c }
       } else {
         const q = this.db.prepare('SELECT COUNT(*) AS c FROM queries').get() as { c: number }
         const r = this.db.prepare('SELECT COUNT(*) AS c FROM results').get() as { c: number }
@@ -227,15 +277,20 @@ export class Store {
       const rows = engine
         ? this.db.prepare(`SELECT id FROM queries WHERE ts < ? AND engine = ?`).all(since, engine) as { id: string }[]
         : this.db.prepare(`SELECT id FROM queries WHERE ts < ?`).all(since) as { id: string }[]
-      for (const row of rows) this.removeQuery(row.id)
-      const p = this.db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE fetched_at < ?`).get(since) as { c: number }
-      this.db.prepare('DELETE FROM pages WHERE fetched_at < ?').run(since)
-      removed = { queries: rows.length, results: rows.length, pages: p.c }
+      const predicate = engine ? 'ts < ? AND engine = ?' : 'ts < ?'
+      const params = engine ? [since, engine] : [since]
+      const r = this.db.prepare(`SELECT COUNT(*) AS c FROM results WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})`).get(...params) as { c: number }
+      const p = this.db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate}) OR (query_id IS NULL AND fetched_at < ?)`).get(...params, since) as { c: number }
+      this.db.prepare(`DELETE FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate}) OR (query_id IS NULL AND fetched_at < ?)`).run(...params, since)
+      this.db.prepare(`DELETE FROM results WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})`).run(...params)
+      this.db.prepare(`DELETE FROM queries WHERE ${predicate}`).run(...params)
+      removed = { queries: rows.length, results: r.c, pages: p.c }
     }
     return removed
   }
 
   private removeQuery(id: string): void {
+    this.db.prepare('DELETE FROM pages WHERE query_id = ?').run(id)
     this.db.prepare('DELETE FROM results WHERE query_id = ?').run(id)
     this.db.prepare('DELETE FROM queries WHERE id = ?').run(id)
   }

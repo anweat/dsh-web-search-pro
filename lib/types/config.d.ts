@@ -42,6 +42,8 @@ export interface Config {
     searchMaxResults: number;
     /** Cooperative per-call timeout budget in ms. */
     timeoutMs: number;
+    /** Trust Clash/TUN fake-IP DNS ranges while retaining all other SSRF checks. */
+    allowProxyFakeIp: boolean;
     /** Ordered engine list for web_search_pro. */
     engines: string[];
     /** Query all requested engines in parallel and merge. */

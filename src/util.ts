@@ -88,7 +88,7 @@ export interface HttpResult {
  */
 export async function httpGet(
   url: string,
-  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number } = { signal: undefined },
+  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean } = { signal: undefined },
 ): Promise<HttpResult> {
   const controller = new AbortController()
   const timer = opts.timeoutMs ? setTimeout(() => controller.abort(new Error('dsh-web-search-pro: request timed out')), opts.timeoutMs) : undefined
@@ -96,7 +96,8 @@ export async function httpGet(
   if (opts.signal?.aborted) onAbort()
   else opts.signal?.addEventListener('abort', onAbort)
   try {
-    let current = (await assertResolvedPublicUrl(url)).href
+    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false }
+    let current = (await assertResolvedPublicUrl(url, resolution)).href
     let method = opts.method ?? 'GET'
     let body = opts.body
     let requestHeaders: Record<string, string> = { ...opts.headers }
@@ -117,7 +118,7 @@ export async function httpGet(
       if (opts.redirect === 'error') throw new Error('HTTP redirect is not allowed')
       if (redirects === 5) throw new Error('too many HTTP redirects')
       const from = new URL(current)
-      const target = await assertResolvedPublicUrl(new URL(location, current))
+      const target = await assertResolvedPublicUrl(new URL(location, current), resolution)
       requestHeaders = stripSensitiveHeadersForRedirect(requestHeaders, from, target)
       current = target.href
       if (res.status === 303 || ((res.status === 301 || res.status === 302) && method !== 'GET' && method !== 'HEAD')) { method = 'GET'; body = undefined }

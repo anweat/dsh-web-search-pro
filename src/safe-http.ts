@@ -21,6 +21,31 @@ function privateIp(value: string): boolean {
   return mapped ? privateIpv4(mapped[1]!) : false
 }
 
+function proxyFakeIp(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/^\[|\]$/g, '')
+  if (net.isIP(normalized) === 4) {
+    const [first, second] = normalized.split('.').map(Number)
+    return first === 198 && (second === 18 || second === 19)
+  }
+  if (net.isIP(normalized) !== 6) return false
+  const [left = '', right = ''] = normalized.split('::')
+  const leftGroups = left ? left.split(':') : []
+  const rightGroups = right ? right.split(':') : []
+  const missing = 8 - leftGroups.length - rightGroups.length
+  const groups = normalized.includes('::')
+    ? [...leftGroups, ...Array.from({ length: missing }, () => '0'), ...rightGroups]
+    : leftGroups
+  return groups.length === 8
+    && groups.slice(0, 6).map(group => Number.parseInt(group, 16)).every((group, index) => group === [0xfdfe, 0xdcba, 0x9876, 0, 0, 0][index])
+}
+
+export interface ResolvePublicUrlOptions {
+  /** Trust Clash/TUN fake-IP DNS ranges. Literal fake-IP URLs remain blocked. */
+  allowProxyFakeIp?: boolean
+  /** Test seam; production callers use node:dns/promises lookup. */
+  lookup?: (hostname: string) => Promise<{ address: string; family?: number }[]>
+}
+
 export function assertSafePublicUrl(raw: string | URL): URL {
   let url: URL
   try { url = raw instanceof URL ? new URL(raw.href) : new URL(raw) } catch { throw new Error('URL is not valid') }
@@ -33,14 +58,19 @@ export function assertSafePublicUrl(raw: string | URL): URL {
   return url
 }
 
-export async function assertResolvedPublicUrl(raw: string | URL): Promise<URL> {
+export async function assertResolvedPublicUrl(raw: string | URL, options: ResolvePublicUrlOptions = {}): Promise<URL> {
   const url = assertSafePublicUrl(raw)
   if (net.isIP(url.hostname.replace(/^\[|\]$/g, ''))) return url
   let addresses: { address: string }[]
-  try { addresses = await dns.lookup(url.hostname, { all: true, verbatim: true }) } catch (error) {
+  try {
+    addresses = options.lookup
+      ? await options.lookup(url.hostname)
+      : await dns.lookup(url.hostname, { all: true, verbatim: true })
+  } catch (error) {
     throw new Error('hostname resolution failed for ' + url.hostname + ': ' + String(error).slice(0, 160))
   }
-  if (!addresses.length || addresses.some(v => privateIp(v.address))) throw new Error('hostname does not resolve exclusively to public addresses')
+  const unsafe = addresses.some(({ address }) => privateIp(address) && !(options.allowProxyFakeIp && proxyFakeIp(address)))
+  if (!addresses.length || unsafe) throw new Error('hostname does not resolve exclusively to public addresses')
   return url
 }
 

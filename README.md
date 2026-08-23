@@ -7,14 +7,14 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add dsh-web-search-pro   # 自动装 dsh-browser（dependency）+ 自动挂载 browser 行（本 patch）
+dsh plugin --profile web add @anweat/dsh-browser@^0.1.7 dsh-web-search-pro@^0.1.7
 # 或本地目录 / tarball：
-dsh plugin --profile web add ./dsh-web-search-pro
+dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
 dsh --profile web
 ```
 
-> npm 安装会解析 `@anweat/dsh-browser`；本地联调可用 `dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro` 一条命令显式列两个。
+> 两个插件都必须是 profile 的直接依赖：DSH 只激活直接依赖的 bundle layer，且标准 profile 可能设置 `autoInstallPeers: false`。不要只安装 Web Search Pro 后依赖 peer 自动补齐。
 > 依赖 `@deepseek-ai/*` 已发布到 npm（`^0.1.0-rc.6`，与社区 dsh-cc-tui 一致）。
 > 若你的 harness 是本地源码 checkout（如 `0.1.0-rc.5`），版本号可能有出入——用
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
@@ -26,7 +26,7 @@ dsh --profile web
 
 ```bash
 # npm 安装：显式升级两个包，避免 profile 锁文件继续保留旧版 browser
-dsh plugin --profile web add @anweat/dsh-browser@^0.1.7 dsh-web-search-pro@^0.1.6
+dsh plugin --profile web add @anweat/dsh-browser@^0.1.7 dsh-web-search-pro@^0.1.7
 
 # 本地 checkout 联调：两个目录一起重新挂载
 dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
@@ -39,6 +39,8 @@ dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
 3. 打开 `设置 → 插件 → 插件配置 → Web Search Pro`：确认可视化面板已加载。
 
 > `automationMode` 属于 dsh-browser，升级不会自动改写现有审批策略。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile。
+
+若 Clash/TUN 使用 fake-IP DNS，原生 HTTP 后端可能看到 `198.18.0.0/15` 或 `fdfe:dcba:9876::/96`。可在可视化面板的高级设置中启用 `allowProxyFakeIp`；默认关闭。该开关只信任这两个代理网段的 **DNS 解析结果**，字面 fake-IP URL、localhost 和其他私网地址仍会被 SSRF 防护拒绝。
 
 ## 快速使用与适用情形
 
@@ -100,6 +102,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
    - Exa、Jina、GitHub 密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器。
    - `platformRules`、`customPlatforms`、`browserBindings` 与 Playwright 设置使用 JSON 对象编辑器；格式或数值范围无效时会阻止保存。
    - 浏览器工具的审批自由度仍由 `dsh-browser.automationMode` 管辖；用 `browser_status` 查看当前模式。Web Search Pro 面板只管理搜索插件自己的后端开关，不会绕过 dsh-browser 的审批策略。
+   - `allowProxyFakeIp` 仅用于明确采用 Clash/TUN fake-IP DNS 的环境；普通网络保持关闭。
    - 更新带客户端面板的插件版本后需要重启 Web profile，让 DSH 客户端模块扫描器重新装载 `client.js`。
 
 2. **`$DSH_HOME/settings.yaml` → `web-search-pro:` 段**（热重载，改完即生效）：
@@ -169,8 +172,7 @@ zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都�
 
 ## 历史管理
 
-web_history 支持：kind/query/engine/platform 过滤、replay（用 queryId 回放已存结果）、
-export（把过滤后的历史+结果写成 JSON 文件）。
+web_history 支持：kind/query/engine/platform 过滤、replay 和 JSON export。search/platform 回放保存的来源；fetch/snapshot 回放当次持久化的正文、HTML/截图路径。旧数据库会自动迁移 pages 表；历史上无法关联 queryId 的旧页面按 URL 做兼容回放。
 
 ## 自定义平台
 

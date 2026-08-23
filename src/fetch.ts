@@ -125,20 +125,21 @@ export class FetchService {
 
     this.memory.set('page|' + normalized, result)
     if (opts.persist) {
-      this.store.savePage({
-        url: normalized,
-        ...result.title ? { title: result.title } : {},
-        text: result.text,
-        ...result.statusCode !== undefined ? { status: result.statusCode } : {},
-        source: result.source,
-      })
-      this.store.recordQuery({
+      const queryId = this.store.recordQuery({
         kind: 'fetch',
         url: normalized,
         query: result.title ?? normalized,
         engine: result.source,
         status: 'ok',
         detail: JSON.stringify({ textLength: result.text.length, usedRule: result.usedRule }),
+      })
+      this.store.savePage({
+        queryId,
+        url: normalized,
+        ...result.title ? { title: result.title } : {},
+        text: result.text,
+        ...result.statusCode !== undefined ? { status: result.statusCode } : {},
+        source: result.source,
       })
     }
     return result
@@ -150,7 +151,7 @@ export class FetchService {
     const key = cfg.jinaApiKey || process.env[cfg.jinaApiKeyEnv]
     if (key) headers['authorization'] = 'Bearer ' + key
     headers['x-respond-with'] = 'markdown'
-    const res = await httpGet('https://r.jina.ai/' + url, { headers, signal: opts.signal, timeoutMs: 30_000 })
+    const res = await httpGet('https://r.jina.ai/' + url, { headers, signal: opts.signal, timeoutMs: 30_000, allowProxyFakeIp: cfg.allowProxyFakeIp })
     if (res.status === 401 && !key) throw new Error('jina reader requires an API key (set jinaApiKey or $JINA_API_KEY)')
     if (!res.ok) throw new Error('jina reader HTTP ' + res.status)
     const text = res.text
@@ -166,7 +167,7 @@ export class FetchService {
   }
 
   private async fetchHttp(url: string, opts: FetchOptions, maxChars: number, rules: ExtractRule[]): Promise<FetchResult> {
-    const res = await httpGet(url, { signal: opts.signal, timeoutMs: 30_000 })
+    const res = await httpGet(url, { signal: opts.signal, timeoutMs: 30_000, allowProxyFakeIp: this.cfg().allowProxyFakeIp })
     const contentType = res.contentType ?? ''
     const isHtml = /html|xml/i.test(contentType) || /<\s*!doctype|<!DOCTYPE|(<html[\s>])/i.test(res.text.slice(0, 2000))
     if (isHtml) {

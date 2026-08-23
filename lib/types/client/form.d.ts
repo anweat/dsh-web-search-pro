@@ -1,6 +1,6 @@
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client';
 import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client';
-export type SettingField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose';
+export type SettingField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose';
 export type CredentialId = 'exa' | 'jina' | 'github';
 export interface CardFieldState {
     text: string;
