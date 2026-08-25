@@ -34,10 +34,14 @@ export function apply(ctx: Context): void {
   const controller = new WebSearchSettingsController(scope, api)
   ctx.effect(() => () => { controller.dispose() }, 'web-search-pro: settings controller')
 
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: 'web-search-pro',
-    locale: NS,
-    inject: () => controller.inject(),
-  }, SettingsCard))
+  ctx.slots.inject('settings.plugin.item', () => {
+    const options = {
+      name: 'settings.plugin.item',
+      key: 'web-search-pro',
+      id: 'web-search-pro',
+      locale: NS,
+      inject: () => controller.inject(),
+    } as const
+    return ctx.slots.register(options, SettingsCard)
+  })
 }
