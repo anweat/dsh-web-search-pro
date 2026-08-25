@@ -10,6 +10,8 @@ import { FetchService } from '../src/fetch.ts'
 import { replayHistory } from '../src/history.ts'
 import { assertResolvedPublicUrl, assertSafePublicUrl } from '../src/safe-http.ts'
 import { Store } from '../src/store.ts'
+import { resolveConfig } from '../src/config.ts'
+import { SearchRouter } from '../src/router.ts'
 
 test('RSS platform search filters all feed items by the requested query before applying count', async () => {
   const originalLookup = dns.lookup
@@ -233,6 +235,90 @@ test('fetch cache omits a SQLite NULL status instead of returning statusCode nul
     assert.equal(result.fromCache, true)
     assert.equal(result.statusCode, undefined)
     assert.equal(Object.hasOwn(result, 'statusCode'), false)
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('router accepts a legacy RSS feed URL in query without treating it as a filter', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-rss-legacy-query-'))
+  const config = resolveConfig({ engines: ['ddg'], dbPath: path.join(dir, 'store.db') })
+  const store = new Store(config.dbPath)
+  const router = new SearchRouter({ get: () => undefined } as never, config, store)
+  const originalLookup = dns.lookup
+  const originalFetch = globalThis.fetch
+  dns.lookup = (async () => [{ address: '93.184.216.34', family: 4 }]) as typeof dns.lookup
+  globalThis.fetch = (async () => new Response(`
+    <rss><channel><item><title>Visible item</title><link>https://example.com/item</link></item></channel></rss>
+  `, { status: 200 })) as typeof fetch
+  try {
+    const result = await router.platformSearch('rss', 'https://feed.example/rss', undefined, 5, { fresh: true })
+    assert.equal(result.sources[0]?.title, 'Visible item')
+  } finally {
+    dns.lookup = originalLookup
+    globalThis.fetch = originalFetch
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('explicit fetch modes only reuse persisted pages from the same backend', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-fetch-mode-cache-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  const queryId = store.recordQuery({ kind: 'snapshot', query: 'page', url: 'https://example.com/page', engine: 'playwright', status: 'ok' })
+  store.savePage({ queryId, url: 'https://example.com/page', text: 'rendered cache', source: 'playwright' })
+  const originalLookup = dns.lookup
+  const originalFetch = globalThis.fetch
+  dns.lookup = (async () => [{ address: '93.184.216.34', family: 4 }]) as typeof dns.lookup
+  globalThis.fetch = (async () => new Response('<main>fresh http</main>', {
+    status: 200,
+    headers: { 'content-type': 'text/html' },
+  })) as typeof fetch
+  try {
+    const explicitHttp = new FetchService(store, { ttlSeconds: 60, allowProxyFakeIp: false, playwright: { enabled: true } } as never, {} as never)
+    const httpResult = await explicitHttp.fetchPage('https://example.com/page', {
+      mode: 'http', signal: undefined, maxChars: 5_000, fresh: false, persist: false,
+    })
+    assert.equal(httpResult.fromCache, false)
+    assert.equal(httpResult.source, 'http')
+    assert.match(httpResult.text, /fresh http/)
+
+    const automatic = new FetchService(store, { ttlSeconds: 60, allowProxyFakeIp: false, playwright: { enabled: true } } as never, {} as never)
+    const autoResult = await automatic.fetchPage('https://example.com/page', {
+      mode: 'auto', signal: undefined, maxChars: 5_000, fresh: false, persist: false,
+    })
+    assert.equal(autoResult.fromCache, true)
+    assert.equal(autoResult.source, 'cache:playwright')
+  } finally {
+    dns.lookup = originalLookup
+    globalThis.fetch = originalFetch
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('backend diagnostics mark configured CLI engines unavailable when binaries are missing', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-backend-diagnostics-'))
+  const config = resolveConfig({
+    engines: ['exa', 'bilibili', 'youtube'],
+    enableCliBackends: true,
+    exaApiKey: '',
+    dbPath: path.join(dir, 'store.db'),
+  })
+  const store = new Store(config.dbPath)
+  const router = new SearchRouter({ get: () => undefined } as never, config, store)
+  try {
+    const diagnostics = await router.backendDiagnostics(new Map([
+      ['mcporter', false],
+      ['bili', false],
+      ['yt-dlp', false],
+    ]))
+    for (const id of ['exa', 'bilibili', 'youtube']) {
+      const diagnostic = diagnostics.find(item => item.id === id)
+      assert.equal(diagnostic?.available, false, id)
+      assert.match(diagnostic?.reason ?? '', /not found/)
+    }
   } finally {
     store.close()
     fs.rmSync(dir, { recursive: true, force: true })

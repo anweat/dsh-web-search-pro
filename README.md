@@ -72,13 +72,13 @@ dsh plugin --profile web add ../dsh-browser ../dsh-web-search-pro
 |---|---|
 | `web_search_pro` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史 |
 | `web_exa_contents` | 原生 Exa `/contents` 批量正文抓取（1-100 URL） |
-| `web_fetch_pro` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存 |
-| `web_platform_search` | 20 平台：GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手（Playwright 登录态） |
+| `web_fetch_pro` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存；显式 mode 只复用同后端缓存 |
+| `web_platform_search` | 20 平台：GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手（Playwright 登录态）；RSS 用 `url` 传 feed、`query` 可选过滤 |
 | `web_snapshot` | Playwright HTML + 文本落盘；`screenshot=false` 时不生成 PNG |
 | `web_history` / `web_cache_clear` / `web_search_stats` | 持久历史 / 清缓存 / 存储统计 |
-| `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove） |
+| `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove/import/export）；export 会写出可再导入的版本化 JSON rule pack |
 | `web_backend_status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态 |
-| `web_deps` | 检测/安装搜索后端的外部依赖（bili/yt-dlp/agent-reach/mcporter）；浏览器依赖由 dsh-browser 管理 |
+| `web_deps` | 检测/安装搜索后端的外部依赖（省略 action 默认 check；bili/yt-dlp/agent-reach/mcporter）；浏览器依赖由 dsh-browser 管理 |
 
 ## 浏览器脚本与自动化分层
 
@@ -173,7 +173,7 @@ zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都�
 
 ## 历史管理
 
-web_history 支持：kind/query/engine/platform 过滤、replay 和 JSON export。search/platform 回放保存的来源；fetch/snapshot 回放当次持久化的正文、HTML/截图路径。旧数据库会自动迁移 pages 表；历史上无法关联 queryId 的旧页面按 URL 做兼容回放。
+web_history 支持：kind/query/engine/platform 过滤（`kind=all` 等同省略 kind）、replay 和 JSON export。search/platform 回放保存的来源；fetch/snapshot 回放当次持久化的正文、HTML/截图路径。旧数据库会自动迁移 pages 表；历史上无法关联 queryId 的旧页面按 URL 做兼容回放。
 
 ## 自定义平台
 

@@ -55,11 +55,11 @@ web_search_pro / web_platform_search
 |---|---|---|
 | `web_search_pro` | query, engines?, count?, fresh?, multi? | 多引擎搜索 + 缓存 + 历史；输出 sources/engine/fromCache |
 | `web_fetch_pro` | url, mode?(auto/jina/http/playwright), maxChars?, fresh?, persist? | 可读化抓取 + 快照缓存 |
-| `web_platform_search` | platform(github/bilibili/youtube/v2ex/xiaohongshu/twitter/reddit/instagram/facebook/rss), query, url?, count? | 平台搜索（CLI/API/opencli 后端） |
+| `web_platform_search` | platform, query?, url?, count? | 平台搜索（CLI/API/opencli 后端）；RSS 的 url 是 feed 地址、query 是可选关键字，并兼容旧式 query=feed URL |
 | `web_snapshot` | url, screenshot? | Playwright 全页截图 + HTML + 文本落盘 |
-| `web_history` | kind?, query?, limit? | 查询持久历史 |
+| `web_history` | kind?(search/fetch/platform/snapshot/all), query?, limit? | 查询持久历史；all 等同不按 kind 过滤 |
 | `web_cache_clear` | olderThanDays?, engine? | 清理缓存 |
-| `web_rule` | action(list/upsert/remove), hostname?, contentSelectors?, removeSelectors? | 持久化脚本猫式提取规则 |
+| `web_rule` | action(list/upsert/remove/import/export), hostname?, contentSelectors?, removeSelectors?, rulesJson? | 持久化脚本猫式提取规则；export 在插件数据目录写版本化 JSON 文件，import 兼容数组和导出包 |
 | `web_search_stats` | — | DB 大小 + 各表计数 + 引擎列表 |
 
 ## 4. 关键设计决策

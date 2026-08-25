@@ -199,8 +199,8 @@ export function registerTools(deps: ToolDeps): void {
     description: 'Search a built-in or configured custom platform. Built-ins: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set the dsh-browser storageStatePath), and selectors are tunable via settings.yaml platformRules. Results are persisted to the search history.',
     parameters: {
       platform: { type: 'string', required: true, description: 'Built-in platform (' + PLATFORM_IDS.join(', ') + ') or a configured customPlatforms key.' },
-      query: { type: 'string', required: true, description: 'The search query (feed URL for rss).' },
-      url: { type: 'string', description: 'Feed URL when platform is rss.' },
+      query: { type: 'string', description: 'Search query; for rss this is an optional keyword filter. A feed URL here is still accepted for backward compatibility.' },
+      url: { type: 'string', description: 'Feed URL when platform is rss (preferred over putting the URL in query).' },
       count: { type: 'number', description: 'Max results (1-20).' },
       authProfile: { type: 'string', description: 'Named, domain-scoped dsh-browser auth profile.' },
       rulePack: { type: 'string', description: 'Named, domain-scoped dsh-browser enhancement rule pack.' },
@@ -227,7 +227,8 @@ export function registerTools(deps: ToolDeps): void {
       if (!isPlatformSupported(args.platform, dynamic().customPlatforms)) {
         throw new Error('unsupported platform: ' + args.platform)
       }
-      const result = await router.platformSearch(args.platform, args.query, args.url, args.count ?? 8, { signal: exec.signal, ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {} })
+      const legacyRssUrl = args.platform === 'rss' && !args.url && /^https?:\/\//i.test(args.query?.trim() ?? '') ? args.query!.trim() : undefined
+      const result = await router.platformSearch(args.platform, legacyRssUrl ? '' : (args.query ?? ''), args.url ?? legacyRssUrl, args.count ?? 8, { signal: exec.signal, ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {} })
       return { platform: args.platform, sources: result.sources, engine: result.engine, fromCache: result.fromCache }
     },
   }))
@@ -343,8 +344,9 @@ export function registerTools(deps: ToolDeps): void {
     timeoutMs: 15_000,
     isConcurrencySafe: () => true,
     async execute(args) {
-      const kind = args.kind as 'search' | 'fetch' | 'platform' | 'snapshot' | undefined
-      if (kind && !['search', 'fetch', 'platform', 'snapshot'].includes(kind)) throw new Error('kind must be search, fetch, platform, snapshot, or omitted')
+      const requestedKind = args.kind as 'search' | 'fetch' | 'platform' | 'snapshot' | 'all' | undefined
+      if (requestedKind && !['search', 'fetch', 'platform', 'snapshot', 'all'].includes(requestedKind)) throw new Error('kind must be search, fetch, platform, snapshot, all, or omitted')
+      const kind = requestedKind === 'all' ? undefined : requestedKind
       const records = store.listQueries({
         ...kind ? { kind } : {},
         ...args.query ? { query: args.query } : {},
@@ -436,7 +438,7 @@ export function registerTools(deps: ToolDeps): void {
       hostname: { type: 'string', description: 'Site hostname, e.g. example.com (required for upsert/remove).' },
       contentSelectors: { type: 'string', description: 'Comma-separated CSS selectors for the main content (upsert).' },
       removeSelectors: { type: 'string', description: 'Comma-separated CSS selectors to remove before extraction (upsert).' },
-      rulesJson: { type: 'string', description: 'JSON array of {hostname, content, remove?} rules to import (action=import).' },
+      rulesJson: { type: 'string', description: 'JSON array of rules, or a versioned pack previously produced by export (action=import).' },
     },
     output: {
       schema: {
@@ -445,16 +447,18 @@ export function registerTools(deps: ToolDeps): void {
         properties: {
           message: { type: 'string' },
           rules: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { hostname: { type: 'string' }, content: { type: 'string' }, remove: { type: 'string' } } } },
+          exportPath: { type: 'string' },
         },
       },
       render: (_args, value) => {
-        const v = value as { message?: string; rules?: { hostname: string; content: string; remove?: string }[] }
+        const v = value as { message?: string; rules?: { hostname: string; content: string; remove?: string }[]; exportPath?: string }
         const parts: string[] = []
         if (v.message) parts.push(v.message)
         if (v.rules?.length) {
           parts.push('Rules:')
           for (const r of v.rules) parts.push('- ' + r.hostname + ' → content: ' + r.content + (r.remove ? ' | remove: ' + r.remove : ''))
         }
+        if (v.exportPath) parts.push('Exported to: ' + v.exportPath)
         return [{ type: 'text', text: parts.join('\n') || 'No rules.' }]
       },
     },
@@ -462,16 +466,28 @@ export function registerTools(deps: ToolDeps): void {
     async execute(args) {
       const action = args.action as 'list' | 'upsert' | 'remove' | 'export' | 'import'
       if (!['list', 'upsert', 'remove', 'export', 'import'].includes(action)) throw new Error('action must be list, upsert, remove, export, or import')
-      if (action === 'list' || action === 'export') {
-        return { rules: store.listRules().map(r => ({ hostname: r.hostname, content: r.content, ...r.remove ? { remove: r.remove } : {} })) }
+      const rules = store.listRules().map(r => ({ hostname: r.hostname, content: r.content, ...r.remove ? { remove: r.remove } : {} }))
+      if (action === 'list') {
+        return { rules }
+      }
+      if (action === 'export') {
+        const { default: fs } = await import('node:fs')
+        const { default: path } = await import('node:path')
+        const exportPath = path.join(path.dirname(config.dbPath), 'rules-export-' + Date.now() + '.json')
+        fs.mkdirSync(path.dirname(exportPath), { recursive: true })
+        fs.writeFileSync(exportPath, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), rules }, null, 2), 'utf8')
+        return { message: 'Exported ' + rules.length + ' rules', rules, exportPath }
       }
       if (action === 'import') {
         if (!args.rulesJson) throw new Error('rulesJson is required for import')
         let parsed: unknown
         try { parsed = JSON.parse(args.rulesJson) } catch { throw new Error('rulesJson is not valid JSON') }
-        if (!Array.isArray(parsed)) throw new Error('rulesJson must be a JSON array')
+        const importedRules = Array.isArray(parsed)
+          ? parsed
+          : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { rules?: unknown }).rules) ? (parsed as { rules: unknown[] }).rules : undefined)
+        if (!importedRules) throw new Error('rulesJson must be a JSON array or exported rule pack')
         let count = 0
-        for (const item of parsed as { hostname?: string; content?: string; remove?: string }[]) {
+        for (const item of importedRules as { hostname?: string; content?: string; remove?: string }[]) {
           if (typeof item?.hostname !== 'string' || typeof item?.content !== 'string') continue
           store.upsertRule(item.hostname, item.content, item.remove)
           count++
@@ -562,7 +578,8 @@ export function registerTools(deps: ToolDeps): void {
     isConcurrencySafe: () => true,
     async execute() {
       const cli = await detectDeps()
-      return { engines: await router.backendDiagnostics(), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })) }
+      const availability = new Map(cli.map(value => [value.id, value.available]))
+      return { engines: await router.backendDiagnostics(availability), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })) }
     },
   }))
 
@@ -570,7 +587,7 @@ export function registerTools(deps: ToolDeps): void {
     name: 'web_deps',
     description: 'Detect or install the external tools this plugin shells out to (bili, yt-dlp, agent-reach, mcporter). Playwright/chromium and opencli are bundled in the dsh-browser plugin, not listed here. GitHub uses the native REST API and needs no CLI. check reports which tools are present and how to install them; install runs the package-manager command for one backend. Prefer check first; install only when the user asks.',
     parameters: {
-      action: { type: 'string', required: true, description: 'check (default) or install.' },
+      action: { type: 'string', description: 'check (default) or install.' },
       backend: { type: 'string', description: 'Dependency id to install (bili, yt-dlp, agent-reach, mcporter).' },
       installer: { type: 'string', description: 'Package manager: winget, choco, uv, pipx, pip, or npm.' },
     },
@@ -601,13 +618,14 @@ export function registerTools(deps: ToolDeps): void {
     timeoutMs: config.timeoutMs + 180_000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      if (args.action === 'install') {
+      const action = args.action ?? 'check'
+      if (action === 'install') {
         if (!args.backend) throw new Error('backend is required for install')
         const installer = args.installer ?? defaultInstallerFor(args.backend)
         const result = await installDep(args.backend, installer)
         return { backends: [], install: { ...result } }
       }
-      if (args.action !== 'check' && args.action !== 'install') throw new Error('action must be check or install')
+      if (action !== 'check' && action !== 'install') throw new Error('action must be check or install')
       const backends = await detectDeps()
       const allOk = backends.every(b => b.available)
       return {

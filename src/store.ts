@@ -144,6 +144,7 @@ export class Store {
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_queries_cache ON queries(kind, cache_key, ts)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_url ON pages(url)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_url_source ON pages(url, source, fetched_at)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_query ON pages(query_id)')
   }
 
@@ -201,11 +202,16 @@ export class Store {
     return this.db.prepare('SELECT * FROM queries WHERE id = ?').get(id) as unknown as QueryRecord | undefined
   }
 
-  /** Fresh page snapshot by URL, or undefined. */
-  getPage(url: string, ttlSeconds: number): PageRecord | undefined {
-    const row = this.db.prepare(
-      `SELECT ${PAGE_COLUMNS} FROM pages WHERE url = ? AND fetched_at > ? ORDER BY fetched_at DESC LIMIT 1`,
-    ).get(url, new Date(Date.now() - ttlSeconds * 1000).toISOString()) as unknown as PageRecord | undefined
+  /** Fresh page snapshot by URL and, when requested, its exact backend source. */
+  getPage(url: string, ttlSeconds: number, source?: string): PageRecord | undefined {
+    const cutoff = new Date(Date.now() - ttlSeconds * 1000).toISOString()
+    const row = source
+      ? this.db.prepare(
+        `SELECT ${PAGE_COLUMNS} FROM pages WHERE url = ? AND source = ? AND fetched_at > ? ORDER BY fetched_at DESC LIMIT 1`,
+      ).get(url, source, cutoff) as unknown as PageRecord | undefined
+      : this.db.prepare(
+        `SELECT ${PAGE_COLUMNS} FROM pages WHERE url = ? AND fetched_at > ? ORDER BY fetched_at DESC LIMIT 1`,
+      ).get(url, cutoff) as unknown as PageRecord | undefined
     return row
   }
 

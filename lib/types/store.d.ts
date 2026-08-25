@@ -76,8 +76,8 @@ export declare class Store {
     }[], engine: string): void;
     resultsForQuery(queryId: string): SourceRow[];
     queryById(id: string): QueryRecord | undefined;
-    /** Fresh page snapshot by URL, or undefined. */
-    getPage(url: string, ttlSeconds: number): PageRecord | undefined;
+    /** Fresh page snapshot by URL and, when requested, its exact backend source. */
+    getPage(url: string, ttlSeconds: number, source?: string): PageRecord | undefined;
     savePage(input: Omit<PageRecord, 'id' | 'fetchedAt'>): void;
     /** Exact persisted fetch/snapshot for a history query; legacy rows fall back by URL. */
     pageForQuery(queryId: string): PageRecord | undefined;

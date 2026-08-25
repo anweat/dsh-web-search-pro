@@ -92,8 +92,27 @@ export class SearchRouter {
     }
   }
 
-  backendDiagnostics(): Promise<BackendDiagnostic[]> {
-    return this.backends.diagnosticsAsync()
+  async backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]> {
+    const diagnostics = await this.backends.diagnosticsAsync()
+    if (!cliAvailability || !this.dynamic().enableCliBackends) return diagnostics
+
+    const cfg = this.dynamic()
+    const exaKey = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
+    const requiredCli = new Map<string, string>([
+      ...exaKey ? [] : [['exa', 'mcporter'] as const],
+      ['bilibili', 'bili'],
+      ['youtube', 'yt-dlp'],
+    ])
+    return diagnostics.map(diagnostic => {
+      const dependency = requiredCli.get(diagnostic.id)
+      if (!dependency || cliAvailability.get(dependency) !== false) return diagnostic
+      return {
+        ...diagnostic,
+        available: false,
+        state: 'unavailable',
+        reason: dependency + ' executable not found',
+      }
+    })
   }
 
   async exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]> {
@@ -331,12 +350,15 @@ export class SearchRouter {
     count: number,
     opts: { signal?: AbortSignal; fresh?: boolean; authProfile?: string; rulePack?: string },
   ): Promise<RouterSearchResult> {
-    const nq = normQuery(query || url || platform)
+    const legacyRssUrl = platform === 'rss' && !url && /^https?:\/\//i.test(query.trim()) ? query.trim() : undefined
+    const feedUrl = url ?? legacyRssUrl
+    const effectiveQuery = legacyRssUrl ? '' : query
+    const nq = normQuery(effectiveQuery || feedUrl || platform)
     const boundedCount = Math.min(Math.max(count, 1), 20)
     const binding = this.dynamic().browserBindings?.[platform]
     const authProfile = opts.authProfile ?? binding?.authProfile
     const rulePack = opts.rulePack ?? binding?.rulePack
-    const cacheKey = createPlatformCacheKey({ platform, query: query || url || platform, ...url ? { url } : {}, count: boundedCount, ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} })
+    const cacheKey = createPlatformCacheKey({ platform, query: effectiveQuery || feedUrl || platform, ...feedUrl ? { url: feedUrl } : {}, count: boundedCount, ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} })
     const custom = this.dynamic().customPlatforms?.[platform]
     // Async deps (not depsSync): platform engines may need credentials-resolved
     // keys (e.g. githubToken from the credentials service), which the sync path
@@ -344,7 +366,7 @@ export class SearchRouter {
     const deps = await this.deps(true)
     const engines = custom
       ? [customPlatformEngine(platform, custom, deps)]
-      : (platform === 'rss' && url ? [rssEngine(url, deps.allowProxyFakeIp)] : platformEngines(platform, deps))
+      : (platform === 'rss' && feedUrl ? [rssEngine(feedUrl, deps.allowProxyFakeIp)] : platformEngines(platform, deps))
     if (!engines.length) throw new Error('unsupported platform: ' + platform)
 
     if (!opts.fresh) {
@@ -371,7 +393,7 @@ export class SearchRouter {
       enginesTried.push(engine.id)
       if (!engine.available()) continue
       try {
-        outcome = await engine.search(platform === 'rss' ? query : query || 'latest', boundedCount, opts.signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
+        outcome = await engine.search(platform === 'rss' ? effectiveQuery : effectiveQuery || 'latest', boundedCount, opts.signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
         break
       } catch (error) {
         if (opts.signal?.aborted) throw error

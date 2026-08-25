@@ -101,3 +101,86 @@ test('web_history replay omits a SQLite NULL page status', async () => {
     fs.rmSync(h.dir, { recursive: true, force: true })
   }
 })
+
+test('web_history accepts kind=all as an unfiltered query', async () => {
+  const h = toolHarness()
+  try {
+    registerTools({
+      ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
+      config: h.config, dynamic: () => h.config, store: h.store,
+      router: {} as any, fetch: {} as any, browser: {} as any,
+    })
+    h.store.recordQuery({ kind: 'search', query: 'all fixture', engine: 'ddg', status: 'ok' })
+    h.store.recordQuery({ kind: 'fetch', query: 'page fixture', engine: 'http', status: 'ok' })
+
+    const result = await h.definitions.get('web_history').execute({ kind: 'all' }, { signal: undefined })
+    assert.deepEqual(new Set(result.records.map((record: any) => record.kind)), new Set(['search', 'fetch']))
+  } finally {
+    h.store.close()
+    fs.rmSync(h.dir, { recursive: true, force: true })
+  }
+})
+
+test('web_platform_search accepts a feed URL in query for RSS compatibility', async () => {
+  const h = toolHarness()
+  let routedQuery: string | undefined
+  let routedUrl: string | undefined
+  try {
+    registerTools({
+      ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
+      config: h.config, dynamic: () => h.config, store: h.store,
+      router: { platformSearch: async (_platform: string, query: string, url: string | undefined) => {
+        routedQuery = query
+        routedUrl = url
+        return { sources: [], engine: 'rss', fromCache: false }
+      } } as any,
+      fetch: {} as any, browser: {} as any,
+    })
+
+    await h.definitions.get('web_platform_search').execute({ platform: 'rss', query: 'https://example.com/feed.xml' }, { signal: undefined })
+    assert.equal(routedUrl, 'https://example.com/feed.xml')
+    assert.equal(routedQuery, '')
+  } finally {
+    h.store.close()
+    fs.rmSync(h.dir, { recursive: true, force: true })
+  }
+})
+
+test('web_deps defaults an omitted action to check', async () => {
+  const h = toolHarness()
+  try {
+    registerTools({
+      ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
+      config: h.config, dynamic: () => h.config, store: h.store,
+      router: {} as any, fetch: {} as any, browser: {} as any,
+    })
+    const definition = h.definitions.get('web_deps')
+    assert.notEqual(definition.parameters.action.required, true)
+    const result = await definition.execute({}, { signal: undefined })
+    assert.equal(Array.isArray(result.backends), true)
+  } finally {
+    h.store.close()
+    fs.rmSync(h.dir, { recursive: true, force: true })
+  }
+})
+
+test('web_rule export writes an importable versioned JSON rule pack', async () => {
+  const h = toolHarness()
+  try {
+    registerTools({
+      ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
+      config: h.config, dynamic: () => h.config, store: h.store,
+      router: {} as any, fetch: {} as any, browser: {} as any,
+    })
+    h.store.upsertRule('example.com', 'main', '.ad')
+
+    const result = await h.definitions.get('web_rule').execute({ action: 'export' }, { signal: undefined })
+    assert.equal(typeof result.exportPath, 'string')
+    const pack = JSON.parse(fs.readFileSync(result.exportPath, 'utf8'))
+    assert.equal(pack.version, 1)
+    assert.deepEqual(pack.rules, [{ hostname: 'example.com', content: 'main', remove: '.ad' }])
+  } finally {
+    h.store.close()
+    fs.rmSync(h.dir, { recursive: true, force: true })
+  }
+})
