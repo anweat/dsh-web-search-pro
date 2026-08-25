@@ -77,6 +77,17 @@ test('history replay returns sources for searches and exact pages for fetches', 
   }
 })
 
+test('RSS parser decodes escaped HTML before stripping snippet tags', () => {
+  const sources = parseRss(`
+    <rss><channel><item>
+      <title>Release</title>
+      <link>https://example.com/release</link>
+      <description>&lt;p&gt;&lt;a href=&quot;#cn&quot;&gt;中文&lt;/a&gt;&lt;/p&gt; &lt;h3&gt;体验优化&lt;/h3&gt;</description>
+    </item></channel></rss>
+  `)
+  assert.equal(sources[0]?.snippet, '中文 体验优化')
+})
+
 test('history replay preserves a successful search with zero results', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-empty-history-'))
   const store = new Store(path.join(dir, 'store.db'))
@@ -203,6 +214,25 @@ test('fetch memory cache respects maxChars and does not cross persist semantics'
     assert.match(smaller.text, /Content truncated at 1000 characters/)
     assert.equal(store.listQueries({ kind: 'fetch' }).length, 1)
     assert.equal(renders, 2)
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('fetch cache omits a SQLite NULL status instead of returning statusCode null', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-fetch-null-status-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  const queryId = store.recordQuery({ kind: 'fetch', query: 'page', url: 'https://example.com/page', engine: 'playwright', status: 'ok' })
+  store.savePage({ queryId, url: 'https://example.com/page', text: 'cached page', source: 'playwright' })
+  const fetch = new FetchService(store, { ttlSeconds: 60 } as never, {} as never)
+  try {
+    const result = await fetch.fetchPage('https://example.com/page', {
+      mode: 'playwright', signal: undefined, maxChars: 5_000, fresh: false, persist: true,
+    })
+    assert.equal(result.fromCache, true)
+    assert.equal(result.statusCode, undefined)
+    assert.equal(Object.hasOwn(result, 'statusCode'), false)
   } finally {
     store.close()
     fs.rmSync(dir, { recursive: true, force: true })

@@ -6,20 +6,20 @@ import path from 'node:path'
 import { createSearchCacheKey, createPlatformCacheKey } from '../src/cache-key.ts'
 import { assertSafePublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect } from '../src/safe-http.ts'
 import { ExaClient } from '../src/exa-client.ts'
-import { parseMcporterExaSearch } from '../src/engines.ts'
+import { exaEngine, jinaSearchEngine, parseMcporterExaSearch } from '../src/engines.ts'
 import { BackendRegistry } from '../src/backend-registry.ts'
 import { Store } from '../src/store.ts'
 import { SearchRouter } from '../src/router.ts'
 import { runCli } from '../src/util.ts'
 
-test('cache fingerprints cover mode, engine order, count, and Exa options', () => {
+test('cache fingerprints cover mode, engine order, and Exa options while allowing smaller-count reuse', () => {
   const base = { query: '  New   Query ', engines: ['exa', 'ddg'], count: 5, multi: true }
   const a = createSearchCacheKey(base)
   assert.equal(a, createSearchCacheKey({ ...base }))
-  assert.notEqual(a, createSearchCacheKey({ ...base, count: 10 }))
+  assert.equal(a, createSearchCacheKey({ ...base, count: 10 }))
   assert.notEqual(a, createSearchCacheKey({ ...base, engines: ['ddg', 'exa'] }))
   assert.notEqual(a, createSearchCacheKey({ ...base, exa: { type: 'deep' } }))
-  assert.notEqual(createPlatformCacheKey({ platform: 'rss', query: 'x', count: 5 }), createPlatformCacheKey({ platform: 'rss', query: 'x', count: 8 }))
+  assert.equal(createPlatformCacheKey({ platform: 'rss', query: 'x', count: 5 }), createPlatformCacheKey({ platform: 'rss', query: 'x', count: 8 }))
 })
 
 test('SQLite cache lookup uses kind plus an explicit cache fingerprint', () => {
@@ -136,6 +136,78 @@ test('backend registry honors override, records failure, and cools down retryabl
   assert.match(diagnostics.find(v => v.id === 'primary')?.lastError ?? '', /rate limited/)
 })
 
+test('platform cache replay preserves publishedAt metadata', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-web-platform-cache-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  const config = {
+    memoryCacheEntries: 8, ttlSeconds: 60, engines: ['arxiv'], rrfConstant: 60,
+    freshnessBoost: 0, freshnessDays: 30, authorityBoost: 0, authorityDomains: [],
+    exaApiKeyEnv: 'EXA_API_KEY', jinaApiKeyEnv: 'JINA_API_KEY', githubTokenEnv: 'GITHUB_TOKEN',
+    enableCliBackends: false, opencliEnabled: false, agentReachEnabled: false, allowProxyFakeIp: false,
+  }
+  const key = createPlatformCacheKey({ platform: 'arxiv', query: 'deepseek', count: 4 })
+  try {
+    const id = store.recordQuery({ kind: 'platform', query: 'deepseek', platform: 'arxiv', engine: 'arxiv', cacheKey: key, status: 'ok', detail: JSON.stringify({ requestedCount: 4 }) })
+    store.recordResults(id, [{ url: 'https://arxiv.org/abs/2402.03300', title: 'DeepSeek', publishedAt: '2024-02-18T17:10:07Z' }], 'arxiv')
+    const router = new SearchRouter({ get: () => undefined } as never, config as never, store)
+    const result = await router.platformSearch('arxiv', 'deepseek', undefined, 3, { fresh: false })
+    assert.equal(result.fromCache, true)
+    assert.equal(result.sources[0]?.publishedAt, '2024-02-18T17:10:07Z')
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a single requested engine stays single even when multi mode is enabled globally', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-web-single-engine-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  const web = { search: async () => ({ sources: [{ url: 'https://example.com/a', title: 'A' }] }) }
+  const config = {
+    memoryCacheEntries: 8, ttlSeconds: 60, engines: ['seam'], rrfConstant: 60,
+    freshnessBoost: 0, freshnessDays: 30, authorityBoost: 0, authorityDomains: [],
+    exaApiKeyEnv: 'EXA_API_KEY', jinaApiKeyEnv: 'JINA_API_KEY', githubTokenEnv: 'GITHUB_TOKEN',
+    enableCliBackends: false, opencliEnabled: false, agentReachEnabled: false, allowProxyFakeIp: false,
+  }
+  try {
+    const router = new SearchRouter({ get: (name: string) => name === 'web' ? web : undefined } as never, config as never, store)
+    const result = await router.search({ query: 'one engine', engines: ['seam'], count: 3, fresh: true, multi: true, signal: undefined })
+    assert.equal(result.engine, 'seam')
+    assert.deepEqual(result.enginesTried, ['seam'])
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a smaller result count reuses a larger cached search without another backend call', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-web-count-cache-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  let calls = 0
+  const web = { search: async ({ maxResults }: { maxResults: number }) => {
+    calls++
+    return { sources: Array.from({ length: maxResults }, (_, index) => ({ url: `https://example.com/${index}`, title: `R${index}` })) }
+  } }
+  const config = {
+    memoryCacheEntries: 8, ttlSeconds: 60, engines: ['seam'], rrfConstant: 60,
+    freshnessBoost: 0, freshnessDays: 30, authorityBoost: 0, authorityDomains: [],
+    exaApiKeyEnv: 'EXA_API_KEY', jinaApiKeyEnv: 'JINA_API_KEY', githubTokenEnv: 'GITHUB_TOKEN',
+    enableCliBackends: false, opencliEnabled: false, agentReachEnabled: false, allowProxyFakeIp: false,
+  }
+  try {
+    const router = new SearchRouter({ get: (name: string) => name === 'web' ? web : undefined } as never, config as never, store)
+    const larger = await router.search({ query: 'same query', count: 4, fresh: false, multi: false, signal: undefined })
+    const smaller = await router.search({ query: 'same query', count: 3, fresh: false, multi: false, signal: undefined })
+    assert.equal(larger.fromCache, false)
+    assert.equal(smaller.fromCache, true)
+    assert.equal(smaller.sources.length, 3)
+    assert.equal(calls, 1)
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('external CLI argv is passed verbatim without cmd.exe metacharacter execution', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-cli-argv-'))
   const script = path.join(dir, 'argv.mjs')
@@ -147,5 +219,39 @@ test('external CLI argv is passed verbatim without cmd.exe metacharacter executi
     assert.deepEqual(JSON.parse(result.stdout), args)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('external CLI output can be decoded as GB18030 after byte collection', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-cli-gb18030-'))
+  const script = path.join(dir, 'gb18030.mjs')
+  // GBK/GB18030 bytes for 中文, split across writes to exercise chunk boundaries.
+  fs.writeFileSync(script, 'process.stdout.write(Buffer.from([0xd6, 0xd0])); process.stdout.write(Buffer.from([0xce, 0xc4]))', 'utf8')
+  try {
+    const result = await runCli(process.execPath, [script], { signal: undefined, timeoutMs: 5_000, outputEncoding: 'gb18030' })
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, '中文')
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('Exa MCP fallback rejects advanced filters instead of silently dropping them', async () => {
+  const engine = exaEngine({ enableCli: true } as any)
+  await assert.rejects(
+    () => engine.search('dsh', 3, AbortSignal.abort(), { exa: { includeDomains: ['github.com'], type: 'auto' } }),
+    /advanced.*not supported|cannot honor/i,
+  )
+})
+
+test('Jina search diagnostics require a configured key', () => {
+  const previous = process.env.JINA_API_KEY
+  delete process.env.JINA_API_KEY
+  try {
+    assert.equal(jinaSearchEngine({} as any).available(), false)
+    assert.equal(jinaSearchEngine({ jinaApiKey: 'configured' } as any).available(), true)
+  } finally {
+    if (previous === undefined) delete process.env.JINA_API_KEY
+    else process.env.JINA_API_KEY = previous
   }
 })

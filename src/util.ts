@@ -147,8 +147,7 @@ export function decodeText(buf: Buffer, contentType?: string): string {
   const candidates = charset ? [charset] : ['utf-8', 'gbk']
   for (const enc of candidates) {
     try {
-      const text = new TextDecoder(enc).decode(buf)
-      if (enc === 'utf-8' || !text.includes('\uFFFD')) return text
+      return new TextDecoder(enc, { fatal: enc === 'utf-8' }).decode(buf)
     } catch { /* unsupported encoding */ }
   }
   return new TextDecoder('utf-8').decode(buf)
@@ -166,7 +165,7 @@ export function htmlDecode(input: string): string {
 
 /** Strip HTML tags (used for titles / snippets inside already-scoped strings). */
 export function stripTags(input: string): string {
-  return htmlDecode(input.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
+  return htmlDecode(input).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export interface CliResult {
@@ -184,12 +183,14 @@ export interface CliResult {
 export function runCli(
   bin: string,
   args: string[],
-  opts: { timeoutMs?: number; signal: AbortSignal | undefined; env?: Record<string, string>; cwd?: string; maxOutput?: number } = { signal: undefined },
+  opts: { timeoutMs?: number; signal: AbortSignal | undefined; env?: Record<string, string>; cwd?: string; maxOutput?: number; outputEncoding?: string } = { signal: undefined },
 ): Promise<CliResult> {
   return new Promise((resolve) => {
     const maxOutput = opts.maxOutput ?? 4 * 1024 * 1024
-    let stdout = ''
-    let stderr = ''
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+    let stdoutBytes = 0
+    let stderrBytes = 0
     let child: ChildProcess
     let settled = false
     const finish = (code: number, timedOut: boolean) => {
@@ -198,6 +199,9 @@ export function runCli(
       clearTimeout(timer)
       opts.signal?.removeEventListener('abort', onAbort)
       if (child.exitCode === null) child.kill()
+      const encoding = opts.outputEncoding ?? 'utf-8'
+      const stdout = new TextDecoder(encoding).decode(Buffer.concat(stdoutChunks, stdoutBytes))
+      const stderr = new TextDecoder(encoding).decode(Buffer.concat(stderrChunks, stderrBytes))
       resolve({ code, stdout, stderr, timedOut })
     }
     const timer = opts.timeoutMs ? setTimeout(() => finish(-1, true), opts.timeoutMs) : undefined
@@ -210,8 +214,20 @@ export function runCli(
       cwd: opts.cwd,
       windowsHide: process.platform === 'win32',
     })
-    child.stdout?.on('data', (d: Buffer) => { if (stdout.length < maxOutput) stdout += d.toString('utf8') })
-    child.stderr?.on('data', (d: Buffer) => { if (stderr.length < maxOutput) stderr += d.toString('utf8') })
+    child.stdout?.on('data', (d: Buffer) => {
+      const remaining = maxOutput - stdoutBytes
+      if (remaining <= 0) return
+      const chunk = d.length <= remaining ? d : d.subarray(0, remaining)
+      stdoutChunks.push(chunk)
+      stdoutBytes += chunk.length
+    })
+    child.stderr?.on('data', (d: Buffer) => {
+      const remaining = maxOutput - stderrBytes
+      if (remaining <= 0) return
+      const chunk = d.length <= remaining ? d : d.subarray(0, remaining)
+      stderrChunks.push(chunk)
+      stderrBytes += chunk.length
+    })
     child.on('error', () => finish(-1, false))
     child.on('close', (code) => finish(code ?? -1, false))
     if (opts.signal?.aborted) onAbort()

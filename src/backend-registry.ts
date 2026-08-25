@@ -1,5 +1,5 @@
 export interface BackendProbe { available: boolean; reason?: string }
-export interface Backend<I, O> { id: string; probe(): BackendProbe; run(input: I): Promise<O> }
+export interface Backend<I, O> { id: string; probe(): BackendProbe | Promise<BackendProbe>; run(input: I): Promise<O> }
 export interface BackendDiagnostic { id: string; available: boolean; state: 'ready' | 'unavailable' | 'cooldown'; reason?: string; lastError?: string; cooldownUntil?: string }
 
 export class BackendRegistry<I, O> {
@@ -25,7 +25,7 @@ export class BackendRegistry<I, O> {
       if (!backend) { errors.push(id + ': unknown'); continue }
       const failed = this.failures.get(id)
       if (failed && failed.until > Date.now()) { errors.push(id + ': cooldown'); continue }
-      const probe = backend.probe()
+      const probe = await backend.probe()
       if (!probe.available) { errors.push(id + ': ' + (probe.reason ?? 'unavailable')); continue }
       try {
         const result = await backend.run(input)
@@ -43,9 +43,19 @@ export class BackendRegistry<I, O> {
   diagnostics(): BackendDiagnostic[] {
     return [...this.entries.values()].map(backend => {
       const probe = backend.probe()
+      if (probe instanceof Promise) return { id: backend.id, available: false, state: 'unavailable', reason: 'asynchronous probe requires diagnosticsAsync()' }
       const failed = this.failures.get(backend.id)
       if (failed && failed.until > Date.now()) return { id: backend.id, available: probe.available, state: 'cooldown', lastError: failed.message, cooldownUntil: new Date(failed.until).toISOString() }
       return { id: backend.id, available: probe.available, state: probe.available ? 'ready' : 'unavailable', ...probe.reason ? { reason: probe.reason } : {} }
     })
+  }
+
+  async diagnosticsAsync(): Promise<BackendDiagnostic[]> {
+    return Promise.all([...this.entries.values()].map(async backend => {
+      const probe = await backend.probe()
+      const failed = this.failures.get(backend.id)
+      if (failed && failed.until > Date.now()) return { id: backend.id, available: probe.available, state: 'cooldown', lastError: failed.message, cooldownUntil: new Date(failed.until).toISOString() } as BackendDiagnostic
+      return { id: backend.id, available: probe.available, state: probe.available ? 'ready' : 'unavailable', ...probe.reason ? { reason: probe.reason } : {} } as BackendDiagnostic
+    }))
   }
 }

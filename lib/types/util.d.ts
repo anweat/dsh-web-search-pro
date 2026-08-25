@@ -69,6 +69,7 @@ export declare function runCli(bin: string, args: string[], opts?: {
     env?: Record<string, string>;
     cwd?: string;
     maxOutput?: number;
+    outputEncoding?: string;
 }): Promise<CliResult>;
 /** Extract the first URL from a DuckDuckGo / Google style redirect parameter. */
 export declare function decodeRedirectUrl(href: string): string;

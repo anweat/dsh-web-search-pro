@@ -81,3 +81,23 @@ test('web_snapshot forwards screenshot=false and persists no PNG path', async ()
     fs.rmSync(h.dir, { recursive: true, force: true })
   }
 })
+
+test('web_history replay omits a SQLite NULL page status', async () => {
+  const h = toolHarness()
+  try {
+    registerTools({
+      ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
+      config: h.config, dynamic: () => h.config, store: h.store,
+      router: {} as any, fetch: {} as any, browser: {} as any,
+    })
+    const queryId = h.store.recordQuery({ kind: 'snapshot', query: 'page', url: 'https://example.com/page', engine: 'playwright', status: 'ok' })
+    h.store.savePage({ queryId, url: 'https://example.com/page', text: 'snapshot', source: 'playwright' })
+
+    const result = await h.definitions.get('web_history').execute({ replay: queryId }, { signal: undefined })
+    assert.equal(result.replayedPage.status, undefined)
+    assert.equal(Object.hasOwn(result.replayedPage, 'status'), false)
+  } finally {
+    h.store.close()
+    fs.rmSync(h.dir, { recursive: true, force: true })
+  }
+})

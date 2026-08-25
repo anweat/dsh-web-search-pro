@@ -133,6 +133,14 @@ export function exaEngine(deps: EngineDeps): Engine {
         return { sources }
       }
       if (!deps.enableCli) throw new EngineError('Exa unavailable: configure EXA_API_KEY or enable CLI backends with mcporter', 'ENGINE_UNAVAILABLE', false)
+      const advanced = Object.keys(options?.exa ?? {})
+      if (advanced.length) {
+        throw new EngineError(
+          'Exa MCP fallback cannot honor advanced search options (' + advanced.join(', ') + '); configure EXA_API_KEY to use native Exa filtering',
+          'ENGINE_UNAVAILABLE',
+          false,
+        )
+      }
       const result = await runCli('mcporter', [
         'call',
         'exa.web_search_exa',
@@ -241,7 +249,7 @@ export function jinaSearchEngine(deps: EngineDeps): Engine {
   return {
     id: 'jina',
     label: 'Jina AI',
-    available: () => true,
+    available: () => (key()?.length ?? 0) > 0,
     async search(query, count, signal) {
       const headers: Record<string, string> = {}
       const k = key()
@@ -387,8 +395,8 @@ export function bilibiliEngine(deps: EngineDeps): Engine {
     label: 'B站 (bili-cli)',
     available: () => deps.enableCli,
     async search(query, count, signal) {
-      const res = await runCli('bili', ['search', query, '--type', 'video', '-n', String(Math.min(count, 10))], { timeoutMs: 30_000, signal })
-      if (res.code !== 0) throw new EngineError('bili search failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
+      const res = await runCli('bili', ['search', query, '--type', 'video', '-n', String(Math.min(count, 10))], { timeoutMs: 30_000, signal, outputEncoding: process.platform === 'win32' ? 'gb18030' : 'utf-8' })
+      if (res.code !== 0) throw new EngineError('bili search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
       let data: any
       try {
         data = jsYaml.load(res.stdout) as any
@@ -448,8 +456,8 @@ export function youtubeEngine(deps: EngineDeps): Engine {
     available: () => deps.enableCli,
     async search(query, count, signal) {
       const n = Math.min(count, 10)
-      const res = await runCli('yt-dlp', ['ytsearch' + n + ':' + query, '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration_string)s'], { timeoutMs: 60_000, signal })
-      if (res.code !== 0) throw new EngineError('yt-dlp failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
+      const res = await runCli('yt-dlp', ['ytsearch' + n + ':' + query, '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration_string)s'], { timeoutMs: 60_000, signal, outputEncoding: process.platform === 'win32' ? 'gb18030' : 'utf-8' })
+      if (res.code !== 0) throw new EngineError('yt-dlp failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
       const sources: WebSearchSource[] = []
       for (const line of res.stdout.split(/\r?\n/)) {
         const [id, title, channel, views, duration] = line.split('\t')
@@ -522,7 +530,7 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
       available: () => deps.enableCli && deps.agentReachEnabled && !!process.env.TWITTER_AUTH_TOKEN && !!process.env.TWITTER_CT0,
       async search(query, count, signal) {
         const res = await runCli('twitter', ['search', query, '-n', String(Math.min(count, 10))], { timeoutMs: 45_000, signal })
-        if (res.code !== 0) throw new EngineError('twitter search failed: ' + res.stderr.trim().slice(0, 200), 'ENGINE_ERROR')
+        if (res.code !== 0) throw new EngineError('twitter search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
         const sources: WebSearchSource[] = []
         for (const line of res.stdout.split(/\r?\n/)) {
           const m = /(https?:\/\/[^\s]+)/.exec(line)

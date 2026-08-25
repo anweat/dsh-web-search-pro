@@ -74,13 +74,10 @@ export class SearchRouter {
     for (const id of Object.keys(ENGINE_FACTORIES)) {
       this.backends.register({
         id,
-        probe: () => {
+        probe: async () => {
           try {
-            const engine = this.buildSync(id, false)
+            const engine = await this.build(id, false)
             if (engine.available()) return { available: true }
-            // Credential resolution is asynchronous. A configured credentials service
-            // means Exa may still be available even when no literal/env key is visible.
-            if (id === 'exa' && this.ctx.get('credentials')) return { available: true, reason: 'credential resolution deferred until execution' }
             return { available: false, reason: engine.label + ' unavailable' }
           } catch (error) {
             return { available: false, reason: error instanceof Error ? error.message : String(error) }
@@ -95,8 +92,8 @@ export class SearchRouter {
     }
   }
 
-  backendDiagnostics(): BackendDiagnostic[] {
-    return this.backends.diagnostics()
+  backendDiagnostics(): Promise<BackendDiagnostic[]> {
+    return this.backends.diagnosticsAsync()
   }
 
   async exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]> {
@@ -191,29 +188,35 @@ export class SearchRouter {
       .filter((id, i, arr) => arr.indexOf(id) === i)
     const nq = normQuery(query)
     const count = Math.min(Math.max(opts.count, 1), 20)
-    const cacheKey = createSearchCacheKey({ query, engines: ids, count, multi: opts.multi, ...opts.exa ? { exa: opts.exa as Record<string, unknown> } : {} })
+    const multi = opts.multi && ids.length > 1
+    const cacheKey = createSearchCacheKey({ query, engines: ids, count, multi, ...opts.exa ? { exa: opts.exa as Record<string, unknown> } : {} })
+    const memoryKey = cacheKey + ':count=' + count
 
     // 1. In-process LRU cache, then SQLite.
     if (!opts.fresh) {
-      const hot = this.memory.get(cacheKey, cfg.ttlSeconds * 1000)
+      const hot = this.memory.get(memoryKey, cfg.ttlSeconds * 1000)
       if (hot) return { ...hot, fromCache: true }
       const cached = this.store.getCachedQuery('search', cacheKey, cfg.ttlSeconds)
       if (cached) {
           const rows = this.store.resultsForQuery(cached.id)
           if (rows.length) {
-            let detail: { content?: string; engine?: string; enginesTried?: string[] } | undefined
+            let detail: { content?: string; engine?: string; enginesTried?: string[]; requestedCount?: number } | undefined
             if (cached.detail) { try { detail = JSON.parse(cached.detail) } catch { /* ignore */ } }
-            return {
-              ...detail?.content ? { content: detail.content } : {},
-              sources: rows.map(r => ({
-                url: r.url,
-                ...r.title ? { title: r.title } : {},
-                ...r.snippet ? { snippet: r.snippet } : {},
-                ...r.published ? { publishedAt: r.published } : {},
-              })),
-              engine: detail?.engine ?? ids[0] ?? 'unknown',
-              enginesTried: detail?.enginesTried ?? ids,
-              fromCache: true,
+            if (detail?.requestedCount === undefined || detail.requestedCount >= count) {
+              const result: RouterSearchResult = {
+                ...detail?.content ? { content: detail.content } : {},
+                sources: rows.slice(0, count).map(r => ({
+                  url: r.url,
+                  ...r.title ? { title: r.title } : {},
+                  ...r.snippet ? { snippet: r.snippet } : {},
+                  ...r.published ? { publishedAt: r.published } : {},
+                })),
+                engine: detail?.engine ?? ids[0] ?? 'unknown',
+                enginesTried: detail?.enginesTried ?? ids,
+                fromCache: true,
+              }
+              this.memory.set(memoryKey, result)
+              return result
             }
           }
       }
@@ -225,7 +228,7 @@ export class SearchRouter {
     let usedId: string | undefined
     const signal = opts.signal
 
-    if (opts.multi) {
+    if (multi) {
       const results = await Promise.allSettled(ids.map(async (id) => {
         const engine = await this.build(id, opts.skipSeam ?? false)
         if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
@@ -299,7 +302,7 @@ export class SearchRouter {
       engine: usedId,
       status: 'ok',
       cacheKey,
-      detail: JSON.stringify({ ...outcome.content ? { content: outcome.content } : {}, engine: usedId, enginesTried }),
+      detail: JSON.stringify({ ...outcome.content ? { content: outcome.content } : {}, engine: usedId, enginesTried, requestedCount: count }),
     })
     this.store.recordResults(queryId, outcome.sources, usedId)
 
@@ -316,7 +319,7 @@ export class SearchRouter {
       fromCache: false,
     }
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).
-    this.memory.set(cacheKey, result)
+    this.memory.set(memoryKey, result)
     return result
   }
 
@@ -348,9 +351,11 @@ export class SearchRouter {
       const cached = this.store.getCachedQuery('platform', cacheKey, this.dynamic().ttlSeconds)
       if (cached) {
         const rows = this.store.resultsForQuery(cached.id)
-        if (rows.length) {
+        let detail: { requestedCount?: number } | undefined
+        if (cached.detail) { try { detail = JSON.parse(cached.detail) } catch { /* ignore */ } }
+        if (rows.length && (detail?.requestedCount === undefined || detail.requestedCount >= boundedCount)) {
           return {
-            sources: rows.map(r => ({ url: r.url, ...r.title ? { title: r.title } : {}, ...r.snippet ? { snippet: r.snippet } : {} })),
+            sources: rows.slice(0, boundedCount).map(r => ({ url: r.url, ...r.title ? { title: r.title } : {}, ...r.snippet ? { snippet: r.snippet } : {}, ...r.published ? { publishedAt: r.published } : {} })),
             engine: platform,
             enginesTried: [platform],
             fromCache: true,
@@ -385,6 +390,7 @@ export class SearchRouter {
       engine: enginesTried.at(-1) ?? 'unknown',
       status: 'ok',
       cacheKey,
+      detail: JSON.stringify({ requestedCount: boundedCount }),
     })
     this.store.recordResults(queryId, outcome.sources, 'platform-' + platform)
     return { sources: outcome.sources, engine: platform, enginesTried, fromCache: false }

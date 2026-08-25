@@ -29,13 +29,15 @@ function canonical(value: unknown): unknown {
 }
 
 function fingerprint(kind: string, input: unknown): string {
-  return kind + ':v2:' + crypto.createHash('sha256').update(JSON.stringify(canonical(input))).digest('hex')
+  return kind + ':v3:' + crypto.createHash('sha256').update(JSON.stringify(canonical(input))).digest('hex')
 }
 
 export function createSearchCacheKey(input: SearchCacheInput): string {
-  return fingerprint('search', { ...input, query: input.query.trim().replace(/\s+/g, ' ').toLowerCase() })
+  const { count: _count, ...stable } = input
+  return fingerprint('search', { ...stable, query: input.query.trim().replace(/\s+/g, ' ').toLowerCase() })
 }
 
 export function createPlatformCacheKey(input: PlatformCacheInput): string {
-  return fingerprint('platform', { ...input, query: input.query.trim().replace(/\s+/g, ' ').toLowerCase() })
+  const { count: _count, ...stable } = input
+  return fingerprint('platform', { ...stable, query: input.query.trim().replace(/\s+/g, ' ').toLowerCase() })
 }

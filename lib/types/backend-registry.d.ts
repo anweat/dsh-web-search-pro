@@ -4,7 +4,7 @@ export interface BackendProbe {
 }
 export interface Backend<I, O> {
     id: string;
-    probe(): BackendProbe;
+    probe(): BackendProbe | Promise<BackendProbe>;
     run(input: I): Promise<O>;
 }
 export interface BackendDiagnostic {
@@ -35,4 +35,5 @@ export declare class BackendRegistry<I, O> {
         value: O;
     }>;
     diagnostics(): BackendDiagnostic[];
+    diagnosticsAsync(): Promise<BackendDiagnostic[]>;
 }

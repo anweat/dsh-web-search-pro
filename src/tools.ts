@@ -369,7 +369,7 @@ export function registerTools(deps: ToolDeps): void {
           out.replayedSources = replay.sources
         } else {
           const page = replay.page
-          out.replayedPage = { url: page.url, ...page.title ? { title: page.title } : {}, ...page.text ? { text: page.text } : {}, ...page.htmlPath ? { htmlPath: page.htmlPath } : {}, ...page.screenshotPath ? { screenshotPath: page.screenshotPath } : {}, ...page.status !== undefined ? { status: page.status } : {}, fetchedAt: page.fetchedAt, ...page.source ? { source: page.source } : {} }
+          out.replayedPage = { url: page.url, ...page.title ? { title: page.title } : {}, ...page.text ? { text: page.text } : {}, ...page.htmlPath ? { htmlPath: page.htmlPath } : {}, ...page.screenshotPath ? { screenshotPath: page.screenshotPath } : {}, ...typeof page.status === 'number' ? { status: page.status } : {}, fetchedAt: page.fetchedAt, ...page.source ? { source: page.source } : {} }
         }
       }
       if (args.export) {
@@ -562,7 +562,7 @@ export function registerTools(deps: ToolDeps): void {
     isConcurrencySafe: () => true,
     async execute() {
       const cli = await detectDeps()
-      return { engines: router.backendDiagnostics(), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })) }
+      return { engines: await router.backendDiagnostics(), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })) }
     },
   }))
 

@@ -48,7 +48,7 @@ export declare class SearchRouter {
     private readonly memory;
     private readonly backends;
     constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | undefined, memory?: LruCache<RouterSearchResult>);
-    backendDiagnostics(): BackendDiagnostic[];
+    backendDiagnostics(): Promise<BackendDiagnostic[]>;
     exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]>;
     /** Resolve a key through credentials first, then process env. */
     private resolveKey;
