@@ -21,7 +21,7 @@ import path from 'node:path'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import { Config, resolveConfig, type ResolvedConfig } from './config.ts'
 import { Store } from './store.ts'
 import type { BrowserService } from './browser-service.ts'
@@ -60,17 +60,33 @@ export function apply(ctx: Context, config: Config): void {
   //    $DSH_HOME/settings.yaml `web-search-pro:` section (validated against the
   //    same schema) overlays this composition entry and every operation re-reads
   //    it — edit keys/engines in the file without touching cordis.yml.
-  //    installSettingsSection: 官方可选 settings 消费者接线（base=插件配置，
+  //    installSection: 官方可选 settings 消费者接线（base=插件配置，
   //    用户段落热重载；settings 服务缺席时回退到插件配置）。
-  // Stable accessor over a mutable source ref: installSettingsSection swaps
+  // Stable accessor over a mutable source ref: installSection swaps
   // the source thunk on settings attach/detach, while router/fetch/tools all
   // hold the SAME stable `dynamic` closure that dereferences it per call —
   // so hot-reloaded sections reach every consumer.
   let resolveSource: () => ResolvedConfig = () => resolved
   const dynamic = (): ResolvedConfig => resolveSource()
-  installSettingsSection(ctx, settingsNamespace('web-search-pro'), Config, resolved, {
-    setSource: (current) => { resolveSource = () => current() as ResolvedConfig },
-    onChange: () => {},
+  ctx.inject(['settings'], (sctx) => {
+    const settings = sctx.settings as unknown as {
+      installSection?: (
+        owner: Context,
+        ns: string,
+        schema: typeof Config,
+        entry: ResolvedConfig,
+        hooks: {
+          setSource: (current: () => unknown) => void
+          onChange: () => void
+        },
+      ) => void
+    }
+    if (typeof settings?.installSection === 'function') {
+      settings.installSection(ctx, 'web-search-pro', Config, resolved, {
+        setSource: (current) => { resolveSource = () => current() as ResolvedConfig },
+        onChange: () => {},
+      })
+    }
   })
 
   // 4. Services.
