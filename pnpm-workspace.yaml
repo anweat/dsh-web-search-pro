@@ -4,12 +4,33 @@ autoInstallPeers: false
 allowBuilds:
   '@jackwener/opencli': false
 minimumReleaseAgeExclude:
-  - '@deepseek-ai/dsh-credentials@0.1.1-rc.2'
-  - '@deepseek-ai/dsh-settings@0.1.1-rc.2'
-  - '@deepseek-ai/dsh-system-prompt@0.1.1-rc.2'
-  - '@deepseek-ai/dsh-tools@0.1.1-rc.2'
-  - '@deepseek-ai/dsh-web@0.1.1-rc.2'
   # First-party companion plugin: release browser before Web Search Pro, then
   # allow CI to consume first-party browser releases without the public-package
   # maturity delay. All third-party packages keep the default age gate.
   - '@anweat/dsh-browser'
+  - '@deepseek-ai/dsh-agent@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-api-remotes@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-brand@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-client-locale@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-client-store@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-client-ui-renderer@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-client-ui-settings-plugins@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-client-ui-settings@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-client-ui-slots@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-credentials@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-code-runtime@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-deque@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-llm@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-invariants@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-scope@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-session-projection@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-session@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-settings@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-system-prompt@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-timeout@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-tools@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-typert-protocol@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-user-approval@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-util-crypto@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-util-values@0.1.2-alpha.3'
+  - '@deepseek-ai/dsh-web@0.1.2-alpha.3'

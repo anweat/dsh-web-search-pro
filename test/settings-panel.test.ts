@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { FIELD_SPECS, WebSearchSettingsController } from '../src/client/form.ts'
 
 test('settings panel covers every non-secret Web Search Pro configuration field', () => {
@@ -67,27 +67,25 @@ function fixture() {
     freshnessDays: 30, authorityBoost: 0.25, authorityDomains: [], verbose: false,
   })
   const credentialValues = new Map<string, string>()
-  const api = {
-    credentials: {
-      async describe({ refs }: { refs: string[] }) {
-        return {
-          result: {
+  const ctx = {
+    remote: {
+      credentials: {
+        async describe(refs: string[]) {
+          return {
             ok: true,
-            value: {
-              credentials: Object.fromEntries(refs.map(ref => [ref, {
-                configured: credentialValues.has(ref), writable: true,
-              }])),
-            },
-          },
-        }
-      },
-      async set({ ref, value }: { ref: string; value: string }) {
-        credentialValues.set(ref, value)
-        return { result: { ok: true, value: { ref } } }
+            value: Object.fromEntries(refs.map(ref => [ref, {
+              configured: credentialValues.has(ref), writable: true,
+            }])),
+          }
+        },
+        async set(ref: string, value: string) {
+          credentialValues.set(ref, value)
+          return { ok: true, value: { ref } }
+        },
       },
     },
   }
-  const controller = new WebSearchSettingsController(scope, api as never)
+  const controller = new WebSearchSettingsController(scope, ctx as never)
   return { scope, credentialValues, controller }
 }
 

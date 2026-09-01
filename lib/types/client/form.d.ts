@@ -1,5 +1,6 @@
-import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client';
-import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client';
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store';
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
+import type { Context } from './context-types.ts';
 export type SettingField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose';
 export type CredentialId = 'exa' | 'jina' | 'github';
 export interface CardFieldState {
@@ -37,7 +38,7 @@ interface FieldSpec {
 export declare const FIELD_SPECS: readonly FieldSpec[];
 export declare class WebSearchSettingsController {
     private readonly scope;
-    private readonly api;
+    private readonly ctx;
     private readonly staged;
     private readonly secretDrafts;
     private readonly listeners;
@@ -48,7 +49,7 @@ export declare class WebSearchSettingsController {
     private credentialGeneration;
     private credentialRefSignature;
     private credentialStates;
-    constructor(scope: SettingsScope<Record<string, unknown>>, api: Pick<IApiClient, 'credentials'>);
+    constructor(scope: SettingsScope<Record<string, unknown>>, ctx: Context);
     inject(): {
         hooks: {
             webSearchPro: SnapshotStore<WebSearchCardState>;

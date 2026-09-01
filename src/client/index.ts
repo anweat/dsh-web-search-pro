@@ -1,5 +1,4 @@
-import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { Context } from './context-types.ts'
 import {
@@ -13,7 +12,7 @@ import { en, zh } from './locales.ts'
 import { ensureStyles } from './styles.ts'
 
 export const name = 'web-search-pro-client'
-export const inject = ['slots', 'locale', 'connection', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope']
 export const NS = 'web-search-pro.card'
 
 export type SettingsCardProps = PropsLocale<typeof NS> & {
@@ -29,9 +28,8 @@ export function apply(ctx: Context): void {
   ensureStyles()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'web-search-pro: settings dictionaries')
 
-  const { api } = ctx.get('connection') as ConnectionHandle
   const scope = ctx.settingsScope.bind({ namespace: 'web-search-pro' }) as SettingsScope<Record<string, unknown>>
-  const controller = new WebSearchSettingsController(scope, api)
+  const controller = new WebSearchSettingsController(scope, ctx)
   ctx.effect(() => () => { controller.dispose() }, 'web-search-pro: settings controller')
 
   ctx.slots.inject('settings.plugin.item', () => {
