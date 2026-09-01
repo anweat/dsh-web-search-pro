@@ -20,20 +20,83 @@ export interface DepInfo {
   usedBy: string
   available: boolean
   path?: string
+  /** Human-readable upstream source; important when a package name is ambiguous. */
+  source?: string
+  /** Minimum compatible CLI version, when the backend has a versioned contract. */
+  requiredVersion?: string
+  /** Detected CLI version. */
+  version?: string
+  /** Why a command found on PATH is not compatible. */
+  diagnostic?: string
   installs: { installer: string; command: string }[]
 }
 
 const IS_WIN = process.platform === 'win32'
 
+export const BILI_CLI_VERSION = '0.6.2'
+export const BILI_CLI_REVISION = '489607468f967e0e11f3cdff6efc022d011e982a'
+export const BILI_CLI_SOURCE = `git+https://github.com/public-clis/bilibili-cli@${BILI_CLI_REVISION}`
+export const BILI_CLI_INSTALLS = [
+  { installer: 'uv', command: `uv tool install --force ${BILI_CLI_SOURCE}` },
+  { installer: 'pipx', command: `pipx install --force ${BILI_CLI_SOURCE}` },
+  { installer: 'pip', command: `pip install --force-reinstall ${BILI_CLI_SOURCE}` },
+]
+
+interface DepProbeResult {
+  available: boolean
+  version?: string
+  diagnostic?: string
+}
+
+interface DepSpec extends Omit<DepInfo, 'available' | 'path' | 'version' | 'diagnostic'> {
+  probe?: (bin: string) => Promise<DepProbeResult>
+}
+
+function compareVersions(left: string, right: string): number {
+  const a = left.split('.').map(Number)
+  const b = right.split('.').map(Number)
+  for (let index = 0; index < Math.max(a.length, b.length); index++) {
+    const delta = (a[index] ?? 0) - (b[index] ?? 0)
+    if (delta !== 0) return delta
+  }
+  return 0
+}
+
+/** Validate the public-clis bili command rather than trusting an ambiguous package name. */
+export function evaluateBiliCli(versionOutput: string, searchHelpOutput: string): DepProbeResult {
+  const version = /\b(\d+\.\d+\.\d+)\b/.exec(versionOutput)?.[1]
+  if (!version) return { available: false, diagnostic: 'bili --version returned no semantic version' }
+  if (compareVersions(version, BILI_CLI_VERSION) < 0) {
+    return { available: false, version, diagnostic: `bili ${version} is older than required ${BILI_CLI_VERSION}` }
+  }
+  const missing = ['--type', '--max', '--json'].filter(option => !searchHelpOutput.includes(option))
+  if (missing.length) {
+    return { available: false, version, diagnostic: `bili search contract missing ${missing.join(', ')}` }
+  }
+  return { available: true, version }
+}
+
+async function probeBiliCli(bin: string): Promise<DepProbeResult> {
+  const env = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
+  const version = await runCli(bin, ['--version'], { timeoutMs: 8_000, signal: undefined, env, maxOutput: 64 * 1024 })
+  if (version.code !== 0) {
+    return { available: false, diagnostic: `bili --version failed with exit ${version.code}` }
+  }
+  const help = await runCli(bin, ['search', '--help'], { timeoutMs: 8_000, signal: undefined, env, maxOutput: 128 * 1024 })
+  if (help.code !== 0) {
+    return { available: false, diagnostic: `bili search --help failed with exit ${help.code}` }
+  }
+  return evaluateBiliCli(version.stdout + version.stderr, help.stdout + help.stderr)
+}
+
 /** One external tool the plugin may shell out to. */
-const DEPS: Omit<DepInfo, 'available' | 'path'>[] = [
+const DEPS: DepSpec[] = [
   {
     id: 'bili', label: 'bili-cli', usedBy: 'bilibili 后端',
-    installs: [
-      { installer: 'uv', command: 'uv tool install bili-cli' },
-      { installer: 'pipx', command: 'pipx install bili-cli' },
-      { installer: 'pip', command: 'pip install bili-cli' },
-    ],
+    source: `public-clis/bilibili-cli v${BILI_CLI_VERSION} (${BILI_CLI_REVISION.slice(0, 12)})`,
+    requiredVersion: `>=${BILI_CLI_VERSION}`,
+    installs: BILI_CLI_INSTALLS,
+    probe: probeBiliCli,
   },
   {
     id: 'yt-dlp', label: 'yt-dlp', usedBy: 'youtube 后端',
@@ -76,8 +139,14 @@ async function resolveCmd(cmd: string): Promise<{ found: boolean; path?: string 
 export async function detectDeps(): Promise<DepInfo[]> {
   const out: DepInfo[] = []
   for (const dep of DEPS) {
+    const { probe, ...info } = dep
     const resolved = await resolveCmd(dep.id)
-    out.push({ ...dep, available: resolved.found, ...resolved.path ? { path: resolved.path } : {} })
+    if (!resolved.found) {
+      out.push({ ...info, available: false })
+      continue
+    }
+    const probed = probe ? await probe(resolved.path ?? dep.id) : { available: true }
+    out.push({ ...info, ...probed, ...resolved.path ? { path: resolved.path } : {} })
   }
   return out
 }

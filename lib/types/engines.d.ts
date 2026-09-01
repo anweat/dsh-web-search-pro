@@ -69,6 +69,10 @@ export declare function githubEngine(deps: EngineDeps): Engine;
 export declare function githubCodeEngine(deps: EngineDeps): Engine;
 export declare function githubIssuesEngine(deps: EngineDeps): Engine;
 export declare function bilibiliEngine(deps: EngineDeps): Engine;
+/** Exact argv contract supported by public-clis/bilibili-cli v0.6.2+. */
+export declare function biliSearchArgs(query: string, count: number): string[];
+/** Parse and validate bili-cli's versioned JSON envelope. */
+export declare function parseBilibiliSearchOutput(output: string): WebSearchSource[];
 export declare function v2exEngine(allowProxyFakeIp?: boolean): Engine;
 export declare function youtubeEngine(deps: EngineDeps): Engine;
 export declare function opencliEngine(platform: string, deps: EngineDeps): Engine;

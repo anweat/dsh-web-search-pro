@@ -17,11 +17,33 @@ export interface DepInfo {
     usedBy: string;
     available: boolean;
     path?: string;
+    /** Human-readable upstream source; important when a package name is ambiguous. */
+    source?: string;
+    /** Minimum compatible CLI version, when the backend has a versioned contract. */
+    requiredVersion?: string;
+    /** Detected CLI version. */
+    version?: string;
+    /** Why a command found on PATH is not compatible. */
+    diagnostic?: string;
     installs: {
         installer: string;
         command: string;
     }[];
 }
+export declare const BILI_CLI_VERSION = "0.6.2";
+export declare const BILI_CLI_REVISION = "489607468f967e0e11f3cdff6efc022d011e982a";
+export declare const BILI_CLI_SOURCE = "git+https://github.com/public-clis/bilibili-cli@489607468f967e0e11f3cdff6efc022d011e982a";
+export declare const BILI_CLI_INSTALLS: {
+    installer: string;
+    command: string;
+}[];
+interface DepProbeResult {
+    available: boolean;
+    version?: string;
+    diagnostic?: string;
+}
+/** Validate the public-clis bili command rather than trusting an ambiguous package name. */
+export declare function evaluateBiliCli(versionOutput: string, searchHelpOutput: string): DepProbeResult;
 /** Detect all backends. */
 export declare function detectDeps(): Promise<DepInfo[]>;
 /** Run the install command for one backend + installer. */
@@ -32,3 +54,4 @@ export declare function installDep(id: string, installer: string): Promise<{
     timedOut: boolean;
 }>;
 export declare const DEP_IDS: string[];
+export {};
