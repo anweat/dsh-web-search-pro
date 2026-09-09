@@ -9,10 +9,10 @@
 | 插件发布通道 | DSH 基线 | 兼容承诺 |
 |---|---|---|
 | npm `latest`（当前正式发布插件） | `dsh-v0.1.1-rc.2` | 已验证维护基线 |
-| npm `next` 候选（`0.1.12-alpha.4`） | `dsh-v0.1.2-alpha.4` | 已通过隔离真实 profile 门禁，仅用于开发预览 |
-| 后续 DSH 正式版 `0.1.2` | 尚未发布 | 发布并完成真实 profile 门禁后再声明兼容 |
+| npm `next` 候选（`0.1.12-alpha.5`） | `dsh-v0.1.5-alpha.1` | 精确依赖与真实 profile 验收目标 |
+| 后续 DSH 正式版 | 尚未发布 | 发布并完成真实 profile 门禁后再声明兼容 |
 
-开发版不会覆盖 npm `latest`。alpha.4 依赖按精确版本锁定；该版本已移除
+开发版不会覆盖 npm `latest`。`0.1.5-alpha.1` 依赖按精确版本锁定；该版本已移除
 `@deepseek-ai/dsh-client-runtime`，客户端契约分别迁移到 Cordis、
 `dsh-client-store` 与 `dsh-client-ui-settings`，不会混装 rc.2 运行时。
 
@@ -28,7 +28,7 @@ dsh --profile web
 
 > 两个插件都必须是 profile 的直接依赖：DSH 只激活直接依赖的 bundle layer，且标准 profile 可能设置 `autoInstallPeers: false`。不要只安装 Web Search Pro 后依赖 peer 自动补齐。
 > 安装 npm `latest` 时使用 `dsh-v0.1.1-rc.2`；测试本开发分支时使用
-> `dsh-v0.1.2-alpha.4`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
+> `dsh-v0.1.5-alpha.1`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
 > 里对齐版本后重装即可。
 
