@@ -4,6 +4,18 @@
 
 一个 DSH **bundle 插件**，把多引擎网页搜索、平台搜索、持久化缓存、受控按站增强和 Playwright 渲染打包成模型可直接调用的 11 个工具。路由控制面借鉴 Agent-Reach 的后端探测、顺序选择和失败冷却思路，核心逻辑为本项目原生 TypeScript 实现。
 
+## 兼容与发布通道
+
+| 插件发布通道 | DSH 基线 | 兼容承诺 |
+|---|---|---|
+| npm `latest`（当前正式发布插件） | `dsh-v0.1.1-rc.2` | 已验证维护基线 |
+| npm `next` 候选（`0.1.12-alpha.5`） | `dsh-v0.1.5-alpha.1` | 精确依赖与真实 profile 验收目标 |
+| 后续 DSH 正式版 | 尚未发布 | 发布并完成真实 profile 门禁后再声明兼容 |
+
+开发版不会覆盖 npm `latest`。`0.1.5-alpha.1` 依赖按精确版本锁定；该版本已移除
+`@deepseek-ai/dsh-client-runtime`，客户端契约分别迁移到 Cordis、
+`dsh-client-store` 与 `dsh-client-ui-settings`，不会混装 rc.2 运行时。
+
 ## 安装
 
 ```bash
@@ -15,8 +27,8 @@ dsh --profile web
 ```
 
 > 两个插件都必须是 profile 的直接依赖：DSH 只激活直接依赖的 bundle layer，且标准 profile 可能设置 `autoInstallPeers: false`。不要只安装 Web Search Pro 后依赖 peer 自动补齐。
-> 依赖 `@deepseek-ai/*` 已发布到 npm（`^0.1.0-rc.6`，与社区 dsh-cc-tui 一致）。
-> 若你的 harness 是本地源码 checkout（如 `0.1.0-rc.5`），版本号可能有出入——用
+> 安装 npm `latest` 时使用 `dsh-v0.1.1-rc.2`；测试本开发分支时使用
+> `dsh-v0.1.5-alpha.1`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
 > 里对齐版本后重装即可。
 
@@ -131,12 +143,17 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 | 依赖 | 用途 | 安装 |
 |---|---|---|
-| bili-cli | B站后端 | `uv tool install bili-cli` / `pipx install bili-cli` |
+| bili-cli `0.6.2` | B站后端 | `uv tool install --force git+https://github.com/public-clis/bilibili-cli@489607468f967e0e11f3cdff6efc022d011e982a` |
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
 | opencli | 小红书/Twitter/Reddit/IG/FB | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
 | agent-reach | agent-reach 后端 | `uv tool install agent-reach` / `pip install agent-reach` |
 | mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |
 | playwright / patchright | 渲染/截图后端 | 由 dsh-browser 内置；默认 Playwright，兼容场景可显式切 Patchright；缺 Chromium 时调用 `browser_install` |
+
+> B站后端使用 `public-clis/bilibili-cli` 的 `bili` 命令；上述提交对应上游
+> `v0.6.2`。不要安装 PyPI 上同名的 `bili-cli 0.1.1`，它是另一个项目且不提供
+> `bili search` 契约。`web_deps` 会同时检查版本和 `--json` 搜索能力，避免只因
+> PATH 中存在一个同名命令就误报可用。
 
 ## 平台与引擎
 

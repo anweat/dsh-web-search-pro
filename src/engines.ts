@@ -395,23 +395,57 @@ export function bilibiliEngine(deps: EngineDeps): Engine {
     label: 'B站 (bili-cli)',
     available: () => deps.enableCli,
     async search(query, count, signal) {
-      const res = await runCli('bili', ['search', query, '--type', 'video', '-n', String(Math.min(count, 10))], { timeoutMs: 30_000, signal, outputEncoding: process.platform === 'win32' ? 'gb18030' : 'utf-8' })
+      const res = await runCli('bili', biliSearchArgs(query, count), {
+        timeoutMs: 30_000,
+        signal,
+        outputEncoding: 'utf-8',
+        env: { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
+      })
       if (res.code !== 0) throw new EngineError('bili search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
-      let data: any
-      try {
-        data = jsYaml.load(res.stdout) as any
-      } catch {
-        throw new EngineError('bili output not parseable', 'ENGINE_ERROR')
-      }
-      const items: { bvid?: string; title?: string; author?: string; play?: number | string; duration?: string }[] = data?.data ?? []
-      const sources: WebSearchSource[] = items.filter(i => i.bvid).map(i => ({
-        url: 'https://www.bilibili.com/video/' + i.bvid,
-        ...i.title ? { title: i.title } : {},
-        ...(i.author || i.play != null || i.duration) ? { snippet: capText(['UP: ' + (i.author ?? ''), '播放: ' + i.play, i.duration ?? ''].filter(Boolean).join(' | '), 300) } : {},
-      }))
-      return { sources }
+      return { sources: parseBilibiliSearchOutput(res.stdout) }
     },
   }
+}
+
+/** Exact argv contract supported by public-clis/bilibili-cli v0.6.2+. */
+export function biliSearchArgs(query: string, count: number): string[] {
+  return ['search', query, '--type', 'video', '--max', String(Math.min(Math.max(count, 1), 10)), '--json']
+}
+
+/** Parse and validate bili-cli's versioned JSON envelope. */
+export function parseBilibiliSearchOutput(output: string): WebSearchSource[] {
+  let envelope: {
+    ok?: boolean
+    schema_version?: string
+    data?: { bvid?: unknown; title?: unknown; author?: unknown; play?: unknown; duration?: unknown }[]
+    error?: unknown
+    message?: unknown
+  }
+  try {
+    envelope = JSON.parse(output) as typeof envelope
+  } catch {
+    throw new EngineError('bili output is not valid UTF-8 JSON', 'ENGINE_ERROR')
+  }
+  if (envelope.ok !== true || envelope.schema_version !== '1' || !Array.isArray(envelope.data)) {
+    const detail = typeof envelope.message === 'string'
+      ? envelope.message
+      : typeof envelope.error === 'string' ? envelope.error : 'unexpected response envelope'
+    throw new EngineError('bili search failed: ' + capText(detail, 200), 'ENGINE_ERROR')
+  }
+  return envelope.data
+    .filter(item => typeof item.bvid === 'string' && item.bvid.length > 0)
+    .map(item => {
+      const title = typeof item.title === 'string' ? stripTags(item.title) : undefined
+      const author = typeof item.author === 'string' ? item.author : undefined
+      const duration = typeof item.duration === 'string' ? item.duration : undefined
+      const play = typeof item.play === 'number' || typeof item.play === 'string' ? item.play : undefined
+      const meta = [author ? 'UP: ' + author : undefined, play !== undefined ? '播放: ' + play : undefined, duration].filter(Boolean)
+      return {
+        url: 'https://www.bilibili.com/video/' + item.bvid,
+        ...title ? { title } : {},
+        ...meta.length ? { snippet: capText(meta.join(' | '), 300) } : {},
+      }
+    })
 }
 
 // ── V2EX (sov2ex community search API) ──────────────────────────────────────

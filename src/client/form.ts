@@ -1,5 +1,6 @@
-import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { Context } from './context-types.ts'
 
 export type SettingField =
   | 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs'
@@ -201,7 +202,7 @@ export class WebSearchSettingsController {
 
   constructor(
     private readonly scope: SettingsScope<Record<string, unknown>>,
-    private readonly api: Pick<IApiClient, 'credentials'>,
+    private readonly ctx: Context,
   ) {
     this.store = createLocalStore(this.project())
     this.unsubscribe = scope.subscribe(() => {
@@ -302,23 +303,21 @@ export class WebSearchSettingsController {
     this.credentialRefSignature = stable(refs)
     for (const id of Object.keys(refs) as CredentialId[]) this.credentialStates[id].loading = true
     this.publish()
-    try {
-      const response = await this.api.credentials.describe({ refs: Object.values(refs) })
-      if (generation !== this.credentialGeneration || !response.result.ok) return
+    const response = await this.ctx.remote.credentials.describe(Object.values(refs))
+    if (generation !== this.credentialGeneration) return
+    if (response.ok) {
       for (const id of Object.keys(refs) as CredentialId[]) {
-        const view = response.result.value.credentials[refs[id]]
+        const view = response.value[refs[id]]
         this.credentialStates[id] = {
           configured: view?.configured ?? false,
           writable: view?.writable ?? true,
           loading: false,
         }
       }
-    } catch {
-      if (generation !== this.credentialGeneration) return
+    } else {
       for (const id of Object.keys(refs) as CredentialId[]) this.credentialStates[id].loading = false
-    } finally {
-      if (generation === this.credentialGeneration) this.publish()
     }
+    if (generation === this.credentialGeneration) this.publish()
   }
 
   dispose(): void {
@@ -376,13 +375,10 @@ export class WebSearchSettingsController {
 
   private async writeCredential(id: CredentialId, value: string): Promise<boolean> {
     const ref = this.credentialRefs()[id]
-    try {
-      await this.api.credentials.set({ ref, value })
-      const response = await this.api.credentials.describe({ refs: [ref] })
-      return response.result.ok && (response.result.value.credentials[ref]?.configured ?? false)
-    } catch {
-      return false
-    }
+    const written = await this.ctx.remote.credentials.set(ref, value)
+    if (!written.ok) return false
+    const response = await this.ctx.remote.credentials.describe([ref])
+    return response.ok && (response.value[ref]?.configured ?? false)
   }
 
   private credentialRefs(): Record<CredentialId, string> {
