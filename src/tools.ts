@@ -596,18 +596,20 @@ export function registerTools(deps: ToolDeps): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backends: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, usedBy: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, installs: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { installer: { type: 'string', required: true }, command: { type: 'string', required: true } } } } } } },
+          backends: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, usedBy: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, source: { type: 'string' }, requiredVersion: { type: 'string' }, version: { type: 'string' }, diagnostic: { type: 'string' }, installs: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { installer: { type: 'string', required: true }, command: { type: 'string', required: true } } } } } } },
           message: { type: 'string' },
           install: { type: 'object', additionalProperties: false, properties: { code: { type: 'number' }, stdout: { type: 'string' }, stderr: { type: 'string' }, timedOut: { type: 'boolean' } } },
         },
       },
       render: (_args, value) => {
-        const v = value as { backends: { id: string; label: string; usedBy: string; available: boolean; path?: string; installs: { installer: string; command: string }[] }[]; message?: string; install?: { code: number; stdout: string; stderr: string; timedOut: boolean } }
+        const v = value as { backends: { id: string; label: string; usedBy: string; available: boolean; path?: string; source?: string; requiredVersion?: string; version?: string; diagnostic?: string; installs: { installer: string; command: string }[] }[]; message?: string; install?: { code: number; stdout: string; stderr: string; timedOut: boolean } }
         const parts: string[] = []
         if (v.message) parts.push(v.message)
         if (v.backends.length) {
           for (const b of v.backends) {
-            parts.push((b.available ? '✅' : '❌') + ' ' + b.label + ' (' + b.id + ') — ' + b.usedBy + (b.available && b.path ? ' · ' + b.path : ''))
+            const details = [b.version ? '版本 ' + b.version : '', b.requiredVersion ? '要求 ' + b.requiredVersion : '', b.source ? '来源 ' + b.source : '', b.path ? b.path : ''].filter(Boolean)
+            parts.push((b.available ? '✅' : '❌') + ' ' + b.label + ' (' + b.id + ') — ' + b.usedBy + (details.length ? ' · ' + details.join(' · ') : ''))
+            if (b.diagnostic) parts.push('   诊断: ' + b.diagnostic)
             if (!b.available) parts.push('   安装: ' + b.installs.map(i => i.installer + ': ' + i.command).join('   |   '))
           }
         }
