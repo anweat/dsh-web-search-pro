@@ -158,6 +158,32 @@ test('web_deps defaults an omitted action to check', async () => {
     assert.notEqual(definition.parameters.action.required, true)
     const result = await definition.execute({}, { signal: undefined })
     assert.equal(Array.isArray(result.backends), true)
+    const backendProperties = definition.output.schema.properties.backends.items.properties
+    for (const backend of result.backends) {
+      assert.deepEqual(
+        Object.keys(backend).filter(key => !(key in backendProperties)),
+        [],
+        `web_deps output schema is missing fields returned by ${backend.id}`,
+      )
+    }
+    assert.deepEqual(
+      ['source', 'requiredVersion', 'version', 'diagnostic'].filter(key => !(key in backendProperties)),
+      [],
+    )
+
+    const rendered = definition.output.render({}, {
+      backends: [{
+        id: 'bili', label: 'bili-cli', usedBy: 'bilibili 后端', available: false,
+        source: 'public-clis/bilibili-cli', requiredVersion: '>=0.6.2', version: '0.5.0',
+        diagnostic: 'bili 0.5.0 is older than required 0.6.2',
+        installs: [{ installer: 'uv', command: 'uv tool install bili' }],
+      }],
+    })
+    const text = rendered.map((part: { text?: string }) => part.text ?? '').join('\n')
+    assert.match(text, /版本 0\.5\.0/)
+    assert.match(text, /要求 >=0\.6\.2/)
+    assert.match(text, /来源 public-clis\/bilibili-cli/)
+    assert.match(text, /诊断: bili 0\.5\.0 is older/)
   } finally {
     h.store.close()
     fs.rmSync(h.dir, { recursive: true, force: true })
