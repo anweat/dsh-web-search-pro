@@ -43,6 +43,8 @@ export interface RouterSearchResult {
   engine: string
   enginesTried: string[]
   fromCache: boolean
+  /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
+  fallbackNote?: string
 }
 
 const ENGINE_FACTORIES: Record<string, (deps: any, config: ResolvedConfig) => Engine> = {
@@ -87,6 +89,17 @@ export class SearchRouter {
           const engine = await this.build(id, input.skipSeam)
           if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
           return engine.search(input.query, input.count, input.signal, input.options)
+        },
+        // Quality gate: a result whose snippet coverage is below 50% is usable
+        // but thin — the router should keep probing later engines instead of
+        // settling for titles-only output (the ddg-regex regression case).
+        assess: outcome => {
+          const sources = outcome.sources
+          if (!sources.length) return { ok: true }
+          const withSnippet = sources.filter(s => s.snippet && s.snippet.trim()).length
+          const ratio = withSnippet / sources.length
+          if (ratio >= 0.5) return { ok: true }
+          return { ok: true, lowQuality: true, detail: 'snippets=' + withSnippet + '/' + sources.length }
         },
       })
     }
@@ -219,7 +232,7 @@ export class SearchRouter {
       if (cached) {
           const rows = this.store.resultsForQuery(cached.id)
           if (rows.length) {
-            let detail: { content?: string; engine?: string; enginesTried?: string[]; requestedCount?: number } | undefined
+            let detail: { content?: string; engine?: string; enginesTried?: string[]; requestedCount?: number; fallbackNote?: string } | undefined
             if (cached.detail) { try { detail = JSON.parse(cached.detail) } catch { /* ignore */ } }
             if (detail?.requestedCount === undefined || detail.requestedCount >= count) {
               const result: RouterSearchResult = {
@@ -233,6 +246,7 @@ export class SearchRouter {
                 engine: detail?.engine ?? ids[0] ?? 'unknown',
                 enginesTried: detail?.enginesTried ?? ids,
                 fromCache: true,
+                ...detail?.fallbackNote ? { fallbackNote: detail.fallbackNote } : {},
               }
               this.memory.set(memoryKey, result)
               return result
@@ -245,6 +259,7 @@ export class SearchRouter {
     const enginesTried: string[] = []
     let outcome: SearchOutcome | undefined
     let usedId: string | undefined
+    let fallbackNote: string | undefined
     const signal = opts.signal
 
     if (multi) {
@@ -307,6 +322,14 @@ export class SearchRouter {
         outcome = selected.value
         usedId = selected.id
         enginesTried.push(...ids.slice(0, Math.max(ids.indexOf(selected.id) + 1, 1)))
+        // P1-1: explain the fallback (e.g. ddg returned results but none had snippets).
+        const lowQualityAttempts = selected.attempts.filter(a => a.outcome === 'low-quality')
+        if (lowQualityAttempts.length) {
+          const triedLine = selected.attempts
+            .map(a => a.id + '(' + a.outcome + (a.detail ? ':' + a.detail : '') + ')')
+            .join(' -> ')
+          fallbackNote = 'fallback; ' + lowQualityAttempts.map(a => a.id + ' returned results but ' + (a.detail ?? 'low quality')).join('; ') + '\ntried: ' + triedLine
+        }
       } catch (error) {
         if (signal?.aborted) throw error
         enginesTried.push(...ids)
@@ -321,13 +344,13 @@ export class SearchRouter {
       engine: usedId,
       status: 'ok',
       cacheKey,
-      detail: JSON.stringify({ ...outcome.content ? { content: outcome.content } : {}, engine: usedId, enginesTried, requestedCount: count }),
+      detail: JSON.stringify({ ...outcome!.content ? { content: outcome!.content } : {}, engine: usedId, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
     })
-    this.store.recordResults(queryId, outcome.sources, usedId)
+    this.store.recordResults(queryId, outcome!.sources, usedId)
 
     const result: RouterSearchResult = {
-      ...outcome.content ? { content: outcome.content } : {},
-      sources: outcome.sources.slice(0, count).map(s => ({
+      ...outcome!.content ? { content: outcome!.content } : {},
+      sources: outcome!.sources.slice(0, count).map(s => ({
         url: s.url,
         ...s.title ? { title: s.title } : {},
         ...s.snippet ? { snippet: capText(s.snippet, 500) } : {},
@@ -336,6 +359,7 @@ export class SearchRouter {
       engine: usedId,
       enginesTried,
       fromCache: false,
+      ...fallbackNote ? { fallbackNote } : {},
     }
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).
     this.memory.set(memoryKey, result)

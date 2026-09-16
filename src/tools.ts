@@ -74,15 +74,25 @@ export function registerTools(deps: ToolDeps): void {
           engine: { type: 'string', required: true },
           enginesTried: { type: 'array', required: true, items: { type: 'string' } },
           fromCache: { type: 'boolean', required: true },
+          fallbackNote: { type: 'string' },
         },
       },
       render: (_args, value) => {
-        const v = value as { content?: string; sources: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; engine: string; enginesTried: string[]; fromCache: boolean }
+        const v = value as { content?: string; sources: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; engine: string; enginesTried: string[]; fromCache: boolean; fallbackNote?: string }
         const parts: string[] = []
         if (v.content) parts.push(v.content)
         parts.push(formatSources(v.sources))
-        parts.push('Engine: ' + v.engine + (v.fromCache ? ' (cached)' : '') + (v.enginesTried.length > 1 ? '; tried: ' + v.enginesTried.join(', ') : ''))
-        parts.push('Cite the relevant URLs above as markdown links in your answer.')
+        // P1-1: surface *why* the router fell back, so the model can adapt its query.
+        parts.push('Engine: ' + v.engine + (v.fromCache ? ' (cached)' : '') + (v.fallbackNote ? ' (' + v.fallbackNote + ')' : '') + (v.enginesTried.length > 1 ? '; tried: ' + v.enginesTried.join(', ') : ''))
+        // P1-2/P1-4: no blanket "cite the URLs" instruction — it pushes the model
+        // to answer from titles without reading. Instead, point at fetching when
+        // the results are thin, and give an actionable retry hint when empty.
+        const withSnippet = v.sources.filter(s => s.snippet && s.snippet.trim()).length
+        if (!v.sources.length) {
+          parts.push('No usable results for this query. Retry with a different phrasing, a site: filter, or the "api documentation" / "<host> API" form.')
+        } else if (withSnippet < v.sources.length) {
+          parts.push('These are navigation targets — several lack snippets. Fetch the most relevant 1-2 before answering.')
+        }
         return [{ type: 'text', text: parts.join('\n\n') }]
       },
     },
@@ -116,6 +126,7 @@ export function registerTools(deps: ToolDeps): void {
         engine: result.engine,
         enginesTried: result.enginesTried,
         fromCache: result.fromCache,
+        ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {},
       }
     },
   }))
@@ -169,12 +180,20 @@ export function registerTools(deps: ToolDeps): void {
           fromCache: { type: 'boolean', required: true },
           statusCode: { type: 'number' },
           usedRule: { type: 'string' },
+          shellPage: { type: 'boolean' },
         },
       },
       render: (_args, value) => {
-        const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean }
+        const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean }
         const parts: string[] = []
         if (v.title) parts.push('Title: ' + v.title)
+        // P1-3: a navigation/JS/form shell has no data — say so and point the
+        // model at the links it contains instead of re-fetching the same page.
+        if (v.shellPage) {
+          const pointed = (v.text.match(/\[[^\]]*\]\((https?:[^)]+)\)/g) ?? []).map(s => s.slice(s.indexOf('(') + 1, -1)).slice(0, 5)
+          parts.push('This page contains no extractable data (navigation/JS shell).')
+          if (pointed.length) parts.push('It points to: ' + pointed.join(', ') + '. Consider fetching one of those instead.')
+        }
         parts.push(v.text)
         parts.push('— Source: ' + v.source + (v.fromCache ? ' (cached snapshot)' : '') + ' · ' + v.url)
         return [{ type: 'text', text: parts.join('\n\n') }]

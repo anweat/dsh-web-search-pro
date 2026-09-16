@@ -61,6 +61,16 @@ export declare function seamEngine(deps: EngineDeps): Engine;
 /** Parse mcporter's human-readable Exa response into the router's native source shape. */
 export declare function parseMcporterExaSearch(output: string, count: number): WebSearchSource[];
 export declare function exaEngine(deps: EngineDeps): Engine;
+/**
+ * Parse DDG html.duckduckgo.com result HTML into sources.
+ *
+ * Two passes on purpose: a single regex combining the result anchor with an
+ * *optional* snippet group behind a lazy bridge silently never captures
+ * snippets (the optional group backtracks to an empty match before the lazy
+ * bridge is allowed to expand). Slicing each block first, then extracting the
+ * snippet inside the block, avoids that trap entirely.
+ */
+export declare function parseDdgHtml(html: string, count?: number): WebSearchSource[];
 export declare function ddgEngine(allowProxyFakeIp?: boolean): Engine;
 export declare function bingEngine(allowProxyFakeIp?: boolean): Engine;
 /** Parse RSS/Atom XML into sources (used by bing engine and rss platform). */

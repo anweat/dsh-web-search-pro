@@ -23,6 +23,7 @@ import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-settings'
 import { Config, resolveConfig, type ResolvedConfig } from './config.ts'
+import { SEARCH_CACHE_VERSION } from './cache-key.ts'
 import { Store } from './store.ts'
 import type { BrowserService } from './browser-service.ts'
 import { SearchRouter } from './router.ts'
@@ -49,8 +50,14 @@ export function apply(ctx: Context, config: Config): void {
   const dbPath = resolved.dbPath
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
-  // 1. Persistent store (closed on plugin unload).
+  // 1. Persistent store (closed on plugin unload). On startup, purge search
+  //    rows minted with an older cache-key version so stale titles-only ddg
+  //    results saved before the snippet-regex fix are never replayed.
   const store = new Store(dbPath)
+  try {
+    const purged = store.cleanupLegacySearchCache('search:v' + SEARCH_CACHE_VERSION + ':')
+    if (purged.queries > 0) ctx.logger?.(name).info('web-search-pro: purged ' + purged.queries + ' legacy search rows (' + purged.results + ' results) from cache-key v<=' + (SEARCH_CACHE_VERSION - 1))
+  } catch { /* non-fatal */ }
   ctx.effect(() => () => store.close())
 
   // 2. Browser service (provided by dsh-browser; inject: ['browser']).

@@ -160,6 +160,34 @@ export function exaEngine(deps: EngineDeps): Engine {
 
 // ── DuckDuckGo HTML (no key) ────────────────────────────────────────────────
 
+/**
+ * Parse DDG html.duckduckgo.com result HTML into sources.
+ *
+ * Two passes on purpose: a single regex combining the result anchor with an
+ * *optional* snippet group behind a lazy bridge silently never captures
+ * snippets (the optional group backtracks to an empty match before the lazy
+ * bridge is allowed to expand). Slicing each block first, then extracting the
+ * snippet inside the block, avoids that trap entirely.
+ */
+export function parseDdgHtml(html: string, count = 10): WebSearchSource[] {
+  const sources: WebSearchSource[] = []
+  // 1) Slice blocks: from one result__a anchor up to the next (or end of doc).
+  const blockRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>([\s\S]*?)(?=<a[^>]*class="[^"]*result__a[^"]*"|$)/g
+  // 2) Extract the snippet inside each block, independently.
+  const snipRe = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/
+  let m: RegExpExecArray | null
+  while ((m = blockRe.exec(html)) !== null) {
+    const url = decodeRedirectUrl(m[1] ?? '')
+    const title = stripTags(m[2] ?? '').trim()
+    const sm = snipRe.exec(m[3] ?? '')
+    const snippet = sm?.[1] ? stripTags(sm[1]).trim() : undefined
+    if (!/^https?:\/\//i.test(url) || title.length < 2) continue
+    sources.push({ url, ...title ? { title } : {}, ...snippet ? { snippet: capText(snippet, 400) } : {} })
+    if (sources.length >= count) break
+  }
+  return sources
+}
+
 export function ddgEngine(allowProxyFakeIp = false): Engine {
   return {
     id: 'ddg',
@@ -168,18 +196,7 @@ export function ddgEngine(allowProxyFakeIp = false): Engine {
     async search(query, count, signal) {
       const res = await httpGet('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), { signal, timeoutMs: 30_000, allowProxyFakeIp })
       if (!res.ok) throw new EngineError('DuckDuckGo HTTP ' + res.status, 'ENGINE_ERROR')
-      const sources: WebSearchSource[] = []
-      const blockRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>)?/g
-      let m: RegExpExecArray | null
-      while ((m = blockRe.exec(res.text)) !== null) {
-        const rawHref = m[1] ?? ''
-        const url = decodeRedirectUrl(rawHref)
-        const title = stripTags(m[2] ?? '').trim()
-        const snippet = m[3] ? stripTags(m[3]).trim() : undefined
-        if (!/^https?:\/\//i.test(url) || title.length < 2) continue
-        sources.push({ url, ...title ? { title } : {}, ...snippet ? { snippet: capText(snippet, 400) } : {} })
-        if (sources.length >= count) break
-      }
+      const sources = parseDdgHtml(res.text, count)
       if (!sources.length) throw new EngineError('DuckDuckGo returned no results (may be rate-limited)', 'ENGINE_EMPTY', true)
       return { sources }
     },

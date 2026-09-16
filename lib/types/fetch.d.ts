@@ -23,7 +23,17 @@ export interface FetchResult {
     fromCache: boolean;
     statusCode?: number;
     usedRule?: string;
+    /** True when the page is a navigation/JS/form shell with no extractable data. */
+    shellPage?: boolean;
 }
+/**
+ * Heuristic: a "shell" page looks like text but is really navigation — search
+ * forms, "look elsewhere" pointers, JS-only stubs. Signals: very little prose,
+ * a high link-to-text ratio, or explicit form/redirect phrasing. Returning true
+ * lets the tool tell the model to fetch one of the pointed-at URLs instead of
+ * re-fetching the same kind of page in a loop (P1-3).
+ */
+export declare function detectShellPage(text: string): boolean;
 /** Validate and normalize a URL for fetching. */
 export declare function normalizeUrl(raw: string): string;
 /** All rules: user (DB) first, then built-ins; user rules win on ties. */

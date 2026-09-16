@@ -112,7 +112,7 @@ const PAGE_COLUMNS = 'id, query_id AS queryId, url, title, text, html_path AS ht
 export class Store {
   private db: DatabaseSync
 
-  constructor(readonly dbPath: string) {
+  constructor(readonly dbPath: string, opts: { currentSearchCacheKeyPrefix?: string } = {}) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
     this.db = new DatabaseSync(dbPath)
     this.db.exec('PRAGMA journal_mode = WAL')
@@ -295,6 +295,27 @@ export class Store {
       removed = { queries: rows.length, results: r.c, pages: p.c }
     }
     return removed
+  }
+
+  /**
+   * Purge search rows minted with an older cache-key version (e.g. ddg results
+   * saved before the snippet-regex fix). Called once at startup so stale
+   * titles-only rows are never replayed from the persistent cache.
+   */
+  cleanupLegacySearchCache(currentPrefix: string): { queries: number; results: number } {
+    const stale = this.db.prepare(
+      `SELECT id FROM queries WHERE kind = 'search' AND (cache_key IS NULL OR cache_key NOT LIKE ?)`,
+    ).all(currentPrefix + '%') as unknown as { id: string }[]
+    let removedResults = 0
+    if (stale.length) {
+      const placeholders = stale.map(() => '?').join(', ')
+      const r = this.db.prepare(`SELECT COUNT(*) AS c FROM results WHERE query_id IN (${placeholders})`).get(...stale.map(s => s.id)) as { c: number }
+      removedResults = r.c
+      this.db.prepare(`DELETE FROM pages WHERE query_id IN (${placeholders})`).run(...stale.map(s => s.id))
+      this.db.prepare(`DELETE FROM results WHERE query_id IN (${placeholders})`).run(...stale.map(s => s.id))
+      this.db.prepare(`DELETE FROM queries WHERE id IN (${placeholders})`).run(...stale.map(s => s.id))
+    }
+    return { queries: stale.length, results: removedResults }
   }
 
   private removeQuery(id: string): void {
