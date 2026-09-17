@@ -7,7 +7,7 @@
  * @module web-search-pro/extract
  */
 
-import { jsdom } from './util.ts'
+import { jsdom, stripTags } from './util.ts'
 
 /** Backtick character (kept in a constant so fenced code blocks stay readable). */
 const BT = String.fromCharCode(96)
@@ -236,5 +236,3 @@ export function extractResultLinks(html: string): { title: string; url: string }
   }
   return out
 }
-
-import { stripTags } from './util.ts'

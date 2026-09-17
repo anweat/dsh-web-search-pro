@@ -74,12 +74,13 @@ export class ExaClient {
     for (const date of [request.startPublishedDate, request.endPublishedDate]) {
       if (date && Number.isNaN(Date.parse(date))) throw new Error('invalid Exa published date: ' + date)
     }
-    return this.post('/search', {
-      ...request,
-      query,
-      numResults: Math.min(Math.max(request.numResults ?? 10, 1), 100),
-      contents: { text: false, highlights: true },
-    }, signal)
+    const body: Record<string, unknown> = { query }
+    for (const [k, v] of Object.entries(request)) {
+      if (v !== undefined && k !== 'query') body[k] = v
+    }
+    body.numResults = Math.min(Math.max(request.numResults ?? 10, 1), 100)
+    body.contents = { text: false, highlights: true }
+    return this.post('/search', body, signal)
   }
 
   contents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]> {

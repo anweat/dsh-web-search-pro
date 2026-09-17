@@ -195,7 +195,7 @@ export function ddgEngine(allowProxyFakeIp = false): Engine {
     available: () => true,
     async search(query, count, signal) {
       const res = await httpGet('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), { signal, timeoutMs: 30_000, allowProxyFakeIp })
-      if (!res.ok) throw new EngineError('DuckDuckGo HTTP ' + res.status, 'ENGINE_ERROR')
+      if (!res.ok) throw new EngineError('DuckDuckGo HTTP ' + res.status, 'ENGINE_ERROR', true)
       const sources = parseDdgHtml(res.text, count)
       if (!sources.length) throw new EngineError('DuckDuckGo returned no results (may be rate-limited)', 'ENGINE_EMPTY', true)
       return { sources }
@@ -215,7 +215,7 @@ export function bingEngine(allowProxyFakeIp = false): Engine {
         'https://www.bing.com/search?q=' + encodeURIComponent(query) + '&format=rss&count=' + Math.min(count, 20),
         { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
-      if (!res.ok) throw new EngineError('Bing HTTP ' + res.status, 'ENGINE_ERROR')
+      if (!res.ok) throw new EngineError('Bing HTTP ' + res.status, 'ENGINE_ERROR', true)
       const sources: WebSearchSource[] = parseRss(res.text, count)
       if (!sources.length) throw new EngineError('Bing returned no results', 'ENGINE_EMPTY', true)
       return { sources }
@@ -273,7 +273,7 @@ export function jinaSearchEngine(deps: EngineDeps): Engine {
       if (k) headers['authorization'] = 'Bearer ' + k
       const res = await httpGet('https://s.jina.ai/?q=' + encodeURIComponent(query), { headers, signal, timeoutMs: 30_000, allowProxyFakeIp: deps.allowProxyFakeIp })
       if (res.status === 401 && !k) throw new EngineError('Jina AI requires an API key (set jinaApiKey or $JINA_API_KEY)', 'ENGINE_UNAVAILABLE', false)
-      if (!res.ok) throw new EngineError('Jina search HTTP ' + res.status, 'ENGINE_ERROR')
+      if (!res.ok) throw new EngineError('Jina search HTTP ' + res.status, 'ENGINE_ERROR', true)
       const sources: WebSearchSource[] = []
       const lineRe = /^\s*(\d+)\.\s*\[([^\]]+)\]\(([^)]+)\)(?:[：:\-—]?\s*([\s\S]*?))?$/gm
       let m: RegExpExecArray | null
@@ -324,8 +324,12 @@ async function githubApiGet(path: string, deps: EngineDeps, signal?: AbortSignal
       false,
     )
   }
-  if (!res.ok) throw new EngineError('GitHub API HTTP ' + res.status, 'ENGINE_ERROR')
-  return JSON.parse(res.text)
+  if (!res.ok) throw new EngineError('GitHub API HTTP ' + res.status, 'ENGINE_ERROR', true)
+  try {
+    return JSON.parse(res.text)
+  } catch {
+    throw new EngineError('GitHub API returned invalid JSON', 'ENGINE_ERROR', true)
+  }
 }
 
 export function githubEngine(deps: EngineDeps): Engine {
@@ -474,9 +478,14 @@ export function v2exEngine(allowProxyFakeIp = false): Engine {
     available: () => true,
     async search(query, count, signal) {
       const res = await httpGet('https://www.sov2ex.com/api/search?q=' + encodeURIComponent(query) + '&size=' + Math.min(count, 15), { signal, timeoutMs: 25_000, allowProxyFakeIp })
-      if (!res.ok) throw new EngineError('sov2ex HTTP ' + res.status, 'ENGINE_ERROR')
-      const parsed = JSON.parse(res.text) as {
+      if (!res.ok) throw new EngineError('sov2ex HTTP ' + res.status, 'ENGINE_ERROR', true)
+      let parsed: {
         hits?: { _source?: { id?: string | number; title?: string; content?: string; created?: string | number; node?: { title?: string } } }[] | { hits?: { _source?: { id?: string | number; title?: string; content?: string; created?: string | number; node?: { title?: string } } }[] }
+      }
+      try {
+        parsed = JSON.parse(res.text) as typeof parsed
+      } catch {
+        throw new EngineError('sov2ex returned invalid JSON', 'ENGINE_ERROR', true)
       }
       // sov2ex returns the hits array at top level; keep a defensive fallback.
       const rawHits = Array.isArray(parsed.hits)
@@ -615,7 +624,7 @@ export function arxivEngine(allowProxyFakeIp = false): Engine {
         'http://export.arxiv.org/api/query?search_query=all:' + encodeURIComponent(query) + '&start=0&max_results=' + Math.min(count, 20),
         { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
-      if (!res.ok) throw new EngineError('arXiv HTTP ' + res.status, 'ENGINE_ERROR')
+      if (!res.ok) throw new EngineError('arXiv HTTP ' + res.status, 'ENGINE_ERROR', true)
       const sources = parseRss(res.text, count)
       if (!sources.length) throw new EngineError('arXiv returned no results', 'ENGINE_EMPTY', true)
       return { sources }
@@ -633,8 +642,13 @@ export function pubmedEngine(allowProxyFakeIp = false): Engine {
         'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=' + encodeURIComponent(query) + '&retmax=' + n + '&retmode=json',
         { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
-      if (!esearch.ok) throw new EngineError('PubMed esearch HTTP ' + esearch.status, 'ENGINE_ERROR')
-      const ids: string[] = (JSON.parse(esearch.text) as any)?.esearchresult?.idlist ?? []
+      if (!esearch.ok) throw new EngineError('PubMed esearch HTTP ' + esearch.status, 'ENGINE_ERROR', true)
+      let ids: string[] = []
+      try {
+        ids = (JSON.parse(esearch.text) as any)?.esearchresult?.idlist ?? []
+      } catch {
+        throw new EngineError('PubMed esearch returned invalid JSON', 'ENGINE_ERROR', true)
+      }
       if (!ids.length) throw new EngineError('PubMed returned no results', 'ENGINE_EMPTY', true)
       const sources: WebSearchSource[] = ids.map(id => ({ url: 'https://pubmed.ncbi.nlm.nih.gov/' + id + '/', title: 'PubMed ' + id }))
       const esummary = await httpGet(
@@ -642,7 +656,10 @@ export function pubmedEngine(allowProxyFakeIp = false): Engine {
         { signal, timeoutMs: 30_000, allowProxyFakeIp },
       )
       if (esummary.ok) {
-        const result = (JSON.parse(esummary.text) as any)?.result ?? {}
+        let result: Record<string, { title?: unknown; pubdate?: unknown }> = {}
+        try {
+          result = (JSON.parse(esummary.text) as any)?.result ?? {}
+        } catch { /* keep the id-only sources below */ }
         return {
           sources: ids.map(id => {
             const doc = result[id]
@@ -720,7 +737,7 @@ export function rssEngine(url: string, allowProxyFakeIp = false): Engine {
     available: () => /^https?:\/\//i.test(url),
     async search(query, count, signal) {
       const res = await httpGet(url, { signal, timeoutMs: 25_000, allowProxyFakeIp })
-      if (!res.ok) throw new EngineError('RSS HTTP ' + res.status, 'ENGINE_ERROR')
+      if (!res.ok) throw new EngineError('RSS HTTP ' + res.status, 'ENGINE_ERROR', true)
       const parsed = parseRss(res.text, 500)
       const needle = query.trim().toLocaleLowerCase()
       const sources = (needle

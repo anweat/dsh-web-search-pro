@@ -99,7 +99,8 @@ export class FetchService {
     const memoryKey = ['page', normalized, opts.mode, maxChars, opts.persist ? 'persist' : 'ephemeral'].join('|')
 
     if (!opts.fresh) {
-      const hot = this.memory.get(memoryKey, this.cfg().ttlSeconds * 1000)
+      const ttlMs = this.cfg().ttlSeconds * 1000
+      const hot = this.memory.get(memoryKey, ttlMs)
       if (hot) return { ...hot, fromCache: true }
       // Auto mode may reuse the freshest successful representation. An explicit
       // backend is a caller contract and must not silently replay another mode.
@@ -113,7 +114,9 @@ export class FetchService {
           fromCache: true,
           ...typeof cached.status === 'number' ? { statusCode: cached.status } : {},
         }
-        this.memory.set(memoryKey, page)
+        // Only re-warm the memory layer for auto mode: the key encodes the mode,
+        // so a stale-mode entry would shadow later explicit-mode hits.
+        if (opts.mode === 'auto') this.memory.set(memoryKey, page)
         return page
       }
     }

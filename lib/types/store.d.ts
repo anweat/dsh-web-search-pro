@@ -59,11 +59,6 @@ export declare class Store {
     recordQuery(input: Omit<QueryRecord, 'id' | 'ts'> & {
         id?: string;
     }): string;
-    /** Look up a fresh cached search by (engine, normalized query). */
-    getCachedSearch(engine: string, normQuery: string, ttlSeconds: number): {
-        id: string;
-        detail?: string;
-    } | undefined;
     /** Look up a fresh cached operation by kind and its complete input fingerprint. */
     getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): {
         id: string;

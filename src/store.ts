@@ -162,17 +162,6 @@ export class Store {
     return id
   }
 
-  /** Look up a fresh cached search by (engine, normalized query). */
-  getCachedSearch(engine: string, normQuery: string, ttlSeconds: number): { id: string; detail?: string } | undefined {
-    const row = this.db.prepare(
-      `SELECT id, detail FROM queries
-       WHERE kind = 'search' AND engine = ? AND query = ? AND status = 'ok'
-         AND ts > ? ORDER BY ts DESC LIMIT 1`,
-    ).get(engine, normQuery, new Date(Date.now() - ttlSeconds * 1000).toISOString()) as { id: string; detail: string | null } | undefined
-    if (!row) return undefined
-    return { id: row.id, ...row.detail != null ? { detail: row.detail } : {} }
-  }
-
   /** Look up a fresh cached operation by kind and its complete input fingerprint. */
   getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): { id: string; detail?: string } | undefined {
     const row = this.db.prepare(

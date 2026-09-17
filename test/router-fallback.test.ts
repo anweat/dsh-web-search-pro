@@ -92,6 +92,38 @@ test('router keeps the first low-quality result when no later engine does better
   }
 })
 
+test('router does not downgrade metadata-snippet engines (github/bilibili/youtube) to low-quality', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-web-router-meta-'))
+  const store = new Store(path.join(dir, 'store.db'))
+  try {
+    const config = {
+      memoryCacheEntries: 8, ttlSeconds: 60, engines: ['github', 'bing'], rrfConstant: 60,
+      freshnessBoost: 0, freshnessDays: 30, authorityBoost: 0, authorityDomains: [],
+      exaApiKeyEnv: 'EXA_API_KEY', jinaApiKeyEnv: 'JINA_API_KEY', githubTokenEnv: 'GITHUB_TOKEN',
+      enableCliBackends: false, opencliEnabled: false, agentReachEnabled: false,
+    }
+    const router = new SearchRouter({ get: () => undefined } as never, config as never, store)
+    const entries = (router as any).backends.entries as Map<string, { probe: () => unknown; run: (i: unknown) => Promise<unknown> }>
+    // GitHub-style result: every source carries a structured metadata snippet.
+    entries.set('github', {
+      id: 'github',
+      probe: async () => ({ available: true }),
+      run: async () => ({ sources: [
+        { url: 'https://github.com/o/r1', title: 'o/r1', snippet: 'repo — ⭐12 [TypeScript]' },
+        { url: 'https://github.com/o/r2', title: 'o/r2', snippet: 'repo — ⭐3' },
+      ] }),
+    })
+
+    const result = await router.search({ query: 'meta snippets', count: 5, fresh: true, multi: false, signal: undefined })
+    assert.equal(result.engine, 'github')
+    assert.deepEqual(result.enginesTried, ['github'])
+    assert.equal(result.fallbackNote, undefined)
+  } finally {
+    store.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('BackendRegistry.runSelected reports per-engine attempts with outcomes', async () => {
   const reg = new BackendRegistry<{ q: string }, { sources: { url: string; snippet?: string }[] }>()
   reg.register({

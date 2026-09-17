@@ -200,6 +200,7 @@ export function registerTools(deps: ToolDeps): void {
       },
     },
     timeoutMs: config.timeoutMs + 30_000,
+    isConcurrencySafe: () => true,
     async execute(args, exec) {
       const mode = (args.mode ?? 'auto') as 'auto' | 'jina' | 'http' | 'playwright'
       if (!['auto', 'jina', 'http', 'playwright'].includes(mode)) throw new Error('mode must be auto, jina, http, or playwright')
@@ -282,6 +283,7 @@ export function registerTools(deps: ToolDeps): void {
       },
     },
     timeoutMs: config.timeoutMs + 60_000,
+    isConcurrencySafe: () => true,
     async execute(args, exec) {
       const rules = mergedRules(store)
       const shot = await browser.snapshot(args.url, rules, {
@@ -482,6 +484,8 @@ export function registerTools(deps: ToolDeps): void {
       },
     },
     timeoutMs: 10_000,
+    // list/export are read-only; upsert/remove/import mutate the SQLite rules table.
+    isConcurrencySafe: (args) => args.action === 'list' || args.action === 'export',
     async execute(args) {
       const action = args.action as 'list' | 'upsert' | 'remove' | 'export' | 'import'
       if (!['list', 'upsert', 'remove', 'export', 'import'].includes(action)) throw new Error('action must be list, upsert, remove, export, or import')
