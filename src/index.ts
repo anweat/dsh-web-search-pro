@@ -60,19 +60,21 @@ export function apply(ctx: Context, config: Config): void {
   //    $DSH_HOME/settings.yaml `web-search-pro:` section (validated against the
   //    same schema) overlays this composition entry and every operation re-reads
   //    it — edit keys/engines in the file without touching cordis.yml.
-  //    installSection: 官方可选 settings 消费者接线（base=插件配置，
-  //    用户段落热重载；settings 服务缺席时回退到插件配置）。
-  // Stable accessor over a mutable source ref: installSection swaps
-  // the source thunk on settings attach/detach, while router/fetch/tools all
+  // Use the provider's registration API across Host versions; standalone
+  // settings helper exports were removed in newer Hosts.
+  // Stable accessor over a mutable source ref: settings attach/detach swaps
+  // the source thunk, while router/fetch/tools all
   // hold the SAME stable `dynamic` closure that dereferences it per call —
   // so hot-reloaded sections reach every consumer.
   let resolveSource: () => ResolvedConfig = () => resolved
   const dynamic = (): ResolvedConfig => resolveSource()
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, 'web-search-pro', Config, resolved, {
-      setSource: (current) => { resolveSource = () => current() as ResolvedConfig },
-      onChange: () => {},
-    })
+    const settings = settingsCtx.settings as unknown as {
+      register: (ns: string, schema: typeof Config, options: { base: ResolvedConfig; applies: string }) => { get: () => Config }
+    }
+    const scope = settings.register('web-search-pro', Config, { base: resolved, applies: 'live' })
+    resolveSource = () => resolveConfig(scope.get())
+    settingsCtx.effect(() => () => { resolveSource = () => resolved })
   })
 
   // 4. Services.
