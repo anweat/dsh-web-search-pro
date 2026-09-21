@@ -1,48 +1,13 @@
 /**
- * Consumer-side contract for the `browser` service provided by the dsh-browser
- * plugin. web-search-pro injects it (inject: ['browser']) and calls these
- * methods instead of its former local PlaywrightManager / global opencli.
+ * Consumer-side contract for the `browser` service provided by dsh-browser.
+ * Keep this surface derived from the provider's public type so incompatible
+ * browser changes fail web-search-pro's typecheck instead of drifting silently.
  * @module web-search-pro/browser-service
  */
 
-export interface RenderRule {
-  hostname: string
-  contentSelectors: string[]
-  removeSelectors?: string[]
-}
+import type { BrowserService as DshBrowserService } from '@anweat/dsh-browser'
 
-export interface BrowserRenderResult {
-  title: string
-  text: string
-  html: string
-  usedRule?: string
-}
-
-export interface BrowserSnapshotResult {
-  title: string
-  text: string
-  screenshotPath?: string
-  htmlPath: string
-  usedRule?: string
-}
-
-export interface BrowserSearchItem {
-  url: string
-  title: string
-  snippet?: string
-}
-
-export interface BrowserCliResult {
-  code: number
-  stdout: string
-  stderr: string
-  timedOut: boolean
-}
-
-export interface BrowserService {
-  render(url: string, rules: readonly RenderRule[], opts?: { signal?: AbortSignal; maxChars?: number; waitMs?: number; authProfile?: string; rulePack?: string }): Promise<BrowserRenderResult>
-  snapshot(url: string, rules: readonly RenderRule[], opts: { signal?: AbortSignal; outDir: string; maxChars?: number; authProfile?: string; rulePack?: string; screenshot?: boolean }): Promise<BrowserSnapshotResult>
-  searchResults(url: string, spec: { item: string; title: string; link: string; text?: string }, opts?: { signal?: AbortSignal; count?: number; waitMs?: number; cookies?: { name: string; value: string; domain: string; path: string }[]; authProfile?: string; rulePack?: string }): Promise<BrowserSearchItem[]>
-  opencli(args: string[], opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<BrowserCliResult>
-  close(): Promise<void>
-}
+export type BrowserService = Pick<
+  DshBrowserService,
+  'render' | 'snapshot' | 'searchResults' | 'opencli' | 'close'
+>
