@@ -9,7 +9,7 @@
 | 插件发布通道 | DSH 基线 | 兼容承诺 |
 |---|---|---|
 | npm `latest`（当前正式发布插件） | `dsh-v0.1.1-rc.2` | 已验证维护基线 |
-| npm `next` 候选（`0.1.12-alpha.5`） | `dsh-v0.1.5-alpha.1` | 精确依赖与真实 profile 验收目标 |
+| npm `next` 候选（`0.1.13-alpha.2`） | `dsh-v0.1.5-alpha.1` | 精确依赖与真实 profile 验收目标 |
 | 后续 DSH 正式版 | 尚未发布 | 发布并完成真实 profile 门禁后再声明兼容 |
 
 开发版不会覆盖 npm `latest`。`0.1.5-alpha.1` 依赖按精确版本锁定；该版本已移除
@@ -217,4 +217,3 @@ web_platform_search 就能直接搜它——不需要改代码：
           authProfile: forum
 
 旧版 `customPlatforms.*.cookie` 仍兼容，但会让 Cookie 明文进入配置；新配置应使用 dsh-browser 的命名 AuthProfile，状态文件不要提交到仓库。
-

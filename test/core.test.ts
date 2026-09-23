@@ -6,7 +6,7 @@ import path from 'node:path'
 import { createSearchCacheKey, createPlatformCacheKey } from '../src/cache-key.ts'
 import { assertSafePublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect } from '../src/safe-http.ts'
 import { ExaClient } from '../src/exa-client.ts'
-import { exaEngine, jinaSearchEngine, parseMcporterExaSearch } from '../src/engines.ts'
+import { exaEngine, jinaSearchEngine, parseMcporterExaSearch, youtubeEngine } from '../src/engines.ts'
 import { BackendRegistry } from '../src/backend-registry.ts'
 import { Store } from '../src/store.ts'
 import { SearchRouter } from '../src/router.ts'
@@ -233,6 +233,24 @@ test('external CLI output can be decoded as GB18030 after byte collection', asyn
     assert.equal(result.stdout, '中文')
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('YouTube CLI requests UTF-8 on Windows and preserves Chinese titles', async () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  let requestedEncoding: string | undefined
+  try {
+    Object.defineProperty(process, 'platform', { ...originalPlatform, value: 'win32' })
+    const engine = youtubeEngine({ enableCli: true } as never, async (bin, _args, opts) => {
+      assert.equal(bin, 'yt-dlp')
+      requestedEncoding = opts.outputEncoding
+      return { code: 0, stdout: 'abc123\t中文标题\t中文频道\t100\t01:00\n', stderr: '', timedOut: false }
+    })
+    const result = await engine.search('中文', 1)
+    assert.equal(requestedEncoding, 'utf-8')
+    assert.equal(result.sources[0]?.title, '中文标题')
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform)
   }
 })
 
