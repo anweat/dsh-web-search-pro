@@ -483,14 +483,14 @@ export function v2exEngine(allowProxyFakeIp = false): Engine {
 
 // ── YouTube (yt-dlp search) ─────────────────────────────────────────────────
 
-export function youtubeEngine(deps: EngineDeps): Engine {
+export function youtubeEngine(deps: EngineDeps, cli: typeof runCli = runCli): Engine {
   return {
     id: 'youtube',
     label: 'YouTube (yt-dlp)',
     available: () => deps.enableCli,
     async search(query, count, signal) {
       const n = Math.min(count, 10)
-      const res = await runCli('yt-dlp', ['ytsearch' + n + ':' + query, '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration_string)s'], { timeoutMs: 60_000, signal, outputEncoding: process.platform === 'win32' ? 'gb18030' : 'utf-8' })
+      const res = await cli('yt-dlp', ['ytsearch' + n + ':' + query, '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration_string)s'], { timeoutMs: 60_000, signal, outputEncoding: 'utf-8' })
       if (res.code !== 0) throw new EngineError('yt-dlp failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
       const sources: WebSearchSource[] = []
       for (const line of res.stdout.split(/\r?\n/)) {
@@ -753,4 +753,3 @@ export function isPlatformSupported(platform: string, customPlatforms?: Record<s
   return PLATFORM_IDS.includes(platform as typeof PLATFORM_IDS[number])
     || Object.hasOwn(customPlatforms ?? {}, platform)
 }
-

@@ -5,6 +5,7 @@
  * @module web-search-pro/engines
  */
 import type { WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web';
+import { runCli } from './util.ts';
 import type { BrowserService } from './browser-service.ts';
 import type { CustomPlatformSpec } from './config.ts';
 import { type ExaSearchRequest } from './exa-client.ts';
@@ -74,7 +75,7 @@ export declare function biliSearchArgs(query: string, count: number): string[];
 /** Parse and validate bili-cli's versioned JSON envelope. */
 export declare function parseBilibiliSearchOutput(output: string): WebSearchSource[];
 export declare function v2exEngine(allowProxyFakeIp?: boolean): Engine;
-export declare function youtubeEngine(deps: EngineDeps): Engine;
+export declare function youtubeEngine(deps: EngineDeps, cli?: typeof runCli): Engine;
 export declare function opencliEngine(platform: string, deps: EngineDeps): Engine;
 export declare function agentReachEngine(platform: string, deps: EngineDeps): Engine;
 export declare function arxivEngine(allowProxyFakeIp?: boolean): Engine;
