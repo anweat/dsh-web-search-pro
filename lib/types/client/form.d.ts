@@ -1,5 +1,5 @@
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store';
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { Context } from './context-types.ts';
 export type SettingField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose';
 export type CredentialId = 'exa' | 'jina' | 'github';
@@ -49,7 +49,7 @@ export declare class WebSearchSettingsController {
     private credentialGeneration;
     private credentialRefSignature;
     private credentialStates;
-    constructor(scope: SettingsScope<Record<string, unknown>>, ctx: Context);
+    constructor(scope: ConfigForm<Record<string, unknown>>, ctx: Context);
     inject(): {
         hooks: {
             webSearchPro: SnapshotStore<WebSearchCardState>;

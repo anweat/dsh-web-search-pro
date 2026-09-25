@@ -1,5 +1,5 @@
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { Context } from './context-types.ts'
 
 export type SettingField =
@@ -201,7 +201,7 @@ export class WebSearchSettingsController {
   }
 
   constructor(
-    private readonly scope: SettingsScope<Record<string, unknown>>,
+    private readonly scope: ConfigForm<Record<string, unknown>>,
     private readonly ctx: Context,
   ) {
     this.store = createLocalStore(this.project())
