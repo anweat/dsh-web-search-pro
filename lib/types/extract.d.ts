@@ -1,7 +1,8 @@
 /**
  * Userscript-style page extraction ("脚本猫/油猴" inspired): declarative
- * per-hostname rules (content + removal selectors) applied over a jsdom
- * parse, with generic readability fallbacks and a DOM→text walker.
+ * per-hostname rules (content + removal selectors) applied over a
+ * node-html-parser parse, with generic readability fallbacks and a DOM→text
+ * walker.
  * Built-in rules cover common Chinese/global sites; users can add persistent
  * rules through the web_rule tool (stored in SQLite).
  * @module web-search-pro/extract

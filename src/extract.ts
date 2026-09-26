@@ -1,13 +1,14 @@
 /**
  * Userscript-style page extraction ("脚本猫/油猴" inspired): declarative
- * per-hostname rules (content + removal selectors) applied over a jsdom
- * parse, with generic readability fallbacks and a DOM→text walker.
+ * per-hostname rules (content + removal selectors) applied over a
+ * node-html-parser parse, with generic readability fallbacks and a DOM→text
+ * walker.
  * Built-in rules cover common Chinese/global sites; users can add persistent
  * rules through the web_rule tool (stored in SQLite).
  * @module web-search-pro/extract
  */
 
-import { jsdom, stripTags } from './util.ts'
+import { parseDocument, stripTags } from './util.ts'
 
 /** Backtick character (kept in a constant so fenced code blocks stay readable). */
 const BT = String.fromCharCode(96)
@@ -76,6 +77,37 @@ const SKIP_TAGS = new Set([
   'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'NAV', 'FORM', 'META', 'LINK',
 ])
 
+/**
+ * Flattened text of a subtree, matching DOM `textContent` semantics.
+ *
+ * node-html-parser parses `<pre>`/`<code>` bodies as RAW TEXT, so `textContent`
+ * returns inner MARKUP rather than flattened text (for
+ * `<pre><code>x</code></pre>` it yields `"<code>x</code>"` where a real DOM
+ * yields `"x"`). Those tags are re-parsed from `rawText`, which holds the
+ * ORIGINAL escaped source — so nested elements are walked normally while
+ * escaped lookalikes (`&lt;tag&gt;`) still decode to text, exactly as a DOM does.
+ * @param node - any parsed node.
+ * @returns flattened descendant text.
+ */
+function rawText(node: any): string {
+  if (!node) return ''
+  if (node.nodeType === 3) return node.textContent ?? ''
+  const tag = (node.tagName ?? '').toUpperCase()
+  if (tag === 'PRE' || tag === 'CODE') {
+    const source = node.rawText ?? node.rawContent ?? ''
+    if (typeof source === 'string' && source.length > 0) {
+      try {
+        const fragment: any = parseDocument(source)
+        const nodes: any[] = fragment.body?.childNodes ?? []
+        let out = ''
+        for (let i = 0; i < nodes.length; i++) out += rawText(nodes[i])
+        return out
+      } catch { /* fall through to textContent */ }
+    }
+  }
+  return node.textContent ?? ''
+}
+
 /** Convert one DOM element subtree to readable text. */
 function elementToText(node: any, depth: number): string {
   if (depth > 40) return ''
@@ -86,14 +118,14 @@ function elementToText(node: any, depth: number): string {
   const tag = (node.tagName ?? '').toUpperCase()
   if (SKIP_TAGS.has(tag)) return ''
   if (tag === 'PRE') {
-    const code = (node.textContent ?? '').replace(/^\n+|\n+$/g, '')
+    const code = rawText(node).replace(/^\n+|\n+$/g, '')
     return '\n' + BT.repeat(3) + '\n' + code + '\n' + BT.repeat(3) + '\n'
   }
   if (tag === 'CODE') {
-    return BT + (node.textContent ?? '') + BT
+    return BT + rawText(node) + BT
   }
   if (tag === 'A') {
-    const text = (node.textContent ?? '').trim()
+    const text = rawText(node).trim()
     const href = node.getAttribute?.('href') ?? ''
     if (!text) return ''
     if (/^https?:\/\//i.test(href) && href.length < 300) return '[' + text + '](' + href + ')'
@@ -167,16 +199,16 @@ export interface ExtractResult {
  * @param maxChars - output cap.
  */
 export function extractText(html: string, url: string, rules: readonly ExtractRule[], maxChars = 200_000): ExtractResult {
-  let dom: any
+  let document: ReturnType<typeof parseDocument>
   try {
-    dom = new jsdom(html, { url })
+    document = parseDocument(html)
   } catch {
     return { title: '', text: stripRough(html).slice(0, maxChars), usedRule: undefined }
   }
-  const document = dom.window.document
   let title = document.title?.trim() ?? ''
   const og = document.querySelector('meta[property="og:title"]')
-  if (og?.content && og.content.trim().length > title.length) title = og.content.trim()
+  const ogContent = og?.getAttribute?.('content') ?? ''
+  if (ogContent.trim().length > title.length) title = ogContent.trim()
   const h1 = document.querySelector('h1')
   if (h1 && !title && (h1.textContent ?? '').trim()) title = h1.textContent.trim()
 
