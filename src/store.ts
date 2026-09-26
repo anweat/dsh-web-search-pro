@@ -112,7 +112,7 @@ const PAGE_COLUMNS = 'id, query_id AS queryId, url, title, text, html_path AS ht
 export class Store {
   private db: DatabaseSync
 
-  constructor(readonly dbPath: string) {
+  constructor(readonly dbPath: string, opts: { currentSearchCacheKeyPrefix?: string } = {}) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
     this.db = new DatabaseSync(dbPath)
     this.db.exec('PRAGMA journal_mode = WAL')
@@ -160,17 +160,6 @@ export class Store {
       'INSERT OR REPLACE INTO queries (id, kind, query, engine, platform, url, status, ts, detail, cache_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).run(id, input.kind, input.query ?? null, input.engine ?? null, input.platform ?? null, input.url ?? null, input.status, ts, input.detail ?? null, input.cacheKey ?? null)
     return id
-  }
-
-  /** Look up a fresh cached search by (engine, normalized query). */
-  getCachedSearch(engine: string, normQuery: string, ttlSeconds: number): { id: string; detail?: string } | undefined {
-    const row = this.db.prepare(
-      `SELECT id, detail FROM queries
-       WHERE kind = 'search' AND engine = ? AND query = ? AND status = 'ok'
-         AND ts > ? ORDER BY ts DESC LIMIT 1`,
-    ).get(engine, normQuery, new Date(Date.now() - ttlSeconds * 1000).toISOString()) as { id: string; detail: string | null } | undefined
-    if (!row) return undefined
-    return { id: row.id, ...row.detail != null ? { detail: row.detail } : {} }
   }
 
   /** Look up a fresh cached operation by kind and its complete input fingerprint. */
@@ -295,6 +284,27 @@ export class Store {
       removed = { queries: rows.length, results: r.c, pages: p.c }
     }
     return removed
+  }
+
+  /**
+   * Purge search rows minted with an older cache-key version (e.g. ddg results
+   * saved before the snippet-regex fix). Called once at startup so stale
+   * titles-only rows are never replayed from the persistent cache.
+   */
+  cleanupLegacySearchCache(currentPrefix: string): { queries: number; results: number } {
+    const stale = this.db.prepare(
+      `SELECT id FROM queries WHERE kind = 'search' AND (cache_key IS NULL OR cache_key NOT LIKE ?)`,
+    ).all(currentPrefix + '%') as unknown as { id: string }[]
+    let removedResults = 0
+    if (stale.length) {
+      const placeholders = stale.map(() => '?').join(', ')
+      const r = this.db.prepare(`SELECT COUNT(*) AS c FROM results WHERE query_id IN (${placeholders})`).get(...stale.map(s => s.id)) as { c: number }
+      removedResults = r.c
+      this.db.prepare(`DELETE FROM pages WHERE query_id IN (${placeholders})`).run(...stale.map(s => s.id))
+      this.db.prepare(`DELETE FROM results WHERE query_id IN (${placeholders})`).run(...stale.map(s => s.id))
+      this.db.prepare(`DELETE FROM queries WHERE id IN (${placeholders})`).run(...stale.map(s => s.id))
+    }
+    return { queries: stale.length, results: removedResults }
   }
 
   private removeQuery(id: string): void {

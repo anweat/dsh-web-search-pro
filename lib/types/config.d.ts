@@ -90,7 +90,143 @@ export interface Config {
     };
     verbose: boolean;
 }
-export declare const Config: z<Config>;
+export declare const Config: z<Schemastery.ObjectS<NoInfer<{
+    dbPath: z<string, string, "plain">;
+    ttlSeconds: z<number, number, "volatile-defined">;
+    memoryCacheEntries: z<number, number, "defined">;
+    rrfConstant: z<number, number, "volatile-defined">;
+    freshnessBoost: z<number, number, "volatile-defined">;
+    freshnessDays: z<number, number, "volatile-defined">;
+    authorityBoost: z<number, number, "volatile-defined">;
+    authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    searchMaxResults: z<number, number, "volatile-defined">;
+    timeoutMs: z<number, number, "defined">;
+    allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
+    engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    parallelEngines: z<boolean, boolean, "volatile-defined">;
+    exaApiKey: z<string, string, "volatile">;
+    exaApiKeyEnv: z<string, string, "volatile-defined">;
+    jinaApiKey: z<string, string, "volatile">;
+    jinaApiKeyEnv: z<string, string, "volatile-defined">;
+    githubToken: z<string, string, "volatile">;
+    githubTokenEnv: z<string, string, "volatile-defined">;
+    enableCliBackends: z<boolean, boolean, "volatile-defined">;
+    opencliEnabled: z<boolean, boolean, "volatile-defined">;
+    agentReachEnabled: z<boolean, boolean, "volatile-defined">;
+    providerId: z<string, string, "defined">;
+    registerProvider: z<boolean, boolean, "defined">;
+    platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    customPlatforms: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        name?: string | null | undefined;
+        url?: string | null | undefined;
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+        cookie?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        name: z<string, string, "plain">;
+        url: z<string, string, "plain">;
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+        cookie: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    browserBindings: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        authProfile?: string | null | undefined;
+        rulePack?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        authProfile: z<string, string, "plain">;
+        rulePack: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    playwright: z<Schemastery.ObjectS<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "plain">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "plain">;
+    }>>, "plain">;
+    verbose: z<boolean, boolean, "defined">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    dbPath: z<string, string, "plain">;
+    ttlSeconds: z<number, number, "volatile-defined">;
+    memoryCacheEntries: z<number, number, "defined">;
+    rrfConstant: z<number, number, "volatile-defined">;
+    freshnessBoost: z<number, number, "volatile-defined">;
+    freshnessDays: z<number, number, "volatile-defined">;
+    authorityBoost: z<number, number, "volatile-defined">;
+    authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    searchMaxResults: z<number, number, "volatile-defined">;
+    timeoutMs: z<number, number, "defined">;
+    allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
+    engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    parallelEngines: z<boolean, boolean, "volatile-defined">;
+    exaApiKey: z<string, string, "volatile">;
+    exaApiKeyEnv: z<string, string, "volatile-defined">;
+    jinaApiKey: z<string, string, "volatile">;
+    jinaApiKeyEnv: z<string, string, "volatile-defined">;
+    githubToken: z<string, string, "volatile">;
+    githubTokenEnv: z<string, string, "volatile-defined">;
+    enableCliBackends: z<boolean, boolean, "volatile-defined">;
+    opencliEnabled: z<boolean, boolean, "volatile-defined">;
+    agentReachEnabled: z<boolean, boolean, "volatile-defined">;
+    providerId: z<string, string, "defined">;
+    registerProvider: z<boolean, boolean, "defined">;
+    platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    customPlatforms: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        name?: string | null | undefined;
+        url?: string | null | undefined;
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+        cookie?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        name: z<string, string, "plain">;
+        url: z<string, string, "plain">;
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+        cookie: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    browserBindings: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        authProfile?: string | null | undefined;
+        rulePack?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        authProfile: z<string, string, "plain">;
+        rulePack: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    playwright: z<Schemastery.ObjectS<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "plain">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "plain">;
+    }>>, "plain">;
+    verbose: z<boolean, boolean, "defined">;
+}>>, "plain">;
 export interface ResolvedConfig extends Config {
     dbPath: string;
     exaApiKey?: string;
@@ -102,5 +238,5 @@ export interface ResolvedConfig extends Config {
 }
 /** Default database path under the harness home. */
 export declare function defaultDbPath(): string;
-/** Resolve a fully-defaulted config from user input. */
+/** Resolve a fully-defaulted config from user input. Unwraps volatile fields (schemastery `Volatile<T>`) into plain values so consumers never see the wrapper. */
 export declare function resolveConfig(config: Config): ResolvedConfig;

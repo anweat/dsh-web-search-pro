@@ -23,6 +23,7 @@ import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-settings'
 import { Config, resolveConfig, type ResolvedConfig } from './config.ts'
+import { SEARCH_CACHE_VERSION } from './cache-key.ts'
 import { Store } from './store.ts'
 import type { BrowserService } from './browser-service.ts'
 import { SearchRouter } from './router.ts'
@@ -49,33 +50,27 @@ export function apply(ctx: Context, config: Config): void {
   const dbPath = resolved.dbPath
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
-  // 1. Persistent store (closed on plugin unload).
+  // 1. Persistent store (closed on plugin unload). On startup, purge search
+  //    rows minted with an older cache-key version so stale titles-only ddg
+  //    results saved before the snippet-regex fix are never replayed.
   const store = new Store(dbPath)
+  try {
+    const purged = store.cleanupLegacySearchCache('search:v' + SEARCH_CACHE_VERSION + ':')
+    if (purged.queries > 0) ctx.logger?.(name).info('web-search-pro: purged ' + purged.queries + ' legacy search rows (' + purged.results + ' results) from cache-key v<=' + (SEARCH_CACHE_VERSION - 1))
+  } catch { /* non-fatal */ }
   ctx.effect(() => () => store.close())
 
   // 2. Browser service (provided by dsh-browser; inject: ['browser']).
   const browser = ctx.get('browser') as BrowserService
 
-  // 3. Hot-reloadable config source: while a settings service exists, the
-  //    $DSH_HOME/settings.yaml `web-search-pro:` section (validated against the
-  //    same schema) overlays this composition entry and every operation re-reads
-  //    it — edit keys/engines in the file without touching cordis.yml.
-  // Use the provider's registration API across Host versions; standalone
-  // settings helper exports were removed in newer Hosts.
-  // Stable accessor over a mutable source ref: settings attach/detach swaps
-  // the source thunk, while router/fetch/tools all
-  // hold the SAME stable `dynamic` closure that dereferences it per call —
-  // so hot-reloaded sections reach every consumer.
-  let resolveSource: () => ResolvedConfig = () => resolved
-  const dynamic = (): ResolvedConfig => resolveSource()
-  ctx.inject(['settings'], (settingsCtx) => {
-    const settings = settingsCtx.settings as unknown as {
-      register: (ns: string, schema: typeof Config, options: { base: ResolvedConfig; applies: string }) => { get: () => Config }
-    }
-    const scope = settings.register('web-search-pro', Config, { base: resolved, applies: 'live' })
-    resolveSource = () => resolveConfig(scope.get())
-    settingsCtx.effect(() => () => { resolveSource = () => resolved })
-  })
+  // 3. Hot-reloadable config source. The plugin's Config schema marks live
+  //    fields `volatile()` (schemastery), so the Host re-resolves this entry's
+  //    config in place on every profile-patch edit and the fiber's `config`
+  //    object reflects the new values without a remount. Every operation
+  //    therefore reads through the SAME stable `dynamic` closure that
+  //    dereferences the live config per call — hot-reloaded sections reach
+  //    every consumer. (Hosts without volatile support keep the startup value.)
+  const dynamic = (): ResolvedConfig => resolveConfig(ctx.fiber.config as Config)
 
   // 4. Services.
   const router = new SearchRouter(ctx, resolved, store, dynamic, browser)

@@ -1,4 +1,5 @@
 export declare const zh: {
+    readonly tab: "Web Search Pro";
     readonly title: "Web Search Pro";
     readonly description: "搜索引擎、凭据、OpenCLI、Playwright、缓存与平台规则";
     readonly expand: "展开";

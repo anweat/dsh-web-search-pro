@@ -1,7 +1,7 @@
 /**
  * Shared helpers for the dsh-web-search-pro plugin (published bundle).
- * Dependencies (js-yaml, jsdom) are normal npm imports; playwright resolves
- * from the global npm root or config playwright.modulePath.
+ * Dependencies (js-yaml, node-html-parser) are normal npm imports; playwright
+ * resolves from the global npm root or config playwright.modulePath.
  * @module dsh-web-search-pro/util
  */
 
@@ -11,14 +11,39 @@ import crypto from 'node:crypto'
 import path from 'node:path'
 import crossSpawn from 'cross-spawn'
 import { load as yamlLoad } from 'js-yaml'
-import { JSDOM } from 'jsdom'
+import { parse as parseHtml } from 'node-html-parser'
 import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect } from './safe-http.ts'
 
 /** js-yaml parser (npm dep). */
 export const jsYaml: { load(input: string): unknown } = { load: (input: string) => yamlLoad(input) }
 
-/** jsdom constructor (npm dep) for HTML parsing in extraction rules. */
-export const jsdom: { new (html: string, options?: Record<string, unknown>): { window: { document: any } } } = JSDOM as never
+/**
+ * Parse an HTML document into a queryable DOM.
+ *
+ * Deliberately NOT jsdom: jsdom depends on whatwg-url -> tr46, whose
+ * `require('punycode/')` cannot be routed by dsh 0.1.7's CJS resolution
+ * router (the router derives search paths from `createRequire().resolve.paths`,
+ * which reports builtin-shadowed names as unresolvable), so any plugin
+ * importing jsdom fails to load on dsh 0.1.7-rc.2. node-html-parser has a
+ * tiny dependency tree (entities + css-select) with no such require.
+ *
+ * The returned object mimics the small slice of the DOM API the extractor
+ * uses: `document.querySelector(All)`, `document.body`, `document.title`,
+ * `nodeType`, `tagName`, `childNodes`, `textContent`, `getAttribute`, `remove`.
+ * @param html - raw HTML source.
+ * @returns a document-like root node.
+ */
+export function parseDocument(html: string): { title: string; body: any; querySelector(sel: string): any; querySelectorAll(sel: string): any[] } {
+  const root: any = parseHtml(html, { comment: false })
+  const body = root.querySelector('body') ?? root
+  const title = root.querySelector('title')?.textContent?.trim() ?? ''
+  return {
+    title,
+    body,
+    querySelector: (sel: string) => root.querySelector(sel),
+    querySelectorAll: (sel: string) => root.querySelectorAll(sel),
+  }
+}
 
 let cachedPlaywright: any | undefined
 

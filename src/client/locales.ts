@@ -1,4 +1,5 @@
 export const zh = {
+  tab: 'Web Search Pro',
   title: 'Web Search Pro',
   description: '搜索引擎、凭据、OpenCLI、Playwright、缓存与平台规则',
   expand: '展开', collapse: '收起', unsaved: '未保存', readOnly: '当前设置文档为只读，无法保存修改。',
@@ -39,6 +40,7 @@ export const zh = {
 } as const
 
 export const en: Record<keyof typeof zh, string> = {
+  tab: 'Web Search Pro',
   title: 'Web Search Pro', description: 'Search engines, credentials, OpenCLI, Playwright, cache, and platform rules',
   expand: 'Expand', collapse: 'Collapse', unsaved: 'Unsaved', readOnly: 'The settings document is read-only.',
   searchSection: 'Search strategy', searchSectionHint: 'Control default engines, fusion, and per-call budgets.',

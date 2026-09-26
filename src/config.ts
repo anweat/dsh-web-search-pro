@@ -92,29 +92,38 @@ export interface Config {
   verbose: boolean
 }
 
-export const Config: z<Config> = z.object({
+// The volatile() modifier changes each live field's output type to
+// Volatile<T> (a readonly array-like snapshot with get()), which is not
+// structurally assignable to the plain input shape. Cordis only reads
+// `~standard`/`toJSON` from the runtime object, so the annotation stays
+// untyped and the exact volatile wrapper shape is left to inference.
+// The cosmokit import below exists solely so the emitted .d.ts can name the
+// inferred Volatile types without a non-portable pnpm path reference.
+import type { Volatile } from '@deepseek-ai/cosmokit'
+void ({} as Volatile<unknown>)
+export const Config = z.object({
   dbPath: z.string(),
-  ttlSeconds: z.number().default(3600),
+  ttlSeconds: z.number().default(3600).volatile(),
   memoryCacheEntries: z.number().default(128),
-  rrfConstant: z.number().default(60),
-  freshnessBoost: z.number().default(0.2),
-  freshnessDays: z.number().default(30),
-  authorityBoost: z.number().default(0.25),
-  authorityDomains: z.array(z.string()).default([]),
-  searchMaxResults: z.number().default(8),
+  rrfConstant: z.number().default(60).volatile(),
+  freshnessBoost: z.number().default(0.2).volatile(),
+  freshnessDays: z.number().default(30).volatile(),
+  authorityBoost: z.number().default(0.25).volatile(),
+  authorityDomains: z.array(z.string()).default([]).volatile(),
+  searchMaxResults: z.number().default(8).volatile(),
   timeoutMs: z.number().default(30_000),
-  allowProxyFakeIp: z.boolean().default(false),
-  engines: z.array(z.string()).default(['ddg', 'bing', 'exa', 'seam', 'jina']),
-  parallelEngines: z.boolean().default(false),
-  exaApiKey: z.string().role('secret'),
-  exaApiKeyEnv: z.string().default('EXA_API_KEY'),
-  jinaApiKey: z.string().role('secret'),
-  jinaApiKeyEnv: z.string().default('JINA_API_KEY'),
-  githubToken: z.string().role('secret'),
-  githubTokenEnv: z.string().default('GITHUB_TOKEN'),
-  enableCliBackends: z.boolean().default(true),
-  opencliEnabled: z.boolean().default(true),
-  agentReachEnabled: z.boolean().default(true),
+  allowProxyFakeIp: z.boolean().default(false).volatile(),
+  engines: z.array(z.string()).default(['ddg', 'bing', 'exa', 'seam', 'jina']).volatile(),
+  parallelEngines: z.boolean().default(false).volatile(),
+  exaApiKey: z.string().role('secret').volatile(),
+  exaApiKeyEnv: z.string().default('EXA_API_KEY').volatile(),
+  jinaApiKey: z.string().role('secret').volatile(),
+  jinaApiKeyEnv: z.string().default('JINA_API_KEY').volatile(),
+  githubToken: z.string().role('secret').volatile(),
+  githubTokenEnv: z.string().default('GITHUB_TOKEN').volatile(),
+  enableCliBackends: z.boolean().default(true).volatile(),
+  opencliEnabled: z.boolean().default(true).volatile(),
+  agentReachEnabled: z.boolean().default(true).volatile(),
   providerId: z.string().default('web-search-pro'),
   registerProvider: z.boolean().default(false),
   platformRules: z.dict(z.object({
@@ -122,7 +131,7 @@ export const Config: z<Config> = z.object({
     title: z.string(),
     link: z.string(),
     text: z.string(),
-  })),
+  })).volatile(),
   customPlatforms: z.dict(z.object({
     name: z.string(),
     url: z.string(),
@@ -130,14 +139,14 @@ export const Config: z<Config> = z.object({
     title: z.string(),
     link: z.string(),
     text: z.string(),
-    cookie: z.string(),
-  })),
+    cookie: z.string().role('secret'),
+  })).volatile(),
   browserBindings: z.dict(z.object({
     authProfile: z.string(),
     rulePack: z.string(),
-  })),
+  })).volatile(),
   playwright: z.object({
-    enabled: z.boolean().default(true),
+    enabled: z.boolean().default(true).volatile(),
     snapshotDir: z.string(),
   }),
   verbose: z.boolean().default(false),
@@ -153,25 +162,56 @@ export interface ResolvedConfig extends Config {
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
 }
 
+/** Read a possibly-volatile config field (schemastery `Volatile<T>` wraps live fields). */
+function v<T>(value: T | { get(): T }): T {
+  return value !== null && typeof value === 'object' && 'get' in value ? (value as { get(): T }).get() : (value as T)
+}
+
+/** Read a volatile field, defaulting when the field is absent. */
+function vOr<T>(value: T | { get(): T } | undefined, fallback: T): T {
+  if (value === undefined || value === null) return fallback
+  return v(value)
+}
+
 /** Default database path under the harness home. */
 export function defaultDbPath(): string {
   const home = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh')
   return path.join(home, 'data', 'web-search-pro', 'store.db')
 }
 
-/** Resolve a fully-defaulted config from user input. */
+/** Resolve a fully-defaulted config from user input. Unwraps volatile fields (schemastery `Volatile<T>`) into plain values so consumers never see the wrapper. */
 export function resolveConfig(config: Config): ResolvedConfig {
-  const dbPath = config.dbPath ?? defaultDbPath()
+  const dbPath = vOr(config.dbPath, defaultDbPath())
   const pw = config.playwright ?? {}
-  const snapshotDir = pw.snapshotDir ?? path.join(path.dirname(dbPath), 'snapshots')
+  const snapshotDir = vOr(pw.snapshotDir, path.join(path.dirname(dbPath), 'snapshots'))
   return {
     ...config,
     dbPath,
-    exaApiKeyEnv: config.exaApiKeyEnv ?? 'EXA_API_KEY',
-    jinaApiKeyEnv: config.jinaApiKeyEnv ?? 'JINA_API_KEY',
-    githubTokenEnv: config.githubTokenEnv ?? 'GITHUB_TOKEN',
+    ttlSeconds: vOr(config.ttlSeconds, 3600) as number,
+    memoryCacheEntries: vOr(config.memoryCacheEntries, 128) as number,
+    rrfConstant: vOr(config.rrfConstant, 60) as number,
+    freshnessBoost: vOr(config.freshnessBoost, 0.2) as number,
+    freshnessDays: vOr(config.freshnessDays, 30) as number,
+    authorityBoost: vOr(config.authorityBoost, 0.25) as number,
+    authorityDomains: vOr(config.authorityDomains, [] as string[]) as string[],
+    searchMaxResults: vOr(config.searchMaxResults, 8) as number,
+    allowProxyFakeIp: vOr(config.allowProxyFakeIp, false) as boolean,
+    engines: vOr(config.engines, ['ddg', 'bing', 'exa', 'seam', 'jina']) as string[],
+    parallelEngines: vOr(config.parallelEngines, false) as boolean,
+    exaApiKey: config.exaApiKey !== undefined ? v(config.exaApiKey) : undefined,
+    exaApiKeyEnv: vOr(config.exaApiKeyEnv, 'EXA_API_KEY') as string,
+    jinaApiKey: config.jinaApiKey !== undefined ? v(config.jinaApiKey) : undefined,
+    jinaApiKeyEnv: vOr(config.jinaApiKeyEnv, 'JINA_API_KEY') as string,
+    githubToken: config.githubToken !== undefined ? v(config.githubToken) : undefined,
+    githubTokenEnv: vOr(config.githubTokenEnv, 'GITHUB_TOKEN') as string,
+    enableCliBackends: vOr(config.enableCliBackends, true) as boolean,
+    opencliEnabled: vOr(config.opencliEnabled, true) as boolean,
+    agentReachEnabled: vOr(config.agentReachEnabled, true) as boolean,
+    platformRules: config.platformRules !== undefined ? v(config.platformRules) : undefined,
+    customPlatforms: config.customPlatforms !== undefined ? v(config.customPlatforms) : undefined,
+    browserBindings: config.browserBindings !== undefined ? v(config.browserBindings) : undefined,
     playwright: {
-      enabled: pw.enabled ?? true,
+      enabled: vOr(pw.enabled, true) as boolean,
       snapshotDir,
     },
   }

@@ -51,17 +51,14 @@ export interface RuleRecord {
 export declare class Store {
     readonly dbPath: string;
     private db;
-    constructor(dbPath: string);
+    constructor(dbPath: string, opts?: {
+        currentSearchCacheKeyPrefix?: string;
+    });
     close(): void;
     /** Record one operation (search / fetch / platform / snapshot). Returns its id. */
     recordQuery(input: Omit<QueryRecord, 'id' | 'ts'> & {
         id?: string;
     }): string;
-    /** Look up a fresh cached search by (engine, normalized query). */
-    getCachedSearch(engine: string, normQuery: string, ttlSeconds: number): {
-        id: string;
-        detail?: string;
-    } | undefined;
     /** Look up a fresh cached operation by kind and its complete input fingerprint. */
     getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): {
         id: string;
@@ -95,6 +92,15 @@ export declare class Store {
         queries: number;
         results: number;
         pages: number;
+    };
+    /**
+     * Purge search rows minted with an older cache-key version (e.g. ddg results
+     * saved before the snippet-regex fix). Called once at startup so stale
+     * titles-only rows are never replayed from the persistent cache.
+     */
+    cleanupLegacySearchCache(currentPrefix: string): {
+        queries: number;
+        results: number;
     };
     private removeQuery;
     /** Delete one query and its linked rows; returns exact counts when it existed. */

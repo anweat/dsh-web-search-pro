@@ -38,6 +38,8 @@ export interface RouterSearchResult {
     engine: string;
     enginesTried: string[];
     fromCache: boolean;
+    /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
+    fallbackNote?: string;
 }
 export declare class SearchRouter {
     private readonly ctx;

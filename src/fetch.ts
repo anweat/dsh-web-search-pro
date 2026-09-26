@@ -31,6 +31,28 @@ export interface FetchResult {
   fromCache: boolean
   statusCode?: number
   usedRule?: string
+  /** True when the page is a navigation/JS/form shell with no extractable data. */
+  shellPage?: boolean
+}
+
+/**
+ * Heuristic: a "shell" page looks like text but is really navigation — search
+ * forms, "look elsewhere" pointers, JS-only stubs. Signals: very little prose,
+ * a high link-to-text ratio, or explicit form/redirect phrasing. Returning true
+ * lets the tool tell the model to fetch one of the pointed-at URLs instead of
+ * re-fetching the same kind of page in a loop (P1-3).
+ */
+export function detectShellPage(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed || trimmed.length < 200) return true
+  const linkCount = (trimmed.match(/\[[^\]]*\]\([^)]*\)/g) ?? []).length
+  const words = trimmed.split(/\s+/).filter(Boolean).length
+  // Link-dense: more than one markdown link per ~15 words is navigation, not prose.
+  if (words > 0 && linkCount / words > 1 / 15) return true
+  // Explicit form/redirect phrasing with almost no other content.
+  const shellPhrases = /\b(search for|search by|look here|try searching|no results found|please (use|go to|visit)|enter (a |your )?(query|keyword)|data is (available|located) at)\b/i
+  if (shellPhrases.test(trimmed) && words < 250) return true
+  return false
 }
 
 /** Validate and normalize a URL for fetching. */
@@ -77,7 +99,8 @@ export class FetchService {
     const memoryKey = ['page', normalized, opts.mode, maxChars, opts.persist ? 'persist' : 'ephemeral'].join('|')
 
     if (!opts.fresh) {
-      const hot = this.memory.get(memoryKey, this.cfg().ttlSeconds * 1000)
+      const ttlMs = this.cfg().ttlSeconds * 1000
+      const hot = this.memory.get(memoryKey, ttlMs)
       if (hot) return { ...hot, fromCache: true }
       // Auto mode may reuse the freshest successful representation. An explicit
       // backend is a caller contract and must not silently replay another mode.
@@ -91,7 +114,9 @@ export class FetchService {
           fromCache: true,
           ...typeof cached.status === 'number' ? { statusCode: cached.status } : {},
         }
-        this.memory.set(memoryKey, page)
+        // Only re-warm the memory layer for auto mode: the key encodes the mode,
+        // so a stale-mode entry would shadow later explicit-mode hits.
+        if (opts.mode === 'auto') this.memory.set(memoryKey, page)
         return page
       }
     }
@@ -125,6 +150,10 @@ export class FetchService {
     if (!result) {
       throw new Error('all fetch backends failed for ' + normalized)
     }
+
+    // P1-3: flag navigation/JS/form shells so the model knows there is no data
+    // here and should follow the pointers instead of re-fetching the same page.
+    if (detectShellPage(result.text)) result.shellPage = true
 
     this.memory.set(memoryKey, result)
     if (opts.persist) {
