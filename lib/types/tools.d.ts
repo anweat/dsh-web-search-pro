@@ -10,6 +10,7 @@ import type { Store } from './store.ts';
 import { type BrowserGetter } from './browser-access.ts';
 import type { BrowserService } from './browser-service.ts';
 import type { ResolvedConfig } from './config.ts';
+import { EvidenceService } from './pipeline/service.ts';
 export interface ToolDeps {
     ctx: Context;
     config: ResolvedConfig;
@@ -20,6 +21,8 @@ export interface ToolDeps {
     fetch: FetchService;
     /** Optional dsh-browser service, read lazily at call time (fixed service accepted for tests). */
     browser?: BrowserService | BrowserGetter;
+    /** Evidence pipeline (built lazily from the other deps when omitted; tests inject doubles). */
+    evidence?: Pick<EvidenceService, 'search'>;
 }
 export declare function formatSources(sources: {
     url: string;

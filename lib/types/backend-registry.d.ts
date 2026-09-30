@@ -8,10 +8,13 @@ export interface BackendRunResult {
     lowQuality?: boolean;
     detail?: string;
 }
-/** Per-engine attempt record so callers can report *why* the router fell back. */
+/**
+ * Per-engine attempt record so callers can report *why* the router fell back.
+ * `skipped` = never ran: unknown, cooling down or failed its availability probe (not a runtime error).
+ */
 export interface BackendAttempt {
     id: string;
-    outcome: 'ok' | 'low-quality' | 'empty' | 'error';
+    outcome: 'ok' | 'low-quality' | 'empty' | 'skipped' | 'error';
     detail?: string;
 }
 export interface Backend<I, O> {
@@ -31,6 +34,12 @@ export declare class NoBackendError extends Error {
 }
 /** True when engines were tried and every one of them answered with a legitimate empty result. */
 export declare function allAttemptsEmpty(attempts: readonly BackendAttempt[]): boolean;
+/**
+ * True when no engine failed at runtime: every attempt was an empty answer or
+ * a skip (unavailable / cooldown / unknown). Such a search has nothing to
+ * report but no error either (dev-plan M2b decision).
+ */
+export declare function allAttemptsBenign(attempts: readonly BackendAttempt[]): boolean;
 export interface BackendDiagnostic {
     id: string;
     available: boolean;

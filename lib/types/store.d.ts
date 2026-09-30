@@ -48,6 +48,24 @@ export interface RuleRecord {
     createdAt: string;
     updatedAt: string;
 }
+export interface EvidenceBlockRow {
+    evidenceId: string;
+    runId: string;
+    url: string;
+    blockId: string;
+    heading?: string;
+    text: string;
+    hash?: string;
+    grade?: number;
+    scorer?: string;
+}
+export interface EvidenceRunRow {
+    id: string;
+    queryId?: string;
+    taskJson: string;
+    packJson: string;
+    createdAt: string;
+}
 /** Persistence health counters; never throws, safe to read after close. */
 export interface StoreDiagnostics {
     closed: boolean;
@@ -113,6 +131,34 @@ export declare class Store {
     recordFetch(input: Omit<QueryRecord, 'id' | 'ts'> & {
         id?: string;
     }, page: Omit<PageRecord, 'id' | 'fetchedAt' | 'queryId'>): string;
+    /**
+     * Atomically record an evidence-pipeline run: its history query + fused
+     * result rows, the run (task + pack JSON) and the selected blocks' full text
+     * (all or nothing). Returns the history query id.
+     */
+    recordEvidenceRun(input: {
+        query: Omit<QueryRecord, 'id' | 'ts'> & {
+            id?: string;
+        };
+        sources: {
+            url: string;
+            title?: string;
+            snippet?: string;
+            publishedAt?: string;
+            extra?: string;
+        }[];
+        engine: string;
+        run: {
+            id: string;
+            taskJson: string;
+            packJson: string;
+        };
+        blocks: readonly Omit<EvidenceBlockRow, 'runId'>[];
+    }): string;
+    evidenceBlock(evidenceId: string): EvidenceBlockRow | undefined;
+    evidenceRun(runId: string): EvidenceRunRow | undefined;
+    /** Newest stored page text for a URL, regardless of age (evidence expansion reads around a block). */
+    latestPage(url: string): PageRecord | undefined;
     /** Look up a fresh cached operation by kind and its complete input fingerprint. */
     getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): {
         id: string;
@@ -162,6 +208,8 @@ export declare class Store {
         results: number;
     };
     private cleanupLegacyRows;
+    /** Delete evidence runs matching `predicate` (over evidence_runs) and their blocks. */
+    private deleteEvidenceWhere;
     private removeQuery;
     /** Delete one query and its linked rows; returns exact counts when it existed. */
     deleteQuery(id: string): {

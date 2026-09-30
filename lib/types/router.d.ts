@@ -13,6 +13,8 @@ import type { BrowserService } from './browser-service.ts';
 import { type BrowserGetter } from './browser-access.ts';
 import { type BackendDiagnostic } from './backend-registry.ts';
 import { type ExaResult } from './exa-client.ts';
+import type { ProviderCall, ProviderOutcome } from './pipeline/run.ts';
+import type { ProviderStatus } from './pipeline/plan.ts';
 export interface RouterSearchOptions {
     query: string;
     /** Engine ids to try, in order. Defaults to config.engines. */
@@ -58,6 +60,20 @@ export declare class SearchRouter {
     constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | BrowserGetter, memory?: LruCache<RouterSearchResult>);
     backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]>;
     exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]>;
+    /** Resolve a secret by credentials ref / environment variable name (credentials service first, then env). */
+    resolveSecret(ref: string): Promise<string | undefined>;
+    /**
+     * Availability of engines for source planning: the registry's probe and
+     * cooldown state, without running a search. Ids the registry does not know are absent.
+     */
+    providerStatuses(ids: readonly string[]): Promise<Map<string, ProviderStatus>>;
+    /**
+     * Run ONE engine through the registry (probe, cooldown, quality gate,
+     * attempts) for the evidence pipeline. Not cached or persisted: the pipeline
+     * persists its fused result once. Cancellation is rethrown; every other
+     * outcome is a value.
+     */
+    runProvider(call: ProviderCall): Promise<ProviderOutcome>;
     /** Resolve a key through credentials first, then process env. */
     private resolveKey;
     private deps;
@@ -70,7 +86,10 @@ export declare class SearchRouter {
     /** Run a full search with caching + persistence. */
     search(opts: RouterSearchOptions): Promise<RouterSearchResult>;
     private runSearch;
-    /** All tried engines returned ENGINE_EMPTY and none errored: zero sources plus an explanation (never cached). */
+    /**
+     * No engine failed at runtime: each returned ENGINE_EMPTY or was skipped
+     * (unavailable / cooldown). Zero sources plus an explanation (never cached).
+     */
     private emptyResult;
     /** Platform search (web_platform_search tool) with the same cache+persist flow. */
     platformSearch(platform: string, query: string, url: string | undefined, count: number, opts: {

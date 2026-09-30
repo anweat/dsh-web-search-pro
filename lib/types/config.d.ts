@@ -21,6 +21,18 @@ export interface BrowserBinding {
     /** Named dsh-browser enhancement rule pack. */
     rulePack?: string;
 }
+/** Evidence-pipeline settings (web_search_pro with `task` / `profile`; dev-plan M2b). */
+export interface EvidenceConfig {
+    /**
+     * Scorer for S6 decisions. `jev` only takes effect with `jevMode: 'control'`:
+     * Jev is a paid hosted service, so it needs both keys turned.
+     */
+    scorer: 'rule' | 'jev';
+    /** `off`: never call Jev. `shadow`: the rule scorer decides, Jev scores are recorded for comparison. `control`: Jev decides when `scorer` is `jev`; any Jev failure falls back to the rule scorer. */
+    jevMode: 'off' | 'shadow' | 'control';
+    /** Upper bound of (need, block) questions sent to Jev per search. */
+    maxJevQuestions: number;
+}
 export interface Config {
     /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
     dbPath?: string;
@@ -95,6 +107,8 @@ export interface Config {
         /** Directory for web_snapshot artifacts; defaults to <dbDir>/snapshots. */
         snapshotDir?: string;
     };
+    /** Evidence pipeline (S6 scoring). */
+    evidence?: Partial<EvidenceConfig>;
     verbose: boolean;
 }
 export declare const Config: z<Schemastery.ObjectS<NoInfer<{
@@ -164,6 +178,15 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
         snapshotDir: z<string, string, "plain">;
     }>>, "plain">;
+    evidence: z<Schemastery.ObjectS<NoInfer<{
+        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        maxJevQuestions: z<number, number, "volatile-defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        maxJevQuestions: z<number, number, "volatile-defined">;
+    }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
     dbPath: z<string, string, "volatile">;
@@ -232,6 +255,15 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
         snapshotDir: z<string, string, "plain">;
     }>>, "plain">;
+    evidence: z<Schemastery.ObjectS<NoInfer<{
+        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        maxJevQuestions: z<number, number, "volatile-defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        maxJevQuestions: z<number, number, "volatile-defined">;
+    }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, "plain">;
 export interface ResolvedConfig extends Config {
@@ -242,6 +274,7 @@ export interface ResolvedConfig extends Config {
     jinaApiKeyEnv: string;
     githubTokenEnv: string;
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
+    evidence: EvidenceConfig;
 }
 /** Default database path under the harness home. */
 export declare function defaultDbPath(): string;

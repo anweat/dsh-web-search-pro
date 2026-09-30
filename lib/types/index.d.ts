@@ -95,6 +95,15 @@ declare const _default: {
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
         }>>, "plain">;
+        evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, "plain">;
         verbose: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
     }>>, Schemastery.ObjectT<NoInfer<{
         dbPath: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
@@ -162,6 +171,15 @@ declare const _default: {
         }>>, Schemastery.ObjectT<NoInfer<{
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, "plain">;
+        evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         }>>, "plain">;
         verbose: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
     }>>, "plain">;

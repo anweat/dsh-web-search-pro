@@ -22,8 +22,17 @@ export interface Constraint {
     strength: ConstraintStrength;
     origin: ConstraintOrigin;
 }
-/** Placeholder: the plan leaves BudgetProfile open (M2b fills it in). */
-export type BudgetProfile = Record<string, unknown>;
+/** Limits of one pipeline run; every field is optional and defaults live where it is used. */
+export interface BudgetProfile {
+    /** Total characters of evidence excerpts in the pack (default 6000). */
+    chars?: number;
+    /** Kept candidates whose pages are read (default 4). */
+    fetchTopK?: number;
+    /** Blocks from one URL in the pack (default 2). */
+    maxPerUrl?: number;
+    /** Overall wall-clock deadline in ms; partial results return when it passes. */
+    deadlineMs?: number;
+}
 export interface TaskSpec {
     /** Short goal, written by the calling model (never the full chat). */
     goal: string;
@@ -72,4 +81,106 @@ export interface Candidate {
     contributions: Contribution[];
     checks?: ConstraintCheck[];
     gate?: GateVerdict;
+}
+/** One addressable piece of a page (see blocks.ts). */
+export interface Block {
+    /** `b_` + 12 hex of sha1(url + ':' + start). Stable for the same url + text layout. */
+    blockId: string;
+    /** Heading path, `A > B > C`, when the block sits under a heading. */
+    heading?: string;
+    text: string;
+    /** Character offsets into the page `text`; `text === page.text.slice(start, end)`. */
+    start: number;
+    end: number;
+    /** 16 hex of sha1(text): detects drift when a page is re-fetched. */
+    hash: string;
+}
+/** A block together with the page it came from; the unit S6 scores and S7 selects. */
+export interface PageBlock {
+    candidateId: string;
+    url: string;
+    /** Candidate title, else the page title. */
+    title: string;
+    publishedAt?: string;
+    /** Provider ids that returned the URL (`ddg+bing`): provenance shown to the model as `source`. */
+    providers: string[];
+    block: Block;
+}
+/** `grade` is 0..3 (rule: integer buckets; Jev: the level expectation). `rank` is a finer tie-breaker. */
+export interface BlockGrade {
+    grade: number;
+    rank?: number;
+}
+export interface ScoredBlock extends PageBlock {
+    /** needId -> grade for the needs the block was scored against. */
+    grades: ReadonlyMap<string, BlockGrade>;
+}
+export interface EvidenceItem {
+    evidenceId: string;
+    blockId: string;
+    url: string;
+    title?: string;
+    excerpt: string;
+    /** Heading path of the block. */
+    heading?: string;
+    publishedAt?: string;
+    /** Needs the block supports, best first. */
+    needIds: string[];
+    /** Best grade over the needs (0..3). */
+    grade: number;
+    /** Provider ids that returned the page (`ddg+bing`). */
+    source: string;
+}
+export type GapReason = 'no_candidates' | 'no_page_content' | 'weak_support' | 'budget';
+export interface Gap {
+    needId: string;
+    text: string;
+    critical: boolean;
+    reason: GapReason;
+    bestGrade?: number;
+}
+export interface PackStats {
+    candidates: number;
+    kept: number;
+    fetched: number;
+    blocksScored: number;
+    excerptChars: number;
+    scorer: string;
+    /** Jev usage of this run (control or shadow). */
+    jev?: {
+        requests: number;
+        questions: number;
+        inputTokens: number;
+        outputTokens: number;
+        mode: 'control' | 'shadow';
+    };
+}
+export interface EvidencePack {
+    resultId: string;
+    profile: Profile;
+    /** Profile was inferred by rule (the caller gave none). */
+    profileInferred: boolean;
+    /** The needs the run was asked to cover (ids are what `needIds` / `coveredNeeds` / `gaps` refer to). */
+    needs: Need[];
+    evidence: EvidenceItem[];
+    /** Need ids with a selected block of grade >= 2. */
+    coveredNeeds: string[];
+    gaps: Gap[];
+    /** Fused kept candidates, best first (unshaped; the tool exit applies `shapeSources`). */
+    sources: {
+        url: string;
+        title?: string;
+        snippet?: string;
+        publishedAt?: string;
+    }[];
+    engine: string;
+    enginesTried: string[];
+    partial: boolean;
+    notes: string[];
+    /** Constraints enforced natively by at least one provider vs. verified locally only (`kind=value`). */
+    verification: {
+        native: string[];
+        local: string[];
+    };
+    stats: PackStats;
 }
