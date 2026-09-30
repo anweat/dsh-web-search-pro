@@ -34,8 +34,15 @@ export interface EvidenceConfig {
    * Jev is a paid hosted service, so it needs both keys turned.
    */
   scorer: 'rule' | 'jev'
-  /** `off`: never call Jev. `shadow`: the rule scorer decides, Jev scores are recorded for comparison. `control`: Jev decides when `scorer` is `jev`; any Jev failure falls back to the rule scorer. */
-  jevMode: 'off' | 'shadow' | 'control'
+  /**
+   * `off`: never call Jev. `shadow`: the rule scorer decides, Jev scores are recorded for comparison.
+   * `control`: Jev decides when `scorer` is `jev`; any Jev failure falls back to the rule scorer.
+   * `hybrid`: the rule scorer grades everything and Jev re-scores only the (need, block) pairs whose languages differ
+   * (plus rule-borderline ones with `hybridBorderline`), within `maxJevQuestions`; a Jev failure keeps the rule grades. Ignores `scorer`.
+   */
+  jevMode: 'off' | 'shadow' | 'control' | 'hybrid'
+  /** `hybrid` only: also let Jev re-score pairs whose rule grade is 1 (borderline), after the language-mismatch pairs. */
+  hybridBorderline: boolean
   /** Upper bound of (need, block) questions sent to Jev per search. */
   maxJevQuestions: number
 }
@@ -173,7 +180,8 @@ export const Config = z.object({
   }),
   evidence: z.object({
     scorer: z.union(['rule', 'jev']).default('rule').volatile(),
-    jevMode: z.union(['off', 'shadow', 'control']).default('off').volatile(),
+    jevMode: z.union(['off', 'shadow', 'control', 'hybrid']).default('off').volatile(),
+    hybridBorderline: z.boolean().default(false).volatile(),
     maxJevQuestions: z.number().default(64).volatile(),
   }),
   verbose: z.boolean().default(false).volatile(),
@@ -250,6 +258,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     evidence: {
       scorer: vOr(ev.scorer, 'rule') as EvidenceConfig['scorer'],
       jevMode: vOr(ev.jevMode, 'off') as EvidenceConfig['jevMode'],
+      hybridBorderline: vOr(ev.hybridBorderline, false) as boolean,
       maxJevQuestions: vOr(ev.maxJevQuestions, 64) as number,
     },
     verbose: vOr(config.verbose, false) as boolean,

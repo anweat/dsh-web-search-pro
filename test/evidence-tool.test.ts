@@ -266,6 +266,40 @@ test('evidence scorer config: off ignores Jev (and says so), missing key falls b
   } finally { half.cleanup() }
 })
 
+test('evidence.jevMode=hybrid: the rule scorer decides, only Chinese-need / English-block pairs go to Jev, failures keep the rule pack', async () => {
+  const args = { query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code', needs: '如何设置 busy timeout;如何开启 WAL 模式' }
+  const hybrid = evidenceHarness({ evidence: { jevMode: 'hybrid', maxJevQuestions: 3 }, secret: 'sk-secret' })
+  try {
+    const out = await hybrid.def.execute(args, { signal: undefined })
+    assert.equal(out.stats.scorer, 'hybrid')
+    assert.equal(out.stats.jev.mode, 'hybrid')
+    assert.ok(out.stats.jev.questions >= 1 && out.stats.jev.questions <= 3, 'maxJevQuestions caps the pairs the hybrid scorer sends: ' + out.stats.jev.questions)
+    const sent = hybrid.jevCalls.flatMap(c => Object.values(c.body.questions as Record<string, { instructions: string }>))
+    assert.equal(sent.length, out.stats.jev.questions)
+    assert.ok(sent.every(q => /需求：如何/.test(q.instructions)), 'only mismatching pairs were asked')
+    assert.equal(hybrid.jevCalls[0]!.headers.authorization, 'Bearer sk-secret')
+    assert.ok(!JSON.stringify(out).includes('sk-secret'))
+    assertFits(out, hybrid.def.output.schema)
+    assert.equal(hybrid.store.evidenceBlock(out.evidence[0].evidenceId)!.scorer, 'hybrid')
+  } finally { hybrid.cleanup() }
+
+  const noKey = evidenceHarness({ evidence: { jevMode: 'hybrid' }, secret: undefined })
+  try {
+    const out = await noKey.def.execute(args, { signal: undefined })
+    assert.equal(noKey.jevCalls.length, 0)
+    assert.equal(out.stats.scorer, 'rule')
+    assert.match(out.notes.join(' | '), /BOCHA_JEV_API_KEY.*rule scorer used/)
+  } finally { noKey.cleanup() }
+
+  const down = evidenceHarness({ evidence: { jevMode: 'hybrid', hybridBorderline: true }, secret: 'sk-secret', jev: () => new Response('{"detail":"nope"}', { status: 500 }) })
+  try {
+    const out = await down.def.execute(args, { signal: undefined })
+    assert.ok(out.evidence.length > 0, 'the search still answers with the rule grades')
+    assert.match(out.notes.join(' | '), /kept the rule grades/)
+    assert.ok(!JSON.stringify(out).includes('sk-secret'))
+  } finally { down.cleanup() }
+})
+
 test('a Jev outage never fails the search: rule fallback with a diagnostic note', async () => {
   const h = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'control' }, secret: 'sk-secret', jev: () => new Response('{"detail":"nope"}', { status: 401 }) })
   try {

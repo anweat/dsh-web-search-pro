@@ -4,9 +4,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { splitBlocks } from '../../src/pipeline/blocks.ts'
-import { JevScorer } from '../../src/pipeline/score.ts'
+import { HybridScorer, JevScorer } from '../../src/pipeline/score.ts'
 import {
-  approxTokens, evaluate, goldPairs, jevMisses, pageFetcher, providerOutputs, r1JevCache, renderReport, summarize,
+  approxTokens, evaluate, goldPairs, jevMisses, pageFetcher, providerOutputs, r1JevCache, renderReport, runStages, summarize,
   type EvalOptions, type LoadedTask, type TaskEval,
 } from '../src/eval-pack.ts'
 import { JudgeCache } from '../src/judges/cache.ts'
@@ -147,6 +147,11 @@ test('Jev arm: cache-only mode counts misses without any request, falls back per
     assert.equal(hot.tasks[0]!.jevStatus, 'answered')
     assert.equal(hot.tasks[0]!.jevRequests, 0)
     assert.equal(hot.tasks[0]!.jev!.retained, 1)
+    // an English need against English pages has no language mismatch: the hybrid arms ask Jev nothing and equal the aligned rule arm
+    assert.equal(hot.tasks[0]!.uses.hybrid!.status, 'answered')
+    assert.equal(hot.tasks[0]!.uses.hybrid!.questions, 0)
+    assert.equal(hot.tasks[0]!.hybrid!.retained, hot.tasks[0]!.ruleAligned.retained)
+    assert.equal(hot.tasks[0]!.uses.hybridB!.status, 'answered')
     assert.ok(hot.tasks[0]!.jevCacheHits >= questions.length)
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
@@ -165,4 +170,33 @@ test('report: sections and numbers render for a run with and without Jev', async
   assert.ok(!withJev.includes('NaN') && !withJev.includes('undefined'))
   const s = summarize([], t => t.rule)
   assert.equal(s.retention, undefined)
+})
+
+test('hybrid arms: a Chinese need against English pages costs Jev questions; cold requests are counted without any network; cached answers complete the arm', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-evalpack-'))
+  try {
+    const f = fixture()
+    f.task = { ...f.task, lang: 'zh', needs: [{ id: 'n1', text: '如何在 node:sqlite 中设置 busy timeout', critical: true }, { id: 'n2', text: '量子引力格点理论', critical: false }] }
+    const opts: EvalOptions = { ...OPTS, jev: true, jevRoot: root }
+    const cold = await evaluate([f], opts)
+    const t = cold.tasks[0]!
+    assert.equal(t.uses.hybrid!.status, 'fallback', 'unanswered questions and no allowance: the arm keeps the rule grades and is excluded')
+    assert.ok(t.uses.hybrid!.cold >= 1 && t.uses.hybrid!.requests === 0 && t.uses.hybrid!.misses > 0)
+    assert.ok(t.uses.jev!.cold >= t.uses.hybrid!.cold, 'Jev on every pair never needs fewer requests than Jev on mismatches only')
+    assert.equal(t.hybrid!.retained, t.ruleAligned.retained, 'fallback = aligned rule pack')
+    // answer exactly the hybrid questions from the cache, then the arm completes
+    const cache = r1JevCache(root)
+    const questions: { state: string; need: string; candidate: string }[] = []
+    const recorder = new JevScorer({ apiKey: 'offline', requestCap: 0, cache: { get: p => { questions.push(p); return undefined }, set() {} }, fetchImpl: (async () => { throw new Error('offline') }) as never })
+    await runStages(f, opts, new HybridScorer({ jev: recorder }))
+    assert.ok(questions.length > 0)
+    for (const q of questions) cache.set(q, { grade: 3 })
+    const hot = await evaluate([f], opts)
+    assert.equal(hot.tasks[0]!.uses.hybrid!.status, 'answered')
+    assert.equal(hot.tasks[0]!.uses.hybrid!.questions, questions.length)
+    assert.equal(hot.tasks[0]!.uses.hybrid!.misses, 0)
+    const md = renderReport({ runId: 't', tasks: hot.tasks, opts, jevRequests: 0, generatedAt: 'now' })
+    assert.ok(!md.includes('NaN') && !md.includes('undefined'))
+    assert.ok(md.includes('(b′) 管线 + 规则评分（跨语言对齐）') && md.includes('(d) 混合') && md.includes('(d′) 混合 + 规则边界对'))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })

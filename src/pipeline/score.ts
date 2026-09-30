@@ -3,7 +3,12 @@
  * grade 0..3 (score.support.v1: 0 unrelated, 1 same topic only, 2 partly
  * answers, 3 answers directly with locatable evidence).
  *
- *  - RuleScorer: lexical relevance bucketed like the bench rule judge.
+ *  - RuleScorer: lexical relevance bucketed like the bench rule judge, with
+ *    cross-lingual / identifier alignment (align.ts, dev-plan M3a).
+ *  - HybridScorer: the rule scorer grades everything; Jev re-scores only the
+ *    pairs the rule scorer is structurally weak on (need and block in different
+ *    languages, optionally rule-borderline ones); any Jev failure keeps the
+ *    rule grades.
  *  - JevScorer: hosted Bocha Jev `score` questions in Chinese (experiment r1:
  *    nDCG@5 0.565 vs 0.378 for the rule scorer). Questions are chunked to the
  *    service limits and to a conservative expanded-token budget per REQUEST
@@ -17,6 +22,7 @@
  * @module web-search-pro/pipeline/score
  */
 
+import { alignedRelevance, languagesDiffer } from './align.ts'
 import { blockScoringText } from './blocks.ts'
 import { lexicalRelevance, type RelevanceContext } from './gate.ts'
 import type { BlockGrade, Need, TaskSpec } from './types.ts'
@@ -60,9 +66,20 @@ export function bucketGrade(relevance: number): 0 | 1 | 2 | 3 {
   return 3
 }
 
+export interface RuleScorerOptions {
+  /** Cross-lingual / identifier alignment (default true). `false` = the M2 lexical-v1 relevance, kept for comparison. */
+  align?: boolean
+}
+
 export class RuleScorer implements Scorer {
   readonly id = 'rule'
-  readonly model = 'lexical-v1'
+  readonly model: string
+  private readonly align: boolean
+
+  constructor(options: RuleScorerOptions = {}) {
+    this.align = options.align ?? true
+    this.model = this.align ? 'lexical-v2-aligned' : 'lexical-v1'
+  }
 
   async score(task: ScoreTask, jobs: readonly ScoreJob[]): Promise<ScoreOutcome> {
     const grades = new Map<string, Map<string, BlockGrade>>()
@@ -70,12 +87,95 @@ export class RuleScorer implements Scorer {
       const ctx: RelevanceContext = { goal: task.goal, query: task.query, needs: [job.need.text], constraints: task.constraints }
       const byBlock = new Map<string, BlockGrade>()
       for (const block of job.blocks) {
-        const relevance = lexicalRelevance(ctx, { url: block.url, text: blockScoringText(block), ...block.heading ? { heading: block.heading } : {} }, true)
+        // Same-language pairs keep the calibrated lexical-v1 relevance (an offline sweep showed no gain from identifier splitting there).
+        const aligned = this.align && languagesDiffer(job.need.text, blockScoringText(block))
+        const relevance = aligned
+          ? alignedRelevance({ goal: task.goal, query: task.query, need: job.need.text, constraints: task.constraints }, { ...block.heading ? { heading: block.heading } : {}, text: block.text })
+          : lexicalRelevance(ctx, { url: block.url, text: blockScoringText(block), ...block.heading ? { heading: block.heading } : {} }, true)
         byBlock.set(block.blockId, { grade: bucketGrade(relevance), rank: relevance })
       }
       grades.set(job.need.id, byBlock)
     }
     return { grades }
+  }
+}
+
+// ── hybrid scorer ───────────────────────────────────────────────────────────
+
+export interface HybridScorerOptions {
+  /** The paid scorer that re-scores the selected pairs. */
+  jev: Scorer
+  rule?: Scorer
+  /** Also re-score pairs whose rule grade is 1 (relevance in [T1, T2)), after the language-mismatch pairs. Default false. */
+  borderline?: boolean
+  /** Cap on the (need, block) questions handed to `jev` (round-robin over needs, best rule relevance first). Default 64. */
+  maxQuestions?: number
+}
+
+/**
+ * Rule scorer for everything, Jev for the pairs where the rule scorer is
+ * structurally weak: need and block written in different languages (both
+ * detected, see `detectLang`), plus optionally the rule-borderline pairs
+ * (grade 1). Jev answers replace the rule grades; unanswered questions and
+ * any Jev failure keep the rule grades (the outcome then says so in `notes`).
+ */
+export class HybridScorer implements Scorer {
+  readonly id = 'hybrid'
+  readonly model: string
+  private readonly jev: Scorer
+  private readonly rule: Scorer
+  private readonly borderline: boolean
+  private readonly maxQuestions: number
+
+  constructor(options: HybridScorerOptions) {
+    this.jev = options.jev
+    this.rule = options.rule ?? new RuleScorer()
+    this.borderline = options.borderline ?? false
+    this.maxQuestions = Math.max(options.maxQuestions ?? 64, 0)
+    this.model = 'rule+' + this.jev.id + (this.borderline ? '+borderline' : '')
+  }
+
+  /** Pairs to re-score, ordered by priority (mismatch first), capped round-robin over the needs. */
+  select(jobs: readonly ScoreJob[], rule: ScoreOutcome): ScoreJob[] {
+    const rows = jobs.map(job => {
+      const byBlock = rule.grades.get(job.need.id)
+      const mismatch: { block: ScoreBlock; rank: number }[] = []
+      const border: { block: ScoreBlock; rank: number }[] = []
+      for (const block of job.blocks) {
+        const g = byBlock?.get(block.blockId)
+        const rank = g?.rank ?? 0
+        if (languagesDiffer(job.need.text, blockScoringText(block))) mismatch.push({ block, rank })
+        else if (this.borderline && g?.grade === 1) border.push({ block, rank })
+      }
+      const byRank = (a: { rank: number }, b: { rank: number }): number => b.rank - a.rank
+      return { need: job.need, queue: [...mismatch.sort(byRank), ...border.sort(byRank)].map(x => x.block) }
+    })
+    const take = rows.map(() => 0)
+    let left = this.maxQuestions
+    for (let round = 0; left > 0; round++) {
+      let progressed = false
+      rows.forEach((row, i) => { if (left > 0 && round < row.queue.length) { take[i]!++; left--; progressed = true } })
+      if (!progressed) break
+    }
+    return rows.map((row, i) => ({ need: row.need, blocks: row.queue.slice(0, take[i]) })).filter(job => job.blocks.length)
+  }
+
+  async score(task: ScoreTask, jobs: readonly ScoreJob[], ctx: ScoreContext = {}): Promise<ScoreOutcome> {
+    const base = await this.rule.score(task, jobs, ctx)
+    const grades = new Map([...base.grades].map(([needId, byBlock]) => [needId, new Map(byBlock)]))
+    const notes: string[] = []
+    const picked = this.select(jobs, base)
+    if (!picked.length) return { grades, notes }
+    try {
+      const out = await this.jev.score(task, picked, ctx)
+      for (const [needId, byBlock] of out.grades) for (const [blockId, g] of byBlock) grades.get(needId)?.set(blockId, { grade: g.grade, rank: g.grade / 3 })
+      if (out.notes?.length) notes.push(...out.notes)
+      return { grades, ...out.usage ? { usage: out.usage } : {}, notes }
+    } catch (error) {
+      if (ctx.signal?.aborted) throw error
+      notes.push('Jev re-scoring failed, kept the rule grades: ' + (error instanceof Error ? error.message : String(error)))
+      return { grades, notes }
+    }
   }
 }
 

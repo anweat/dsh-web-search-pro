@@ -5,8 +5,12 @@
  *
  *   (a) baseline: the top-8 fused candidates with snippets plus their full page texts,
  *   (b) the pipeline with the rule scorer,
+ *   (b') the pipeline with the rule scorer plus cross-lingual alignment (M3a; (b) is
+ *        the M2 lexical-v1 scorer, kept for comparison),
  *   (c) the pipeline with the Jev scorer, answering from the r1 judge cache
- *       (bench/data/judge-cache/jev) whenever the question text matches.
+ *       (bench/data/judge-cache/jev) whenever the question text matches,
+ *   (d) hybrid: aligned rule scorer, Jev only for need/block language mismatches,
+ *   (d') hybrid plus the rule-borderline pairs (grade 1).
  *
  *   node --experimental-transform-types bench/src/eval-pack.ts \
  *     [--run-id ID] [--split all|calibration|test] [--tasks a,b] [--allow-jev N] [--no-jev] \
@@ -29,7 +33,7 @@ import { mergeCandidates, type ProviderOutput } from '../../src/pipeline/candida
 import { fuseCandidates, type FusionOptions } from '../../src/pipeline/fusion.ts'
 import { runEvidenceStages, type PageInput, type PipelineDeps, type PipelineOptions, type PipelineResult, type StageContext } from '../../src/pipeline/run.ts'
 import { renderEvidencePack } from '../../src/pipeline/render.ts'
-import { JEV_MODEL, JevScorer, type JevCache, type JevProbe } from '../../src/pipeline/score.ts'
+import { HybridScorer, JEV_MODEL, JevScorer, RuleScorer, type JevCache, type JevProbe, type Scorer } from '../../src/pipeline/score.ts'
 import { DEFAULT_SELECT_OPTIONS, type SelectOptions } from '../../src/pipeline/select.ts'
 import { canonicalizeUrl } from '../../src/pipeline/url.ts'
 import { listFlag, numberFlag, parseFlags } from './cli.ts'
@@ -245,13 +249,24 @@ export interface TaskEval {
   baseline: ArmResult
   /** Baseline cut to the size of the rule pack. */
   baselineCut: ArmResult
+  /** (b) the M2 lexical-v1 rule scorer (no alignment). */
   rule: ArmResult
+  /** (b') rule scorer with cross-lingual / identifier alignment. */
+  ruleAligned: ArmResult
+  /** (c) Jev scores every pair. */
   jev?: ArmResult
+  /** (d) hybrid: Jev only for need/block language mismatches. (d') adds the rule-borderline pairs. */
+  hybrid?: ArmResult
+  hybridB?: ArmResult
   jevStatus: JevStatus
   jevCacheHits: number
   jevMisses: number
   jevRequests: number
+  /** Jev use of each Jev-backed arm: questions asked, cache hits / misses, HTTP requests made now, requests an empty cache would need. */
+  uses: Partial<Record<JevKind, JevUse>>
 }
+
+export interface JevUse { status: JevStatus; questions: number; cacheHits: number; misses: number; requests: number; cold: number }
 
 export interface LoadedTask { task: BenchTask; split: Split; snapshot: CandidateSnapshot; label: Label }
 
@@ -269,7 +284,7 @@ export function loadEvalTasks(only?: readonly string[], split: 'all' | Split = '
   return out
 }
 
-function runStages(item: LoadedTask, opts: EvalOptions, scorer?: JevScorer): Promise<PipelineResult> {
+export function runStages(item: LoadedTask, opts: EvalOptions, scorer?: Scorer): Promise<PipelineResult> {
   const spec = toTaskSpec(item.task)
   const outputs = providerOutputs(item.snapshot)
   const deps: PipelineDeps = {
@@ -282,51 +297,94 @@ function runStages(item: LoadedTask, opts: EvalOptions, scorer?: JevScorer): Pro
 
 const noNetwork = (async () => { throw new Error('offline evaluation: no network') }) as unknown as typeof fetch
 
-/** The Jev arm of one task; `cap` HTTP requests may be spent (0 = cache only). */
-async function jevArm(item: LoadedTask, opts: EvalOptions, cap: number, key: string | undefined): Promise<{ result: PipelineResult; cache: ReturnType<typeof r1JevCache>; requests: number }> {
+export type JevKind = 'jev' | 'hybrid' | 'hybridB'
+
+function scorerFor(kind: JevKind, jev: JevScorer): Scorer {
+  return kind === 'jev' ? jev : new HybridScorer({ jev, borderline: kind === 'hybridB', maxQuestions: 64 })
+}
+
+interface JevRun { result: PipelineResult; cache: ReturnType<typeof r1JevCache>; requests: number }
+
+/** One Jev-using arm of one task; `cap` HTTP requests may be spent (0 = cache only). */
+async function jevArm(item: LoadedTask, opts: EvalOptions, cap: number, key: string | undefined, kind: JevKind): Promise<JevRun> {
   const cache = r1JevCache(opts.jevRoot)
   const scorer = new JevScorer({ apiKey: key || 'offline', cache, requestCap: cap, ...cap > 0 ? {} : { fetchImpl: noNetwork } })
-  const result = await runStages(item, opts, scorer)
+  const result = await runStages(item, opts, scorerFor(kind, scorer))
   return { result, cache, requests: scorer.requests }
 }
 
+/** HTTP requests the arm would need with an EMPTY cache (a stub service answers every question; nothing is sent anywhere). */
+async function coldRequests(item: LoadedTask, opts: EvalOptions, kind: JevKind): Promise<number> {
+  const stub = (async (_url: string, init: { body: string }) => {
+    const questions = Object.keys(JSON.parse(init.body).questions as Record<string, unknown>)
+    return new Response(JSON.stringify({ answers: Object.fromEntries(questions.map(q => [q, { score: 1 }])), usage: { input_tokens: 0, output_tokens: 0 } }), { status: 200 })
+  }) as unknown as typeof fetch
+  const scorer = new JevScorer({ apiKey: 'offline', fetchImpl: stub })
+  await runStages(item, opts, scorerFor(kind, scorer))
+  return scorer.requests
+}
+
 /** Jev questions per task the cache cannot answer (dry run: no requests, tasks fall back to rule). */
-export async function jevMisses(items: readonly LoadedTask[], opts: EvalOptions): Promise<Map<string, number>> {
+export async function jevMisses(items: readonly LoadedTask[], opts: EvalOptions, kind: JevKind = 'jev'): Promise<Map<string, number>> {
   const out = new Map<string, number>()
-  for (const item of items) out.set(item.task.id, (await jevArm(item, opts, 0, undefined)).cache.misses)
+  for (const item of items) out.set(item.task.id, (await jevArm(item, opts, 0, undefined, kind)).cache.misses)
   return out
+}
+
+const KINDS: readonly JevKind[] = ['hybrid', 'hybridB', 'jev']
+
+function statusOf(result: PipelineResult): JevStatus {
+  const { stats, notes } = result.pack
+  if (stats.scorer === 'none') return 'nothing'
+  if (stats.scorer === 'hybrid') return notes.some(n => n.includes('kept the rule grades')) ? 'fallback' : 'answered'
+  return stats.scorer === 'jev' ? 'answered' : 'fallback'
 }
 
 export async function evaluate(items: readonly LoadedTask[], opts: EvalOptions, log: (line: string) => void = () => {}): Promise<{ tasks: TaskEval[]; jevRequests: number }> {
   const key = process.env.BOCHA_JEV_API_KEY
   if (opts.jev && opts.allowJev > 0 && !key) throw new Error('--allow-jev needs BOCHA_JEV_API_KEY in the environment')
-  const jevByTask = new Map<string, { result: PipelineResult; cache: ReturnType<typeof r1JevCache>; requests: number }>()
+  const jevRuns = new Map<string, JevRun>()
+  const cold = new Map<string, number>()
   let remaining = opts.allowJev
   let jevRequests = 0
   if (opts.jev) {
-    const misses = await jevMisses(items, opts)
-    // Spend the allowance on the tasks that need the fewest requests first; tasks fully answered by the cache cost nothing.
-    const order = [...items].sort((a, b) => misses.get(a.task.id)! - misses.get(b.task.id)!)
-    for (const item of order) {
-      const r = await jevArm(item, opts, misses.get(item.task.id) === 0 ? 0 : remaining, key)
-      remaining -= r.requests
-      jevRequests += r.requests
-      jevByTask.set(item.task.id, r)
-      log('  jev ' + item.task.id + ': ' + ({ jev: 'answered', none: 'nothing to score' }[r.result.pack.stats.scorer] ?? 'fallback to rule') + ' (cache hits ' + r.cache.hits + ', misses ' + misses.get(item.task.id) + ', requests ' + r.requests + ')')
+    for (const kind of KINDS) {
+      const misses = await jevMisses(items, opts, kind)
+      // Spend the allowance on the tasks that need the fewest requests first; tasks fully answered by the cache cost nothing.
+      const order = [...items].sort((a, b) => misses.get(a.task.id)! - misses.get(b.task.id)!)
+      for (const item of order) {
+        const r = await jevArm(item, opts, misses.get(item.task.id) === 0 ? 0 : remaining, key, kind)
+        remaining -= r.requests
+        jevRequests += r.requests
+        jevRuns.set(kind + '|' + item.task.id, r)
+        cold.set(kind + '|' + item.task.id, await coldRequests(item, opts, kind))
+        log('  ' + kind + ' ' + item.task.id + ': ' + statusOf(r.result) + ' (cache hits ' + r.cache.hits + ', misses ' + misses.get(item.task.id) + ', requests ' + r.requests + ')')
+      }
     }
   }
   const tasks: TaskEval[] = []
   for (const item of items) {
     const pairs = goldPairs(item.label)
     const { arm: baseline, candidates } = baselineArm(item.label, item.snapshot, providerOutputs(item.snapshot), pairs)
-    const rule = packArm(item.label, await runStages(item, opts), pairs)
+    const rule = packArm(item.label, await runStages(item, opts, new RuleScorer({ align: false })), pairs)
+    const ruleAligned = packArm(item.label, await runStages(item, opts, new RuleScorer()), pairs)
     const baselineCut = truncatedBaselineArm(item.label, item.snapshot, providerOutputs(item.snapshot), pairs, rule.chars)
-    const j = jevByTask.get(item.task.id)
+    const run = (kind: JevKind): JevRun | undefined => jevRuns.get(kind + '|' + item.task.id)
+    const arm = (kind: JevKind): ArmResult | undefined => { const r = run(kind); return r ? packArm(item.label, r.result, pairs) : undefined }
+    const uses: TaskEval['uses'] = {}
+    for (const kind of KINDS) {
+      const r = run(kind)
+      if (r) uses[kind] = { status: statusOf(r.result), questions: r.result.pack.stats.jev?.questions ?? 0, cacheHits: r.cache.hits, misses: r.cache.misses, requests: r.requests, cold: cold.get(kind + '|' + item.task.id) ?? 0 }
+    }
+    const j = run('jev')
+    const hybrid = arm('hybrid')
+    const hybridB = arm('hybridB')
+    const jev = arm('jev')
     tasks.push({
-      taskId: item.task.id, profile: item.task.profile, lang: item.task.lang, split: item.split, candidates, goldPairs: pairs.length, baseline, baselineCut, rule,
-      ...j ? { jev: packArm(item.label, j.result, pairs) } : {},
-      jevStatus: !j ? 'off' : j.result.pack.stats.scorer === 'jev' ? 'answered' : j.result.pack.stats.scorer === 'none' ? 'nothing' : 'fallback',
-      jevCacheHits: j?.cache.hits ?? 0, jevMisses: j?.cache.misses ?? 0, jevRequests: j?.requests ?? 0,
+      taskId: item.task.id, profile: item.task.profile, lang: item.task.lang, split: item.split, candidates, goldPairs: pairs.length, baseline, baselineCut, rule, ruleAligned,
+      ...jev ? { jev } : {}, ...hybrid ? { hybrid } : {}, ...hybridB ? { hybridB } : {},
+      jevStatus: !j ? 'off' : statusOf(j.result),
+      jevCacheHits: j?.cache.hits ?? 0, jevMisses: j?.cache.misses ?? 0, jevRequests: j?.requests ?? 0, uses,
     })
   }
   return { tasks, jevRequests }
@@ -385,9 +443,34 @@ function armRows(evals: readonly TaskEval[], jev: boolean): string[][] {
     row('(a) 基线 top-8 + 全文', summarize(evals, t => t.baseline), false),
     row('(a′) 基线截到规则包同等大小', summarize(evals, t => t.baselineCut), false),
     row('(b) 管线 + 规则评分', summarize(evals, t => t.rule), true),
+    row('(b′) 管线 + 规则评分（跨语言对齐）', summarize(evals, t => t.ruleAligned), true),
   ]
-  if (jev) rows.push(row('(c) 管线 + Jev 评分', summarize(evals, t => t.jev), true))
+  if (jev) {
+    rows.push(row('(c) 管线 + Jev 评分', summarize(evals, t => t.jev), true))
+    rows.push(row('(d) 混合（仅语言不一致的对交给 Jev）', summarize(evals, t => t.hybrid), true))
+    rows.push(row('(d′) 混合 + 规则边界对', summarize(evals, t => t.hybridB), true))
+  }
   return rows
+}
+
+const USAGE_HEAD = ['组', '任务', '需求命中', '声称覆盖的正确率', '金标块保留', '≈tokens', '条目', 'Jev 问题（合计）', '问题/任务', '冷缓存请求（合计）', '实际请求']
+const USAGE_ALIGN = ['---', '---:', '---:', '---:', '---:', '---:', '---:', '---:', '---:', '---:', '---:']
+
+function usageRows(evals: readonly TaskEval[]): string[][] {
+  const arms: [string, (t: TaskEval) => ArmResult | undefined, JevKind | undefined][] = [
+    ['(b) 规则（v1）', t => t.rule, undefined],
+    ['(b′) 规则 + 对齐', t => t.ruleAligned, undefined],
+    ['(d) 混合（仅语言不一致）', t => t.hybrid, 'hybrid'],
+    ['(d′) 混合 + 边界对', t => t.hybridB, 'hybridB'],
+    ['(c) Jev 全部评分', t => t.jev, 'jev'],
+  ]
+  return arms.map(([label, pick, kind]) => {
+    const s = summarize(evals, pick)
+    const sum = (f: (u: JevUse) => number): number => evals.reduce((n, t) => n + (kind && t.uses[kind] ? f(t.uses[kind]!) : 0), 0)
+    const questions = sum(u => u.questions)
+    return [label, String(s.tasks), pct(s.needCoverage), pct(s.claimPrecision), pct(s.retention), num(s.tokens), num(s.items, 1),
+      kind ? String(questions) : '0', kind ? num(questions / Math.max(evals.length, 1), 1) : '0', kind ? String(sum(u => u.cold)) : '0', kind ? String(sum(u => u.requests)) : '0']
+  })
 }
 
 export interface ReportInput {
@@ -404,16 +487,19 @@ export interface ReportInput {
 
 export function renderReport(r: ReportInput): string {
   const all = r.tasks
-  const matched = all.filter(t => t.jevStatus === 'answered')
+  const answeredArm = (t: TaskEval, kind: JevKind): boolean => t.uses[kind]?.status === 'answered'
+  const matched = all.filter(t => t.jevStatus === 'answered' && answeredArm(t, 'hybrid') && answeredArm(t, 'hybridB'))
   const byKey = (key: (t: TaskEval) => string): string[] => [...new Set(all.map(key))].sort()
   const out: string[] = []
-  out.push('# 证据包离线评测（M2b，pack-report）', '')
+  out.push('# 证据包离线评测（M2b/M3a，pack-report）', '')
   out.push('运行：' + r.runId + '，生成时间 ' + r.generatedAt + '。**标签是 LLM 初稿，未经人工复核**；本报告用于排定开发顺序，不作最终质量判断。', '')
   out.push('## 1. 设置', '')
   out.push('- 数据：冻结的候选快照与标注（' + all.length + ' 个任务，金标块共 ' + all.reduce((s, t) => s + t.goldPairs, 0) + ' 个）；**全程不联网**：快照中的引擎结果代替 S2，快照中的页面和块代替 S5 抓取与分块（块 ID 与金标一致）。')
   out.push('- (a) 基线：融合排序后的前 8 个候选（标题、链接、摘要）加上其中有快照页面的全文（每页上限 ' + PAGE_CAP + ' 字符）。页面全文送入主模型时，整页都算保留。')
   out.push('- (a′) 等长基线：同样的前 8 个候选，但每个已读页面只取开头，总长截到 (b) 同一任务的包大小——即“把基线压缩到同样大小、不做任何选择”能保留多少。')
   out.push('- (b) 管线 + 规则评分：S3/S4 规则 gate → 读取前 ' + r.opts.fetchTopK + ' 个保留候选（无快照页面的候选不占名额）→ 每个需求按 IDF 加权词法取前 ' + (r.opts.blocksPerNeed > 0 ? String(r.opts.blocksPerNeed) : '12（块数 > 80 的页面自适应，至多 24）') + ' 块 → RuleScorer → 选择（预算 ' + (r.opts.select.charBudget ?? DEFAULT_SELECT_OPTIONS.charBudget) + ' 字符，每 URL 至多 ' + (r.opts.select.maxPerUrl ?? DEFAULT_SELECT_OPTIONS.maxPerUrl) + ' 块，至多 ' + (r.opts.select.maxItems ?? DEFAULT_SELECT_OPTIONS.maxItems) + ' 条，最低入选评分 ' + (r.opts.select.minGrade ?? DEFAULT_SELECT_OPTIONS.minGrade) + '）→ 覆盖判定。')
+  out.push('- (b′) 规则评分 + 跨语言对齐（M3a）：同 (b)，但块评分用 align.ts——需求 / 查询 / 目标 / 实体与必含词里的拉丁词和标识符（camelCase、snake_case、点号路径拆开后匹配，`DatabaseSync` 对 `DatabaseSyncOptions` 有部分分）；块为拉丁文时不把汉字 bigram 计入分母，并在拉丁词权重不足时按比例收缩。(b) 是 M2 的 lexical-v1，仅作对照。')
+  out.push('- (d) 混合：(b′) 评分全部块，Jev 只重评“需求语言 ≠ 块语言”的对（汉字占比检测），至多 64 问；(d′) 在此基础上再重评规则评分为 1 的边界对。Jev 失败或没有回答的问题保留规则评分。')
   out.push('- (c) 管线 + Jev 评分：同 (b)，评分改用 JevScorer；问题文本与 r1 相同时直接读 r1 评分缓存。' + (r.opts.jev ? '本次调用实际发出 **' + r.jevRequests + '** 次 Jev 请求（上限 ' + r.opts.allowJev + '）' + (r.jevRequestsTotal !== undefined && r.jevRequestsTotal !== r.jevRequests ? '；该运行目录累计 **' + r.jevRequestsTotal + '** 次（此前的调用补全了缓存缺口，之后的回答都已缓存，可重复运行不再计费）' : '') + '。无法全部回答的任务回退到规则评分并排除在 Jev 对照之外。' : '未运行 Jev 组。'))
   out.push('- 指标：**金标块保留** = 金标 (需求, 块) 对中，该块出现在最终送给主模型的内容里的比例（基线按“所在页面被整页送入”计）；**金标页到达** = 金标块所在页面被读取的比例；**需求命中** = 有金标的需求中，至少一个金标块在内容里的比例；**声称覆盖的正确率** = 管线声称已覆盖的需求里，确有金标块在包内的比例（无金标的需求算错）；**无金标需求标缺口** = 快照里没有任何金标的需求，管线把它列为缺口的比例；字符与 tokens 为主模型实际看到的渲染文本（tokens 为粗估：汉字 0.7、其他 0.3 每字符）。', '')
 
@@ -431,6 +517,11 @@ export function renderReport(r: ReportInput): string {
     section('### 匹配子集（全部）', matched, true)
     section('### 匹配子集 · test', matched.filter(t => t.split === 'test'), true)
     section('### 匹配子集 · calibration', matched.filter(t => t.split === 'calibration'), true)
+    out.push('## 3b. M3a：Jev 用量与质量（匹配子集，' + matched.length + ' 个任务）', '')
+    out.push('“Jev 问题”= 该组向 Jev 提出的 (需求, 块) 问题数（含缓存命中，即冷启动时要付费的数量）；“冷缓存请求”= 缓存为空时需要的 HTTP 请求数（由桩服务统计，不发送任何数据）；“实际请求”= 本次调用真正发出的请求数。', '')
+    out.push(table(usageRows(matched), USAGE_HEAD, USAGE_ALIGN), '')
+    out.push('### 按任务语言（匹配子集）', '')
+    for (const lang of [...new Set(matched.map(t => t.lang))].sort()) out.push('**' + lang + '**（' + matched.filter(t => t.lang === lang).length + ' 个任务）', '', table(usageRows(matched.filter(t => t.lang === lang)), USAGE_HEAD, USAGE_ALIGN), '')
   }
   const funnel = (title: string, evals: TaskEval[], jev: boolean): void => {
     const f = (label: string, s: Summary): string[] => [label, pct(s.reach), pct(s.scoredShare), pct(s.strongShare), pct(s.retention), num(s.items, 1)]
@@ -445,7 +536,7 @@ export function renderReport(r: ReportInput): string {
   if (r.variants?.length) {
     out.push('## 2c. 选择参数敏感性（规则评分，全部任务）', '')
     const variantRows = r.variants.map(v => {
-      const s = summarize(v.tasks, t => t.rule)
+      const s = summarize(v.tasks, t => t.ruleAligned)
       return [v.label, pct(s.retention), pct(s.needCoverage), pct(s.claimPrecision), num(s.chars), num(s.tokens), num(s.items, 1)]
     })
     out.push(table(variantRows, ['变体', '金标块保留', '需求命中', '声称覆盖的正确率', '平均字符', '≈tokens', '条目'], ['---', '---:', '---:', '---:', '---:', '---:', '---:']), '')
@@ -481,7 +572,7 @@ export async function sweep(items: readonly LoadedTask[], base: EvalOptions, log
   for (const minGrade of [1, 2]) for (const maxItems of [6, 8, 10, 12]) for (const charBudget of [4000, 6000]) for (const maxPerUrl of [2, 3]) {
     const opts: EvalOptions = { ...base, jev: false, select: { ...base.select, minGrade, maxItems, charBudget, maxPerUrl } }
     const { tasks } = await evaluate(cal, opts)
-    const s = summarize(tasks, t => t.rule)
+    const s = summarize(tasks, t => t.ruleAligned)
     rows.push([String(minGrade), String(maxItems), String(charBudget), String(maxPerUrl), pct(s.retention), pct(s.needCoverage), pct(s.claimPrecision), num(s.chars), num(s.items, 1)])
   }
   log(table(rows, ['minGrade', 'maxItems', 'budget', 'perUrl', '金标块保留', '需求命中', '声称正确率', '平均字符', '条目'], ['---:', '---:', '---:', '---:', '---:', '---:', '---:', '---:', '---:']))

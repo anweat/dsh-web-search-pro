@@ -161,7 +161,7 @@ export interface PackStats {
   excerptChars: number
   scorer: string
   /** Jev usage of this run (control or shadow). */
-  jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' }
+  jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' | 'hybrid' }
 }
 
 export interface EvidencePack {

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  bucketGrade, estimateJevTokens, JEV_CRITERIA, JEV_INSTRUCTIONS, JEV_MODEL, JEV_QUESTION_OVERHEAD_TOKENS, JEV_STATE_PREFIX, JevError, JevScorer, RuleScorer,
-  type JevCache, type JevProbe, type ScoreJob, type ScoreTask,
+  bucketGrade, estimateJevTokens, HybridScorer, JEV_CRITERIA, JEV_INSTRUCTIONS, JEV_MODEL, JEV_QUESTION_OVERHEAD_TOKENS, JEV_STATE_PREFIX, JevError, JevScorer, RuleScorer,
+  type JevCache, type JevProbe, type ScoreJob, type ScoreOutcome, type ScoreTask, type Scorer,
 } from '../src/pipeline/score.ts'
 
 const task: ScoreTask = {
@@ -221,4 +221,130 @@ test('Jev: an aborted signal rejects without a request', async () => {
 
 test('Jev: constructing without a key fails', () => {
   assert.throws(() => new JevScorer({ apiKey: '' }), /API key/)
+})
+
+// ── hybrid scorer ───────────────────────────────────────────────────────────
+
+const zhNeed = { id: 'n1', text: 'DatabaseSync 构造参数中的 timeout 选项', critical: true }
+const enNeed = { id: 'n2', text: 'how to set the busy timeout in DatabaseSync', critical: true }
+const hybridTask: ScoreTask = { goal: '了解 node:sqlite 的 busy timeout', query: 'node:sqlite DatabaseSync busy timeout 设置', needs: [zhNeed, enNeed], constraints: [] }
+const EN_OPT = 'sqlite.DatabaseSyncOptions.timeout — timeout?: number — The busy timeout in milliseconds.'
+const EN_MID = 'The DatabaseSync class opens a database file and exposes exec and prepare for statements.'
+const ZH_MID = 'DatabaseSync 类用于打开数据库文件，并提供 exec 和 prepare 方法来执行语句。'
+
+/** A Jev stand-in: records the jobs it gets and answers every pair with `grade`. */
+function stubJev(grade: number | ((needId: string, blockId: string) => number | undefined), opts: { fail?: Error; usage?: boolean } = {}) {
+  const seen: ScoreJob[][] = []
+  const scorer: Scorer = {
+    id: 'jev', model: 'stub',
+    async score(_task, jobs): Promise<ScoreOutcome> {
+      seen.push(jobs.map(j => ({ need: j.need, blocks: [...j.blocks] })))
+      if (opts.fail) throw opts.fail
+      const grades = new Map<string, Map<string, { grade: number; rank: number }>>()
+      for (const j of jobs) {
+        const byBlock = new Map<string, { grade: number; rank: number }>()
+        for (const b of j.blocks) {
+          const g = typeof grade === 'function' ? grade(j.need.id, b.blockId) : grade
+          if (g !== undefined) byBlock.set(b.blockId, { grade: g, rank: g })
+        }
+        grades.set(j.need.id, byBlock)
+      }
+      const questions = jobs.reduce((n, j) => n + j.blocks.length, 0)
+      return { grades, ...opts.usage === false ? {} : { usage: { requests: 1, questions, cacheHits: 0, inputTokens: 10, outputTokens: 0 } } }
+    },
+  }
+  return { scorer, seen }
+}
+
+const pairsOf = (jobs: ScoreJob[]): string[] => jobs.flatMap(j => j.blocks.map(b => j.need.id + '|' + b.blockId))
+
+test('Hybrid: the rule scorer grades everything, Jev re-scores only need/block language mismatches and its grades replace the rule grades', async () => {
+  const blocks = [blk('opt', EN_OPT), blk('zh', ZH_MID), blk('en', EN_MID)]
+  const jev = stubJev(0.5)
+  const hybrid = new HybridScorer({ jev: jev.scorer })
+  const rule = await new RuleScorer().score(hybridTask, [job(blocks, zhNeed), job(blocks, enNeed)])
+  const out = await hybrid.score(hybridTask, [job(blocks, zhNeed), job(blocks, enNeed)])
+  assert.equal(jev.seen.length, 1)
+  // zh need: the two English blocks; en need: the Chinese block. Nothing else.
+  assert.deepEqual(pairsOf(jev.seen[0]!).sort(), ['n1|en', 'n1|opt', 'n2|zh'])
+  for (const pair of ['n1|en', 'n1|opt', 'n2|zh']) {
+    const [n, b] = pair.split('|') as [string, string]
+    assert.deepEqual(out.grades.get(n)!.get(b), { grade: 0.5, rank: 0.5 / 3 })
+  }
+  for (const pair of [['n1', 'zh'], ['n2', 'opt'], ['n2', 'en']] as const) assert.deepEqual(out.grades.get(pair[0])!.get(pair[1]), rule.grades.get(pair[0])!.get(pair[1]), 'same-language pairs keep the rule grade')
+  assert.deepEqual(out.usage, { requests: 1, questions: 3, cacheHits: 0, inputTokens: 10, outputTokens: 0 })
+  assert.equal(hybrid.id, 'hybrid')
+})
+
+test('Hybrid: a Jev answer can also lower the rule grade; unanswered questions keep it', async () => {
+  const blocks = [blk('opt', EN_OPT), blk('en', EN_MID)]
+  const rule = await new RuleScorer().score(hybridTask, [job(blocks, zhNeed)])
+  assert.ok(rule.grades.get('n1')!.get('opt')!.grade >= 2)
+  const jev = stubJev((_n, b) => (b === 'opt' ? 0.4 : undefined))
+  const out = await new HybridScorer({ jev: jev.scorer }).score(hybridTask, [job(blocks, zhNeed)])
+  assert.equal(out.grades.get('n1')!.get('opt')!.grade, 0.4, 'Jev says no: the lexical guess is overruled')
+  assert.deepEqual(out.grades.get('n1')!.get('en'), rule.grades.get('n1')!.get('en'), 'no Jev answer -> rule grade')
+})
+
+test('Hybrid: no mismatching pair means no Jev call at all', async () => {
+  const jev = stubJev(3)
+  const out = await new HybridScorer({ jev: jev.scorer }).score(hybridTask, [job([blk('en', EN_MID), blk('opt', EN_OPT)], enNeed)])
+  assert.equal(jev.seen.length, 0)
+  assert.equal(out.usage, undefined)
+  assert.equal(out.grades.get('n2')!.size, 2)
+})
+
+test('Hybrid: hybridBorderline also sends rule grade-1 pairs of the same language, mismatches first; off by default', async () => {
+  // a same-language block with rule grade exactly 1 for the English need
+  const borderline = blk('mid', 'The DatabaseSync class opens a database file and exposes exec and prepare for statements, see the guide.')
+  const rule = await new RuleScorer().score(hybridTask, [job([borderline], enNeed)])
+  assert.equal(rule.grades.get('n2')!.get('mid')!.grade, 1, 'fixture must be rule-borderline: ' + rule.grades.get('n2')!.get('mid')!.rank)
+  const blocks = [borderline, blk('zh', ZH_MID)]
+  const off = stubJev(2)
+  await new HybridScorer({ jev: off.scorer }).score(hybridTask, [job(blocks, enNeed)])
+  assert.deepEqual(pairsOf(off.seen[0]!), ['n2|zh'])
+  const on = stubJev(2)
+  const out = await new HybridScorer({ jev: on.scorer, borderline: true }).score(hybridTask, [job(blocks, enNeed)])
+  assert.deepEqual(pairsOf(on.seen[0]!), ['n2|zh', 'n2|mid'], 'mismatch pairs are queued before borderline ones')
+  assert.equal(out.grades.get('n2')!.get('mid')!.grade, 2)
+})
+
+test('Hybrid: maxQuestions caps the Jev pairs round-robin over the needs, best rule relevance first', async () => {
+  const many = Array.from({ length: 6 }, (_, i) => blk('b' + i, i === 3 ? EN_OPT : 'Plain English paragraph number ' + i + ' about cooking bread.'))
+  const needB = { id: 'n3', text: '另一个中文需求 busy timeout', critical: true }
+  const t: ScoreTask = { ...hybridTask, needs: [zhNeed, needB] }
+  const jev = stubJev(1)
+  await new HybridScorer({ jev: jev.scorer, maxQuestions: 3 }).score(t, [job(many, zhNeed), job(many, needB)])
+  const sent = pairsOf(jev.seen[0]!)
+  assert.equal(sent.length, 3)
+  assert.ok(sent.includes('n1|b3') && sent.includes('n3|b3'), 'the most relevant block of each need goes first: ' + sent.join())
+  assert.deepEqual(new Set(jev.seen[0]!.map(j => j.need.id)), new Set(['n1', 'n3']), 'both needs are served before one gets a second question')
+  const none = stubJev(1)
+  await new HybridScorer({ jev: none.scorer, maxQuestions: 0 }).score(t, [job(many, zhNeed)])
+  assert.equal(none.seen.length, 0)
+})
+
+test('Hybrid: a Jev failure keeps every rule grade and says so; an abort is rethrown', async () => {
+  const blocks = [blk('opt', EN_OPT), blk('en', EN_MID)]
+  const rule = await new RuleScorer().score(hybridTask, [job(blocks, zhNeed)])
+  const failing = stubJev(1, { fail: new JevError('Jev HTTP 503 down') })
+  const out = await new HybridScorer({ jev: failing.scorer }).score(hybridTask, [job(blocks, zhNeed)])
+  assert.deepEqual([...out.grades.get('n1')!], [...rule.grades.get('n1')!])
+  assert.match(out.notes!.join(' '), /Jev re-scoring failed, kept the rule grades: Jev HTTP 503 down/)
+  assert.equal(out.usage, undefined)
+  const controller = new AbortController()
+  const aborting: Scorer = { id: 'jev', model: 'x', async score() { controller.abort(); throw new Error('aborted') } }
+  await assert.rejects(new HybridScorer({ jev: aborting }).score(hybridTask, [job(blocks, zhNeed)], { signal: controller.signal }), /aborted/)
+})
+
+test('Hybrid over the real JevScorer: only mismatch pairs are posted, in the score.support.v1 wording', async () => {
+  const { calls, fetchImpl } = fakeJev()
+  const jev = scorerWith(fetchImpl)
+  const out = await new HybridScorer({ jev }).score(hybridTask, [job([blk('opt', EN_OPT), blk('zh', ZH_MID)], zhNeed)])
+  assert.equal(calls.length, 1)
+  const questions = Object.values(calls[0]!.body.questions)
+  assert.equal(questions.length, 1)
+  assert.ok(questions[0]!.instructions.includes('sqlite.DatabaseSyncOptions.timeout'))
+  assert.equal(out.usage!.questions, 1)
+  assert.equal(out.grades.get('n1')!.get('opt')!.grade, 2)
 })

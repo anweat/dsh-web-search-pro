@@ -293,10 +293,11 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
   const scoreCtx = { signal: ctx.stage, ...deadlineAt !== undefined ? { deadline: deadlineAt } : {} }
   if (fullJobs.length) {
     if (control.id !== 'rule' && !ctx.stage.aborted) {
-      const limited = limitQuestions(fullJobs, options.maxScoreQuestions ?? 64)
+      // The hybrid scorer picks (and caps) the pairs it sends to Jev itself; a plain remote scorer gets the first `maxScoreQuestions`.
+      const limited = control.id === 'hybrid' ? fullJobs : limitQuestions(fullJobs, options.maxScoreQuestions ?? 64)
       try {
         outcome = await control.score(task, limited, scoreCtx)
-        if (outcome.usage) jevUsage = { requests: outcome.usage.requests, questions: outcome.usage.questions + outcome.usage.cacheHits, inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, mode: 'control' }
+        if (outcome.usage) jevUsage = { requests: outcome.usage.requests, questions: outcome.usage.questions + outcome.usage.cacheHits, inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, mode: control.id === 'hybrid' ? 'hybrid' : 'control' }
         if (outcome.notes?.length) notes.push(...outcome.notes.map(n => control.id + ': ' + n))
       } catch (error) {
         checkUser()
@@ -304,7 +305,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
         outcome = undefined
       }
     } else if (control.id !== 'rule') notes.push('scorer ' + control.id + ' skipped after the deadline, used the rule scorer')
-    if (!outcome) { outcome = await rule.score(task, fullJobs); scorerUsed = 'rule' }
+    if (!outcome) { outcome = await (control.id === 'rule' ? control : rule).score(task, fullJobs); scorerUsed = 'rule' }
   }
 
   if (ctx.deadlineSignal.aborted && !partial) { partial = true; notes.push('deadline reached while scoring') }
