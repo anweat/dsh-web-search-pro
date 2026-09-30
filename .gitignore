@@ -4,3 +4,6 @@ node_modules/
 .DS_Store
 .codegraph/
 *.tgz
+
+# bench: local candidate snapshots and labels (see bench/README.md)
+bench/data/

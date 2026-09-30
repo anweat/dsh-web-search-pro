@@ -37,7 +37,10 @@
     "verify": "pnpm run typecheck && pnpm run test:peers && pnpm run build && pnpm test && pnpm run test:client-bundle",
     "prepublishOnly": "pnpm run verify",
     "prepare": "pnpm run build",
-    "test:peers": "node test/compat/check-peer-ranges.js"
+    "test:peers": "node test/compat/check-peer-ranges.js",
+    "bench:typecheck": "tsc -p bench/tsconfig.json",
+    "bench:test": "node --test --experimental-transform-types bench/test/*.test.ts",
+    "bench:harvest": "node --experimental-transform-types bench/src/harvest.ts"
   },
   "peerDependencies": {
     "@anweat/dsh-browser": "0.1.15",

@@ -1,0 +1,12 @@
+{
+  // Bench-only typecheck (not part of the plugin build). Run: pnpm run bench:typecheck
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationDir": null,
+    "sourceMap": false,
+    "rootDir": ".."
+  },
+  "include": ["src", "test", "../src"]
+}
