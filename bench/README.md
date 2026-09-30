@@ -26,6 +26,7 @@ bench/
     harvest.ts             # 命令行入口
     judges/                # E2/E3：Judge 接口与各判定器（见下文）
     label-llm.ts  run-judges.ts  report.ts  metrics.ts  data.ts  cli.ts
+    eval-gate.ts           # M2a：src 规则 gate 的离线核对、查询编译预览、GitHub 实测
   rubrics/                 # 题目模板（gate.*.v1、score.support.v1、profile.choice.v1）
   test/
     blocks.test.ts         # 分块器（中英文、代码块、表格、稳定 id）
@@ -178,6 +179,18 @@ node --experimental-transform-types bench/src/report.ts --run e3-1
 - **判定器**：`rule` 为确定性词法基线；`jev` 硬上限 `--max-jev-requests`（含重试，默认 50），429/503/529 按 Retry-After 重试最多 2 次，401/413/422 不重试；`laya` 默认 multilingual（`--laya-model english|router`）；`deepseek` 只有加 `--with-deepseek` 才运行（与标注同源，存在泄漏）。每个判定调用按条目缓存到 `data/judge-cache/<judge>/<sha256>.json`，重跑不重复计费。
 - **S6 输入**：每个 need 取词法初排前 `--blocks-per-need`（默认 12）个块，所有判定器用同一批块。
 - **报告**：Gate 用标注相关度 ≥ 2 为正例（另报 ≥ 1），drop 阈值在 calibration 上取「正例召回 ≥ 0.95 的最高阈值」，在 test 上报召回、丢弃比例和含金标准块候选的召回；另有 Brier / ECE、Spearman、混淆矩阵、nDCG@5、请求数 / token / p50 / p95。标注是 LLM 初稿，报告头部会标明未经人工复核。
+
+### 规则 gate 离线核对（M2a）
+
+`src/pipeline/lexical.ts`（词法相关度）、`src/pipeline/gate.ts`（硬约束核验 + 相关度 gate）是运行时与 bench 共用的唯一实现；`bench/src/judges/rule.ts` 只保留 bench 专有部分（分档、导航页、profile 猜测）。
+
+```bash
+pnpm run bench:eval-gate                     # 在已标注数据上跑 src gate，与 r1 报告对照（±1pt 内为通过）
+pnpm run bench:eval-gate -- --compile        # 60 个任务按 provider 编译查询，并列出 GitHub 关键词查询
+pnpm run bench:eval-gate -- --github-live 5  # 另发 5 次匿名 GitHub 仓库搜索（间隔 7 s，忽略 GITHUB_TOKEN）
+```
+
+默认相关度阈值 `DEFAULT_RELEVANCE_THRESHOLD = 0.1236` 来自 r1 的 rule / gate.relevance.v1 calibration 选取值；修改 `lexical.ts` 后必须重跑本命令并重新选阈值。
 
 ## 哪些进 git，哪些不进
 
