@@ -27,6 +27,19 @@ export interface BrowserBinding {
   rulePack?: string
 }
 
+/** Evidence-pipeline settings (web_search_pro with `task` / `profile`; dev-plan M2b). */
+export interface EvidenceConfig {
+  /**
+   * Scorer for S6 decisions. `jev` only takes effect with `jevMode: 'control'`:
+   * Jev is a paid hosted service, so it needs both keys turned.
+   */
+  scorer: 'rule' | 'jev'
+  /** `off`: never call Jev. `shadow`: the rule scorer decides, Jev scores are recorded for comparison. `control`: Jev decides when `scorer` is `jev`; any Jev failure falls back to the rule scorer. */
+  jevMode: 'off' | 'shadow' | 'control'
+  /** Upper bound of (need, block) questions sent to Jev per search. */
+  maxJevQuestions: number
+}
+
 export interface Config {
   /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
   dbPath?: string
@@ -96,6 +109,8 @@ export interface Config {
     /** Directory for web_snapshot artifacts; defaults to <dbDir>/snapshots. */
     snapshotDir?: string
   }
+  /** Evidence pipeline (S6 scoring). */
+  evidence?: Partial<EvidenceConfig>
   verbose: boolean
 }
 
@@ -156,6 +171,11 @@ export const Config = z.object({
     enabled: z.boolean().default(true).volatile(),
     snapshotDir: z.string(),
   }),
+  evidence: z.object({
+    scorer: z.union(['rule', 'jev']).default('rule').volatile(),
+    jevMode: z.union(['off', 'shadow', 'control']).default('off').volatile(),
+    maxJevQuestions: z.number().default(64).volatile(),
+  }),
   verbose: z.boolean().default(false).volatile(),
 })
 
@@ -167,6 +187,7 @@ export interface ResolvedConfig extends Config {
   jinaApiKeyEnv: string
   githubTokenEnv: string
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
+  evidence: EvidenceConfig
 }
 
 /** Read a possibly-volatile config field (schemastery `Volatile<T>` wraps live fields). */
@@ -192,6 +213,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const dbPath = vOr(config.dbPath, defaultDbPath())
   const pw: Partial<Config['playwright']> = config.playwright ?? {}
   const snapshotDir = vOr(pw.snapshotDir, path.join(path.dirname(dbPath), 'snapshots'))
+  const ev: Partial<EvidenceConfig> = config.evidence ?? {}
   return {
     ...config,
     dbPath,
@@ -224,6 +246,11 @@ export function resolveConfig(config: Config): ResolvedConfig {
     playwright: {
       enabled: vOr(pw.enabled, true) as boolean,
       snapshotDir,
+    },
+    evidence: {
+      scorer: vOr(ev.scorer, 'rule') as EvidenceConfig['scorer'],
+      jevMode: vOr(ev.jevMode, 'off') as EvidenceConfig['jevMode'],
+      maxJevQuestions: vOr(ev.maxJevQuestions, 64) as number,
     },
     verbose: vOr(config.verbose, false) as boolean,
   }

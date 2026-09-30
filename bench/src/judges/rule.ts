@@ -14,18 +14,12 @@ import {
   type ConstraintVerdict, type GateItem,
 } from '../../../src/pipeline/gate.ts'
 import { profileScores } from '../../../src/pipeline/plan.ts'
+import { bucketGrade, GRADE_THRESHOLDS } from '../../../src/pipeline/score.ts'
 import type { TaskConstraint } from '../types.ts'
 import type { Judge, JudgeContext, JudgeItem, JudgeQuestion, JudgeResult, Readiness } from './types.ts'
 
-/** Relevance -> grade buckets: [0,T1) 0, [T1,T2) 1, [T2,T3) 2, >=T3 3. */
-export const GRADE_THRESHOLDS = [0.12, 0.3, 0.55] as const
-
-export function bucketGrade(relevance: number): 0 | 1 | 2 | 3 {
-  if (relevance < GRADE_THRESHOLDS[0]) return 0
-  if (relevance < GRADE_THRESHOLDS[1]) return 1
-  if (relevance < GRADE_THRESHOLDS[2]) return 2
-  return 3
-}
+// Grade buckets live in src/pipeline/score.ts (the runtime RuleScorer uses them).
+export { bucketGrade, GRADE_THRESHOLDS }
 
 export type { ConstraintVerdict }
 

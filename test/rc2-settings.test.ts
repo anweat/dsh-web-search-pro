@@ -34,3 +34,10 @@ test('an unset rc.2 volatile field falls back after unwrapping', () => {
   assert.match(resolved.dbPath, /web-search-pro[\\/]store\.db$/)
   assert.equal(resolved.playwright.enabled, true)
 })
+
+test('evidence settings default to the rule scorer with Jev off, and unwrap volatile values', () => {
+  assert.deepEqual(resolveConfig({} as never).evidence, { scorer: 'rule', jevMode: 'off', maxJevQuestions: 64 })
+  const live = <T>(value: T) => ({ get: () => value })
+  const resolved = resolveConfig({ evidence: { scorer: live('jev'), jevMode: live('shadow'), maxJevQuestions: live(24) } } as never)
+  assert.deepEqual(resolved.evidence, { scorer: 'jev', jevMode: 'shadow', maxJevQuestions: 24 })
+})
