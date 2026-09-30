@@ -36,11 +36,18 @@ export interface Config {
   memoryCacheEntries: number
   /** Reciprocal Rank Fusion constant for multi-engine merging. */
   rrfConstant: number
-  /** Max recency bonus added to a source's fusion score (0..1). */
+  /**
+   * Recency bonus, as a fraction (0..1) of ONE TOP-RANK STEP on the normalised
+   * fusion scale (pipeline/fusion.ts): added once per URL, so even at 1 a fresh
+   * result gains about one rank position, and at the default it is a tie-breaker.
+   */
   freshnessBoost: number
   /** Days over which the recency bonus decays to zero. */
   freshnessDays: number
-  /** Max authority-domain bonus added to a source's fusion score (0..1). */
+  /**
+   * Authority-domain bonus, same scale and once-per-URL rule as `freshnessBoost`:
+   * it cannot lift a rank-10 result over a rank-1 result of the same engine.
+   */
   authorityBoost: number
   /** Extra authority domains (beyond the built-in .edu/.gov/.org and the curated list). */
   authorityDomains: string[]

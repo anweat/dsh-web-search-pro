@@ -22,6 +22,8 @@ import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
 import { BackendRegistry, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
 import { SingleFlight } from './singleflight.ts'
+import { mergeCandidates, type ProviderOutput } from './pipeline/candidates.ts'
+import { fuseCandidates } from './pipeline/fusion.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -285,6 +287,7 @@ export class SearchRouter {
     let usedId: string | undefined
     let fallbackNote: string | undefined
     let availableCount: number | undefined
+    let persistExtras: string[] | undefined
 
     if (multi) {
       // Every engine goes through the registry (probe, cooldown, quality gate,
@@ -293,50 +296,30 @@ export class SearchRouter {
       const results = await Promise.allSettled(ids.map(id => this.backends.runSelected(input, { preferred: [id], ...signal ? { signal } : {} })))
       if (signal?.aborted) throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
       enginesTried.push(...ids)
-      // Reciprocal Rank Fusion + freshness/authority signals (Argo-style
-      // evidence credibility): each engine's rank order contributes 1/(k+rank);
-      // recency and authoritative domains add a bounded bonus so a recent,
-      // trustworthy source can edge out an older, lower-authority one.
-      const k = Math.max(cfg.rrfConstant, 1)
-      const scores = new Map<string, number>()
-      const entries = new Map<string, { url: string; title?: string; snippet?: string; publishedAt?: string }>()
-      const freshnessBoost = Math.min(Math.max(cfg.freshnessBoost, 0), 1)
-      const authorityBoost = Math.min(Math.max(cfg.authorityBoost, 0), 1)
-      const freshnessDays = Math.max(cfg.freshnessDays, 1)
-      const authorityDomains = [...cfg.authorityDomains, 'github.com', 'wikipedia.org', 'arxiv.org', 'pubmed.ncbi.nlm.nih.gov', 'stackoverflow.com', 'developer.mozilla.org']
-      for (const r of results) {
-        if (r.status !== 'fulfilled') continue
-        r.value.value.sources.forEach((s, rank) => {
-          if (!s.url) return
-          let score = scores.get(s.url) ?? 0
-          score += 1 / (k + rank + 1)
-          if (freshnessBoost > 0 && s.publishedAt) {
-            const published = Date.parse(s.publishedAt)
-            if (!Number.isNaN(published)) {
-              const ageDays = (Date.now() - published) / 86400_000
-              if (ageDays >= 0) score += freshnessBoost * Math.max(0, 1 - ageDays / freshnessDays)
-            }
-          }
-          if (authorityBoost > 0) {
-            let host = ''
-            try { host = new URL(s.url).hostname.toLowerCase() } catch { /* ignore */ }
-            const isAuthority = authorityDomains.some(d => host === d || host.endsWith('.' + d))
-              || /(^|\.)(edu|gov|org)$/.test(host)
-            if (isAuthority) score += authorityBoost
-          }
-          scores.set(s.url, score)
-          if (!entries.has(s.url)) {
-            entries.set(s.url, { url: s.url, ...s.title ? { title: s.title } : {}, ...s.snippet ? { snippet: s.snippet } : {}, ...s.publishedAt ? { publishedAt: s.publishedAt } : {} })
-          }
-        })
-      }
-      if (!scores.size) {
+      // Merge by canonical URL (every provider/rank/query contribution kept),
+      // then fuse: one normalised RRF term per provider, freshness/authority
+      // bonuses once per URL (pipeline/fusion.ts).
+      const outputs: ProviderOutput[] = []
+      results.forEach((r, index) => {
+        if (r.status === 'fulfilled' && r.value.value.sources.length) outputs.push({ providerId: ids[index]!, query, sources: r.value.value.sources })
+      })
+      if (!outputs.length) {
         const failures = results.map((r, index) => ids[index] + ': ' + (r.status === 'rejected' ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : 'empty')).join('; ')
         throw new Error('all engines failed: ' + failures)
       }
-      availableCount = scores.size
-      const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, count)
-      outcome = { sources: ranked.map(([url]) => entries.get(url)!) }
+      const merged = mergeCandidates(outputs)
+      const ranked = fuseCandidates(merged, {
+        k: cfg.rrfConstant,
+        freshnessBoost: cfg.freshnessBoost,
+        freshnessDays: cfg.freshnessDays,
+        authorityBoost: cfg.authorityBoost,
+        authorityDomains: cfg.authorityDomains,
+        nProviders: outputs.length,
+      }).slice(0, count)
+      availableCount = merged.length
+      outcome = { sources: ranked.map(({ candidate }) => ({ url: candidate.url, ...candidate.title ? { title: candidate.title } : {}, ...candidate.snippet ? { snippet: candidate.snippet } : {}, ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {} })) }
+      // Per-source provenance survives in results.extra (no schema change); the cache-hit path ignores it.
+      persistExtras = ranked.map(({ candidate, score }) => JSON.stringify({ contributions: candidate.contributions, score: Number(score.toFixed(6)) }))
       usedId = 'multi(' + ids.join('+') + ')'
     } else {
       try {
@@ -374,7 +357,7 @@ export class SearchRouter {
       status: 'ok',
       cacheKey,
       detail: JSON.stringify({ ...finalOutcome.content ? { content: finalOutcome.content } : {}, engine: finalId, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
-    }, finalOutcome.sources, finalId))
+    }, persistExtras ? finalOutcome.sources.map((source, i) => ({ ...source, extra: persistExtras![i]! })) : finalOutcome.sources, finalId))
 
     const result: RouterSearchResult = {
       ...outcome.content ? { content: outcome.content } : {},
