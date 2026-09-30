@@ -24,13 +24,17 @@ bench/
     blocks.ts              # 分块器：标题路径、代码块/表格保持完整、稳定 blockId
     harvest-lib.ts         # 采集逻辑：引擎计划、礼貌限速、页面抓取、快照读写
     harvest.ts             # 命令行入口
+    judges/                # E2/E3：Judge 接口与各判定器（见下文）
+    label-llm.ts  run-judges.ts  report.ts  metrics.ts  data.ts  cli.ts
+  rubrics/                 # 题目模板（gate.*.v1、score.support.v1、profile.choice.v1）
   test/
     blocks.test.ts         # 分块器（中英文、代码块、表格、稳定 id）
     tasks.test.ts          # 任务集结构与覆盖检查
     harvest.test.ts        # URL 归一/选取、引擎计划、限速
   data/                    # 本地数据，git 忽略（见下）
     candidates.v1/<taskId>.json
-    labels.v1/<taskId>.json        # 后续标注写入这里
+    labels.v1/<taskId>.json        # 标注（LLM 初稿或人工）
+    judge-cache/  runs/<runId>/    # 判定缓存；对照实验结果与报告
 ```
 
 ## 如何运行
@@ -154,6 +158,26 @@ pnpm run bench:harvest -- --limit 5          # 等价写法：只跑前 5 个任
 - `gold[].evidence` 为空数组表示快照内没有页面支持该 need；它是有意义的结果（覆盖判定 S8 的负例）。
 - `evidence` 同时记录 `blockId` 与块 `hash`，页面重抓或分块规则变化后可以据此重新对齐。
 - **calibration/test 划分**：`assignSplits()`（`src/tasks.ts`）按 profile 分层、按 `sha1(id)` 排序、前一半为 calibration，确定且可复现。任务集有增删时分配会变化，所以开始标注前把划分结果固化到文件。阈值与提示词只在 calibration 上调。
+
+## E2/E3：LLM 标注初稿与判定器对照（dev-plan §6.3、§6.5）
+
+新增目录：`src/judges/`（Judge 接口、rule / jev / laya / deepseek、缓存、预算守卫）、`rubrics/*.json`（带版本的题目模板）、`src/label-llm.ts`、`src/run-judges.ts`、`src/report.ts`、`src/metrics.ts`。
+
+```bash
+# 1. DeepSeek 标注初稿（付费；余额守卫强制开启）。key 来自环境变量 DEEPSEEK_API_KEY，不要打印
+node --experimental-transform-types bench/src/label-llm.ts --tasks dc-01 --effort low \
+  --max-spend-cny 2 --min-balance-cny 41            # 也可 --limit N、--force、--dry-run
+# 2. 判定器对照（rule 离线；laya 需先 experiments/laya/start.sh；jev 需 BOCHA_JEV_API_KEY）
+node --experimental-transform-types bench/src/run-judges.ts --judges rule,laya,jev \
+  --split all --max-jev-requests 50 --run-id e3-1     # --groups s4,s6,s1  --gates single,relevance,constraint,nav
+# 3. 报告（中文 report.md + report.json，同目录）
+node --experimental-transform-types bench/src/report.ts --run e3-1
+```
+
+- **标注**：写入 `data/labels.v1/<taskId>.json`（`labeler.reviewed: false`），每次请求的 token 与余额写入 `data/labels.v1/_ledger.jsonl`。每次请求之后都会读 `GET /user/balance`；花费 ≥ `--max-spend-cny` 或余额 < `--min-balance-cny` 立即停止。余额接口只有 0.01 元精度且可能滞后，所以另有 `--max-total-tokens`（默认 300 万）兜底。`reasoning_effort` 被 API 接受（取值 none/minimal/low/medium/high/xhigh/ultra/max，非法值 422）；推理 token 计入输出，`low` 在长提示上可能把 `max_tokens` 用光而内容为空，此时脚本对该请求自动降级为 `none` 重试。site / exclude_site 约束由程序按 URL 主机判定，不问模型。
+- **判定器**：`rule` 为确定性词法基线；`jev` 硬上限 `--max-jev-requests`（含重试，默认 50），429/503/529 按 Retry-After 重试最多 2 次，401/413/422 不重试；`laya` 默认 multilingual（`--laya-model english|router`）；`deepseek` 只有加 `--with-deepseek` 才运行（与标注同源，存在泄漏）。每个判定调用按条目缓存到 `data/judge-cache/<judge>/<sha256>.json`，重跑不重复计费。
+- **S6 输入**：每个 need 取词法初排前 `--blocks-per-need`（默认 12）个块，所有判定器用同一批块。
+- **报告**：Gate 用标注相关度 ≥ 2 为正例（另报 ≥ 1），drop 阈值在 calibration 上取「正例召回 ≥ 0.95 的最高阈值」，在 test 上报召回、丢弃比例和含金标准块候选的召回；另有 Brier / ECE、Spearman、混淆矩阵、nDCG@5、请求数 / token / p50 / p95。标注是 LLM 初稿，报告头部会标明未经人工复核。
 
 ## 哪些进 git，哪些不进
 
