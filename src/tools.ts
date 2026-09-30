@@ -204,13 +204,15 @@ export function registerTools(deps: ToolDeps): void {
     async execute(args, exec) {
       const mode = (args.mode ?? 'auto') as 'auto' | 'jina' | 'http' | 'playwright'
       if (!['auto', 'jina', 'http', 'playwright'].includes(mode)) throw new Error('mode must be auto, jina, http, or playwright')
-      return fetchSvc.fetchPage(args.url, {
+      const { truncated: _truncated, ...page } = await fetchSvc.fetchPage(args.url, {
         mode,
         signal: exec.signal,
         maxChars: args.maxChars ?? 100_000,
         fresh: args.fresh ?? false,
         persist: args.persist ?? true,
       })
+      // `truncated` is provider-only; the tool output schema is closed.
+      return page
     },
   }))
 
@@ -298,16 +300,18 @@ export function registerTools(deps: ToolDeps): void {
         htmlPath: shot.htmlPath,
       }
       if (args.screenshot !== false && shot.screenshotPath) out.screenshotPath = shot.screenshotPath
-      const queryId = store.recordQuery({ kind: 'snapshot', url: args.url, query: shot.title ?? args.url, engine: 'playwright', status: 'ok', detail: JSON.stringify({ screenshotPath: out.screenshotPath, htmlPath: shot.htmlPath }) })
-      store.savePage({
-        queryId,
-        url: args.url,
-        ...shot.title ? { title: shot.title } : {},
-        text: shot.text,
-        htmlPath: shot.htmlPath,
-        ...out.screenshotPath ? { screenshotPath: out.screenshotPath } : {},
-        source: 'playwright',
-      })
+      // Atomic query + page rows; a storage failure must not lose the captured snapshot.
+      store.bestEffort('recordFetch', () => store.recordFetch(
+        { kind: 'snapshot', url: args.url, query: shot.title ?? args.url, engine: 'playwright', status: 'ok', detail: JSON.stringify({ screenshotPath: out.screenshotPath, htmlPath: shot.htmlPath }) },
+        {
+          url: args.url,
+          ...shot.title ? { title: shot.title } : {},
+          text: shot.text,
+          htmlPath: shot.htmlPath,
+          ...out.screenshotPath ? { screenshotPath: out.screenshotPath } : {},
+          source: 'playwright',
+        },
+      ))
       return out
     },
   }))

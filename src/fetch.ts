@@ -12,6 +12,7 @@ import { extractText, BUILTIN_RULES } from './extract.ts'
 import { httpGet, capText } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import { assertSafePublicUrl } from './safe-http.ts'
+import { SingleFlight } from './singleflight.ts'
 
 export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright'
 
@@ -33,6 +34,13 @@ export interface FetchResult {
   usedRule?: string
   /** True when the page is a navigation/JS/form shell with no extractable data. */
   shellPage?: boolean
+  /** True when `text` was cut at maxChars (internal: reported by the ctx.web provider, not a tool output field). */
+  truncated?: boolean
+}
+
+/** True when `text` ends with capText()'s truncation marker. */
+export function isTruncatedText(text: string): boolean {
+  return /\(Content truncated at \d+ characters\.\)$/.test(text)
 }
 
 const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]/g
@@ -90,6 +98,8 @@ export function mergedRules(store: Store): ExtractRule[] {
 
 export class FetchService {
   private readonly memory = new LruCache<FetchResult>(128)
+  /** In-flight de-duplication of identical non-fresh fetches (C3). */
+  private readonly flights = new SingleFlight<FetchResult>()
 
   constructor(
     private readonly store: Store,
@@ -105,6 +115,14 @@ export class FetchService {
     const normalized = normalizeUrl(url)
     const maxChars = Math.min(Math.max(opts.maxChars, 1_000), 500_000)
     const memoryKey = ['page', normalized, opts.mode, maxChars, opts.persist ? 'persist' : 'ephemeral'].join('|')
+    const run = (signal: AbortSignal | undefined): Promise<FetchResult> => this.runFetch(normalized, maxChars, memoryKey, opts, signal)
+    if (opts.fresh) return run(opts.signal)
+    return this.flights.do(memoryKey, run, opts.signal)
+  }
+
+  private async runFetch(normalized: string, maxChars: number, memoryKey: string, callerOpts: FetchOptions, signal: AbortSignal | undefined): Promise<FetchResult> {
+    // Backends see the shared flight signal, not one waiter's own.
+    const opts: FetchOptions = { ...callerOpts, signal }
 
     if (!opts.fresh) {
       const ttlMs = this.cfg().ttlSeconds * 1000
@@ -112,12 +130,13 @@ export class FetchService {
       if (hot) return { ...hot, fromCache: true }
       // Auto mode may reuse the freshest successful representation. An explicit
       // backend is a caller contract and must not silently replay another mode.
-      const cached = this.store.getPage(normalized, this.cfg().ttlSeconds, opts.mode === 'auto' ? undefined : opts.mode)
+      const cached = this.store.bestEffort('page cache read', () => this.store.getPage(normalized, this.cfg().ttlSeconds, opts.mode === 'auto' ? undefined : opts.mode))
       if (cached && cached.text) {
         const page: FetchResult = {
           url: normalized,
           ...cached.title ? { title: cached.title } : {},
           text: capText(cached.text, maxChars),
+          ...cached.text.length > maxChars || isTruncatedText(cached.text) ? { truncated: true } : {},
           source: 'cache:' + (cached.source ?? 'unknown'),
           fromCache: true,
           ...typeof cached.status === 'number' ? { statusCode: cached.status } : {},
@@ -162,25 +181,26 @@ export class FetchService {
     // P1-3: flag navigation/JS/form shells so the model knows there is no data
     // here and should follow the pointers instead of re-fetching the same page.
     if (detectShellPage(result.text)) result.shellPage = true
+    if (isTruncatedText(result.text)) result.truncated = true
 
     this.memory.set(memoryKey, result)
     if (opts.persist) {
-      const queryId = this.store.recordQuery({
+      // Atomic query + page rows; a storage failure must not lose the fetched page.
+      const saved = result
+      this.store.bestEffort('recordFetch', () => this.store.recordFetch({
         kind: 'fetch',
         url: normalized,
-        query: result.title ?? normalized,
-        engine: result.source,
+        query: saved.title ?? normalized,
+        engine: saved.source,
         status: 'ok',
-        detail: JSON.stringify({ textLength: result.text.length, usedRule: result.usedRule }),
-      })
-      this.store.savePage({
-        queryId,
+        detail: JSON.stringify({ textLength: saved.text.length, usedRule: saved.usedRule }),
+      }, {
         url: normalized,
-        ...result.title ? { title: result.title } : {},
-        text: result.text,
-        ...result.statusCode !== undefined ? { status: result.statusCode } : {},
-        source: result.source,
-      })
+        ...saved.title ? { title: saved.title } : {},
+        text: saved.text,
+        ...saved.statusCode !== undefined ? { status: saved.statusCode } : {},
+        source: saved.source,
+      }))
     }
     return result
   }

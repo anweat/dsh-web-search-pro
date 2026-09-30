@@ -14,12 +14,13 @@ import {
   bilibiliEngine, v2exEngine, youtubeEngine, arxivEngine, pubmedEngine, platformEngines,
   rssEngine, customPlatformEngine, EngineError, type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions,
 } from './engines.ts'
-import { normQuery, capText } from './util.ts'
+import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
 import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
 import { BackendRegistry, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
+import { SingleFlight } from './singleflight.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -43,6 +44,8 @@ export interface RouterSearchResult {
   engine: string
   enginesTried: string[]
   fromCache: boolean
+  /** Sources available before slicing to `count` (>= sources.length); drives `truncated`. */
+  availableCount?: number
   /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
   fallbackNote?: string
 }
@@ -62,6 +65,9 @@ const ENGINE_FACTORIES: Record<string, (deps: any, config: ResolvedConfig) => En
 }
 
 export class SearchRouter {
+  /** In-flight de-duplication of identical non-fresh requests (C3). */
+  private readonly searchFlights = new SingleFlight<RouterSearchResult>()
+  private readonly platformFlights = new SingleFlight<RouterSearchResult>()
   private readonly backends: BackendRegistry<{ query: string; count: number; signal?: AbortSignal; skipSeam: boolean; options?: EngineSearchOptions }, SearchOutcome>
 
   constructor(
@@ -228,35 +234,43 @@ export class SearchRouter {
     const multi = opts.multi && ids.length > 1
     const cacheKey = createSearchCacheKey({ query, engines: ids, count, multi, ...opts.exa ? { exa: opts.exa as Record<string, unknown> } : {} })
     const memoryKey = cacheKey + ':count=' + count
+    const run = (signal: AbortSignal | undefined): Promise<RouterSearchResult> => this.runSearch({ opts, query, nq, ids, count, multi, cacheKey, memoryKey }, signal)
+    if (opts.fresh) return run(opts.signal)
+    // skipSeam changes which engines can run, so it must be part of the flight identity.
+    return this.searchFlights.do(memoryKey + (opts.skipSeam ? ':skipSeam' : ''), run, opts.signal)
+  }
+
+  private async runSearch(
+    p: { opts: RouterSearchOptions; query: string; nq: string; ids: string[]; count: number; multi: boolean; cacheKey: string; memoryKey: string },
+    signal: AbortSignal | undefined,
+  ): Promise<RouterSearchResult> {
+    const { opts, query, nq, ids, count, multi, cacheKey, memoryKey } = p
+    const cfg = this.dynamic()
 
     // 1. In-process LRU cache, then SQLite.
     if (!opts.fresh) {
       const hot = this.memory.get(memoryKey, cfg.ttlSeconds * 1000)
       if (hot) return { ...hot, fromCache: true }
-      const cached = this.store.getCachedQuery('search', cacheKey, cfg.ttlSeconds)
-      if (cached) {
-          const rows = this.store.resultsForQuery(cached.id)
-          if (rows.length) {
-            let detail: { content?: string; engine?: string; enginesTried?: string[]; requestedCount?: number; fallbackNote?: string } | undefined
-            if (cached.detail) { try { detail = JSON.parse(cached.detail) } catch { /* ignore */ } }
-            if (detail?.requestedCount === undefined || detail.requestedCount >= count) {
-              const result: RouterSearchResult = {
-                ...detail?.content ? { content: detail.content } : {},
-                sources: rows.slice(0, count).map(r => ({
-                  url: r.url,
-                  ...r.title ? { title: r.title } : {},
-                  ...r.snippet ? { snippet: r.snippet } : {},
-                  ...r.published ? { publishedAt: r.published } : {},
-                })),
-                engine: detail?.engine ?? ids[0] ?? 'unknown',
-                enginesTried: detail?.enginesTried ?? ids,
-                fromCache: true,
-                ...detail?.fallbackNote ? { fallbackNote: detail.fallbackNote } : {},
-              }
-              this.memory.set(memoryKey, result)
-              return result
-            }
+      const cached = this.store.bestEffort('search cache read', () => {
+        const hit = this.store.getCachedQuery('search', cacheKey, cfg.ttlSeconds)
+        return hit ? { hit, rows: this.store.resultsForQuery(hit.id) } : undefined
+      })
+      if (cached?.rows.length) {
+        let detail: { content?: string; engine?: string; enginesTried?: string[]; requestedCount?: number; fallbackNote?: string } | undefined
+        if (cached.hit.detail) { try { detail = JSON.parse(cached.hit.detail) } catch { /* ignore */ } }
+        if (detail?.requestedCount === undefined || detail.requestedCount >= count) {
+          const result: RouterSearchResult = {
+            ...detail?.content ? { content: detail.content } : {},
+            sources: shapeSources(cached.rows.map(r => ({ url: r.url, title: r.title, snippet: r.snippet, publishedAt: r.published })), count),
+            engine: detail?.engine ?? ids[0] ?? 'unknown',
+            enginesTried: detail?.enginesTried ?? ids,
+            fromCache: true,
+            availableCount: cached.rows.length,
+            ...detail?.fallbackNote ? { fallbackNote: detail.fallbackNote } : {},
           }
+          this.memory.set(memoryKey, result)
+          return result
+        }
       }
     }
 
@@ -265,14 +279,14 @@ export class SearchRouter {
     let outcome: SearchOutcome | undefined
     let usedId: string | undefined
     let fallbackNote: string | undefined
-    const signal = opts.signal
+    let availableCount: number | undefined
 
     if (multi) {
-      const results = await Promise.allSettled(ids.map(async (id) => {
-        const engine = await this.build(id, opts.skipSeam ?? false)
-        if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
-        return { id, outcome: await engine.search(query, count, signal, opts.exa ? { exa: opts.exa } : undefined) }
-      }))
+      // Every engine goes through the registry (probe, cooldown, quality gate,
+      // attempts) in parallel; failures of one never cancel the others.
+      const input = { query, count, signal, skipSeam: opts.skipSeam ?? false, ...opts.exa ? { options: { exa: opts.exa } } : {} }
+      const results = await Promise.allSettled(ids.map(id => this.backends.runSelected(input, { preferred: [id], ...signal ? { signal } : {} })))
+      if (signal?.aborted) throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
       enginesTried.push(...ids)
       // Reciprocal Rank Fusion + freshness/authority signals (Argo-style
       // evidence credibility): each engine's rank order contributes 1/(k+rank);
@@ -287,7 +301,7 @@ export class SearchRouter {
       const authorityDomains = [...cfg.authorityDomains, 'github.com', 'wikipedia.org', 'arxiv.org', 'pubmed.ncbi.nlm.nih.gov', 'stackoverflow.com', 'developer.mozilla.org']
       for (const r of results) {
         if (r.status !== 'fulfilled') continue
-        r.value.outcome.sources.forEach((s, rank) => {
+        r.value.value.sources.forEach((s, rank) => {
           if (!s.url) return
           let score = scores.get(s.url) ?? 0
           score += 1 / (k + rank + 1)
@@ -315,6 +329,7 @@ export class SearchRouter {
         const failures = results.map((r, index) => ids[index] + ': ' + (r.status === 'rejected' ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : 'empty')).join('; ')
         throw new Error('all engines failed: ' + failures)
       }
+      availableCount = scores.size
       const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, count)
       outcome = { sources: ranked.map(([url]) => entries.get(url)!) }
       usedId = 'multi(' + ids.join('+') + ')'
@@ -322,7 +337,7 @@ export class SearchRouter {
       try {
         const selected = await this.backends.runSelected(
           { query, count, signal, skipSeam: opts.skipSeam ?? false, ...opts.exa ? { options: { exa: opts.exa } } : {} },
-          { preferred: ids },
+          { preferred: ids, ...signal ? { signal } : {} },
         )
         outcome = selected.value
         usedId = selected.id
@@ -341,29 +356,28 @@ export class SearchRouter {
         throw error
       }
     }
+    availableCount ??= outcome.sources.length
 
-    // 3. Persist.
-    const queryId = this.store.recordQuery({
+    // 3. Persist (atomic query + rows). A storage failure must not lose results
+    // the network already paid for: it is logged and the search still returns.
+    const finalOutcome = outcome
+    const finalId = usedId
+    this.store.bestEffort('recordSearch', () => this.store.recordSearch({
       kind: 'search',
       query: nq,
-      engine: usedId,
+      engine: finalId,
       status: 'ok',
       cacheKey,
-      detail: JSON.stringify({ ...outcome!.content ? { content: outcome!.content } : {}, engine: usedId, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
-    })
-    this.store.recordResults(queryId, outcome!.sources, usedId)
+      detail: JSON.stringify({ ...finalOutcome.content ? { content: finalOutcome.content } : {}, engine: finalId, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
+    }, finalOutcome.sources, finalId))
 
     const result: RouterSearchResult = {
-      ...outcome!.content ? { content: outcome!.content } : {},
-      sources: outcome!.sources.slice(0, count).map(s => ({
-        url: s.url,
-        ...s.title ? { title: s.title } : {},
-        ...s.snippet ? { snippet: capText(s.snippet, 500) } : {},
-        ...s.publishedAt ? { publishedAt: s.publishedAt } : {},
-      })),
+      ...outcome.content ? { content: outcome.content } : {},
+      sources: shapeSources(outcome.sources, count),
       engine: usedId,
       enginesTried,
       fromCache: false,
+      availableCount,
       ...fallbackNote ? { fallbackNote } : {},
     }
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).
@@ -382,34 +396,54 @@ export class SearchRouter {
     const legacyRssUrl = platform === 'rss' && !url && /^https?:\/\//i.test(query.trim()) ? query.trim() : undefined
     const feedUrl = url ?? legacyRssUrl
     const effectiveQuery = legacyRssUrl ? '' : query
-    const nq = normQuery(effectiveQuery || feedUrl || platform)
     const boundedCount = Math.min(Math.max(count, 1), 20)
     const binding = this.dynamic().browserBindings?.[platform]
     const authProfile = opts.authProfile ?? binding?.authProfile
     const rulePack = opts.rulePack ?? binding?.rulePack
     const cacheKey = createPlatformCacheKey({ platform, query: effectiveQuery || feedUrl || platform, ...feedUrl ? { url: feedUrl } : {}, count: boundedCount, ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} })
+    const run = (signal: AbortSignal | undefined): Promise<RouterSearchResult> =>
+      this.runPlatformSearch({ platform, url: feedUrl, effectiveQuery, boundedCount, authProfile, rulePack, cacheKey, fresh: opts.fresh ?? false }, signal)
+    if (opts.fresh) return run(opts.signal)
+    // The cache key ignores count (smaller requests reuse larger ones); flights must not.
+    return this.platformFlights.do(cacheKey + ':count=' + boundedCount, run, opts.signal)
+  }
+
+  /** Platform engine list; a seam so tests can inject fakes without network. */
+  protected platformEngineList(platform: string, feedUrl: string | undefined, deps: EngineDeps): Engine[] {
     const custom = this.dynamic().customPlatforms?.[platform]
+    return custom
+      ? [customPlatformEngine(platform, custom, deps)]
+      : (platform === 'rss' && feedUrl ? [rssEngine(feedUrl, deps.allowProxyFakeIp)] : platformEngines(platform, deps))
+  }
+
+  private async runPlatformSearch(
+    p: { platform: string; url: string | undefined; effectiveQuery: string; boundedCount: number; authProfile: string | undefined; rulePack: string | undefined; cacheKey: string; fresh: boolean },
+    signal: AbortSignal | undefined,
+  ): Promise<RouterSearchResult> {
+    const { platform, url: feedUrl, effectiveQuery, boundedCount, authProfile, rulePack, cacheKey } = p
+    const nq = normQuery(effectiveQuery || feedUrl || platform)
     // Async deps (not depsSync): platform engines may need credentials-resolved
     // keys (e.g. githubToken from the credentials service), which the sync path
     // cannot reach. platformSearch is async, so awaiting is free.
     const deps = await this.deps(true)
-    const engines = custom
-      ? [customPlatformEngine(platform, custom, deps)]
-      : (platform === 'rss' && feedUrl ? [rssEngine(feedUrl, deps.allowProxyFakeIp)] : platformEngines(platform, deps))
+    const engines = this.platformEngineList(platform, feedUrl, deps)
     if (!engines.length) throw new Error('unsupported platform: ' + platform)
 
-    if (!opts.fresh) {
-      const cached = this.store.getCachedQuery('platform', cacheKey, this.dynamic().ttlSeconds)
+    if (!p.fresh) {
+      const cached = this.store.bestEffort('platform cache read', () => {
+        const hit = this.store.getCachedQuery('platform', cacheKey, this.dynamic().ttlSeconds)
+        return hit ? { hit, rows: this.store.resultsForQuery(hit.id) } : undefined
+      })
       if (cached) {
-        const rows = this.store.resultsForQuery(cached.id)
         let detail: { requestedCount?: number } | undefined
-        if (cached.detail) { try { detail = JSON.parse(cached.detail) } catch { /* ignore */ } }
-        if (rows.length && (detail?.requestedCount === undefined || detail.requestedCount >= boundedCount)) {
+        if (cached.hit.detail) { try { detail = JSON.parse(cached.hit.detail) } catch { /* ignore */ } }
+        if (cached.rows.length && (detail?.requestedCount === undefined || detail.requestedCount >= boundedCount)) {
           return {
-            sources: rows.slice(0, boundedCount).map(r => ({ url: r.url, ...r.title ? { title: r.title } : {}, ...r.snippet ? { snippet: r.snippet } : {}, ...r.published ? { publishedAt: r.published } : {} })),
+            sources: shapeSources(cached.rows.map(r => ({ url: r.url, title: r.title, snippet: r.snippet, publishedAt: r.published })), boundedCount),
             engine: platform,
             enginesTried: [platform],
             fromCache: true,
+            availableCount: cached.rows.length,
           }
         }
       }
@@ -422,10 +456,10 @@ export class SearchRouter {
       enginesTried.push(engine.id)
       if (!engine.available()) continue
       try {
-        outcome = await engine.search(platform === 'rss' ? effectiveQuery : effectiveQuery || 'latest', boundedCount, opts.signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
+        outcome = await engine.search(platform === 'rss' ? effectiveQuery : effectiveQuery || 'latest', boundedCount, signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
         break
       } catch (error) {
-        if (opts.signal?.aborted) throw error
+        if (signal?.aborted) throw error
         lastError = error
       }
     }
@@ -434,7 +468,8 @@ export class SearchRouter {
       throw new Error('platform ' + platform + ' unavailable (tried: ' + enginesTried.join(', ') + ')' + reason)
     }
 
-    const queryId = this.store.recordQuery({
+    const found = outcome
+    this.store.bestEffort('recordSearch', () => this.store.recordSearch({
       kind: 'platform',
       query: nq,
       platform,
@@ -442,9 +477,8 @@ export class SearchRouter {
       status: 'ok',
       cacheKey,
       detail: JSON.stringify({ requestedCount: boundedCount }),
-    })
-    this.store.recordResults(queryId, outcome.sources, 'platform-' + platform)
-    return { sources: outcome.sources, engine: platform, enginesTried, fromCache: false }
+    }, found.sources, 'platform-' + platform))
+    return { sources: shapeSources(found.sources, boundedCount), engine: platform, enginesTried, fromCache: false, availableCount: found.sources.length }
   }
 
   /**
@@ -464,8 +498,8 @@ export class SearchRouter {
     return {
       ...result.content ? { content: result.content } : {},
       sources: result.sources.map(s => ({ url: s.url, ...s.title ? { title: s.title } : {}, ...s.snippet ? { snippet: s.snippet } : {}, ...s.publishedAt ? { publishedAt: s.publishedAt } : {} })),
-      truncated: result.sources.length > (request.maxResults ?? cfg.searchMaxResults),
+      // Cut only when the router really had more sources than it returned.
+      truncated: (result.availableCount ?? result.sources.length) > result.sources.length,
     }
   }
 }
-

@@ -210,3 +210,21 @@ test('web_rule export writes an importable versioned JSON rule pack', async () =
     fs.rmSync(h.dir, { recursive: true, force: true })
   }
 })
+
+test('web_fetch_pro does not leak the provider-only truncated flag into its closed output schema', async () => {
+  const h = toolHarness()
+  try {
+    registerTools({
+      ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
+      config: h.config, dynamic: () => h.config, store: h.store,
+      router: {} as any, browser: {} as any,
+      fetch: { fetchPage: async () => ({ url: 'https://example.com', text: 'body', source: 'http', fromCache: false, truncated: true }) } as any,
+    })
+    const out = await h.definitions.get('web_fetch_pro').execute({ url: 'https://example.com' }, { signal: undefined })
+    assert.equal(Object.hasOwn(out, 'truncated'), false)
+    assert.equal(out.text, 'body')
+  } finally {
+    h.store.close()
+    fs.rmSync(h.dir, { recursive: true, force: true })
+  }
+})

@@ -105,7 +105,7 @@ export function apply(ctx: Context, config: Config): void {
           url: out.url,
           statusCode: out.statusCode ?? 200,
           body: { kind: 'text', content: out.text },
-          truncated: false,
+          truncated: out.truncated ?? false,
         }
       },
     })

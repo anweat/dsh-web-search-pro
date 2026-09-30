@@ -278,3 +278,22 @@ export function capText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
   return text.slice(0, maxChars) + '\n\n(Content truncated at ' + maxChars + ' characters.)'
 }
+
+/** Max snippet length returned to callers, whichever path produced the sources. */
+export const SNIPPET_MAX_CHARS = 500
+
+/**
+ * Single output shaping for search sources (live, SQLite hit, platform):
+ * slice to `count`, cap snippets, drop empty optional fields.
+ */
+export function shapeSources(
+  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null }[],
+  count: number,
+): { url: string; title?: string; snippet?: string; publishedAt?: string }[] {
+  return sources.slice(0, count).map(s => ({
+    url: s.url,
+    ...s.title ? { title: s.title } : {},
+    ...s.snippet ? { snippet: capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
+    ...s.publishedAt ? { publishedAt: s.publishedAt } : {},
+  }))
+}
