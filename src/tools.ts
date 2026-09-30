@@ -15,7 +15,9 @@ import type { ResolvedConfig } from './config.ts'
 import { mergedRules } from './fetch.ts'
 import { SEARCH_ENGINE_IDS, PLATFORM_IDS, isPlatformSupported } from './engines.ts'
 import { detectDeps, installDep } from './deps.ts'
-import { replayHistory } from './history.ts'
+import { expandEvidence, replayHistory, type ExpandedEvidence } from './history.ts'
+import { EvidenceService, type EvidenceOutput } from './pipeline/service.ts'
+import { renderEvidencePack } from './pipeline/render.ts'
 
 export interface ToolDeps {
   ctx: Context
@@ -27,6 +29,8 @@ export interface ToolDeps {
   fetch: FetchService
   /** Optional dsh-browser service, read lazily at call time (fixed service accepted for tests). */
   browser?: BrowserService | BrowserGetter
+  /** Evidence pipeline (built lazily from the other deps when omitted; tests inject doubles). */
+  evidence?: Pick<EvidenceService, 'search'>
 }
 
 function sourceLine(s: { url: string; title?: string; snippet?: string; publishedAt?: string }): string {
@@ -47,9 +51,41 @@ export function formatSources(sources: { url: string; title?: string; snippet?: 
   return sources.map(sourceLine).join('\n')
 }
 
+const EVIDENCE_ITEM_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    evidenceId: { type: 'string', required: true }, blockId: { type: 'string' }, url: { type: 'string', required: true }, title: { type: 'string' },
+    excerpt: { type: 'string', required: true }, heading: { type: 'string' }, publishedAt: { type: 'string' },
+    needIds: { type: 'array', required: true, items: { type: 'string' } }, grade: { type: 'number', required: true }, source: { type: 'string', required: true },
+  },
+} as const
+
+/** Output schema fields added for the evidence pipeline (all optional: the classic output stays valid). */
+const EVIDENCE_OUTPUT_PROPERTIES = {
+  resultId: { type: 'string' },
+  profile: { type: 'string' },
+  profileInferred: { type: 'boolean' },
+  needs: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, text: { type: 'string', required: true }, critical: { type: 'boolean', required: true } } } },
+  evidence: { type: 'array', items: EVIDENCE_ITEM_SCHEMA },
+  coveredNeeds: { type: 'array', items: { type: 'string' } },
+  gaps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { needId: { type: 'string', required: true }, text: { type: 'string', required: true }, critical: { type: 'boolean', required: true }, reason: { type: 'string', required: true }, bestGrade: { type: 'number' } } } },
+  partial: { type: 'boolean' },
+  notes: { type: 'array', items: { type: 'string' } },
+  verification: { type: 'object', additionalProperties: false, properties: { native: { type: 'array', required: true, items: { type: 'string' } }, local: { type: 'array', required: true, items: { type: 'string' } } } },
+  stats: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      candidates: { type: 'number' }, kept: { type: 'number' }, fetched: { type: 'number' }, blocksScored: { type: 'number' }, excerptChars: { type: 'number' }, scorer: { type: 'string' },
+      jev: { type: 'object', additionalProperties: false, properties: { requests: { type: 'number' }, questions: { type: 'number' }, inputTokens: { type: 'number' }, outputTokens: { type: 'number' }, mode: { type: 'string' } } },
+    },
+  },
+} as const
+
 export function registerTools(deps: ToolDeps): void {
   const { ctx, config, dynamic, store, router, fetch: fetchSvc } = deps
   const getBrowser = toBrowserGetter(deps.browser)
+  let evidenceService = deps.evidence
+  const evidence = (): Pick<EvidenceService, 'search'> => (evidenceService ??= new EvidenceService({ router, fetch: fetchSvc, store, dynamic }))
 
   ctx.tools.register(defineTool({
     name: 'web_search_pro',
@@ -66,12 +102,18 @@ export function registerTools(deps: ToolDeps): void {
       startPublishedDate: { type: 'string', description: 'Exa only: inclusive ISO published-date lower bound.' },
       endPublishedDate: { type: 'string', description: 'Exa only: inclusive ISO published-date upper bound.' },
       category: { type: 'string', description: 'Exa only: search category.' },
+      task: { type: 'string', description: 'Evidence mode: your goal in one short sentence (not the chat). Giving task or profile switches from a plain result list to an evidence pack: pages are read and only the passages that answer the needs come back, with gaps listed.' },
+      profile: { type: 'string', description: 'Evidence mode: docs_code, news_fact, academic, experience, compare, or general. Selects the sources; inferred by rule when omitted.' },
+      needs: { type: 'string', description: 'Evidence mode: the sub-questions to answer, separated by ";" (or a JSON array). Defaults to the task.' },
+      constraints: { type: 'string', description: 'Evidence mode: JSON array of {"kind","value","strength"}; kind is one of must_term, exclude_term, entity, version, time_window, site, exclude_site, language, region, source_type; strength hard (drop violators) or soft (default).' },
+      budget: { type: 'number', description: 'Evidence mode: total characters of excerpts (default 6000). fresh, multi and the Exa options are ignored in this mode.' },
     },
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
+          ...EVIDENCE_OUTPUT_PROPERTIES,
           content: { type: 'string' },
           sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' } } } },
           engine: { type: 'string', required: true },
@@ -82,6 +124,10 @@ export function registerTools(deps: ToolDeps): void {
       },
       render: (_args, value) => {
         const v = value as { content?: string; sources: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; engine: string; enginesTried: string[]; fromCache: boolean; fallbackNote?: string }
+        const pack = value as unknown as Partial<EvidenceOutput>
+        if (pack.resultId !== undefined && pack.evidence && pack.needs && pack.coveredNeeds && pack.gaps && pack.verification) {
+          return [{ type: 'text', text: renderEvidencePack({ resultId: pack.resultId, profile: pack.profile ?? 'general', needs: pack.needs, evidence: pack.evidence, coveredNeeds: pack.coveredNeeds, gaps: pack.gaps, partial: pack.partial === true, notes: pack.notes ?? [], verification: pack.verification }, v.sources, 'Engine: ' + v.engine + (v.enginesTried.length ? '; tried: ' + v.enginesTried.join(', ') : '')) }]
+        }
         const parts: string[] = []
         if (v.content) parts.push(v.content)
         parts.push(formatSources(v.sources))
@@ -99,13 +145,30 @@ export function registerTools(deps: ToolDeps): void {
         return [{ type: 'text', text: parts.join('\n\n') }]
       },
     },
-    timeoutMs: config.timeoutMs,
+    // The evidence path reads pages and may score remotely: its own deadline
+    // (timeoutMs + 30 s, then a partial pack) must come before this host ceiling.
+    timeoutMs: config.timeoutMs + 60_000,
     isConcurrencySafe: () => true,
     presentCall: (args) => ({ card: 'generic', kind: 'search', title: args.query, rawInput: args.query }),
     async execute(args, exec) {
       const engines = args.engines ? args.engines.split(',').map(s => s.trim()).filter(Boolean) : undefined
       for (const id of engines ?? []) {
         if (!SEARCH_ENGINE_IDS.includes(id as never)) throw new Error('unknown engine: ' + id)
+      }
+      if (args.task || args.profile) {
+        const out = await evidence().search({
+          query: args.query,
+          ...args.task ? { task: args.task } : {},
+          ...args.profile ? { profile: args.profile } : {},
+          ...args.needs ? { needs: args.needs } : {},
+          ...args.constraints ? { constraints: args.constraints } : {},
+          ...args.budget !== undefined ? { budget: args.budget } : {},
+          ...engines ? { engines } : {},
+          count: Math.min(Math.max(args.count ?? dynamic().searchMaxResults, 1), 20),
+          signal: exec.signal,
+        })
+        const ignored = [args.fresh !== undefined && 'fresh', args.multi !== undefined && 'multi', (args.exaType || args.includeDomains || args.excludeDomains || args.startPublishedDate || args.endPublishedDate || args.category) && 'exa options'].filter(Boolean)
+        return { ...out, ...ignored.length ? { notes: [...out.notes, 'ignored in evidence mode: ' + ignored.join(', ')] } : {} }
       }
       const result = await router.search({
         query: args.query,
@@ -331,6 +394,8 @@ export function registerTools(deps: ToolDeps): void {
       limit: { type: 'number', description: 'Max rows (1-200, default 20).' },
       replay: { type: 'string', description: 'A query id from web_history records; returns saved sources or the exact persisted fetch/snapshot page.' },
       export: { type: 'boolean', description: 'Write the filtered history with sources/pages to a JSON file and return its path.' },
+      action: { type: 'string', description: 'expand: return the full stored text of an evidence excerpt plus its neighbouring blocks (needs evidenceId). Omit for the normal history listing.' },
+      evidenceId: { type: 'string', description: 'Evidence id from a web_search_pro evidence pack (action=expand).' },
     },
     output: {
       schema: {
@@ -341,9 +406,17 @@ export function registerTools(deps: ToolDeps): void {
           replayedSources: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' } } } },
           replayedPage: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, text: { type: 'string' }, htmlPath: { type: 'string' }, screenshotPath: { type: 'string' }, status: { type: 'number' }, fetchedAt: { type: 'string', required: true }, source: { type: 'string' } } },
           exportPath: { type: 'string' },
+          expanded: { type: 'object', additionalProperties: false, properties: { evidenceId: { type: 'string', required: true }, url: { type: 'string', required: true }, title: { type: 'string' }, heading: { type: 'string' }, note: { type: 'string' }, blocks: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { blockId: { type: 'string', required: true }, position: { type: 'string', required: true }, text: { type: 'string', required: true }, truncated: { type: 'boolean' } } } } } },
         },
       },
       render: (_args, value) => {
+        const expanded = (value as { expanded?: ExpandedEvidence }).expanded
+        if (expanded) {
+          const lines = ['Evidence ' + expanded.evidenceId + ' — ' + (expanded.title ? expanded.title + ' — ' : '') + expanded.url + (expanded.heading ? '\n§ ' + expanded.heading : '')]
+          for (const b of expanded.blocks) lines.push((b.position === 'match' ? '>>> matched block' : '(' + b.position + ' block)') + (b.truncated ? ' [truncated]' : '') + '\n' + b.text)
+          if (expanded.note) lines.push('Note: ' + expanded.note)
+          return [{ type: 'text', text: lines.join('\n\n') }]
+        }
         const v = value as { records: { id?: string; kind: string; query?: string; engine?: string; platform?: string; url?: string; status: string; ts: string }[]; replayedSources?: { url: string; title?: string; snippet?: string }[]; replayedPage?: { url: string; title?: string; text?: string; htmlPath?: string; screenshotPath?: string; source?: string }; exportPath?: string }
         const parts: string[] = []
         if (v.records.length) {
@@ -373,6 +446,11 @@ export function registerTools(deps: ToolDeps): void {
     timeoutMs: 15_000,
     isConcurrencySafe: () => true,
     async execute(args) {
+      if (args.action !== undefined && args.action !== 'expand') throw new Error('action must be expand or omitted')
+      if (args.action === 'expand') {
+        if (!args.evidenceId) throw new Error('evidenceId is required for action=expand')
+        return { records: [], expanded: expandEvidence(store, args.evidenceId) }
+      }
       const requestedKind = args.kind as 'search' | 'fetch' | 'platform' | 'snapshot' | 'all' | undefined
       if (requestedKind && !['search', 'fetch', 'platform', 'snapshot', 'all'].includes(requestedKind)) throw new Error('kind must be search, fetch, platform, snapshot, all, or omitted')
       const kind = requestedKind === 'all' ? undefined : requestedKind
@@ -393,7 +471,7 @@ export function registerTools(deps: ToolDeps): void {
         status: r.status,
         ts: r.ts,
       }))
-      const out: { records: typeof mapped; replayedSources?: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; replayedPage?: { url: string; title?: string; text?: string; htmlPath?: string; screenshotPath?: string; status?: number; fetchedAt: string; source?: string }; exportPath?: string } = { records: mapped }
+      const out: { records: typeof mapped; expanded?: ExpandedEvidence; replayedSources?: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; replayedPage?: { url: string; title?: string; text?: string; htmlPath?: string; screenshotPath?: string; status?: number; fetchedAt: string; source?: string }; exportPath?: string } = { records: mapped }
       if (args.replay) {
         const replay = replayHistory(store, args.replay)
         if (replay.sources) {
