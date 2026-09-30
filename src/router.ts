@@ -19,7 +19,7 @@ import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
 import { browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
-import { allAttemptsEmpty, BackendRegistry, NoBackendError, type BackendDiagnostic } from './backend-registry.ts'
+import { allAttemptsBenign, BackendRegistry, NoBackendError, type BackendAttempt, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
 import { SingleFlight } from './singleflight.ts'
 import { mergeCandidates, type ProviderOutput } from './pipeline/candidates.ts'
@@ -304,9 +304,10 @@ export class SearchRouter {
         if (r.status === 'fulfilled' && r.value.value.sources.length) outputs.push({ providerId: ids[index]!, query, sources: r.value.value.sources })
       })
       if (!outputs.length) {
-        // Every engine answered with nothing (and none failed): a legitimate empty result.
-        const allEmpty = results.every(r => r.status === 'fulfilled' || (r.reason instanceof NoBackendError && allAttemptsEmpty(r.reason.attempts)))
-        if (allEmpty) return this.emptyResult(ids, 'multi(' + ids.join('+') + ')')
+        // No engine failed at runtime: each answered with nothing or was skipped
+        // (unavailable / cooling down). That is an empty result with a note, not an error.
+        const benign = results.every(r => r.status === 'fulfilled' || (r.reason instanceof NoBackendError && allAttemptsBenign(r.reason.attempts)))
+        if (benign) return this.emptyResult(ids, 'multi(' + ids.join('+') + ')', results.flatMap(r => r.status === 'rejected' && r.reason instanceof NoBackendError ? r.reason.attempts : []))
         const failures = results.map((r, index) => ids[index] + ': ' + (r.status === 'rejected' ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : 'empty')).join('; ')
         throw new Error('all engines failed: ' + failures)
       }
@@ -344,8 +345,8 @@ export class SearchRouter {
       } catch (error) {
         if (signal?.aborted) throw error
         enginesTried.push(...ids)
-        // Every engine answered with a legitimate empty result: report that, do not fail or cache it.
-        if (error instanceof NoBackendError && allAttemptsEmpty(error.attempts)) return this.emptyResult(ids, 'none')
+        // Every engine answered empty or was skipped (no runtime failure): report that, do not fail or cache it.
+        if (error instanceof NoBackendError && allAttemptsBenign(error.attempts)) return this.emptyResult(ids, 'none', error.attempts)
         throw error
       }
     }
@@ -378,15 +379,20 @@ export class SearchRouter {
     return result
   }
 
-  /** All tried engines returned ENGINE_EMPTY and none errored: zero sources plus an explanation (never cached). */
-  private emptyResult(ids: readonly string[], engine: string): RouterSearchResult {
+  /**
+   * No engine failed at runtime: each returned ENGINE_EMPTY or was skipped
+   * (unavailable / cooldown). Zero sources plus an explanation (never cached).
+   */
+  private emptyResult(ids: readonly string[], engine: string, attempts: readonly BackendAttempt[] = []): RouterSearchResult {
+    const skipped = attempts.filter(a => a.outcome === 'skipped')
     return {
       sources: [],
       engine,
       enginesTried: [...ids],
       fromCache: false,
       availableCount: 0,
-      fallbackNote: 'all engines returned no results (tried: ' + ids.join(', ') + ')',
+      fallbackNote: 'all engines returned no results' + (skipped.length ? ' or were unavailable' : '') + ' (tried: ' + ids.join(', ') + ')'
+        + (skipped.length ? '; skipped: ' + skipped.map(a => a.id + ' (' + (a.detail ?? 'unavailable') + ')').join(', ') : ''),
     }
   }
 

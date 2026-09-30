@@ -497,17 +497,35 @@ test('C7: multi runs every engine through the registry (cooldown, attempts) and 
   } finally { h.cleanup() }
 })
 
-test('C7: multi treats unavailable and empty engines as non-fatal; an unavailable engine plus an empty one is still an error, without cooldown', async () => {
+test('C7: multi with only empty and unavailable engines returns an empty result with a note and cools nothing', async () => {
   const h = harness({ parallel: true })
   h.entries.set('e1', { id: 'e1', probe: async () => ({ available: false, reason: 'down' }), run: async () => { throw new Error('unreachable') } })
   h.engine('e2', async () => { throw new EngineError('no results', 'ENGINE_EMPTY', true) })
   try {
-    await assert.rejects(
-      h.router.search({ query: 'nothing', engines: ['e1', 'e2'], count: 5, fresh: true, multi: true, signal: undefined }),
-      /all engines failed: e1: .*down.*; e2: .*no results/,
-    )
+    const result = await h.router.search({ query: 'nothing', engines: ['e1', 'e2'], count: 5, fresh: true, multi: true, signal: undefined })
+    assert.deepEqual(result.sources, [])
+    assert.equal(result.engine, 'multi(e1+e2)')
+    assert.match(result.fallbackNote!, /all engines returned no results or were unavailable/)
+    assert.match(result.fallbackNote!, /skipped: e1 \(down\)/)
+    assert.equal(h.store.listQueries({ kind: 'search' }).length, 0, 'not persisted')
     const diag = await (h.router as any).backends.diagnosticsAsync()
     assert.equal(diag.find((d: { id: string }) => d.id === 'e2').state, 'ready')
+  } finally { h.cleanup() }
+})
+
+test('C7: all engines unavailable (single and multi) is empty with a note; one runtime failure still throws', async () => {
+  const h = harness({ parallel: true })
+  for (const id of ['e1', 'e2']) h.entries.set(id, { id, probe: async () => ({ available: false, reason: id + ' off' }), run: async () => { throw new Error('unreachable') } })
+  try {
+    for (const multi of [true, false]) {
+      const result = await h.router.search({ query: 'offline ' + multi, engines: ['e1', 'e2'], count: 5, fresh: true, multi, signal: undefined })
+      assert.deepEqual(result.sources, [])
+      assert.match(result.fallbackNote!, /skipped: e1 \(e1 off\), e2 \(e2 off\)/)
+    }
+    h.engine('e3', async () => { throw new EngineError('HTTP 503', 'ENGINE_ERROR', true) })
+    await assert.rejects(h.router.search({ query: 'one fails', engines: ['e1', 'e3'], count: 5, fresh: true, multi: true, signal: undefined }), /all engines failed: e1: .*e1 off.*; e3: .*HTTP 503/)
+    h.engine('e4', async () => { throw new EngineError('HTTP 502', 'ENGINE_ERROR', true) })
+    await assert.rejects(h.router.search({ query: 'one fails single', engines: ['e1', 'e4'], count: 5, fresh: true, multi: false, signal: undefined }), /no backend succeeded/)
   } finally { h.cleanup() }
 })
 

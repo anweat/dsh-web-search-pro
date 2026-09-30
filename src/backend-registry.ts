@@ -1,8 +1,11 @@
 export interface BackendProbe { available: boolean; reason?: string }
 /** Quality verdict for a successful run: ok, low-quality (usable but thin), or error. */
 export interface BackendRunResult { ok: boolean; lowQuality?: boolean; detail?: string }
-/** Per-engine attempt record so callers can report *why* the router fell back. */
-export interface BackendAttempt { id: string; outcome: 'ok' | 'low-quality' | 'empty' | 'error'; detail?: string }
+/**
+ * Per-engine attempt record so callers can report *why* the router fell back.
+ * `skipped` = never ran: unknown, cooling down or failed its availability probe (not a runtime error).
+ */
+export interface BackendAttempt { id: string; outcome: 'ok' | 'low-quality' | 'empty' | 'skipped' | 'error'; detail?: string }
 export interface Backend<I, O> { id: string; probe(): BackendProbe | Promise<BackendProbe>; run(input: I): Promise<O>; assess?(value: O): BackendRunResult }
 /**
  * Thrown when no backend produced a usable result. Carries the per-engine
@@ -19,6 +22,15 @@ export class NoBackendError extends Error {
 /** True when engines were tried and every one of them answered with a legitimate empty result. */
 export function allAttemptsEmpty(attempts: readonly BackendAttempt[]): boolean {
   return attempts.length > 0 && attempts.every(a => a.outcome === 'empty')
+}
+
+/**
+ * True when no engine failed at runtime: every attempt was an empty answer or
+ * a skip (unavailable / cooldown / unknown). Such a search has nothing to
+ * report but no error either (dev-plan M2b decision).
+ */
+export function allAttemptsBenign(attempts: readonly BackendAttempt[]): boolean {
+  return attempts.length > 0 && attempts.every(a => a.outcome === 'empty' || a.outcome === 'skipped')
 }
 
 export interface BackendDiagnostic { id: string; available: boolean; state: 'ready' | 'unavailable' | 'cooldown'; reason?: string; lastError?: string; cooldownUntil?: string }
@@ -77,11 +89,11 @@ export class BackendRegistry<I, O> {
     for (const id of ids) {
       if (signal?.aborted) throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
       const backend = this.entries.get(id)
-      if (!backend) { errors.push(id + ': unknown'); attempts.push({ id, outcome: 'error', detail: 'unknown' }); continue }
+      if (!backend) { errors.push(id + ': unknown'); attempts.push({ id, outcome: 'skipped', detail: 'unknown' }); continue }
       const failed = this.failures.get(id)
-      if (failed && failed.until > Date.now()) { errors.push(id + ': cooldown'); attempts.push({ id, outcome: 'error', detail: 'cooldown' }); continue }
+      if (failed && failed.until > Date.now()) { errors.push(id + ': cooldown'); attempts.push({ id, outcome: 'skipped', detail: 'cooldown' }); continue }
       const probe = await backend.probe()
-      if (!probe.available) { errors.push(id + ': ' + (probe.reason ?? 'unavailable')); attempts.push({ id, outcome: 'error', detail: probe.reason ?? 'unavailable' }); continue }
+      if (!probe.available) { errors.push(id + ': ' + (probe.reason ?? 'unavailable')); attempts.push({ id, outcome: 'skipped', detail: probe.reason ?? 'unavailable' }); continue }
       try {
         const result = await backend.run(input)
         this.failures.delete(id)
