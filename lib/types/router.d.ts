@@ -10,6 +10,7 @@ import type { ResolvedConfig } from './config.ts';
 import { type Engine, type EngineDeps, type EngineSearchOptions } from './engines.ts';
 import { LruCache } from './memory-cache.ts';
 import type { BrowserService } from './browser-service.ts';
+import { type BrowserGetter } from './browser-access.ts';
 import { type BackendDiagnostic } from './backend-registry.ts';
 import { type ExaResult } from './exa-client.ts';
 export interface RouterSearchOptions {
@@ -48,13 +49,13 @@ export declare class SearchRouter {
     private readonly config;
     private readonly store;
     private readonly dynamic;
-    private readonly browser?;
     private readonly memory;
     /** In-flight de-duplication of identical non-fresh requests (C3). */
     private readonly searchFlights;
     private readonly platformFlights;
+    private readonly getBrowser;
     private readonly backends;
-    constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | undefined, memory?: LruCache<RouterSearchResult>);
+    constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | BrowserGetter, memory?: LruCache<RouterSearchResult>);
     backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]>;
     exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]>;
     /** Resolve a key through credentials first, then process env. */

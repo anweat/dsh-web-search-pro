@@ -7,6 +7,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { SearchRouter } from './router.ts';
 import type { FetchService } from './fetch.ts';
 import type { Store } from './store.ts';
+import { type BrowserGetter } from './browser-access.ts';
 import type { BrowserService } from './browser-service.ts';
 import type { ResolvedConfig } from './config.ts';
 export interface ToolDeps {
@@ -17,7 +18,8 @@ export interface ToolDeps {
     store: Store;
     router: SearchRouter;
     fetch: FetchService;
-    browser: BrowserService;
+    /** Optional dsh-browser service, read lazily at call time (fixed service accepted for tests). */
+    browser?: BrowserService | BrowserGetter;
 }
 export declare function formatSources(sources: {
     url: string;

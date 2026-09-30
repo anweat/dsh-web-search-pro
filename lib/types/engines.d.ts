@@ -7,6 +7,7 @@
 import type { WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web';
 import { runCli } from './util.ts';
 import type { BrowserService } from './browser-service.ts';
+import { type BrowserMethod } from './browser-access.ts';
 import type { CustomPlatformSpec } from './config.ts';
 import { type ExaSearchRequest } from './exa-client.ts';
 export interface SearchOutcome {
@@ -19,6 +20,8 @@ export interface Engine {
     label: string;
     /** Cheap local availability check; must not do network I/O. */
     available(): boolean;
+    /** Browser-service method this engine depends on (dsh-browser is optional). */
+    needsBrowser?: BrowserMethod;
     search(query: string, count: number, signal?: AbortSignal, options?: EngineSearchOptions): Promise<SearchOutcome>;
 }
 export interface EngineSearchOptions {
@@ -43,7 +46,7 @@ export interface EngineDeps {
     opencliEnabled: boolean;
     agentReachEnabled: boolean;
     allowProxyFakeIp: boolean;
-    /** Browser service (dsh-browser) for Playwright platform search + bundled opencli. */
+    /** Browser service (dsh-browser, optional) for Playwright platform search + bundled opencli; resolved per call. */
     browser?: BrowserService;
     /** Per-platform selector overrides (settings.yaml `platformRules`). */
     platformRules?: Record<string, {

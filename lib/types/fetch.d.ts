@@ -6,6 +6,7 @@
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { BrowserService } from './browser-service.ts';
+import { type BrowserGetter } from './browser-access.ts';
 import type { ExtractRule } from './extract.ts';
 export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright';
 export interface FetchOptions {
@@ -45,11 +46,11 @@ export declare function mergedRules(store: Store): ExtractRule[];
 export declare class FetchService {
     private readonly store;
     private readonly config;
-    private readonly browser;
     private readonly memory;
     /** In-flight de-duplication of identical non-fresh fetches (C3). */
     private readonly flights;
-    constructor(store: Store, config: ResolvedConfig | (() => ResolvedConfig), browser: BrowserService);
+    private readonly getBrowser;
+    constructor(store: Store, config: ResolvedConfig | (() => ResolvedConfig), browser?: BrowserService | BrowserGetter);
     private cfg;
     fetchPage(url: string, opts: FetchOptions): Promise<FetchResult>;
     private runFetch;
