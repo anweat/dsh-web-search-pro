@@ -84,7 +84,13 @@ dsh plugin --profile web add @anweat/dsh-browser@0.1.17 dsh-web-search-pro@0.1.1
 | 有限泛爬取 | `browser_crawl` | 匿名、默认同源；调用参数不能突破浏览器插件的页数/深度预算 |
 | OpenCLI 站点适配器或浏览器桥 | `browser_opencli_status` → `browser_opencli_catalog` → `browser_opencli_run` | 先发现精确 adapter；仅 `unrestricted` 跳过通用 argv 审批 |
 
-先运行 `web_backend_status` 判断后端是否 ready。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。
+先运行 `web_backend_status` 判断后端是否 ready。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。所有引擎都返回空结果或不可用（没有运行时错误）时，`web_search_pro` 返回空结果和说明，不再报错。
+
+### 证据包模式（`web_search_pro` 传 `task` 或 `profile`）
+
+传 `task`（一句话目标）或 `profile`（`docs_code` / `news_fact` / `academic` / `experience` / `compare` / `general`）时，`web_search_pro` 不返回结果列表，而是按 profile 选择来源（docs_code：ddg/bing/github；academic：arxiv/pubmed/ddg；experience：ddg/bing/v2ex；news_fact：ddg/bing；compare：ddg/bing/github；general：配置的 `engines`；显式 `engines` 优先），读取前 4 个保留候选的页面，分块并按每个需求评分，在字符预算（默认 6000，`budget` 可调）内挑出摘录，并列出未被满足的需求（`gaps`）。可选参数：`needs`（`;` 分隔或 JSON 数组）、`constraints`（JSON 数组 `{kind,value,strength}`；`strength` 缺省为 soft，`hard` 只在确定违反时才丢弃候选）。输出新增 `resultId`、`evidence`、`coveredNeeds`、`gaps`、`partial` 等可选字段，原有 `sources` 仍在；超过总时限（`timeoutMs` + 30 秒）时返回 `partial: true` 的已有结果。`web_history` 传 `action=expand` 和 `evidenceId` 可读回摘录所在块及其前后块（至多 4000 字符）。不传 `task` / `profile` 时行为和输出与以前完全相同。
+
+块评分默认用本地词法规则。可选的博查 Jev 评分（付费，需环境变量或凭据引用 `BOCHA_JEV_API_KEY`）由 `evidence` 配置控制：`jevMode: off`（默认，不调用）、`shadow`（规则决定，Jev 评分只记录到存储 `evidence_runs.pack_json` 供对照）、`control`（且 `scorer: jev` 时由 Jev 决定；任何 Jev 失败都回退到规则并在 `notes` 里说明）；`maxJevQuestions`（默认 64）限制每次搜索发送的 (需求, 块) 问题数。发给 Jev 的只有一句话目标、需求文字和页面块文本。
 
 ## 工具（11 个）
 
@@ -134,6 +140,10 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
      jinaApiKeyEnv: JINA_API_KEY
      engines: [ddg, bing, exa, seam, jina]
      parallelEngines: false
+     evidence: # 证据包模式的块评分；默认完全不调用 Jev
+       scorer: rule # rule | jev
+       jevMode: off # off | shadow | control
+       maxJevQuestions: 64
      ttlSeconds: 3600
      searchMaxResults: 8
      browserBindings:
