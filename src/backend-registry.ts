@@ -2,9 +2,33 @@ export interface BackendProbe { available: boolean; reason?: string }
 /** Quality verdict for a successful run: ok, low-quality (usable but thin), or error. */
 export interface BackendRunResult { ok: boolean; lowQuality?: boolean; detail?: string }
 /** Per-engine attempt record so callers can report *why* the router fell back. */
-export interface BackendAttempt { id: string; outcome: 'ok' | 'low-quality' | 'error'; detail?: string }
+export interface BackendAttempt { id: string; outcome: 'ok' | 'low-quality' | 'empty' | 'error'; detail?: string }
 export interface Backend<I, O> { id: string; probe(): BackendProbe | Promise<BackendProbe>; run(input: I): Promise<O>; assess?(value: O): BackendRunResult }
 export interface BackendDiagnostic { id: string; available: boolean; state: 'ready' | 'unavailable' | 'cooldown'; reason?: string; lastError?: string; cooldownUntil?: string }
+
+export interface RunSelectedOptions {
+  preferred: readonly string[]
+  override?: string
+  /** Caller's cancellation signal: an abort is rethrown at once and never cools an engine down. */
+  signal?: AbortSignal
+}
+
+/** ENGINE_EMPTY is a legitimate empty answer, not a fault. */
+function isEmptyError(error: unknown): boolean {
+  return error instanceof Error && (error as { code?: unknown }).code === 'ENGINE_EMPTY'
+}
+
+/**
+ * Only transient faults (network, timeout, 429, 5xx) cool an engine down.
+ * Coded engine errors flagged non-retryable (misconfiguration, auth) are
+ * deterministic, so a cooldown would not help; unknown errors are assumed transient.
+ */
+function isCooldownWorthy(error: unknown): boolean {
+  if (!(error instanceof Error)) return true
+  const { code, retryable } = error as { code?: unknown; retryable?: unknown }
+  if (typeof code === 'string' && code.length > 0) return retryable === true
+  return true
+}
 
 export class BackendRegistry<I, O> {
   private readonly entries = new Map<string, Backend<I, O>>()
@@ -17,7 +41,7 @@ export class BackendRegistry<I, O> {
     return this
   }
 
-  async run(input: I, options: { preferred: readonly string[]; override?: string }): Promise<O> {
+  async run(input: I, options: RunSelectedOptions): Promise<O> {
     return (await this.runSelected(input, options)).value
   }
 
@@ -27,12 +51,14 @@ export class BackendRegistry<I, O> {
    * router keeps probing; a later *ok* engine replaces it. If no later engine
    * does better, the best low-quality result (first one) is still returned.
    */
-  async runSelected(input: I, options: { preferred: readonly string[]; override?: string }): Promise<{ id: string; value: O; attempts: BackendAttempt[] }> {
+  async runSelected(input: I, options: RunSelectedOptions): Promise<{ id: string; value: O; attempts: BackendAttempt[] }> {
+    const signal = options.signal
     const ids = options.override ? [options.override] : options.preferred
     const errors: string[] = []
     const attempts: BackendAttempt[] = []
     let fallback: { id: string; value: O; detail?: string } | undefined
     for (const id of ids) {
+      if (signal?.aborted) throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
       const backend = this.entries.get(id)
       if (!backend) { errors.push(id + ': unknown'); attempts.push({ id, outcome: 'error', detail: 'unknown' }); continue }
       const failed = this.failures.get(id)
@@ -51,9 +77,17 @@ export class BackendRegistry<I, O> {
         if (!fallback) fallback = { id, value: result, detail: verdict.detail }
         attempts.push({ id, outcome: 'low-quality', detail: verdict.detail })
       } catch (error) {
+        // A cancelled caller is not an engine fault: never cool down, never fall through.
+        if (signal?.aborted) throw error
         const message = error instanceof Error ? error.message : String(error)
-        this.failures.set(id, { message, until: Date.now() + (this.options.cooldownMs ?? 30_000) })
         errors.push(id + ': ' + message)
+        if (isEmptyError(error)) {
+          // The engine answered (with nothing): try the next one, keep this one hot.
+          this.failures.delete(id)
+          attempts.push({ id, outcome: 'empty', detail: message })
+          continue
+        }
+        if (isCooldownWorthy(error)) this.failures.set(id, { message, until: Date.now() + (this.options.cooldownMs ?? 30_000) })
         attempts.push({ id, outcome: 'error', detail: message })
       }
     }
