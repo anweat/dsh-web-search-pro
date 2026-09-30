@@ -13,6 +13,7 @@ import {
   checkConstraint as srcCheckConstraint, knownYear as srcKnownYear, lexicalRelevance as srcLexicalRelevance,
   type ConstraintVerdict, type GateItem,
 } from '../../../src/pipeline/gate.ts'
+import { profileScores } from '../../../src/pipeline/plan.ts'
 import type { TaskConstraint } from '../types.ts'
 import type { Judge, JudgeContext, JudgeItem, JudgeQuestion, JudgeResult, Readiness } from './types.ts'
 
@@ -88,21 +89,8 @@ export function navScore(item: JudgeItem): number {
 
 // ── profile ─────────────────────────────────────────────────────────────────
 
-const PROFILE_KEYWORDS: Record<string, RegExp> = {
-  docs_code: /(文档|api|用法|版本|报错|安装|配置|示例|源码|sdk|cli|函数|参数|接口|升级|迁移|docs?|install|config|error|exception|version|syntax|usage|example)/gi,
-  news_fact: /(新闻|最新|发布|公告|据报道|是否属实|官方回应|事件|声明|宣布|news|announce|released?|reported|latest|did |是否)/gi,
-  academic: /(论文|arxiv|综述|研究|方法|实验|基准|模型|算法|paper|survey|study|benchmark|theorem|dataset|citation)/gi,
-  experience: /(体验|踩坑|口碑|推荐|经验|评测|值得|好用|吐槽|心得|怎么样|review|experience|worth|recommend|reddit|v2ex|小红书)/gi,
-  compare: /(对比|区别|比较|选型|哪个好|哪个更|vs\.?|versus|difference|compare|comparison|alternatives?|优缺点)/gi,
-}
-
-export function profileScores(text: string): Record<string, number> {
-  const raw: Record<string, number> = { general: 0.6 }
-  for (const [profile, re] of Object.entries(PROFILE_KEYWORDS)) raw[profile] = (text.match(re) ?? []).length
-  const exp = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Math.exp(v)]))
-  const sum = Object.values(exp).reduce((a, b) => a + b, 0)
-  return Object.fromEntries(Object.entries(exp).map(([k, v]) => [k, v / sum]))
-}
+// The keyword table and the score function live in src/pipeline/plan.ts (S1 uses them as its rule fallback).
+export { profileScores }
 
 // ── the judge ───────────────────────────────────────────────────────────────
 
