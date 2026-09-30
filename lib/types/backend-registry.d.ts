@@ -20,6 +20,17 @@ export interface Backend<I, O> {
     run(input: I): Promise<O>;
     assess?(value: O): BackendRunResult;
 }
+/**
+ * Thrown when no backend produced a usable result. Carries the per-engine
+ * attempts so callers can tell "every engine answered with nothing" (all
+ * `empty`) from real failures (any `error`).
+ */
+export declare class NoBackendError extends Error {
+    readonly attempts: readonly BackendAttempt[];
+    constructor(message: string, attempts: readonly BackendAttempt[]);
+}
+/** True when engines were tried and every one of them answered with a legitimate empty result. */
+export declare function allAttemptsEmpty(attempts: readonly BackendAttempt[]): boolean;
 export interface BackendDiagnostic {
     id: string;
     available: boolean;

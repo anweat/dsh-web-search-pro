@@ -53,7 +53,7 @@ export declare const zh: {
     readonly rrfConstantHint: "多引擎融合的排名平滑常量。";
     readonly freshnessBoost: "时效加权";
     readonly authorityBoost: "权威域名加权";
-    readonly boostHint: "0–1 之间的附加分值。";
+    readonly boostHint: "0–1：占一个排名名次的比例，每个 URL 只加一次。";
     readonly freshnessDays: "时效衰减天数";
     readonly freshnessDaysHint: "新鲜度加权在多少天内衰减到 0。";
     readonly authorityDomains: "额外权威域名";

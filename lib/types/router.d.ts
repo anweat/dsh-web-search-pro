@@ -70,6 +70,8 @@ export declare class SearchRouter {
     /** Run a full search with caching + persistence. */
     search(opts: RouterSearchOptions): Promise<RouterSearchResult>;
     private runSearch;
+    /** All tried engines returned ENGINE_EMPTY and none errored: zero sources plus an explanation (never cached). */
+    private emptyResult;
     /** Platform search (web_platform_search tool) with the same cache+persist flow. */
     platformSearch(platform: string, query: string, url: string | undefined, count: number, opts: {
         signal?: AbortSignal;
