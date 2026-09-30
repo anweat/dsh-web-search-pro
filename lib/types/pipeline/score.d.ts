@@ -21,6 +21,7 @@
  * what S6 actually needs: one call scores every need's blocks of a run.
  * @module web-search-pro/pipeline/score
  */
+import { type CorpusBlock } from './corpus.ts';
 import type { BlockGrade, Need, TaskSpec } from './types.ts';
 export type ScoreTask = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>;
 export interface ScoreBlock {
@@ -37,6 +38,8 @@ export interface ScoreContext {
     signal?: AbortSignal | undefined;
     /** Epoch ms after which no new request may start (the run's overall deadline). */
     deadline?: number | undefined;
+    /** Every block of the pages read (the rule scorer takes term statistics from it, dev-plan M3b); absent = no statistics. */
+    corpus?: readonly CorpusBlock[] | undefined;
 }
 export interface ScoreUsage {
     requests: number;
@@ -60,6 +63,14 @@ export interface Scorer {
 /** Relevance -> grade buckets: [0,T1) 0, [T1,T2) 1, [T2,T3) 2, >=T3 3 (bench rule judge, r1). */
 export declare const GRADE_THRESHOLDS: readonly [0.12, 0.3, 0.55];
 export declare function bucketGrade(relevance: number): 0 | 1 | 2 | 3;
+/**
+ * With page statistics the overlap is IDF-weighted and code-discounted, so it
+ * runs lower than the plain overlap the thresholds above were calibrated on.
+ * The grade edges are scaled by this factor then (fitted on the 60-task
+ * offline eval: gold pairs graded >= 2 stay at 52% vs 54% without statistics
+ * while the share of gold among all pairs graded >= 2 rises from 15.7% to 17.6%).
+ */
+export declare const STATS_THRESHOLD_SCALE = 0.6;
 export interface RuleScorerOptions {
     /** Cross-lingual / identifier alignment (default true). `false` = the M2 lexical-v1 relevance, kept for comparison. */
     align?: boolean;
@@ -69,8 +80,17 @@ export declare class RuleScorer implements Scorer {
     readonly model: string;
     private readonly align;
     constructor(options?: RuleScorerOptions);
-    score(task: ScoreTask, jobs: readonly ScoreJob[]): Promise<ScoreOutcome>;
+    score(task: ScoreTask, jobs: readonly ScoreJob[], ctx?: ScoreContext): Promise<ScoreOutcome>;
 }
+export declare const isDiscussionUrl: (url: string) => boolean;
+/**
+ * docs_code only (dev-plan M3b): an issue / PR / discussion block never counts
+ * above grade 2 for a need that asks for the documentation / official API, as
+ * long as at least one scored block comes from another kind of page (a
+ * proposal for an option is not evidence that the docs have it). Returns the
+ * number of grades lowered; the outcome is changed in place.
+ */
+export declare function capDiscussionGrades(profile: string, jobs: readonly ScoreJob[], outcome: ScoreOutcome): number;
 export interface HybridScorerOptions {
     /** The paid scorer that re-scores the selected pairs. */
     jev: Scorer;

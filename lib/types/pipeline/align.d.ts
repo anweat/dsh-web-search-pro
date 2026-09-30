@@ -29,6 +29,7 @@
  * is neutral-to-positive on every metric.
  * @module web-search-pro/pipeline/align
  */
+import { type PageTermStats } from './lexical.ts';
 import type { ConstraintLike } from './gate.ts';
 export type TextLang = 'zh' | 'latin' | 'none';
 /**
@@ -72,9 +73,23 @@ export interface AlignItem {
     heading?: string | undefined;
     text: string;
 }
+export interface AlignedScore {
+    relevance: number;
+    /** A matched term occurs in a minority of the page's blocks (always false without page statistics). */
+    distinctiveHit: boolean;
+    /** The task has at least one such term on this page. */
+    distinctiveAvailable: boolean;
+}
 /**
  * Weighted share (0..1) of the task's terms found in the block, with the
  * cross-lingual and identifier handling described in the module comment.
  * Same scale as `lexicalRelevance`, so `bucketGrade` thresholds still apply.
  */
-export declare function alignedRelevance(ctx: AlignContext, item: AlignItem): number;
+export declare function alignedRelevance(ctx: AlignContext, item: AlignItem, stats?: PageTermStats): number;
+/**
+ * {@link alignedRelevance} plus the distinctiveness signals. With page
+ * statistics (dev-plan M3b) every term's weight is scaled by its IDF factor
+ * (`DatabaseSync` on the node:sqlite page appears in most blocks and stops
+ * carrying the grade), and a term that occurs only in code counts at most half (less the more common it is).
+ */
+export declare function alignedScore(ctx: AlignContext, item: AlignItem, stats?: PageTermStats): AlignedScore;

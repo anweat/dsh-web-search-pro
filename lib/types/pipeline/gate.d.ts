@@ -20,6 +20,7 @@
  *  - soft constraints are recorded in `checks` but never drop.
  * @module web-search-pro/pipeline/gate
  */
+import { type QueryPart } from './lexical.ts';
 import type { Candidate, Constraint, ConstraintCheck, GateVerdict, Satisfied, TaskSpec } from './types.ts';
 /**
  * r1 rule / gate.relevance.v1 drop threshold (calibration-selected 0.12363952982150628,
@@ -77,6 +78,8 @@ export interface RelevanceContext {
     constraints: readonly ConstraintLike[];
 }
 export declare function relevanceContextOf(task: Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>): RelevanceContext;
+/** Weighted query parts of the relevance: query, goal, needs and (optionally) entity / must_term values. */
+export declare function relevancePartsOf(ctx: RelevanceContext, withConstraints: boolean): QueryPart[];
 /** Weighted lexical overlap of query / goal / needs (and optionally entity + must_term values) with the item, 0..1. */
 export declare function lexicalRelevance(ctx: RelevanceContext, item: GateItem, withConstraints: boolean): number;
 export interface GateOptions {
