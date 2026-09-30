@@ -109,61 +109,194 @@ CREATE INDEX IF NOT EXISTS idx_pages_url ON pages(url);
 
 const PAGE_COLUMNS = 'id, query_id AS queryId, url, title, text, html_path AS htmlPath, screenshot_path AS screenshotPath, status, fetched_at AS fetchedAt, source'
 
+/** Persistence health counters; never throws, safe to read after close. */
+export interface StoreDiagnostics {
+  closed: boolean
+  /** Writes that threw (e.g. SQLITE_BUSY after the busy timeout). */
+  writeFailures: number
+  /** Writes silently skipped because the store was already closed. */
+  skippedWrites: number
+  lastError?: string
+  lastErrorAt?: string
+}
+
+export interface StoreOptions {
+  currentSearchCacheKeyPrefix?: string
+  /** SQLite busy timeout; concurrent writers wait this long instead of failing at once. */
+  busyTimeoutMs?: number
+  /** Receives one line per persistence failure / skipped write. */
+  onDiagnostic?: (message: string) => void
+}
+
 export class Store {
   private db: DatabaseSync
+  private closed = false
+  private txDepth = 0
+  private writeFailures = 0
+  private skippedWrites = 0
+  private lastError: { message: string; at: string } | undefined
+  private readonly onDiagnostic: ((message: string) => void) | undefined
 
-  constructor(readonly dbPath: string, opts: { currentSearchCacheKeyPrefix?: string } = {}) {
+  constructor(readonly dbPath: string, opts: StoreOptions = {}) {
+    this.onDiagnostic = opts.onDiagnostic
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
     this.db = new DatabaseSync(dbPath)
+    // busy_timeout first: every later statement (incl. the WAL switch and the
+    // migration) must wait for other DSH processes sharing this file, not throw.
+    this.db.exec('PRAGMA busy_timeout = ' + Math.max(Math.floor(opts.busyTimeoutMs ?? 5000), 0))
     this.db.exec('PRAGMA journal_mode = WAL')
-    this.db.exec(SCHEMA)
-    const columns = this.db.prepare('PRAGMA table_info(queries)').all() as unknown as { name: string }[]
-    if (!columns.some(column => column.name === 'cache_key')) this.db.exec('ALTER TABLE queries ADD COLUMN cache_key TEXT')
-    const pageColumns = this.db.prepare('PRAGMA table_info(pages)').all() as unknown as { name: string }[]
-    if (!pageColumns.some(column => column.name === 'query_id')) {
-      this.db.exec(`
-        BEGIN;
-        CREATE TABLE pages_v2 (
-          id TEXT PRIMARY KEY,
-          query_id TEXT,
-          url TEXT NOT NULL,
-          title TEXT,
-          text TEXT,
-          html_path TEXT,
-          screenshot_path TEXT,
-          status INTEGER,
-          fetched_at TEXT NOT NULL,
-          source TEXT
-        );
-        INSERT INTO pages_v2 (id, query_id, url, title, text, html_path, screenshot_path, status, fetched_at, source)
-          SELECT id, NULL, url, title, text, html_path, screenshot_path, status, fetched_at, source FROM pages;
-        DROP TABLE pages;
-        ALTER TABLE pages_v2 RENAME TO pages;
-        COMMIT;
-      `)
-    }
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_queries_cache ON queries(kind, cache_key, ts)')
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_url ON pages(url)')
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_url_source ON pages(url, source, fetched_at)')
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_query ON pages(query_id)')
+    this.db.exec('PRAGMA synchronous = NORMAL')
+    this.transaction(() => {
+      this.db.exec(SCHEMA)
+      const columns = this.db.prepare('PRAGMA table_info(queries)').all() as unknown as { name: string }[]
+      if (!columns.some(column => column.name === 'cache_key')) this.db.exec('ALTER TABLE queries ADD COLUMN cache_key TEXT')
+      const pageColumns = this.db.prepare('PRAGMA table_info(pages)').all() as unknown as { name: string }[]
+      if (!pageColumns.some(column => column.name === 'query_id')) {
+        this.db.exec(`
+          CREATE TABLE pages_v2 (
+            id TEXT PRIMARY KEY,
+            query_id TEXT,
+            url TEXT NOT NULL,
+            title TEXT,
+            text TEXT,
+            html_path TEXT,
+            screenshot_path TEXT,
+            status INTEGER,
+            fetched_at TEXT NOT NULL,
+            source TEXT
+          );
+          INSERT INTO pages_v2 (id, query_id, url, title, text, html_path, screenshot_path, status, fetched_at, source)
+            SELECT id, NULL, url, title, text, html_path, screenshot_path, status, fetched_at, source FROM pages;
+          DROP TABLE pages;
+          ALTER TABLE pages_v2 RENAME TO pages;
+        `)
+      }
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_queries_cache ON queries(kind, cache_key, ts)')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_url ON pages(url)')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_url_source ON pages(url, source, fetched_at)')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_pages_query ON pages(query_id)')
+    })
   }
 
   close(): void {
+    this.closed = true
     try { this.db.close() } catch { /* already closed */ }
+  }
+
+  get isClosed(): boolean { return this.closed }
+
+  diagnostics(): StoreDiagnostics {
+    return {
+      closed: this.closed,
+      writeFailures: this.writeFailures,
+      skippedWrites: this.skippedWrites,
+      ...this.lastError ? { lastError: this.lastError.message, lastErrorAt: this.lastError.at } : {},
+    }
+  }
+
+  private note(message: string): void {
+    try { this.onDiagnostic?.(message) } catch { /* diagnostics must never throw */ }
+  }
+
+  /** Write guard: after close() writes are no-ops (counted) instead of throwing for in-flight requests. */
+  private write<T>(op: string, skipped: T, fn: () => T): T {
+    if (this.closed) {
+      this.skippedWrites++
+      this.note('store closed: skipped ' + op)
+      return skipped
+    }
+    return fn()
+  }
+
+  /** Read guard: after close() reads return a cache miss. */
+  private read<T>(miss: T, fn: () => T): T {
+    return this.closed ? miss : fn()
+  }
+
+  /**
+   * Run best-effort persistence: a failure (SQLITE_BUSY past the timeout, disk
+   * full, ...) is logged and counted but never propagates, so a search/fetch
+   * that already has its result still returns it.
+   */
+  bestEffort<T>(op: string, fn: () => T): T | undefined {
+    try {
+      return fn()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.writeFailures++
+      this.lastError = { message: op + ': ' + message, at: new Date().toISOString() }
+      this.note('persistence failed (' + op + '): ' + message)
+      return undefined
+    }
+  }
+
+  /**
+   * Run `fn` atomically: BEGIN IMMEDIATE / COMMIT, ROLLBACK when it throws.
+   * Nested calls become savepoints, so an inner failure rolls back only its own
+   * writes. After close() `fn` still runs but its writes are no-ops.
+   */
+  transaction<T>(fn: () => T): T {
+    if (this.closed) return fn()
+    const depth = this.txDepth
+    const savepoint = 'sp_' + depth
+    this.db.exec(depth === 0 ? 'BEGIN IMMEDIATE' : 'SAVEPOINT ' + savepoint)
+    this.txDepth++
+    try {
+      const result = fn()
+      this.txDepth--
+      this.db.exec(depth === 0 ? 'COMMIT' : 'RELEASE ' + savepoint)
+      return result
+    } catch (error) {
+      if (this.txDepth > depth) this.txDepth--
+      try {
+        this.db.exec(depth === 0 ? 'ROLLBACK' : 'ROLLBACK TO ' + savepoint + '; RELEASE ' + savepoint)
+      } catch { /* connection already rolled back / closed */ }
+      throw error
+    }
   }
 
   /** Record one operation (search / fetch / platform / snapshot). Returns its id. */
   recordQuery(input: Omit<QueryRecord, 'id' | 'ts'> & { id?: string }): string {
     const id = input.id ?? uid()
-    const ts = new Date().toISOString()
-    this.db.prepare(
-      'INSERT OR REPLACE INTO queries (id, kind, query, engine, platform, url, status, ts, detail, cache_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(id, input.kind, input.query ?? null, input.engine ?? null, input.platform ?? null, input.url ?? null, input.status, ts, input.detail ?? null, input.cacheKey ?? null)
-    return id
+    return this.write('recordQuery', id, () => {
+      const ts = new Date().toISOString()
+      this.db.prepare(
+        'INSERT OR REPLACE INTO queries (id, kind, query, engine, platform, url, status, ts, detail, cache_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, input.kind, input.query ?? null, input.engine ?? null, input.platform ?? null, input.url ?? null, input.status, ts, input.detail ?? null, input.cacheKey ?? null)
+      return id
+    })
+  }
+
+  /** Atomically record a search-like query and its result rows (all or nothing). */
+  recordSearch(
+    input: Omit<QueryRecord, 'id' | 'ts'> & { id?: string },
+    sources: { url: string; title?: string; snippet?: string; publishedAt?: string; extra?: string }[],
+    engine: string,
+  ): string {
+    const fallbackId = input.id ?? uid()
+    return this.write('recordSearch', fallbackId, () => this.transaction(() => {
+      const id = this.recordQuery({ ...input, id: fallbackId })
+      this.recordResults(id, sources, engine)
+      return id
+    }))
+  }
+
+  /** Atomically record a fetch/snapshot query and its page row (all or nothing). */
+  recordFetch(input: Omit<QueryRecord, 'id' | 'ts'> & { id?: string }, page: Omit<PageRecord, 'id' | 'fetchedAt' | 'queryId'>): string {
+    const fallbackId = input.id ?? uid()
+    return this.write('recordFetch', fallbackId, () => this.transaction(() => {
+      const id = this.recordQuery({ ...input, id: fallbackId })
+      this.savePage({ ...page, queryId: id })
+      return id
+    }))
   }
 
   /** Look up a fresh cached operation by kind and its complete input fingerprint. */
   getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): { id: string; detail?: string } | undefined {
+    return this.read(undefined, () => this.getCachedQueryRow(kind, cacheKey, ttlSeconds))
+  }
+
+  private getCachedQueryRow(kind: QueryKind, cacheKey: string, ttlSeconds: number): { id: string; detail?: string } | undefined {
     const row = this.db.prepare(
       `SELECT id, detail FROM queries WHERE kind = ? AND cache_key = ? AND status = 'ok'
        AND ts > ? ORDER BY ts DESC LIMIT 1`,
@@ -173,26 +306,32 @@ export class Store {
   }
 
   recordResults(queryId: string, sources: { url: string; title?: string; snippet?: string; publishedAt?: string; extra?: string }[], engine: string): void {
-    const stmt = this.db.prepare(
-      'INSERT OR REPLACE INTO results (id, query_id, rank, url, title, snippet, published, engine, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    )
-    sources.forEach((s, i) => {
-      stmt.run(uid(), queryId, i, s.url, s.title ?? null, s.snippet ?? null, s.publishedAt ?? null, engine, s.extra ?? null)
-    })
+    this.write('recordResults', undefined, () => this.transaction(() => {
+      const stmt = this.db.prepare(
+        'INSERT OR REPLACE INTO results (id, query_id, rank, url, title, snippet, published, engine, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      sources.forEach((s, i) => {
+        stmt.run(uid(), queryId, i, s.url, s.title ?? null, s.snippet ?? null, s.publishedAt ?? null, engine, s.extra ?? null)
+      })
+    }))
   }
 
   resultsForQuery(queryId: string): SourceRow[] {
-    return this.db.prepare(
+    return this.read([], () => this.db.prepare(
       'SELECT * FROM results WHERE query_id = ? ORDER BY rank ASC',
-    ).all(queryId) as unknown as SourceRow[]
+    ).all(queryId) as unknown as SourceRow[])
   }
 
   queryById(id: string): QueryRecord | undefined {
-    return this.db.prepare('SELECT * FROM queries WHERE id = ?').get(id) as unknown as QueryRecord | undefined
+    return this.read(undefined, () => this.db.prepare('SELECT * FROM queries WHERE id = ?').get(id) as unknown as QueryRecord | undefined)
   }
 
   /** Fresh page snapshot by URL and, when requested, its exact backend source. */
   getPage(url: string, ttlSeconds: number, source?: string): PageRecord | undefined {
+    return this.read(undefined, () => this.getPageRow(url, ttlSeconds, source))
+  }
+
+  private getPageRow(url: string, ttlSeconds: number, source?: string): PageRecord | undefined {
     const cutoff = new Date(Date.now() - ttlSeconds * 1000).toISOString()
     const row = source
       ? this.db.prepare(
@@ -205,18 +344,24 @@ export class Store {
   }
 
   savePage(input: Omit<PageRecord, 'id' | 'fetchedAt'>): void {
-    this.db.prepare(
-      `INSERT INTO pages (id, query_id, url, title, text, html_path, screenshot_path, status, fetched_at, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      uid(), input.queryId ?? null, input.url, input.title ?? null, input.text ?? null,
-      input.htmlPath ?? null, input.screenshotPath ?? null, input.status ?? null,
-      new Date().toISOString(), input.source ?? null,
-    )
+    this.write('savePage', undefined, () => {
+      this.db.prepare(
+        `INSERT INTO pages (id, query_id, url, title, text, html_path, screenshot_path, status, fetched_at, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        uid(), input.queryId ?? null, input.url, input.title ?? null, input.text ?? null,
+        input.htmlPath ?? null, input.screenshotPath ?? null, input.status ?? null,
+        new Date().toISOString(), input.source ?? null,
+      )
+    })
   }
 
   /** Exact persisted fetch/snapshot for a history query; legacy rows fall back by URL. */
   pageForQuery(queryId: string): PageRecord | undefined {
+    return this.read(undefined, () => this.pageForQueryRow(queryId))
+  }
+
+  private pageForQueryRow(queryId: string): PageRecord | undefined {
     const exact = this.db.prepare(
       `SELECT ${PAGE_COLUMNS} FROM pages WHERE query_id = ? ORDER BY fetched_at DESC LIMIT 1`,
     ).get(queryId) as unknown as PageRecord | undefined
@@ -229,6 +374,10 @@ export class Store {
   }
 
   listQueries(opts: { kind?: QueryKind; query?: string; engine?: string; platform?: string; limit?: number }): QueryRecord[] {
+    return this.read([], () => this.listQueriesRows(opts))
+  }
+
+  private listQueriesRows(opts: { kind?: QueryKind; query?: string; engine?: string; platform?: string; limit?: number }): QueryRecord[] {
     const limit = Math.min(Math.max(opts.limit ?? 20, 1), 200)
     const clauses: string[] = []
     const params: (string | number)[] = []
@@ -245,6 +394,10 @@ export class Store {
   }
 
   clearCache(opts: { olderThanDays?: number; engine?: string }): { queries: number; results: number; pages: number } {
+    return this.write('clearCache', { queries: 0, results: 0, pages: 0 }, () => this.transaction(() => this.clearCacheRows(opts)))
+  }
+
+  private clearCacheRows(opts: { olderThanDays?: number; engine?: string }): { queries: number; results: number; pages: number } {
     const cutoff = opts.olderThanDays !== undefined
       ? new Date(Date.now() - Math.max(opts.olderThanDays, 0) * 86400_000).toISOString()
       : undefined
@@ -292,6 +445,10 @@ export class Store {
    * titles-only rows are never replayed from the persistent cache.
    */
   cleanupLegacySearchCache(currentPrefix: string): { queries: number; results: number } {
+    return this.write('cleanupLegacySearchCache', { queries: 0, results: 0 }, () => this.transaction(() => this.cleanupLegacyRows(currentPrefix)))
+  }
+
+  private cleanupLegacyRows(currentPrefix: string): { queries: number; results: number } {
     const stale = this.db.prepare(
       `SELECT id FROM queries WHERE kind = 'search' AND (cache_key IS NULL OR cache_key NOT LIKE ?)`,
     ).all(currentPrefix + '%') as unknown as { id: string }[]
@@ -315,6 +472,10 @@ export class Store {
 
   /** Delete one query and its linked rows; returns exact counts when it existed. */
   deleteQuery(id: string): { queries: number; results: number; pages: number } | undefined {
+    return this.write('deleteQuery', undefined, () => this.transaction(() => this.deleteQueryRows(id)))
+  }
+
+  private deleteQueryRows(id: string): { queries: number; results: number; pages: number } | undefined {
     const row = this.db.prepare('SELECT id FROM queries WHERE id = ?').get(id) as { id: string } | undefined
     if (!row) return undefined
     const results = (this.db.prepare('SELECT COUNT(*) AS c FROM results WHERE query_id = ?').get(id) as { c: number }).c
@@ -325,20 +486,24 @@ export class Store {
 
   /** Most-used engines, desc. */
   topEngines(limit = 8): { engine: string; count: number }[] {
-    return this.db.prepare('SELECT engine, COUNT(*) AS count FROM queries WHERE engine IS NOT NULL GROUP BY engine ORDER BY count DESC LIMIT ?').all(limit) as unknown as { engine: string; count: number }[]
+    return this.read([], () => this.db.prepare('SELECT engine, COUNT(*) AS count FROM queries WHERE engine IS NOT NULL GROUP BY engine ORDER BY count DESC LIMIT ?').all(limit) as unknown as { engine: string; count: number }[])
   }
 
   /** Most-frequent queries, desc. */
   topQueries(limit = 8): { query: string; count: number }[] {
-    return this.db.prepare('SELECT query, COUNT(*) AS count FROM queries WHERE query IS NOT NULL GROUP BY query ORDER BY count DESC LIMIT ?').all(limit) as unknown as { query: string; count: number }[]
+    return this.read([], () => this.db.prepare('SELECT query, COUNT(*) AS count FROM queries WHERE query IS NOT NULL GROUP BY query ORDER BY count DESC LIMIT ?').all(limit) as unknown as { query: string; count: number }[])
   }
 
   /** Per-kind record counts. */
   kindCounts(): { kind: string; count: number }[] {
-    return this.db.prepare('SELECT kind, COUNT(*) AS count FROM queries GROUP BY kind ORDER BY count DESC').all() as unknown as { kind: string; count: number }[]
+    return this.read([], () => this.db.prepare('SELECT kind, COUNT(*) AS count FROM queries GROUP BY kind ORDER BY count DESC').all() as unknown as { kind: string; count: number }[])
   }
 
   stats(): { dbSizeBytes: number; queries: number; results: number; pages: number; rules: number } {
+    return this.read({ dbSizeBytes: 0, queries: 0, results: 0, pages: 0, rules: 0 }, () => this.statsRows())
+  }
+
+  private statsRows(): { dbSizeBytes: number; queries: number; results: number; pages: number; rules: number } {
     const count = (sql: string): number => (this.db.prepare(sql).get() as { c: number }).c
     let dbSizeBytes = 0
     try { dbSizeBytes = fs.statSync(this.dbPath).size } catch { /* not on disk (memory) */ }
@@ -352,20 +517,21 @@ export class Store {
   }
 
   listRules(): RuleRecord[] {
-    return this.db.prepare('SELECT * FROM rules ORDER BY hostname ASC').all() as unknown as RuleRecord[]
+    return this.read([], () => this.db.prepare('SELECT * FROM rules ORDER BY hostname ASC').all() as unknown as RuleRecord[])
   }
 
   upsertRule(hostname: string, content: string, remove?: string): void {
-    const now = new Date().toISOString()
-    this.db.prepare(
-      `INSERT INTO rules (hostname, content, remove, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(hostname) DO UPDATE SET content = excluded.content, remove = excluded.remove, updated_at = excluded.updated_at`,
-    ).run(hostname.toLowerCase(), content, remove ?? null, now, now)
+    this.write('upsertRule', undefined, () => {
+      const now = new Date().toISOString()
+      this.db.prepare(
+        `INSERT INTO rules (hostname, content, remove, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(hostname) DO UPDATE SET content = excluded.content, remove = excluded.remove, updated_at = excluded.updated_at`,
+      ).run(hostname.toLowerCase(), content, remove ?? null, now, now)
+    })
   }
 
   removeRule(hostname: string): boolean {
-    const res = this.db.prepare('DELETE FROM rules WHERE hostname = ?').run(hostname.toLowerCase())
-    return res.changes > 0
+    return this.write('removeRule', false, () => this.db.prepare('DELETE FROM rules WHERE hostname = ?').run(hostname.toLowerCase()).changes > 0)
   }
 }

@@ -53,7 +53,7 @@ export function apply(ctx: Context, config: Config): void {
   // 1. Persistent store (closed on plugin unload). On startup, purge search
   //    rows minted with an older cache-key version so stale titles-only ddg
   //    results saved before the snippet-regex fix are never replayed.
-  const store = new Store(dbPath)
+  const store = new Store(dbPath, { onDiagnostic: message => { try { ctx.logger?.(name).warn(message) } catch { /* logging is best-effort */ } } })
   try {
     const purged = store.cleanupLegacySearchCache('search:v' + SEARCH_CACHE_VERSION + ':')
     if (purged.queries > 0) ctx.logger?.(name).info('web-search-pro: purged ' + purged.queries + ' legacy search rows (' + purged.results + ' results) from cache-key v<=' + (SEARCH_CACHE_VERSION - 1))
