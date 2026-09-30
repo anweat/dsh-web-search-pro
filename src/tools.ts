@@ -9,6 +9,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { SearchRouter } from './router.ts'
 import type { FetchService } from './fetch.ts'
 import type { Store } from './store.ts'
+import { browserState, requireBrowser, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig } from './config.ts'
 import { mergedRules } from './fetch.ts'
@@ -24,7 +25,8 @@ export interface ToolDeps {
   store: Store
   router: SearchRouter
   fetch: FetchService
-  browser: BrowserService
+  /** Optional dsh-browser service, read lazily at call time (fixed service accepted for tests). */
+  browser?: BrowserService | BrowserGetter
 }
 
 function sourceLine(s: { url: string; title?: string; snippet?: string; publishedAt?: string }): string {
@@ -46,7 +48,8 @@ export function formatSources(sources: { url: string; title?: string; snippet?: 
 }
 
 export function registerTools(deps: ToolDeps): void {
-  const { ctx, config, dynamic, store, router, fetch: fetchSvc, browser } = deps
+  const { ctx, config, dynamic, store, router, fetch: fetchSvc } = deps
+  const getBrowser = toBrowserGetter(deps.browser)
 
   ctx.tools.register(defineTool({
     name: 'web_search_pro',
@@ -163,7 +166,7 @@ export function registerTools(deps: ToolDeps): void {
     description: 'Enhanced persistent page fetch: Jina Reader → direct HTTP with per-site extraction rules (userscript-style, e.g. zhihu/bilibili/github) → Playwright rendering fallback. Snapshots are stored in SQLite and reused within the TTL.',
     parameters: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to fetch.' },
-      mode: { type: 'string', description: 'Backend: auto (default), jina, http, or playwright.' },
+      mode: { type: 'string', description: 'Backend: auto (default), jina, http, or playwright. playwright needs the optional dsh-browser plugin; auto skips it when absent.' },
       maxChars: { type: 'number', description: 'Output cap in characters (1000-500000).' },
       fresh: { type: 'boolean', description: 'Bypass the cached snapshot.' },
       persist: { type: 'boolean', description: 'Save the snapshot to the persistent store (default true).' },
@@ -218,7 +221,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_platform_search',
-    description: 'Search a built-in or configured custom platform. Built-ins: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set the dsh-browser storageStatePath), and selectors are tunable via settings.yaml platformRules. Results are persisted to the search history.',
+    description: 'Search a built-in or configured custom platform. Built-ins: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set the dsh-browser storageStatePath), and selectors are tunable via settings.yaml platformRules. Those and the OpenCLI-backed platforms need the optional dsh-browser plugin (an unavailable-platform error says so). Results are persisted to the search history.',
     parameters: {
       platform: { type: 'string', required: true, description: 'Built-in platform (' + PLATFORM_IDS.join(', ') + ') or a configured customPlatforms key.' },
       query: { type: 'string', description: 'Search query; for rss this is an optional keyword filter. A feed URL here is still accepted for backward compatibility.' },
@@ -257,7 +260,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_snapshot',
-    description: 'Render a page in a headless browser (Playwright, optional persisted login state), extract readable text with per-site rules, and save HTML plus an optional full-page screenshot. Returns file paths. Use for JS-heavy pages or when you need a visual capture.',
+    description: 'Render a page in a headless browser (Playwright, optional persisted login state), extract readable text with per-site rules, and save HTML plus an optional full-page screenshot. Returns file paths. Use for JS-heavy pages or when you need a visual capture. Requires the optional dsh-browser plugin; fails with an install/enable hint when it is missing.',
     parameters: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to snapshot.' },
       screenshot: { type: 'boolean', description: 'Save a full-page PNG screenshot (default true).' },
@@ -287,6 +290,7 @@ export function registerTools(deps: ToolDeps): void {
     timeoutMs: config.timeoutMs + 60_000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
+      const browser = requireBrowser(getBrowser(), 'snapshot', 'web_snapshot')
       const rules = mergedRules(store)
       const shot = await browser.snapshot(args.url, rules, {
         signal: exec.signal,
@@ -584,7 +588,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_backend_status',
-    description: 'Side-effect-free backend diagnostics: configured native search engines, availability probes, cooldown state, and local CLI dependency health. Does not make search requests or expose credentials.',
+    description: 'Side-effect-free backend diagnostics: configured native search engines, availability probes, cooldown state, local CLI dependency health, and whether the optional dsh-browser service is present. Does not make search requests or expose credentials.',
     parameters: {},
     output: {
       schema: {
@@ -592,12 +596,14 @@ export function registerTools(deps: ToolDeps): void {
         properties: {
           engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
           cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' } } } },
+          browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
         },
       },
       render: (_args, value) => {
-        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string }[] }
+        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string }[]; browser?: { available: boolean; state: string; reason?: string } }
         const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
         lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '')))
+        if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
         return [{ type: 'text', text: lines.join('\n') }]
       },
     },
@@ -606,7 +612,7 @@ export function registerTools(deps: ToolDeps): void {
     async execute() {
       const cli = await detectDeps()
       const availability = new Map(cli.map(value => [value.id, value.available]))
-      return { engines: await router.backendDiagnostics(availability), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })) }
+      return { engines: await router.backendDiagnostics(availability), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })), browser: browserState(getBrowser()) }
     },
   }))
 

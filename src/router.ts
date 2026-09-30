@@ -17,6 +17,7 @@ import {
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
+import { browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
 import { BackendRegistry, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
@@ -68,6 +69,7 @@ export class SearchRouter {
   /** In-flight de-duplication of identical non-fresh requests (C3). */
   private readonly searchFlights = new SingleFlight<RouterSearchResult>()
   private readonly platformFlights = new SingleFlight<RouterSearchResult>()
+  private readonly getBrowser: BrowserGetter
   private readonly backends: BackendRegistry<{ query: string; count: number; signal?: AbortSignal; skipSeam: boolean; options?: EngineSearchOptions }, SearchOutcome>
 
   constructor(
@@ -75,9 +77,10 @@ export class SearchRouter {
     private readonly config: ResolvedConfig,
     private readonly store: Store,
     private readonly dynamic: () => ResolvedConfig = () => config,
-    private readonly browser?: BrowserService,
+    browser?: BrowserService | BrowserGetter,
     private readonly memory = new LruCache<RouterSearchResult>(config.memoryCacheEntries),
   ) {
+    this.getBrowser = toBrowserGetter(browser)
     this.backends = new BackendRegistry({ cooldownMs: 30_000 })
     for (const id of Object.keys(ENGINE_FACTORIES)) {
       this.backends.register({
@@ -162,6 +165,7 @@ export class SearchRouter {
   private async deps(skipSeam: boolean): Promise<EngineDeps> {
     const cfg = this.dynamic()
     const web = this.ctx.get('web') as WebRuntime | undefined
+    const browser = this.getBrowser()
     const exaApiKey = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
     const jinaApiKey = await this.resolveKey(cfg.jinaApiKeyEnv, cfg.jinaApiKey)
     const githubToken = await this.resolveKey(cfg.githubTokenEnv, cfg.githubToken)
@@ -174,7 +178,7 @@ export class SearchRouter {
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
       allowProxyFakeIp: cfg.allowProxyFakeIp,
-      ...this.browser !== undefined ? { browser: this.browser } : {},
+      ...browser !== undefined ? { browser } : {},
       ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
       ...cfg.customPlatforms !== undefined ? { customPlatforms: cfg.customPlatforms } : {},
       skipSeam,
@@ -185,6 +189,7 @@ export class SearchRouter {
   private depsSync(skipSeam: boolean): EngineDeps {
     const cfg = this.dynamic()
     const web = this.ctx.get('web') as WebRuntime | undefined
+    const browser = this.getBrowser()
     const exaApiKey = cfg.exaApiKey || process.env[cfg.exaApiKeyEnv]
     const jinaApiKey = cfg.jinaApiKey || process.env[cfg.jinaApiKeyEnv]
     const githubToken = cfg.githubToken || process.env[cfg.githubTokenEnv] || process.env.GH_TOKEN
@@ -197,7 +202,7 @@ export class SearchRouter {
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
       allowProxyFakeIp: cfg.allowProxyFakeIp,
-      ...this.browser !== undefined ? { browser: this.browser } : {},
+      ...browser !== undefined ? { browser } : {},
       ...cfg.platformRules !== undefined ? { platformRules: cfg.platformRules } : {},
       ...cfg.customPlatforms !== undefined ? { customPlatforms: cfg.customPlatforms } : {},
       skipSeam,
@@ -454,7 +459,12 @@ export class SearchRouter {
     let lastError: unknown
     for (const engine of engines) {
       enginesTried.push(engine.id)
-      if (!engine.available()) continue
+      if (!engine.available()) {
+        // Say why when the blocker is the optional dsh-browser service.
+        const gap = engine.needsBrowser ? browserGap(deps.browser, engine.needsBrowser, 'platform ' + platform) : undefined
+        if (gap) lastError = new Error(gap)
+        continue
+      }
       try {
         outcome = await engine.search(platform === 'rss' ? effectiveQuery : effectiveQuery || 'latest', boundedCount, signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
         break

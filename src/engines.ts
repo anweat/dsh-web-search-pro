@@ -8,6 +8,7 @@
 import type { WebSearchResult, WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web'
 import { httpGet, runCli, jsYaml, stripTags, capText, decodeRedirectUrl } from './util.ts'
 import type { BrowserService } from './browser-service.ts'
+import { browserGap, requireBrowser, type BrowserMethod } from './browser-access.ts'
 import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } from './platform-search.ts'
 import type { CustomPlatformSpec } from './config.ts'
 import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
@@ -23,6 +24,8 @@ export interface Engine {
   label: string
   /** Cheap local availability check; must not do network I/O. */
   available(): boolean
+  /** Browser-service method this engine depends on (dsh-browser is optional). */
+  needsBrowser?: BrowserMethod
   search(query: string, count: number, signal?: AbortSignal, options?: EngineSearchOptions): Promise<SearchOutcome>
 }
 
@@ -48,7 +51,7 @@ export interface EngineDeps {
   opencliEnabled: boolean
   agentReachEnabled: boolean
   allowProxyFakeIp: boolean
-  /** Browser service (dsh-browser) for Playwright platform search + bundled opencli. */
+  /** Browser service (dsh-browser, optional) for Playwright platform search + bundled opencli; resolved per call. */
   browser?: BrowserService
   /** Per-platform selector overrides (settings.yaml `platformRules`). */
   platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
@@ -554,10 +557,12 @@ export function opencliEngine(platform: string, deps: EngineDeps): Engine {
   return {
     id: 'opencli-' + platform,
     label: 'OpenCLI ' + platform,
-    available: () => deps.enableCli && deps.opencliEnabled && !!adapter && !!deps.browser,
+    needsBrowser: 'opencli',
+    available: () => deps.enableCli && deps.opencliEnabled && !!adapter && !browserGap(deps.browser, 'opencli', ''),
     async search(query, count, signal) {
-      if (!adapter || !deps.browser) throw new EngineError('opencli bundled backend unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
-      const res = await deps.browser.opencli([adapter, 'search', query, '-f', 'yaml'], { timeoutMs: 45_000, signal })
+      if (!adapter) throw new EngineError('opencli bundled backend unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      const browser = requireBrowser(deps.browser, 'opencli', 'opencli ' + platform + ' search')
+      const res = await browser.opencli([adapter, 'search', query, '-f', 'yaml'], { timeoutMs: 45_000, signal })
       if (res.code !== 0) {
         const msg = res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code
         throw new EngineError('opencli ' + platform + ' search failed (browser session connected?): ' + msg.slice(0, 200), 'ENGINE_UNAVAILABLE', false)
@@ -691,12 +696,13 @@ export function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps:
   return {
     id: 'custom-' + id,
     label: spec.name + ' (自定义)',
-    available: () => !!deps.browser,
+    needsBrowser: 'searchResults',
+    available: () => !browserGap(deps.browser, 'searchResults', ''),
     async search(query, count, signal, options) {
-      if (!deps.browser) throw new EngineError('custom platform search unavailable (no browser service)', 'ENGINE_UNAVAILABLE', false)
+      const browser = requireBrowser(deps.browser, 'searchResults', 'custom platform search')
       const url = spec.url.replace(/{query}/g, encodeURIComponent(query))
       const cookies = spec.cookie ? parseCookieString(spec.cookie, url) : undefined
-      const sources = await deps.browser.searchResults(url, searchSpec, { signal, count, cookies, ...options?.browser })
+      const sources = await browser.searchResults(url, searchSpec, { signal, count, cookies, ...options?.browser })
       if (!sources.length) throw new EngineError('自定义平台 ' + spec.name + ' 未取到结果：检查 url 的 {query} 占位、item/title/link 选择器，或补充 cookie。', 'ENGINE_EMPTY', false)
       return { sources }
     },
@@ -710,12 +716,14 @@ export function playwrightPlatformEngine(platform: string, deps: EngineDeps): En
   return {
     id: 'playwright-' + platform,
     label: (builtin?.label ?? platform) + ' (Playwright)',
-    available: () => !!builtin && !!deps.browser,
+    needsBrowser: 'searchResults',
+    available: () => !!builtin && !browserGap(deps.browser, 'searchResults', ''),
     async search(query, count, signal, options) {
-      if (!builtin || !deps.browser) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      if (!builtin) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      const browser = requireBrowser(deps.browser, 'searchResults', builtin.label + ' search')
       const override = deps.platformRules?.[platform]
       const spec = { ...builtin, ...override ?? {} } as typeof builtin
-      const sources = await deps.browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
+      const sources = await browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
       if (!sources.length) {
         throw new EngineError(
           builtin.label + ' 未取到结果：该平台需要浏览器登录态。运行 node scripts/save-login.mjs 登录一次，在 dsh-browser 中声明按域名授权的 AuthProfile，并通过 browserBindings.' + platform + ' 绑定；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',

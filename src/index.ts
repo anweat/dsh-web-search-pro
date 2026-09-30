@@ -26,12 +26,17 @@ import { Config, resolveConfig, type ResolvedConfig } from './config.ts'
 import { SEARCH_CACHE_VERSION } from './cache-key.ts'
 import { Store } from './store.ts'
 import type { BrowserService } from './browser-service.ts'
+import type { BrowserGetter } from './browser-access.ts'
 import { SearchRouter } from './router.ts'
 import { FetchService } from './fetch.ts'
 import { registerTools } from './tools.ts'
+import { buildPromptText } from './prompt.ts'
 
 export const name = 'web-search-pro'
-export const inject = ['tools', 'systemPrompt', 'browser']
+// `browser` (dsh-browser) is deliberately NOT injected: Cordis 4.0.4 treats every
+// `inject` entry as required (the fiber stays PENDING until it exists) and has no
+// optional form. It is read per call with `ctx.get('browser')` instead.
+export const inject = ['tools', 'systemPrompt']
 
 export { Config }
 export type { Config as WebSearchProConfig } from './config.ts'
@@ -60,8 +65,12 @@ export function apply(ctx: Context, config: Config): void {
   } catch { /* non-fatal */ }
   ctx.effect(() => () => store.close())
 
-  // 2. Browser service (provided by dsh-browser; inject: ['browser']).
-  const browser = ctx.get('browser') as BrowserService
+  // 2. Browser service (provided by dsh-browser) is OPTIONAL and resolved lazily
+  //    on every call: enabling/disabling dsh-browser after load is picked up
+  //    (a host may still need a restart to load a newly installed plugin), and
+  //    a removed service is never held on to. `ctx.get` returns undefined unless
+  //    the providing fiber is active.
+  const getBrowser: BrowserGetter = () => ctx.get('browser') as BrowserService | undefined
 
   // 3. Hot-reloadable config source. The plugin's Config schema marks live
   //    fields `volatile()` (schemastery), so the Host re-resolves this entry's
@@ -73,11 +82,11 @@ export function apply(ctx: Context, config: Config): void {
   const dynamic = (): ResolvedConfig => resolveConfig(ctx.fiber.config as Config)
 
   // 4. Services.
-  const router = new SearchRouter(ctx, resolved, store, dynamic, browser)
-  const fetchSvc = new FetchService(store, dynamic, browser)
+  const router = new SearchRouter(ctx, resolved, store, dynamic, getBrowser)
+  const fetchSvc = new FetchService(store, dynamic, getBrowser)
 
   // 5. Tools.
-  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser })
+  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser })
 
   // 5. Optional ctx.web provider registration: the built-in web_search /
   //    web_fetch tools route through this plugin when configured via
@@ -111,11 +120,12 @@ export function apply(ctx: Context, config: Config): void {
     })
   }
 
-  // 6. System prompt guidance.
+  // 6. System prompt guidance; the text thunk runs at assembly time so the
+  //    browser_* paragraph tracks the browser service's current presence.
   ctx.systemPrompt.section({
     name: 'tool:web-search-pro',
     order: 112,
-    text: 'For web research prefer the persistent enhanced tools: web_search_pro (multi-engine search with caching and history), web_platform_search (GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS/知乎/微博/豆瓣/贴吧/抖音/快手…), web_fetch_pro (readable extraction with per-site rules), and web_snapshot (browser capture). Cite relevant URLs as markdown links. The browser runtime bundles Playwright/Patchright-compatible Chromium and OpenCLI. Use browser_open/browser_click/browser_type/browser_scroll/browser_read/browser_screenshot for interactive browsing; browser_crawl for anonymous bounded same-origin traversal; browser_recipe_run for bounded model-generated multi-step operations; inspect browser_script_catalog before a built-in extractor; validate external UserScripts with browser_script_validate before browser_userscript_run. Call browser_status and obey automationMode plus usagePolicy: read-only hides or denies mutation, standard asks for interactions/local web mutations/risky tools, autonomous allows page interactions/mutating recipes/cache clears/rule writes, and unrestricted skips approvals for isolated automation/testing. No-approval never disables concurrency, burst, page/depth, retry, and server-pressure backoff limits. Dependency installation, external UserScripts, and general OpenCLI remain approval-gated in autonomous. Call browser_opencli_catalog before browser_opencli_run to discover exact adapters; browser_opencli_status diagnoses the Chrome bridge. Prefer OpenCLI site adapters, then browser network/extract primitives, then DOM interaction. Before relying on remaining external CLI backends (bili/yt-dlp/agent-reach), run web_deps action=check. Chinese communities need a named, domain-scoped dsh-browser AuthProfile created from scripts/save-login.mjs and bound through browserBindings.',
+    text: () => buildPromptText(getBrowser() !== undefined),
   })
 
   // 7. Apply marker for diagnostics (proves live registration).
@@ -129,7 +139,7 @@ export function apply(ctx: Context, config: Config): void {
         tools: TOOL_NAMES,
         provider: resolved.registerProvider ? resolved.providerId : undefined,
         engines: resolved.engines,
-        browser: 'injected',
+        browser: getBrowser() ? 'present' : 'absent',
       }) + '\n', 'utf8')
     } catch { /* marker is best-effort */ }
   }

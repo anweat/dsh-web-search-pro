@@ -7,6 +7,7 @@
 import type { Store } from './store.ts'
 import type { ResolvedConfig } from './config.ts'
 import type { BrowserService } from './browser-service.ts'
+import { BrowserUnavailableError, browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import type { ExtractRule } from './extract.ts'
 import { extractText, BUILTIN_RULES } from './extract.ts'
 import { httpGet, capText } from './util.ts'
@@ -101,11 +102,15 @@ export class FetchService {
   /** In-flight de-duplication of identical non-fresh fetches (C3). */
   private readonly flights = new SingleFlight<FetchResult>()
 
+  private readonly getBrowser: BrowserGetter
+
   constructor(
     private readonly store: Store,
     private readonly config: ResolvedConfig | (() => ResolvedConfig),
-    private readonly browser: BrowserService,
-  ) {}
+    browser?: BrowserService | BrowserGetter,
+  ) {
+    this.getBrowser = toBrowserGetter(browser)
+  }
 
   private cfg(): ResolvedConfig {
     return typeof this.config === 'function' ? this.config() : this.config
@@ -167,15 +172,22 @@ export class FetchService {
         if (opts.signal?.aborted) throw error
       }
     }
+    let browserNote = ''
     if (!result && (opts.mode === 'auto' || opts.mode === 'playwright')) {
-      if (this.cfg().playwright.enabled) {
-        result = await this.fetchPlaywright(normalized, opts, maxChars, rules)
-      } else if (opts.mode === 'playwright') {
-        throw new Error('playwright backend is disabled in config')
+      if (!this.cfg().playwright.enabled) {
+        if (opts.mode === 'playwright') throw new Error('playwright backend is disabled in config')
+      } else {
+        // Browser is optional: auto skips the render step when it is absent;
+        // an explicit playwright request must say why it cannot run.
+        const browser = this.getBrowser()
+        const gap = browserGap(browser, 'render', 'web_fetch_pro mode=playwright')
+        if (!gap) result = await this.fetchPlaywright(browser!, normalized, opts, maxChars, rules)
+        else if (opts.mode === 'playwright') throw new BrowserUnavailableError(gap)
+        else browserNote = ' (browser render fallback unavailable: dsh-browser not installed or not enabled)'
       }
     }
     if (!result) {
-      throw new Error('all fetch backends failed for ' + normalized)
+      throw new Error('all fetch backends failed for ' + normalized + browserNote)
     }
 
     // P1-3: flag navigation/JS/form shells so the model knows there is no data
@@ -245,8 +257,8 @@ export class FetchService {
     return { url: res.finalUrl, text: capText(res.text, maxChars), source: 'http', fromCache: false, statusCode: res.status }
   }
 
-  private async fetchPlaywright(url: string, opts: FetchOptions, maxChars: number, rules: ExtractRule[]): Promise<FetchResult> {
-    const rendered = await this.browser.render(url, rules, { signal: opts.signal, maxChars })
+  private async fetchPlaywright(browser: BrowserService, url: string, opts: FetchOptions, maxChars: number, rules: ExtractRule[]): Promise<FetchResult> {
+    const rendered = await browser.render(url, rules, { signal: opts.signal, maxChars })
     return {
       url,
       ...rendered.title ? { title: rendered.title } : {},

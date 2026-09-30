@@ -120,7 +120,7 @@ const DEPS: DepSpec[] = [
   },
   // opencli and playwright are NOT listed here: they are bundled (plugin-local
   // node_modules, with global reuse fallback) in the dsh-browser plugin, which
-  // this plugin injects via the `browser` service.
+  // this plugin uses optionally via the `browser` service.
 ]
 
 /** Resolve a command on PATH (win32: where.exe; posix: sh -c command -v). */
