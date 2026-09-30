@@ -88,10 +88,10 @@ test('select: no reservation without a grade>=2 block; a weak block only serves 
   assert.deepEqual(selectEvidence(task, [sb('https://zero.test/', 'nothing', { n1: 0.4, n2: 0 })]).selected, [], 'below minGrade is never eligible')
 })
 
-test('select: at most two blocks per URL, duplicates by hash or near-identical text are skipped', () => {
+test('select: at most four blocks per URL by default, duplicates by hash or near-identical text are skipped', () => {
   const same = Array.from({ length: 5 }, (_, i) => sb('https://one.test/doc', 'Distinct busy timeout paragraph number ' + i + ' ' + 'unique' + i.toString().repeat(3) + ' about pragma values.', { n1: 3 }))
-  assert.equal(selectEvidence(task, same).selected.length, 2)
-  assert.equal(selectEvidence(task, same, { maxPerUrl: 3 }).selected.length, 3)
+  assert.equal(selectEvidence(task, same).selected.length, 4)
+  assert.equal(selectEvidence(task, same, { maxPerUrl: 2 }).selected.length, 2)
   const a = sb('https://a.test/', 'Identical repost of the busy timeout paragraph.', { n1: 3 }, { hash: 'same' })
   const b = sb('https://b.test/', 'Identical repost of the busy timeout paragraph.', { n1: 3 }, { hash: 'same' })
   assert.equal(selectEvidence(task, [a, b]).selected.length, 1, 'same hash')

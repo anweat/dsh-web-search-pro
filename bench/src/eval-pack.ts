@@ -515,7 +515,7 @@ async function main(): Promise<number> {
   const dir = path.join(RUNS_DIR, runId)
   fs.mkdirSync(dir, { recursive: true })
   const variants: { label: string; tasks: TaskEval[] }[] = []
-  for (const [label, sel] of [['默认（每 URL 2 块）', {}], ['每 URL 3 块', { maxPerUrl: 3 }], ['每 URL 4 块、至多 12 条', { maxPerUrl: 4, maxItems: 12 }]] as const) {
+  for (const [label, sel] of [['每 URL 2 块、至多 10 条（M2b 初版）', { maxPerUrl: 2, maxItems: 10 }], ['每 URL 3 块', { maxPerUrl: 3 }], ['默认（每 URL 4 块、至多 12 条）', {}]] as const) {
     variants.push({ label, tasks: (await evaluate(items, { ...opts, jev: false, select: { ...select, ...sel } })).tasks })
   }
   let previous = 0

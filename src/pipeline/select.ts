@@ -39,7 +39,7 @@ export interface SelectOptions {
 }
 
 export const DEFAULT_SELECT_OPTIONS: SelectOptions = {
-  charBudget: 6000, maxExcerptChars: 600, maxPerUrl: 2, maxItems: 10, minGrade: 1, coverGrade: 2, overheadChars: 80,
+  charBudget: 6000, maxExcerptChars: 600, maxPerUrl: 4, maxItems: 12, minGrade: 1, coverGrade: 2, overheadChars: 80,
 }
 
 // ── excerpts ────────────────────────────────────────────────────────────────
