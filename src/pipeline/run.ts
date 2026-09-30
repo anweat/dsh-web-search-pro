@@ -134,6 +134,10 @@ export function verificationOf(task: Pick<TaskSpec, 'constraints'>, compiled: re
 export interface PipelineResult {
   pack: EvidencePack
   task: TaskSpec
+  /** Canonical URLs of the candidates whose pages were read and split into blocks. */
+  pagesRead: string[]
+  /** Every block that got an S6 grade (the selection pool). */
+  scored: ScoredBlock[]
   /** Full text of every selected block (for storage and `web_history action=expand`). */
   evidenceBlocks: { evidenceId: string; url: string; blockId: string; heading?: string; text: string; hash: string; grade: number; scorer: string }[]
   /** Shadow scorer output for later comparison (Jev mode `shadow`). */
@@ -281,7 +285,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
 
   const rule = new RuleScorer()
   const control = deps.scorers.control ?? rule
-  let scorerUsed = control.id
+  // `none`: no page produced a block, so nothing was scored.
+  let scorerUsed = fullJobs.length ? control.id : 'none'
   let outcome: ScoreOutcome | undefined
   let jevUsage: EvidencePack['stats']['jev']
   const scoreCtx = { signal: ctx.stage, ...deadlineAt !== undefined ? { deadline: deadlineAt } : {} }
@@ -380,7 +385,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
       excerptChars: selection.usedChars, scorer: scorerUsed, ...jevUsage ? { jev: jevUsage } : {},
     },
   }
-  return { pack, task, evidenceBlocks, ...shadow ? { shadow } : {} }
+  return { pack, task, pagesRead: [...pages.values()].map(p => p.candidate.canonicalUrl), scored, evidenceBlocks, ...shadow ? { shadow } : {} }
 }
 
 /** Cap the number of (need, block) questions for a paid scorer: round-robin over the needs, keeping each need's pre-rank order. */
