@@ -31,7 +31,7 @@ import { DeepSeekClient, DEEPSEEK_MODEL, EFFORTS, type Effort } from './judges/d
 import { DeepSeekJudge } from './judges/deepseek.ts'
 import { createJevJudge } from './judges/jev.ts'
 import { createLayaJudge, layaJudgeId, type LayaModel } from './judges/laya.ts'
-import { weightedOverlap } from './judges/lexical.ts'
+import { weightedOverlap } from '../../src/pipeline/lexical.ts'
 import { loadRubrics, renderQuestion } from './judges/rubrics.ts'
 import { RuleJudge } from './judges/rule.ts'
 import { SystemOneError, type SystemOneJudge } from './judges/systemone.ts'

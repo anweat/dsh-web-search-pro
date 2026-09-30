@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadRubrics, renderQuestion, bindCandidate, validateRubric } from '../src/judges/rubrics.ts'
-import { termsOf, weightedOverlap } from '../src/judges/lexical.ts'
+import { termsOf, weightedOverlap } from '../../src/pipeline/lexical.ts'
 import { bucketGrade, checkConstraint, knownYear, RuleJudge } from '../src/judges/rule.ts'
 import type { JudgeContext, JudgeItem } from '../src/judges/types.ts'
 

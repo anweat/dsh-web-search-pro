@@ -1,47 +1,19 @@
 /**
  * Shared types for the offline evaluation bench (dev-plan §4.2 and §6.2).
- * The TaskSpec / Need / Constraint shapes mirror the plan; the snapshot and
- * label shapes are bench-local and versioned by `SNAPSHOT_VERSION` / `LABEL_VERSION`.
+ * TaskSpec / Need / Constraint are re-exported from src/pipeline/types.ts; the
+ * snapshot and label shapes are bench-local and versioned by `SNAPSHOT_VERSION` / `LABEL_VERSION`.
  * @module bench/types
  */
 
+import type { BudgetProfile, Constraint, ConstraintOrigin, Need, Profile, Satisfied, TaskSpec } from '../../src/pipeline/types.ts'
+
 // ── Plan types (§4.2) ───────────────────────────────────────────────────────
 
-export type Profile = 'docs_code' | 'news_fact' | 'academic' | 'experience' | 'compare' | 'general'
-export const PROFILES: readonly Profile[] = ['docs_code', 'news_fact', 'academic', 'experience', 'compare', 'general']
-
-export type ConstraintKind =
-  | 'must_term' | 'exclude_term' | 'entity' | 'version' | 'time_window'
-  | 'site' | 'exclude_site' | 'language' | 'region' | 'source_type'
-export const CONSTRAINT_KINDS: readonly ConstraintKind[] = [
-  'must_term', 'exclude_term', 'entity', 'version', 'time_window',
-  'site', 'exclude_site', 'language', 'region', 'source_type',
-]
-
-export type ConstraintStrength = 'hard' | 'soft'
-export type ConstraintOrigin = 'param' | 'query_syntax' | 'rule_extracted' | 'judge_extracted'
-
-export interface Need { id: string; text: string; critical: boolean }
-
-export interface Constraint {
-  id: string
-  kind: ConstraintKind
-  value: string
-  strength: ConstraintStrength
-  origin: ConstraintOrigin
-}
-
-/** Placeholder: the plan leaves BudgetProfile open; experiments fill it in. */
-export type BudgetProfile = Record<string, unknown>
-
-export interface TaskSpec {
-  goal: string
-  query: string
-  profile?: Profile
-  needs: Need[]
-  constraints: Constraint[]
-  budget: BudgetProfile
-}
+// The shapes live in src/pipeline/types.ts (one definition for runtime and bench).
+export { CONSTRAINT_KINDS, PROFILES } from '../../src/pipeline/types.ts'
+export type {
+  BudgetProfile, Constraint, ConstraintKind, ConstraintOrigin, ConstraintStrength, Need, Profile, TaskSpec,
+} from '../../src/pipeline/types.ts'
 
 // ── Task set (bench/tasks/tasks.v1.jsonl) ───────────────────────────────────
 
@@ -154,7 +126,7 @@ export const LABEL_VERSION = 1
 
 /** 0 irrelevant / 1 locates the topic only / 2 partially supports / 3 directly supports incl. conditions (matches §4.3 S6). */
 export type Relevance = 0 | 1 | 2 | 3
-export type Satisfied = 'yes' | 'no' | 'unknown'
+export type { Satisfied } from '../../src/pipeline/types.ts'
 
 export interface ConstraintCheck { constraintId: string; satisfied: Satisfied }
 

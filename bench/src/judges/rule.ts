@@ -2,12 +2,18 @@
  * RuleJudge: deterministic lexical baseline (dev-plan §4.3 rule column).
  * Relevance = weighted term overlap of query / need / entity terms with the
  * candidate text; constraints that rules can decide (must/exclude term, site,
- * version string, known dates, language) are checked directly.
+ * version string, known dates, language) are checked directly. The lexical and
+ * constraint logic lives in src/pipeline/gate.ts (one implementation for the
+ * runtime gate and this bench judge); this file keeps the bench-only parts
+ * (grade buckets, navigation score, profile guess).
  * @module bench/judges/rule
  */
 
-import type { Satisfied, TaskConstraint } from '../types.ts'
-import { hanRatio, hostOf, termsOf, weightedOverlap, type QueryPart } from './lexical.ts'
+import {
+  checkConstraint as srcCheckConstraint, knownYear as srcKnownYear, lexicalRelevance as srcLexicalRelevance,
+  type ConstraintVerdict, type GateItem,
+} from '../../../src/pipeline/gate.ts'
+import type { TaskConstraint } from '../types.ts'
 import type { Judge, JudgeContext, JudgeItem, JudgeQuestion, JudgeResult, Readiness } from './types.ts'
 
 /** Relevance -> grade buckets: [0,T1) 0, [T1,T2) 1, [T2,T3) 2, >=T3 3. */
@@ -20,117 +26,33 @@ export function bucketGrade(relevance: number): 0 | 1 | 2 | 3 {
   return 3
 }
 
-export interface ConstraintVerdict { satisfied: Satisfied; prob: number }
+export type { ConstraintVerdict }
 
-const yes = (prob = 1): ConstraintVerdict => ({ satisfied: 'yes', prob })
-const no = (prob = 0): ConstraintVerdict => ({ satisfied: 'no', prob })
-const unknown = (prob = 0.5): ConstraintVerdict => ({ satisfied: 'unknown', prob })
-
-function domainOf(value: string): string {
-  return value.trim().toLowerCase().replace(/^site:/, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')
+/** Judge item -> the src gate's view of a candidate. */
+export function gateItemOfJudge(item: JudgeItem): GateItem {
+  return {
+    text: item.text,
+    ...item.meta?.url ? { url: item.meta.url } : {},
+    ...item.meta?.title ? { title: item.meta.title } : {},
+    ...item.meta?.heading ? { heading: item.meta.heading } : {},
+    ...item.meta?.publishedAt ? { publishedAt: item.meta.publishedAt } : {},
+  }
 }
 
-function hostMatches(host: string, domain: string): boolean {
-  const h = host.replace(/^www\./, '')
-  return h === domain || h.endsWith('.' + domain)
-}
-
-function versionNumbers(value: string): string[] {
-  return value.match(/\d+(?:\.\d+)*/g) ?? []
-}
-
-function containsVersion(text: string, version: string): boolean {
-  const escaped = version.replace(/\./g, '\\.')
-  return new RegExp('(?<![\\d.])' + escaped + '(?![\\d]|\\.\\d)').test(text)
-}
-
-const CURRENT_YEAR = 2026
-
-/** Newest year evidenced by an explicit date: publishedAt, then date-shaped strings in url/title/snippet. */
+/** Newest year evidenced by an explicit date (implementation: src/pipeline/gate.ts). */
 export function knownYear(item: JudgeItem): number | undefined {
-  const published = item.meta?.publishedAt
-  if (published) {
-    const ts = Date.parse(published)
-    if (Number.isFinite(ts)) return new Date(ts).getUTCFullYear()
-    const m = published.match(/(?:19|20)\d\d/)
-    if (m) return Number(m[0])
-  }
-  const hay = (item.meta?.url ?? '') + ' ' + (item.meta?.title ?? '') + ' ' + item.text
-  const years = [...hay.matchAll(/(?<![\d])((?:19|20)\d\d)(?:[-/.](?:0?[1-9]|1[0-2])\b|\s*年\s*\d{1,2}\s*月)/g)].map(m => Number(m[1]))
-    .filter(y => y <= CURRENT_YEAR + 1)
-  return years.length ? Math.max(...years) : undefined
+  return srcKnownYear(gateItemOfJudge(item))
 }
 
-/** Rule verdict for one constraint on one candidate. Semantic kinds that rules cannot decide are `unknown`. */
+/** Rule verdict for one constraint on one candidate (implementation: src/pipeline/gate.ts). */
 export function checkConstraint(c: TaskConstraint, item: JudgeItem): ConstraintVerdict {
-  const text = (item.meta?.title ? item.meta.title + '\n' : '') + item.text
-  const lower = text.toLowerCase()
-  const value = c.value.trim()
-  switch (c.kind) {
-    case 'site':
-    case 'exclude_site': {
-      const host = hostOf(item.meta?.url)
-      if (!host) return unknown()
-      const match = hostMatches(host, domainOf(value))
-      return (c.kind === 'site') === match ? yes() : no()
-    }
-    case 'exclude_term':
-      return lower.includes(value.toLowerCase()) ? no() : yes(0.9)
-    case 'must_term':
-    case 'entity': {
-      if (lower.includes(value.toLowerCase())) return yes()
-      const want = termsOf(value)
-      if (want.size === 0) return unknown()
-      const have = termsOf(text)
-      let hit = 0
-      for (const t of want.keys()) if (have.has(t)) hit++
-      const frac = hit / want.size
-      if (frac >= 1) return yes(0.95)
-      return frac >= 0.5 ? unknown(frac) : no(frac)
-    }
-    case 'version': {
-      const versions = versionNumbers(value)
-      if (!versions.length) return unknown()
-      return versions.some(v => containsVersion(text, v)) ? yes(0.9) : unknown(0.35)
-    }
-    case 'time_window': {
-      const from = Number(value.match(/(?:19|20)\d\d/)?.[0])
-      const year = knownYear(item)
-      if (!Number.isFinite(from) || year === undefined) return unknown()
-      return year >= from ? yes(0.9) : no(0.1)
-    }
-    case 'language': {
-      if (text.replace(/\s/g, '').length < 12) return unknown()
-      const wantZh = /^(zh|cn|中文|汉语|简体)/i.test(value)
-      const wantEn = /^(en|english|英文|英语)/i.test(value)
-      if (!wantZh && !wantEn) return unknown()
-      const isZh = hanRatio(text) > 0.2
-      return wantZh === isZh ? yes(0.9) : no(0.1)
-    }
-    default:
-      return unknown()
-  }
+  return srcCheckConstraint(c, gateItemOfJudge(item))
 }
 
 // ── relevance ───────────────────────────────────────────────────────────────
 
-function docOf(item: JudgeItem): string {
-  return [item.meta?.title, item.meta?.heading, item.text].filter(Boolean).join('\n')
-}
-
-function partsFor(ctx: JudgeContext, withConstraints: boolean): QueryPart[] {
-  const parts: QueryPart[] = [{ text: ctx.query, weight: 1 }, { text: ctx.goal, weight: 0.8 }]
-  for (const need of ctx.needs) parts.push({ text: need, weight: 1.6 })
-  if (withConstraints) {
-    for (const c of ctx.constraints) {
-      if (c.kind === 'entity' || c.kind === 'must_term') parts.push({ text: c.value, weight: 1.5 })
-    }
-  }
-  return parts
-}
-
 export function lexicalRelevance(ctx: JudgeContext, item: JudgeItem, withConstraints: boolean): number {
-  return weightedOverlap(partsFor(ctx, withConstraints), docOf(item))
+  return srcLexicalRelevance(ctx, gateItemOfJudge(item), withConstraints)
 }
 
 /** gate.single: relevance with constraint penalties (a violated hard constraint cuts the score). */

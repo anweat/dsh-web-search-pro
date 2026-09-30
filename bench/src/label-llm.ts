@@ -30,7 +30,7 @@ import { BudgetGuard } from './judges/budget.ts'
 import {
   DeepSeekClient, DEEPSEEK_MODEL, EFFORTS, parseJsonLoose, type ChatMessage, type Effort,
 } from './judges/deepseek-client.ts'
-import { weightedOverlap } from './judges/lexical.ts'
+import { weightedOverlap } from '../../src/pipeline/lexical.ts'
 import { checkConstraint } from './judges/rule.ts'
 import { BudgetStopError } from './judges/types.ts'
 import { loadTasks } from './tasks.ts'
