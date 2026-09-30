@@ -28,8 +28,15 @@ export interface EvidenceConfig {
      * Jev is a paid hosted service, so it needs both keys turned.
      */
     scorer: 'rule' | 'jev';
-    /** `off`: never call Jev. `shadow`: the rule scorer decides, Jev scores are recorded for comparison. `control`: Jev decides when `scorer` is `jev`; any Jev failure falls back to the rule scorer. */
-    jevMode: 'off' | 'shadow' | 'control';
+    /**
+     * `off`: never call Jev. `shadow`: the rule scorer decides, Jev scores are recorded for comparison.
+     * `control`: Jev decides when `scorer` is `jev`; any Jev failure falls back to the rule scorer.
+     * `hybrid`: the rule scorer grades everything and Jev re-scores only the (need, block) pairs whose languages differ
+     * (plus rule-borderline ones with `hybridBorderline`), within `maxJevQuestions`; a Jev failure keeps the rule grades. Ignores `scorer`.
+     */
+    jevMode: 'off' | 'shadow' | 'control' | 'hybrid';
+    /** `hybrid` only: also let Jev re-score pairs whose rule grade is 1 (borderline), after the language-mismatch pairs. */
+    hybridBorderline: boolean;
     /** Upper bound of (need, block) questions sent to Jev per search. */
     maxJevQuestions: number;
 }
@@ -180,11 +187,13 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
     }>>, Schemastery.ObjectT<NoInfer<{
         scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
     }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;
@@ -257,11 +266,13 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
     }>>, Schemastery.ObjectT<NoInfer<{
         scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
     }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;

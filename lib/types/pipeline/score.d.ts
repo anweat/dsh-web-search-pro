@@ -3,7 +3,12 @@
  * grade 0..3 (score.support.v1: 0 unrelated, 1 same topic only, 2 partly
  * answers, 3 answers directly with locatable evidence).
  *
- *  - RuleScorer: lexical relevance bucketed like the bench rule judge.
+ *  - RuleScorer: lexical relevance bucketed like the bench rule judge, with
+ *    cross-lingual / identifier alignment (align.ts, dev-plan M3a).
+ *  - HybridScorer: the rule scorer grades everything; Jev re-scores only the
+ *    pairs the rule scorer is structurally weak on (need and block in different
+ *    languages, optionally rule-borderline ones); any Jev failure keeps the
+ *    rule grades.
  *  - JevScorer: hosted Bocha Jev `score` questions in Chinese (experiment r1:
  *    nDCG@5 0.565 vs 0.378 for the rule scorer). Questions are chunked to the
  *    service limits and to a conservative expanded-token budget per REQUEST
@@ -55,10 +60,44 @@ export interface Scorer {
 /** Relevance -> grade buckets: [0,T1) 0, [T1,T2) 1, [T2,T3) 2, >=T3 3 (bench rule judge, r1). */
 export declare const GRADE_THRESHOLDS: readonly [0.12, 0.3, 0.55];
 export declare function bucketGrade(relevance: number): 0 | 1 | 2 | 3;
+export interface RuleScorerOptions {
+    /** Cross-lingual / identifier alignment (default true). `false` = the M2 lexical-v1 relevance, kept for comparison. */
+    align?: boolean;
+}
 export declare class RuleScorer implements Scorer {
     readonly id = "rule";
-    readonly model = "lexical-v1";
+    readonly model: string;
+    private readonly align;
+    constructor(options?: RuleScorerOptions);
     score(task: ScoreTask, jobs: readonly ScoreJob[]): Promise<ScoreOutcome>;
+}
+export interface HybridScorerOptions {
+    /** The paid scorer that re-scores the selected pairs. */
+    jev: Scorer;
+    rule?: Scorer;
+    /** Also re-score pairs whose rule grade is 1 (relevance in [T1, T2)), after the language-mismatch pairs. Default false. */
+    borderline?: boolean;
+    /** Cap on the (need, block) questions handed to `jev` (round-robin over needs, best rule relevance first). Default 64. */
+    maxQuestions?: number;
+}
+/**
+ * Rule scorer for everything, Jev for the pairs where the rule scorer is
+ * structurally weak: need and block written in different languages (both
+ * detected, see `detectLang`), plus optionally the rule-borderline pairs
+ * (grade 1). Jev answers replace the rule grades; unanswered questions and
+ * any Jev failure keep the rule grades (the outcome then says so in `notes`).
+ */
+export declare class HybridScorer implements Scorer {
+    readonly id = "hybrid";
+    readonly model: string;
+    private readonly jev;
+    private readonly rule;
+    private readonly borderline;
+    private readonly maxQuestions;
+    constructor(options: HybridScorerOptions);
+    /** Pairs to re-score, ordered by priority (mismatch first), capped round-robin over the needs. */
+    select(jobs: readonly ScoreJob[], rule: ScoreOutcome): ScoreJob[];
+    score(task: ScoreTask, jobs: readonly ScoreJob[], ctx?: ScoreContext): Promise<ScoreOutcome>;
 }
 export declare const JEV_URL = "https://jev.bocha.cn/v1/systemone";
 export declare const JEV_MODEL = "bocha-jev-v1";

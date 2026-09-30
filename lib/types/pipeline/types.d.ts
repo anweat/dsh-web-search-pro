@@ -152,7 +152,7 @@ export interface PackStats {
         questions: number;
         inputTokens: number;
         outputTokens: number;
-        mode: 'control' | 'shadow';
+        mode: 'control' | 'shadow' | 'hybrid';
     };
 }
 export interface EvidencePack {

@@ -97,11 +97,13 @@ declare const _default: {
         }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+            hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         }>>, Schemastery.ObjectT<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+            hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         }>>, "plain">;
         verbose: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -174,11 +176,13 @@ declare const _default: {
         }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+            hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         }>>, Schemastery.ObjectT<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control", "off" | "shadow" | "control", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+            hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         }>>, "plain">;
         verbose: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
