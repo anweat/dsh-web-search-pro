@@ -15,11 +15,12 @@
  * - Invariant: `block.text === text.slice(block.start, block.end)` (trimmed),
  *   and `blockId = 'b_' + sha1(url + ':' + start)`, so the same page text
  *   always yields the same ids.
- * @module bench/blocks
+ * @module web-search-pro/pipeline/blocks
  */
 
 import crypto from 'node:crypto'
-import type { Block } from './types.ts'
+import { weightedOverlap } from './lexical.ts'
+import type { Block, Need } from './types.ts'
 
 export interface SplitOptions {
   /** Soft upper bound per block, in UTF-16 code units. Atomic units may exceed it. */
@@ -267,4 +268,29 @@ export function splitBlocks(text: string, url: string, options: SplitOptions = {
     if (last?.kind === 'heading') emit(last.start, last.end, pathOf())
   }
   return blocks
+}
+
+// ── per-need lexical pre-rank (dev-plan §4.3 S5) ────────────────────────────
+
+/** Anything block-shaped the pre-ranker can look at: a heading path and a text. */
+export interface RankableBlock { heading?: string; text: string }
+
+/** The text S6 scores and the pre-ranker reads: heading path, newline, block text. */
+export function blockScoringText(block: RankableBlock): string {
+  return (block.heading ? block.heading + '\n' : '') + block.text
+}
+
+/**
+ * Pre-rank blocks for one need: weighted lexical overlap of the need (x1.6) and
+ * the query (x1.0) with heading + text, best first, ties in input order. This is
+ * exactly the r1 experiment's S6 input selection, so judge caches from that
+ * run stay valid.
+ */
+export function preRankBlocks<T extends RankableBlock>(need: Pick<Need, 'text'>, query: string, blocks: readonly T[], limit: number): { item: T; score: number }[] {
+  const parts = [{ text: need.text, weight: 1.6 }, { text: query, weight: 1 }]
+  return blocks
+    .map((item, pos) => ({ item, pos, score: weightedOverlap(parts, blockScoringText(item)) }))
+    .sort((a, b) => b.score - a.score || a.pos - b.pos)
+    .slice(0, Math.max(limit, 0))
+    .map(({ item, score }) => ({ item, score }))
 }

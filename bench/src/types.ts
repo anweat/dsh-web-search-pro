@@ -5,7 +5,7 @@
  * @module bench/types
  */
 
-import type { BudgetProfile, Constraint, ConstraintOrigin, Need, Profile, Satisfied, TaskSpec } from '../../src/pipeline/types.ts'
+import type { Block, BudgetProfile, Constraint, ConstraintOrigin, Need, Profile, Satisfied, TaskSpec } from '../../src/pipeline/types.ts'
 
 // ── Plan types (§4.2) ───────────────────────────────────────────────────────
 
@@ -76,18 +76,8 @@ export interface EngineRun {
   results: SnapshotResult[]
 }
 
-export interface Block {
-  /** `b_` + 12 hex of sha1(url + ':' + start). Stable for the same url + text layout. */
-  blockId: string
-  /** Heading path, `A > B > C`, when the block sits under a heading. */
-  heading?: string
-  text: string
-  /** Character offsets into the page `text`; `text === page.text.slice(start, end)`. */
-  start: number
-  end: number
-  /** 16 hex of sha1(text): detects drift when a page is re-fetched. */
-  hash: string
-}
+// `Block` lives in src/pipeline/types.ts (the block splitter is runtime code now).
+export type { Block } from '../../src/pipeline/types.ts'
 
 export type PageStatus = 'ok' | 'error' | 'skipped'
 

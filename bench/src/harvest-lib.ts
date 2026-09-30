@@ -18,7 +18,7 @@ import {
 import { BUILTIN_RULES, extractText } from '../../src/extract.ts'
 import { detectShellPage, isTruncatedText, normalizeUrl } from '../../src/fetch.ts'
 import { capText, httpGet } from '../../src/util.ts'
-import { splitBlocks } from './blocks.ts'
+import { splitBlocks } from '../../src/pipeline/blocks.ts'
 import {
   SNAPSHOT_VERSION,
   type BenchTask, type CandidateSnapshot, type EngineRun, type PageSnapshot, type Profile,

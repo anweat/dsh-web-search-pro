@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
-import { splitBlocks } from '../src/blocks.ts'
+import { splitBlocks } from '../src/pipeline/blocks.ts'
 
 const URL_A = 'https://example.com/docs/a'
 const sha1 = (s: string): string => crypto.createHash('sha1').update(s).digest('hex')
@@ -182,4 +182,25 @@ test('first line of a hard-wrapped paragraph is not mistaken for a heading', () 
   assert.equal(blocks[0]!.heading, 'Setup')
   assert.ok(blocks[0]!.text.includes('whether values are converted'), 'wrapped paragraph stays in the Setup block')
   assert.ok(blocks.every(b => !b.heading?.includes('APIs that read')))
+})
+
+// ── pre-rank ────────────────────────────────────────────────────────────────
+
+import { blockScoringText, preRankBlocks } from '../src/pipeline/blocks.ts'
+
+test('preRankBlocks orders by need/query overlap, keeps input order on ties and honours the limit', () => {
+  const blocks = [
+    { text: 'Totally unrelated gardening advice.' },
+    { heading: 'Busy timeout', text: 'Set busy_timeout via PRAGMA on the node:sqlite DatabaseSync connection.' },
+    { text: 'The busy timeout can be configured.' },
+    { text: 'Totally unrelated cooking advice.' },
+  ]
+  const ranked = preRankBlocks({ text: 'node:sqlite busy timeout' }, 'sqlite busy timeout', blocks, 3)
+  assert.equal(ranked.length, 3)
+  assert.equal(ranked[0]!.item, blocks[1])
+  assert.equal(ranked[1]!.item, blocks[2])
+  assert.equal(ranked[2]!.item, blocks[0], 'tie (score 0) keeps input order')
+  assert.ok(ranked[0]!.score > ranked[1]!.score)
+  assert.equal(blockScoringText(blocks[1]!), 'Busy timeout\nSet busy_timeout via PRAGMA on the node:sqlite DatabaseSync connection.')
+  assert.deepEqual(preRankBlocks({ text: 'x' }, 'x', blocks, 0), [])
 })
