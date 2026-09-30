@@ -89,3 +89,20 @@ export declare function runCli(bin: string, args: string[], opts?: {
 export declare function decodeRedirectUrl(href: string): string;
 /** Cap a string to maxChars while keeping whole lines near the boundary. */
 export declare function capText(text: string, maxChars: number): string;
+/** Max snippet length returned to callers, whichever path produced the sources. */
+export declare const SNIPPET_MAX_CHARS = 500;
+/**
+ * Single output shaping for search sources (live, SQLite hit, platform):
+ * slice to `count`, cap snippets, drop empty optional fields.
+ */
+export declare function shapeSources(sources: readonly {
+    url: string;
+    title?: string | null;
+    snippet?: string | null;
+    publishedAt?: string | null;
+}[], count: number): {
+    url: string;
+    title?: string;
+    snippet?: string;
+    publishedAt?: string;
+}[];

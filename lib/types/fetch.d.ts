@@ -25,7 +25,11 @@ export interface FetchResult {
     usedRule?: string;
     /** True when the page is a navigation/JS/form shell with no extractable data. */
     shellPage?: boolean;
+    /** True when `text` was cut at maxChars (internal: reported by the ctx.web provider, not a tool output field). */
+    truncated?: boolean;
 }
+/** True when `text` ends with capText()'s truncation marker. */
+export declare function isTruncatedText(text: string): boolean;
 /**
  * Heuristic: a "shell" page looks like text but is really navigation — search
  * forms, "look elsewhere" pointers, JS-only stubs. Signals: very little prose,
@@ -43,9 +47,12 @@ export declare class FetchService {
     private readonly config;
     private readonly browser;
     private readonly memory;
+    /** In-flight de-duplication of identical non-fresh fetches (C3). */
+    private readonly flights;
     constructor(store: Store, config: ResolvedConfig | (() => ResolvedConfig), browser: BrowserService);
     private cfg;
     fetchPage(url: string, opts: FetchOptions): Promise<FetchResult>;
+    private runFetch;
     private fetchJina;
     private fetchHttp;
     private fetchPlaywright;

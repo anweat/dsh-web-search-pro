@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
-import { type EngineSearchOptions } from './engines.ts';
+import { type Engine, type EngineDeps, type EngineSearchOptions } from './engines.ts';
 import { LruCache } from './memory-cache.ts';
 import type { BrowserService } from './browser-service.ts';
 import { type BackendDiagnostic } from './backend-registry.ts';
@@ -38,6 +38,8 @@ export interface RouterSearchResult {
     engine: string;
     enginesTried: string[];
     fromCache: boolean;
+    /** Sources available before slicing to `count` (>= sources.length); drives `truncated`. */
+    availableCount?: number;
     /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
     fallbackNote?: string;
 }
@@ -48,6 +50,9 @@ export declare class SearchRouter {
     private readonly dynamic;
     private readonly browser?;
     private readonly memory;
+    /** In-flight de-duplication of identical non-fresh requests (C3). */
+    private readonly searchFlights;
+    private readonly platformFlights;
     private readonly backends;
     constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | undefined, memory?: LruCache<RouterSearchResult>);
     backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]>;
@@ -63,6 +68,7 @@ export declare class SearchRouter {
     private buildSync;
     /** Run a full search with caching + persistence. */
     search(opts: RouterSearchOptions): Promise<RouterSearchResult>;
+    private runSearch;
     /** Platform search (web_platform_search tool) with the same cache+persist flow. */
     platformSearch(platform: string, query: string, url: string | undefined, count: number, opts: {
         signal?: AbortSignal;
@@ -70,6 +76,9 @@ export declare class SearchRouter {
         authProfile?: string;
         rulePack?: string;
     }): Promise<RouterSearchResult>;
+    /** Platform engine list; a seam so tests can inject fakes without network. */
+    protected platformEngineList(platform: string, feedUrl: string | undefined, deps: EngineDeps): Engine[];
+    private runPlatformSearch;
     /**
      * ctx.web provider adapter: route the seam request through this router.
      * Returns a WebSearchResult-shaped value for the built-in web_search tool.

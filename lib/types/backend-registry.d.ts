@@ -11,7 +11,7 @@ export interface BackendRunResult {
 /** Per-engine attempt record so callers can report *why* the router fell back. */
 export interface BackendAttempt {
     id: string;
-    outcome: 'ok' | 'low-quality' | 'error';
+    outcome: 'ok' | 'low-quality' | 'empty' | 'error';
     detail?: string;
 }
 export interface Backend<I, O> {
@@ -28,6 +28,12 @@ export interface BackendDiagnostic {
     lastError?: string;
     cooldownUntil?: string;
 }
+export interface RunSelectedOptions {
+    preferred: readonly string[];
+    override?: string;
+    /** Caller's cancellation signal: an abort is rethrown at once and never cools an engine down. */
+    signal?: AbortSignal;
+}
 export declare class BackendRegistry<I, O> {
     private readonly options;
     private readonly entries;
@@ -36,20 +42,14 @@ export declare class BackendRegistry<I, O> {
         cooldownMs?: number;
     });
     register(backend: Backend<I, O>): this;
-    run(input: I, options: {
-        preferred: readonly string[];
-        override?: string;
-    }): Promise<O>;
+    run(input: I, options: RunSelectedOptions): Promise<O>;
     /**
      * Try engines in order. A successful engine wins by default, but when its
      * `assess()` verdict is `lowQuality` and there are more engines to try, the
      * router keeps probing; a later *ok* engine replaces it. If no later engine
      * does better, the best low-quality result (first one) is still returned.
      */
-    runSelected(input: I, options: {
-        preferred: readonly string[];
-        override?: string;
-    }): Promise<{
+    runSelected(input: I, options: RunSelectedOptions): Promise<{
         id: string;
         value: O;
         attempts: BackendAttempt[];
