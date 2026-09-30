@@ -185,7 +185,16 @@ export interface Label {
   taskId: string
   /** `harvestedAt` of the snapshot this label was made against. */
   snapshotHarvestedAt: string
-  labeler: { kind: 'human' | 'llm'; id: string }
+  labeler: {
+    kind: 'human' | 'llm'
+    id: string
+    /** LLM labelers only: model, reasoning effort, prompt template version, creation time, human-review flag. */
+    model?: string
+    effort?: string
+    promptVersion?: string
+    createdAt?: string
+    reviewed?: boolean
+  }
   labeledAt: string
   candidates: CandidateLabel[]
   gold: NeedGold[]

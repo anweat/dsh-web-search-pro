@@ -1,0 +1,8 @@
+{
+  "id": "gate.single.v1",
+  "version": "v1",
+  "lang": "zh",
+  "kind": "noul",
+  "description": "E0 风格：单一问题，相关性与约束混问。",
+  "instructions": "候选材料是否能帮助回答任务（满足约束更好）？\n需求：{need}\n约束：{constraint}\n候选：{candidate}"
+}
