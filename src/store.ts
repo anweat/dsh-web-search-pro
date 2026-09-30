@@ -59,6 +59,26 @@ export interface RuleRecord {
   updatedAt: string
 }
 
+export interface EvidenceBlockRow {
+  evidenceId: string
+  runId: string
+  url: string
+  blockId: string
+  heading?: string
+  text: string
+  hash?: string
+  grade?: number
+  scorer?: string
+}
+
+export interface EvidenceRunRow {
+  id: string
+  queryId?: string
+  taskJson: string
+  packJson: string
+  createdAt: string
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS queries (
   id TEXT PRIMARY KEY,
@@ -101,6 +121,26 @@ CREATE TABLE IF NOT EXISTS rules (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS evidence_runs (
+  id TEXT PRIMARY KEY,
+  query_id TEXT,
+  task_json TEXT NOT NULL,
+  pack_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS evidence_blocks (
+  evidence_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  block_id TEXT NOT NULL,
+  heading TEXT,
+  text TEXT NOT NULL,
+  hash TEXT,
+  grade REAL,
+  scorer TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_blocks_run ON evidence_blocks(run_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_runs_query ON evidence_runs(query_id);
 CREATE INDEX IF NOT EXISTS idx_results_query ON results(query_id);
 CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(ts);
 CREATE INDEX IF NOT EXISTS idx_queries_kind ON queries(kind);
@@ -291,6 +331,48 @@ export class Store {
     }))
   }
 
+  /**
+   * Atomically record an evidence-pipeline run: its history query + fused
+   * result rows, the run (task + pack JSON) and the selected blocks' full text
+   * (all or nothing). Returns the history query id.
+   */
+  recordEvidenceRun(input: {
+    query: Omit<QueryRecord, 'id' | 'ts'> & { id?: string }
+    sources: { url: string; title?: string; snippet?: string; publishedAt?: string; extra?: string }[]
+    engine: string
+    run: { id: string; taskJson: string; packJson: string }
+    blocks: readonly Omit<EvidenceBlockRow, 'runId'>[]
+  }): string {
+    const fallbackId = input.query.id ?? uid()
+    return this.write('recordEvidenceRun', fallbackId, () => this.transaction(() => {
+      const queryId = this.recordSearch({ ...input.query, id: fallbackId }, input.sources, input.engine)
+      this.db.prepare('INSERT OR REPLACE INTO evidence_runs (id, query_id, task_json, pack_json, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(input.run.id, queryId, input.run.taskJson, input.run.packJson, new Date().toISOString())
+      const stmt = this.db.prepare('INSERT OR REPLACE INTO evidence_blocks (evidence_id, run_id, url, block_id, heading, text, hash, grade, scorer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      for (const b of input.blocks) stmt.run(b.evidenceId, input.run.id, b.url, b.blockId, b.heading ?? null, b.text, b.hash ?? null, b.grade ?? null, b.scorer ?? null)
+      return queryId
+    }))
+  }
+
+  evidenceBlock(evidenceId: string): EvidenceBlockRow | undefined {
+    return this.read(undefined, () => this.db.prepare(
+      `SELECT evidence_id AS evidenceId, run_id AS runId, url, block_id AS blockId, heading, text, hash, grade, scorer FROM evidence_blocks WHERE evidence_id = ?`,
+    ).get(evidenceId) as unknown as EvidenceBlockRow | undefined)
+  }
+
+  evidenceRun(runId: string): EvidenceRunRow | undefined {
+    return this.read(undefined, () => this.db.prepare(
+      `SELECT id, query_id AS queryId, task_json AS taskJson, pack_json AS packJson, created_at AS createdAt FROM evidence_runs WHERE id = ?`,
+    ).get(runId) as unknown as EvidenceRunRow | undefined)
+  }
+
+  /** Newest stored page text for a URL, regardless of age (evidence expansion reads around a block). */
+  latestPage(url: string): PageRecord | undefined {
+    return this.read(undefined, () => this.db.prepare(
+      `SELECT ${PAGE_COLUMNS} FROM pages WHERE url = ? AND text IS NOT NULL ORDER BY fetched_at DESC LIMIT 1`,
+    ).get(url) as unknown as PageRecord | undefined)
+  }
+
   /** Look up a fresh cached operation by kind and its complete input fingerprint. */
   getCachedQuery(kind: QueryKind, cacheKey: string, ttlSeconds: number): { id: string; detail?: string } | undefined {
     return this.read(undefined, () => this.getCachedQueryRow(kind, cacheKey, ttlSeconds))
@@ -408,6 +490,7 @@ export class Store {
         const q = this.db.prepare('SELECT COUNT(*) AS c FROM queries WHERE engine = ?').get(engine) as { c: number }
         const r = this.db.prepare('SELECT COUNT(*) AS c FROM results WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').get(engine) as { c: number }
         const p = this.db.prepare('SELECT COUNT(*) AS c FROM pages WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').get(engine) as { c: number }
+        this.deleteEvidenceWhere('query_id IN (SELECT id FROM queries WHERE engine = ?)', [engine])
         this.db.prepare('DELETE FROM pages WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').run(engine)
         this.db.prepare('DELETE FROM results WHERE query_id IN (SELECT id FROM queries WHERE engine = ?)').run(engine)
         this.db.prepare('DELETE FROM queries WHERE engine = ?').run(engine)
@@ -416,7 +499,7 @@ export class Store {
         const q = this.db.prepare('SELECT COUNT(*) AS c FROM queries').get() as { c: number }
         const r = this.db.prepare('SELECT COUNT(*) AS c FROM results').get() as { c: number }
         const p = this.db.prepare('SELECT COUNT(*) AS c FROM pages').get() as { c: number }
-        this.db.exec('DELETE FROM results; DELETE FROM queries; DELETE FROM pages')
+        this.db.exec('DELETE FROM evidence_blocks; DELETE FROM evidence_runs; DELETE FROM results; DELETE FROM queries; DELETE FROM pages')
         removed = { queries: q.c, results: r.c, pages: p.c }
       }
     } else {
@@ -431,6 +514,7 @@ export class Store {
       const legacyPredicate = engine ? '' : ' OR (query_id IS NULL AND fetched_at < ?)'
       const pageParams = engine ? params : [...params, since]
       const p = this.db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})${legacyPredicate}`).get(...pageParams) as { c: number }
+      this.deleteEvidenceWhere(`query_id IN (SELECT id FROM queries WHERE ${predicate})`, params)
       this.db.prepare(`DELETE FROM pages WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})${legacyPredicate}`).run(...pageParams)
       this.db.prepare(`DELETE FROM results WHERE query_id IN (SELECT id FROM queries WHERE ${predicate})`).run(...params)
       this.db.prepare(`DELETE FROM queries WHERE ${predicate}`).run(...params)
@@ -457,6 +541,7 @@ export class Store {
       const placeholders = stale.map(() => '?').join(', ')
       const r = this.db.prepare(`SELECT COUNT(*) AS c FROM results WHERE query_id IN (${placeholders})`).get(...stale.map(s => s.id)) as { c: number }
       removedResults = r.c
+      this.deleteEvidenceWhere(`query_id IN (${placeholders})`, stale.map(s => s.id))
       this.db.prepare(`DELETE FROM pages WHERE query_id IN (${placeholders})`).run(...stale.map(s => s.id))
       this.db.prepare(`DELETE FROM results WHERE query_id IN (${placeholders})`).run(...stale.map(s => s.id))
       this.db.prepare(`DELETE FROM queries WHERE id IN (${placeholders})`).run(...stale.map(s => s.id))
@@ -464,7 +549,14 @@ export class Store {
     return { queries: stale.length, results: removedResults }
   }
 
+  /** Delete evidence runs matching `predicate` (over evidence_runs) and their blocks. */
+  private deleteEvidenceWhere(predicate: string, params: (string | number)[]): void {
+    this.db.prepare(`DELETE FROM evidence_blocks WHERE run_id IN (SELECT id FROM evidence_runs WHERE ${predicate})`).run(...params)
+    this.db.prepare(`DELETE FROM evidence_runs WHERE ${predicate}`).run(...params)
+  }
+
   private removeQuery(id: string): void {
+    this.deleteEvidenceWhere('query_id = ?', [id])
     this.db.prepare('DELETE FROM pages WHERE query_id = ?').run(id)
     this.db.prepare('DELETE FROM results WHERE query_id = ?').run(id)
     this.db.prepare('DELETE FROM queries WHERE id = ?').run(id)
