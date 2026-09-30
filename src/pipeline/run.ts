@@ -22,7 +22,7 @@ import { type CompiledQuery } from './compile.ts'
 import { fuseCandidates, type FusionOptions } from './fusion.ts'
 import { gateCandidates, keptCandidates } from './gate.ts'
 import { PROFILE_PROVIDERS, planSources, type ProviderStatus, type SourcePlan } from './plan.ts'
-import { RuleScorer, type ScoreJob, type ScoreOutcome, type Scorer } from './score.ts'
+import { capDiscussionGrades, RuleScorer, type ScoreJob, type ScoreOutcome, type Scorer } from './score.ts'
 import { computeCoverage, selectEvidence, DEFAULT_SELECT_OPTIONS, type SelectOptions } from './select.ts'
 import type { Block, BlockGrade, Candidate, EvidenceItem, EvidencePack, PageBlock, ScoredBlock, TaskSpec } from './types.ts'
 
@@ -290,7 +290,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
   let scorerUsed = fullJobs.length ? control.id : 'none'
   let outcome: ScoreOutcome | undefined
   let jevUsage: EvidencePack['stats']['jev']
-  const scoreCtx = { signal: ctx.stage, ...deadlineAt !== undefined ? { deadline: deadlineAt } : {} }
+  const corpus = pageBlocks.map(pb => ({ url: pb.url, ...pb.block.heading ? { heading: pb.block.heading } : {}, text: pb.block.text }))
+  const scoreCtx = { signal: ctx.stage, corpus, ...deadlineAt !== undefined ? { deadline: deadlineAt } : {} }
   if (fullJobs.length) {
     if (control.id !== 'rule' && !ctx.stage.aborted) {
       // The hybrid scorer picks (and caps) the pairs it sends to Jev itself; a plain remote scorer gets the first `maxScoreQuestions`.
@@ -305,7 +306,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
         outcome = undefined
       }
     } else if (control.id !== 'rule') notes.push('scorer ' + control.id + ' skipped after the deadline, used the rule scorer')
-    if (!outcome) { outcome = await (control.id === 'rule' ? control : rule).score(task, fullJobs); scorerUsed = 'rule' }
+    if (!outcome) { outcome = await (control.id === 'rule' ? control : rule).score(task, fullJobs, scoreCtx); scorerUsed = 'rule' }
+    capDiscussionGrades(ctx.plan.profile, fullJobs, outcome)
   }
 
   if (ctx.deadlineSignal.aborted && !partial) { partial = true; notes.push('deadline reached while scoring') }
@@ -315,7 +317,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
   if (deps.scorers.shadow && fullJobs.length && !ctx.stage.aborted) {
     const shadowScorer = deps.scorers.shadow
     try {
-      const reference = scorerUsed === 'rule' ? outcome! : await rule.score(task, fullJobs)
+      const reference = scorerUsed === 'rule' ? outcome! : await rule.score(task, fullJobs, scoreCtx)
       const limited = limitQuestions(fullJobs, options.maxScoreQuestions ?? 64)
       const out = await shadowScorer.score(task, limited, scoreCtx)
       const rows: NonNullable<PipelineResult['shadow']>['rows'] = []

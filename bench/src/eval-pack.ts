@@ -132,6 +132,8 @@ export interface ArmResult {
   reached: number
   scored: number
   strong: number
+  /** All (need, block) pairs graded >= 2, gold or not (pipeline only): the denominator of the pair-level precision. */
+  strongAll: number
   /** Needs that have gold evidence, and how many of them have >= 1 gold block in the pack. */
   needsWithGold: number
   needsHit: number
@@ -165,6 +167,7 @@ function armOf(label: Label, pairs: readonly GoldPair[], view: PackView): ArmRes
     reached: pairs.filter(p => view.pagesRead.has(p.url)).length,
     scored: pairs.filter(p => view.grades?.has(p.needId + '|' + p.blockId)).length,
     strong: pairs.filter(p => (view.grades?.get(p.needId + '|' + p.blockId) ?? 0) >= 2).length,
+    strongAll: view.grades ? [...view.grades.values()].filter(g => g >= 2).length : 0,
     needsWithGold: goldNeeds.size, needsHit: hit.size,
     claimed: claimed.length, claimedHit: claimed.filter(n => hit.has(n)).length,
     noGold: noGold.length, noGoldFlagged: noGold.filter(n => (view.gapNeeds ?? []).includes(n)).length,
@@ -407,6 +410,8 @@ export interface Summary {
   /** Funnel: share of gold pairs reached -> scored -> graded >= 2 -> in the pack. */
   scoredShare: number | undefined
   strongShare: number | undefined
+  /** Share of the pairs graded >= 2 that are gold (a smoother precision proxy than the per-need claim; labels are incomplete, so read it as a relative number). */
+  strongPrecision: number | undefined
 }
 
 export function summarize(evals: readonly TaskEval[], pick: (t: TaskEval) => ArmResult | undefined): Summary {
@@ -424,6 +429,7 @@ export function summarize(evals: readonly TaskEval[], pick: (t: TaskEval) => Arm
     chars: sum(a => a.chars) / n, tokens: sum(a => a.tokens) / n, pages: sum(a => a.pages) / n, items: sum(a => a.items) / n,
     scoredShare: ratio(sum(a => a.scored), evals.reduce((s, t) => s + (pick(t) ? t.goldPairs : 0), 0)),
     strongShare: ratio(sum(a => a.strong), evals.reduce((s, t) => s + (pick(t) ? t.goldPairs : 0), 0)),
+    strongPrecision: ratio(sum(a => a.strong), sum(a => a.strongAll)),
   }
 }
 
@@ -524,10 +530,10 @@ export function renderReport(r: ReportInput): string {
     for (const lang of [...new Set(matched.map(t => t.lang))].sort()) out.push('**' + lang + '**（' + matched.filter(t => t.lang === lang).length + ' 个任务）', '', table(usageRows(matched.filter(t => t.lang === lang)), USAGE_HEAD, USAGE_ALIGN), '')
   }
   const funnel = (title: string, evals: TaskEval[], jev: boolean): void => {
-    const f = (label: string, s: Summary): string[] => [label, pct(s.reach), pct(s.scoredShare), pct(s.strongShare), pct(s.retention), num(s.items, 1)]
-    const rows = [f('(b) 规则评分', summarize(evals, t => t.rule))]
+    const f = (label: string, s: Summary): string[] => [label, pct(s.reach), pct(s.scoredShare), pct(s.strongShare), pct(s.strongPrecision), pct(s.retention), num(s.items, 1)]
+    const rows = [f('(b) 规则评分', summarize(evals, t => t.rule)), f('(b′) 规则 + 对齐', summarize(evals, t => t.ruleAligned))]
     if (jev) rows.push(f('(c) Jev 评分', summarize(evals, t => t.jev)))
-    out.push(title, '', table(rows, ['组', '页面被读取', '进入评分（每需求前 N 块）', '评分 ≥ 2', '入选进包', '条目'], ['---', '---:', '---:', '---:', '---:', '---:']), '')
+    out.push(title, '', table(rows, ['组', '页面被读取', '进入评分（每需求前 N 块）', '评分 ≥ 2', '评分 ≥ 2 的对中金标占比', '入选进包', '条目'], ['---', '---:', '---:', '---:', '---:', '---:', '---:']), '')
   }
   out.push('## 2b. 漏斗：金标块在哪一步丢失', '')
   out.push('占全部金标块的比例（每一步都是上一步的子集）。“进入评分”受每需求只评前 N 块的限制，“评分 ≥ 2”看评分器能否认出金标，“入选进包”还受预算、每 URL 块数和去重限制。', '')

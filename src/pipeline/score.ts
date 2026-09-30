@@ -22,9 +22,11 @@
  * @module web-search-pro/pipeline/score
  */
 
-import { alignedRelevance, languagesDiffer } from './align.ts'
+import { alignedScore, languagesDiffer } from './align.ts'
 import { blockScoringText } from './blocks.ts'
-import { lexicalRelevance, type RelevanceContext } from './gate.ts'
+import { CorpusStats, type CorpusBlock } from './corpus.ts'
+import { relevancePartsOf } from './gate.ts'
+import { statsOverlap, weightedOverlap } from './lexical.ts'
 import type { BlockGrade, Need, TaskSpec } from './types.ts'
 
 export type ScoreTask = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>
@@ -36,6 +38,8 @@ export interface ScoreContext {
   signal?: AbortSignal | undefined
   /** Epoch ms after which no new request may start (the run's overall deadline). */
   deadline?: number | undefined
+  /** Every block of the pages read (the rule scorer takes term statistics from it, dev-plan M3b); absent = no statistics. */
+  corpus?: readonly CorpusBlock[] | undefined
 }
 
 export interface ScoreUsage { requests: number; questions: number; cacheHits: number; inputTokens: number; outputTokens: number }
@@ -66,6 +70,15 @@ export function bucketGrade(relevance: number): 0 | 1 | 2 | 3 {
   return 3
 }
 
+/**
+ * With page statistics the overlap is IDF-weighted and code-discounted, so it
+ * runs lower than the plain overlap the thresholds above were calibrated on.
+ * The grade edges are scaled by this factor then (fitted on the 60-task
+ * offline eval: gold pairs graded >= 2 stay at 52% vs 54% without statistics
+ * while the share of gold among all pairs graded >= 2 rises from 15.7% to 17.6%).
+ */
+export const STATS_THRESHOLD_SCALE = 0.6
+
 export interface RuleScorerOptions {
   /** Cross-lingual / identifier alignment (default true). `false` = the M2 lexical-v1 relevance, kept for comparison. */
   align?: boolean
@@ -81,23 +94,71 @@ export class RuleScorer implements Scorer {
     this.model = this.align ? 'lexical-v2-aligned' : 'lexical-v1'
   }
 
-  async score(task: ScoreTask, jobs: readonly ScoreJob[]): Promise<ScoreOutcome> {
+  async score(task: ScoreTask, jobs: readonly ScoreJob[], ctx: ScoreContext = {}): Promise<ScoreOutcome> {
     const grades = new Map<string, Map<string, BlockGrade>>()
+    const corpus = ctx.corpus?.length ? new CorpusStats(ctx.corpus) : undefined
     for (const job of jobs) {
-      const ctx: RelevanceContext = { goal: task.goal, query: task.query, needs: [job.need.text], constraints: task.constraints }
+      const relCtx = { goal: task.goal, query: task.query, needs: [job.need.text], constraints: task.constraints }
+      const parts = relevancePartsOf(relCtx, true)
       const byBlock = new Map<string, BlockGrade>()
       for (const block of job.blocks) {
+        const stats = corpus?.statsFor(block.url)
+        const doc = blockScoringText(block)
         // Same-language pairs keep the calibrated lexical-v1 relevance (an offline sweep showed no gain from identifier splitting there).
-        const aligned = this.align && languagesDiffer(job.need.text, blockScoringText(block))
-        const relevance = aligned
-          ? alignedRelevance({ goal: task.goal, query: task.query, need: job.need.text, constraints: task.constraints }, { ...block.heading ? { heading: block.heading } : {}, text: block.text })
-          : lexicalRelevance(ctx, { url: block.url, text: blockScoringText(block), ...block.heading ? { heading: block.heading } : {} }, true)
-        byBlock.set(block.blockId, { grade: bucketGrade(relevance), rank: relevance })
+        let relevance: number
+        let distinctiveOk = true
+        if (this.align && languagesDiffer(job.need.text, doc)) {
+          const a = alignedScore({ goal: task.goal, query: task.query, need: job.need.text, constraints: task.constraints }, { ...block.heading ? { heading: block.heading } : {}, text: block.text }, stats)
+          relevance = a.relevance
+          distinctiveOk = !a.distinctiveAvailable || a.distinctiveHit
+        } else if (stats) {
+          const o = statsOverlap(parts, doc, stats)
+          relevance = o.relevance
+          distinctiveOk = !o.distinctiveAvailable || o.distinctiveHit
+        } else {
+          relevance = weightedOverlap(parts, doc)
+        }
+        if (stats) relevance = Math.min(relevance / STATS_THRESHOLD_SCALE, 1)
+        let grade = bucketGrade(relevance)
+        // Only terms that occur everywhere on the page matched: same topic at best, never an answer.
+        if (grade >= 2 && !distinctiveOk) { grade = 1; relevance = Math.min(relevance, GRADE_THRESHOLDS[1] - 0.001) }
+        byBlock.set(block.blockId, { grade, rank: relevance })
       }
       grades.set(job.need.id, byBlock)
     }
     return { grades }
   }
+}
+
+// ── source-type cap ─────────────────────────────────────────────────────────
+
+/** Issue / pull request / discussion pages: discussion about the docs, not the docs. */
+const DISCUSSION_URL = /^https?:\/\/(?:www\.)?github\.com\/[^/]+\/[^/]+\/(?:issues|pull|discussions)(?:\/|$)/i
+/** A need that asks for the documented / official behaviour. */
+const OFFICIAL_NEED = /官方|文档|documentation|\bdocs?\b|\bAPI\b|official/i
+
+export const isDiscussionUrl = (url: string): boolean => DISCUSSION_URL.test(url)
+
+/**
+ * docs_code only (dev-plan M3b): an issue / PR / discussion block never counts
+ * above grade 2 for a need that asks for the documentation / official API, as
+ * long as at least one scored block comes from another kind of page (a
+ * proposal for an option is not evidence that the docs have it). Returns the
+ * number of grades lowered; the outcome is changed in place.
+ */
+export function capDiscussionGrades(profile: string, jobs: readonly ScoreJob[], outcome: ScoreOutcome): number {
+  if (profile !== 'docs_code') return 0
+  if (!jobs.some(job => job.blocks.some(b => !isDiscussionUrl(b.url)))) return 0
+  let lowered = 0
+  for (const job of jobs) {
+    if (!OFFICIAL_NEED.test(job.need.text)) continue
+    const byBlock = outcome.grades.get(job.need.id)
+    for (const b of job.blocks) {
+      const g = byBlock?.get(b.blockId)
+      if (g && g.grade > 2 && isDiscussionUrl(b.url)) { byBlock!.set(b.blockId, { ...g, grade: 2 }); lowered++ }
+    }
+  }
+  return lowered
 }
 
 // ── hybrid scorer ───────────────────────────────────────────────────────────

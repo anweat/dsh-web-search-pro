@@ -11,10 +11,13 @@ export interface RenderSource { url: string; title?: string; snippet?: string; p
 
 const hostOf = (url: string): string => { try { return new URL(url).hostname } catch { return url } }
 
+/** One line under the header (dev-plan M3b): "covered" is a lexical judgement, and a missing passage proves nothing. */
+export const COVERAGE_CAVEAT = 'Coverage is heuristic: no evidence here does not mean it does not exist; fetch/expand before concluding.'
+
 export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'>, sources: readonly RenderSource[], engineLine: string): string {
   const parts: string[] = []
   const covered = new Set(pack.coveredNeeds)
-  parts.push('Evidence pack ' + pack.resultId + ' (' + pack.profile + (pack.partial ? ', PARTIAL: deadline reached' : '') + '): ' + pack.evidence.length + ' excerpt(s); needs covered ' + pack.coveredNeeds.length + '/' + pack.needs.length + '.')
+  parts.push('Evidence pack ' + pack.resultId + ' (' + pack.profile + (pack.partial ? ', PARTIAL: deadline reached' : '') + '): ' + pack.evidence.length + ' excerpt(s); needs covered ' + pack.coveredNeeds.length + '/' + pack.needs.length + '.\n' + COVERAGE_CAVEAT)
   if (pack.evidence.length) {
     parts.push(pack.evidence.map((e, i) => {
       const lines = ['[' + (i + 1) + '] ' + e.evidenceId + ' — ' + (e.title ? e.title + ' — ' : '') + e.url + (e.publishedAt ? ' (' + e.publishedAt + ')' : '')]

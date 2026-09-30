@@ -19,7 +19,7 @@
  */
 
 import crypto from 'node:crypto'
-import { termsOf, weightedOverlap } from './lexical.ts'
+import { IDF_FLOOR, termsOf, weightedOverlap } from './lexical.ts'
 import type { Block, Need } from './types.ts'
 
 export interface SplitOptions {
@@ -297,8 +297,6 @@ export function adaptivePreRankLimit(longestPageBlocks: number): number {
   return Math.min(PRERANK_MAX, PRERANK_DEFAULT + Math.ceil((longestPageBlocks - PRERANK_LONG_PAGE) / 10))
 }
 
-/** Floor of the IDF factor: a term present in every block still counts this much of its weight. */
-const IDF_FLOOR = 0.2
 
 /**
  * Pre-rank blocks for one need: weighted lexical overlap of the need (x1.6) and

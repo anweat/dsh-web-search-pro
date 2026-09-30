@@ -191,8 +191,9 @@ function docOf(item: GateItem): string {
   return [item.title, item.heading, item.text].filter(Boolean).join('\n')
 }
 
-function partsFor(ctx: RelevanceContext, withConstraints: boolean): QueryPart[] {
-  const parts: QueryPart[] = [{ text: ctx.query, weight: 1 }, { text: ctx.goal, weight: 0.8 }]
+/** Weighted query parts of the relevance: query, goal, needs and (optionally) entity / must_term values. */
+export function relevancePartsOf(ctx: RelevanceContext, withConstraints: boolean): QueryPart[] {
+  const parts: QueryPart[] = [{ text: ctx.query, weight: 1 }, { text: ctx.goal, weight: 0.8, context: true }]
   for (const need of ctx.needs) parts.push({ text: need, weight: 1.6 })
   if (withConstraints) {
     for (const c of ctx.constraints) {
@@ -204,7 +205,7 @@ function partsFor(ctx: RelevanceContext, withConstraints: boolean): QueryPart[] 
 
 /** Weighted lexical overlap of query / goal / needs (and optionally entity + must_term values) with the item, 0..1. */
 export function lexicalRelevance(ctx: RelevanceContext, item: GateItem, withConstraints: boolean): number {
-  return weightedOverlap(partsFor(ctx, withConstraints), docOf(item))
+  return weightedOverlap(relevancePartsOf(ctx, withConstraints), docOf(item))
 }
 
 // ── the gate ────────────────────────────────────────────────────────────────
