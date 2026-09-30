@@ -35,6 +35,10 @@ export interface FetchResult {
   shellPage?: boolean
 }
 
+const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]/g
+const CJK_SHELL_PHRASES = /(请输入关键词|没有找到相关结果|请登录)/
+const LATIN_SHELL_PHRASES = /\b(search for|search by|look here|try searching|no results found|please (use|go to|visit)|enter (a |your )?(query|keyword)|data is (available|located) at|enable javascript)\b/i
+
 /**
  * Heuristic: a "shell" page looks like text but is really navigation — search
  * forms, "look elsewhere" pointers, JS-only stubs. Signals: very little prose,
@@ -44,15 +48,19 @@ export interface FetchResult {
  */
 export function detectShellPage(text: string): boolean {
   const trimmed = text.trim()
-  if (!trimmed || trimmed.length < 200) return true
+  if (!trimmed) return true
   const linkCount = (trimmed.match(/\[[^\]]*\]\([^)]*\)/g) ?? []).length
-  const words = trimmed.split(/\s+/).filter(Boolean).length
+  // CJK has no spaces: a run of N ideographs is roughly N/2 words.
+  const cjkChars = trimmed.match(CJK_CHAR)?.length ?? 0
+  const latinWords = trimmed.replace(CJK_CHAR, ' ').split(/\s+/).filter(Boolean).length
+  const words = Math.round(cjkChars / 2) + latinWords
   // Link-dense: more than one markdown link per ~15 words is navigation, not prose.
-  if (words > 0 && linkCount / words > 1 / 15) return true
+  const linkDense = words > 0 && linkCount / words > 1 / 15
   // Explicit form/redirect phrasing with almost no other content.
-  const shellPhrases = /\b(search for|search by|look here|try searching|no results found|please (use|go to|visit)|enter (a |your )?(query|keyword)|data is (available|located) at)\b/i
-  if (shellPhrases.test(trimmed) && words < 250) return true
-  return false
+  const shellPhrase = (LATIN_SHELL_PHRASES.test(trimmed) || CJK_SHELL_PHRASES.test(trimmed)) && words < 250
+  // A short page is only a shell when it also looks like navigation; a short
+  // factual answer is still data.
+  return linkDense || shellPhrase
 }
 
 /** Validate and normalize a URL for fetching. */
