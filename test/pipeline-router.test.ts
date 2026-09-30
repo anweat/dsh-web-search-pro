@@ -72,3 +72,61 @@ test('multi: authority bonus does not reorder a clear rank difference (router le
     assert.ok(order.indexOf('https://github.com/o/r') >= 7, 'github at ' + order.indexOf('https://github.com/o/r'))
   } finally { h.cleanup() }
 })
+
+test('providerStatuses reports registry state (ready / unavailable / cooldown) for the requested ids only', async () => {
+  const h = harness()
+  h.engine('e1', async () => { throw new EngineError('HTTP 503', 'ENGINE_ERROR', true) })
+  h.entries.set('e2', { id: 'e2', probe: async () => ({ available: false, reason: 'no key' }), run: async () => { throw new Error('unreachable') } })
+  h.engine('e3', async () => ({ sources: [{ url: 'https://ex.test/', snippet: 's' }] }))
+  try {
+    await h.router.runProvider({ id: 'e1', query: 'q', count: 3, signal: new AbortController().signal })
+    const status = await h.router.providerStatuses(['e1', 'e2', 'e3', 'nope'])
+    assert.deepEqual([...status.keys()].sort(), ['e1', 'e2', 'e3'])
+    assert.equal(status.get('e1')!.state, 'cooldown')
+    assert.match(status.get('e1')!.reason!, /HTTP 503/)
+    assert.deepEqual(status.get('e2'), { state: 'unavailable', reason: 'no key' })
+    assert.deepEqual(status.get('e3'), { state: 'ready' })
+  } finally { h.cleanup() }
+})
+
+test('runProvider maps registry outcomes to values: ok, empty, skipped, error; cancellation rethrows', async () => {
+  const h = harness()
+  const signal = new AbortController().signal
+  h.engine('ok', async () => ({ sources: [{ url: 'https://ex.test/a', title: 'A', snippet: 's' }] }))
+  h.engine('empty', async () => { throw new EngineError('no results', 'ENGINE_EMPTY', true) })
+  h.entries.set('off', { id: 'off', probe: async () => ({ available: false, reason: 'down' }), run: async () => { throw new Error('unreachable') } })
+  h.engine('bad', async () => { throw new EngineError('HTTP 500', 'ENGINE_ERROR', true) })
+  let seen: unknown
+  h.engine('opts', async input => { seen = input.options; return { sources: [{ url: 'https://ex.test/o', snippet: 's' }] } })
+  try {
+    const ok = await h.router.runProvider({ id: 'ok', query: 'q', count: 3, signal })
+    assert.equal(ok.state, 'ok')
+    assert.equal(ok.state === 'ok' && ok.sources[0]!.url, 'https://ex.test/a')
+    assert.deepEqual(await h.router.runProvider({ id: 'empty', query: 'q', count: 3, signal }), { state: 'empty' })
+    assert.deepEqual(await h.router.runProvider({ id: 'off', query: 'q', count: 3, signal }), { state: 'skipped', reason: 'down' })
+    assert.deepEqual(await h.router.runProvider({ id: 'nope', query: 'q', count: 3, signal }), { state: 'skipped', reason: 'unknown' })
+    const bad = await h.router.runProvider({ id: 'bad', query: 'q', count: 3, signal })
+    assert.equal(bad.state, 'error')
+    assert.deepEqual(await h.router.runProvider({ id: 'bad', query: 'q', count: 3, signal }), { state: 'skipped', reason: 'cooldown' }, 'cooling down now')
+    await h.router.runProvider({ id: 'opts', query: 'q', count: 3, signal, options: { exa: { includeDomains: ['x.test'] } } })
+    assert.deepEqual(seen, { exa: { includeDomains: ['x.test'] } })
+    assert.equal(h.store.listQueries({ kind: 'search' }).length, 0, 'provider runs are not persisted by the router')
+
+    const controller = new AbortController()
+    h.engine('hang', input => new Promise((_resolve, reject) => { input.signal?.addEventListener('abort', () => reject(input.signal.reason)) }))
+    const pending = h.router.runProvider({ id: 'hang', query: 'q', count: 3, signal: controller.signal })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    controller.abort(new Error('stop'))
+    await assert.rejects(pending, /stop/)
+    assert.equal((await h.router.providerStatuses(['hang'])).get('hang')!.state, 'ready', 'a cancelled call cools nothing')
+  } finally { h.cleanup() }
+})
+
+test('resolveSecret reads the environment when no credentials service exists', async () => {
+  const h = harness()
+  process.env.WSP_TEST_SECRET_REF = 'from-env'
+  try {
+    assert.equal(await h.router.resolveSecret('WSP_TEST_SECRET_REF'), 'from-env')
+    assert.equal(await h.router.resolveSecret('WSP_TEST_SECRET_REF_MISSING'), undefined)
+  } finally { delete process.env.WSP_TEST_SECRET_REF; h.cleanup() }
+})

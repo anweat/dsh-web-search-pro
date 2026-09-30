@@ -19,11 +19,13 @@ import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
 import { browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
-import { allAttemptsBenign, BackendRegistry, NoBackendError, type BackendAttempt, type BackendDiagnostic } from './backend-registry.ts'
+import { allAttemptsBenign, allAttemptsEmpty, BackendRegistry, NoBackendError, type BackendAttempt, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
 import { SingleFlight } from './singleflight.ts'
 import { mergeCandidates, type ProviderOutput } from './pipeline/candidates.ts'
 import { fuseCandidates } from './pipeline/fusion.ts'
+import type { ProviderCall, ProviderOutcome } from './pipeline/run.ts'
+import type { ProviderStatus } from './pipeline/plan.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -149,6 +151,51 @@ export class SearchRouter {
     const key = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
     if (!key) throw new Error('Exa is unavailable: configure exaApiKey or ' + cfg.exaApiKeyEnv)
     return new ExaClient({ apiKey: key }).contents(urls, signal)
+  }
+
+  /** Resolve a secret by credentials ref / environment variable name (credentials service first, then env). */
+  resolveSecret(ref: string): Promise<string | undefined> {
+    return this.resolveKey(ref)
+  }
+
+  /**
+   * Availability of engines for source planning: the registry's probe and
+   * cooldown state, without running a search. Ids the registry does not know are absent.
+   */
+  async providerStatuses(ids: readonly string[]): Promise<Map<string, ProviderStatus>> {
+    const wanted = new Set(ids)
+    const out = new Map<string, ProviderStatus>()
+    for (const d of await this.backends.diagnosticsAsync()) {
+      if (!wanted.has(d.id)) continue
+      const reason = d.state === 'cooldown' ? d.lastError : d.reason
+      out.set(d.id, { state: d.state, ...reason ? { reason } : {} })
+    }
+    return out
+  }
+
+  /**
+   * Run ONE engine through the registry (probe, cooldown, quality gate,
+   * attempts) for the evidence pipeline. Not cached or persisted: the pipeline
+   * persists its fused result once. Cancellation is rethrown; every other
+   * outcome is a value.
+   */
+  async runProvider(call: ProviderCall): Promise<ProviderOutcome> {
+    try {
+      const selected = await this.backends.runSelected(
+        { query: call.query, count: call.count, signal: call.signal, skipSeam: false, ...call.options ? { options: call.options } : {} },
+        { preferred: [call.id], signal: call.signal },
+      )
+      const sources = selected.value.sources
+      return sources.length ? { state: 'ok', sources } : { state: 'empty' }
+    } catch (error) {
+      if (call.signal.aborted) throw error
+      if (error instanceof NoBackendError) {
+        if (allAttemptsEmpty(error.attempts)) return { state: 'empty' }
+        const skipped = error.attempts.find(a => a.outcome === 'skipped')
+        if (skipped && allAttemptsBenign(error.attempts)) return { state: 'skipped', reason: skipped.detail ?? 'unavailable' }
+      }
+      return { state: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
   }
 
   /** Resolve a key through credentials first, then process env. */

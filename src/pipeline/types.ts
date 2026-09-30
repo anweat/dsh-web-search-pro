@@ -169,6 +169,8 @@ export interface EvidencePack {
   profile: Profile
   /** Profile was inferred by rule (the caller gave none). */
   profileInferred: boolean
+  /** The needs the run was asked to cover (ids are what `needIds` / `coveredNeeds` / `gaps` refer to). */
+  needs: Need[]
   evidence: EvidenceItem[]
   /** Need ids with a selected block of grade >= 2. */
   coveredNeeds: string[]
