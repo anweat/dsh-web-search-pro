@@ -17,7 +17,7 @@
 
 import crypto from 'node:crypto'
 import { mergeCandidates, type ProviderOutput, type ProviderSource } from './candidates.ts'
-import { splitBlocks, preRankBlocks, type SplitOptions } from './blocks.ts'
+import { adaptivePreRankLimit, splitBlocks, preRankBlocks, type SplitOptions } from './blocks.ts'
 import { type CompiledQuery } from './compile.ts'
 import { fuseCandidates, type FusionOptions } from './fusion.ts'
 import { gateCandidates, keptCandidates } from './gate.ts'
@@ -88,7 +88,7 @@ export interface PipelineOptions {
   fetchConcurrency?: number
   /** Per-page character cap handed to the fetcher (default 60,000). */
   maxPageChars?: number
-  /** Blocks per need that reach S6 (default 12, the r1 setting). */
+  /** Blocks per need that reach S6. Default: adaptive, 12 up to 24 for pages with more than 80 blocks. */
   blocksPerNeed?: number
   /** Upper bound of (need, block) questions handed to a remote scorer (default 64). */
   maxScoreQuestions?: number
@@ -275,7 +275,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     const providers = [...new Set(candidate.contributions.map(c => c.providerId))]
     for (const block of blocks) pageBlocks.push({ candidateId: candidate.candidateId, url: candidate.url, title: candidate.title || page.title || '', ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}, providers, block })
   }
-  const perNeed = Math.max(options.blocksPerNeed ?? 12, 1)
+  const longestPage = Math.max(0, ...[...pages.values()].map(p => p.blocks.length))
+  const perNeed = Math.max(options.blocksPerNeed ?? adaptivePreRankLimit(longestPage), 1)
   const ranked = task.needs.map(need => ({ need, ranked: preRankBlocks(need, task.query, pageBlocks.map(pb => ({ pb, heading: pb.block.heading, text: pb.block.text })), perNeed) }))
   const toJob = (need: typeof task.needs[number], rows: { item: { pb: PageBlock } }[]): ScoreJob => ({
     need,

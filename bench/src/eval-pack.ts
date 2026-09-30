@@ -10,7 +10,7 @@
  *
  *   node --experimental-transform-types bench/src/eval-pack.ts \
  *     [--run-id ID] [--split all|calibration|test] [--tasks a,b] [--allow-jev N] [--no-jev] \
- *     [--budget 6000] [--max-items 10] [--min-grade 1] [--fetch-top-k 4] [--blocks-per-need 12] [--sweep]
+ *     [--budget 6000] [--max-items 10] [--min-grade 1] [--fetch-top-k 4] [--blocks-per-need N (default: adaptive 12..24)] [--sweep]
  *
  * Jev: no HTTP request is made unless `--allow-jev N` (N > 0) is given; then at
  * most N requests are spent (tasks that need the fewest first) and every answer
@@ -276,7 +276,7 @@ function runStages(item: LoadedTask, opts: EvalOptions, scorer?: JevScorer): Pro
     fetchPage: pageFetcher(item.snapshot), scorers: scorer ? { control: scorer } : {}, configuredEngines: [],
     fusion: EVAL_FUSION, newId: () => 'r_eval',
   }
-  const options: PipelineOptions = { fetchTopK: opts.fetchTopK, fetchConcurrency: 1, blocksPerNeed: opts.blocksPerNeed, select: opts.select, maxScoreQuestions: 64 }
+  const options: PipelineOptions = { fetchTopK: opts.fetchTopK, fetchConcurrency: 1, ...opts.blocksPerNeed > 0 ? { blocksPerNeed: opts.blocksPerNeed } : {}, select: opts.select, maxScoreQuestions: 64 }
   return runEvidenceStages(spec, outputs, deps, options, offlineContext(spec, outputs))
 }
 
@@ -413,7 +413,7 @@ export function renderReport(r: ReportInput): string {
   out.push('- 数据：冻结的候选快照与标注（' + all.length + ' 个任务，金标块共 ' + all.reduce((s, t) => s + t.goldPairs, 0) + ' 个）；**全程不联网**：快照中的引擎结果代替 S2，快照中的页面和块代替 S5 抓取与分块（块 ID 与金标一致）。')
   out.push('- (a) 基线：融合排序后的前 8 个候选（标题、链接、摘要）加上其中有快照页面的全文（每页上限 ' + PAGE_CAP + ' 字符）。页面全文送入主模型时，整页都算保留。')
   out.push('- (a′) 等长基线：同样的前 8 个候选，但每个已读页面只取开头，总长截到 (b) 同一任务的包大小——即“把基线压缩到同样大小、不做任何选择”能保留多少。')
-  out.push('- (b) 管线 + 规则评分：S3/S4 规则 gate → 读取前 ' + r.opts.fetchTopK + ' 个保留候选（无快照页面的候选不占名额）→ 每个需求取词法前 ' + r.opts.blocksPerNeed + ' 块 → RuleScorer → 选择（预算 ' + (r.opts.select.charBudget ?? DEFAULT_SELECT_OPTIONS.charBudget) + ' 字符，每 URL 至多 ' + (r.opts.select.maxPerUrl ?? DEFAULT_SELECT_OPTIONS.maxPerUrl) + ' 块，至多 ' + (r.opts.select.maxItems ?? DEFAULT_SELECT_OPTIONS.maxItems) + ' 条，最低入选评分 ' + (r.opts.select.minGrade ?? DEFAULT_SELECT_OPTIONS.minGrade) + '）→ 覆盖判定。')
+  out.push('- (b) 管线 + 规则评分：S3/S4 规则 gate → 读取前 ' + r.opts.fetchTopK + ' 个保留候选（无快照页面的候选不占名额）→ 每个需求按 IDF 加权词法取前 ' + (r.opts.blocksPerNeed > 0 ? String(r.opts.blocksPerNeed) : '12（块数 > 80 的页面自适应，至多 24）') + ' 块 → RuleScorer → 选择（预算 ' + (r.opts.select.charBudget ?? DEFAULT_SELECT_OPTIONS.charBudget) + ' 字符，每 URL 至多 ' + (r.opts.select.maxPerUrl ?? DEFAULT_SELECT_OPTIONS.maxPerUrl) + ' 块，至多 ' + (r.opts.select.maxItems ?? DEFAULT_SELECT_OPTIONS.maxItems) + ' 条，最低入选评分 ' + (r.opts.select.minGrade ?? DEFAULT_SELECT_OPTIONS.minGrade) + '）→ 覆盖判定。')
   out.push('- (c) 管线 + Jev 评分：同 (b)，评分改用 JevScorer；问题文本与 r1 相同时直接读 r1 评分缓存。' + (r.opts.jev ? '本次调用实际发出 **' + r.jevRequests + '** 次 Jev 请求（上限 ' + r.opts.allowJev + '）' + (r.jevRequestsTotal !== undefined && r.jevRequestsTotal !== r.jevRequests ? '；该运行目录累计 **' + r.jevRequestsTotal + '** 次（此前的调用补全了缓存缺口，之后的回答都已缓存，可重复运行不再计费）' : '') + '。无法全部回答的任务回退到规则评分并排除在 Jev 对照之外。' : '未运行 Jev 组。'))
   out.push('- 指标：**金标块保留** = 金标 (需求, 块) 对中，该块出现在最终送给主模型的内容里的比例（基线按“所在页面被整页送入”计）；**金标页到达** = 金标块所在页面被读取的比例；**需求命中** = 有金标的需求中，至少一个金标块在内容里的比例；**声称覆盖的正确率** = 管线声称已覆盖的需求里，确有金标块在包内的比例（无金标的需求算错）；**无金标需求标缺口** = 快照里没有任何金标的需求，管线把它列为缺口的比例；字符与 tokens 为主模型实际看到的渲染文本（tokens 为粗估：汉字 0.7、其他 0.3 每字符）。', '')
 
@@ -505,7 +505,7 @@ async function main(): Promise<number> {
     ...flags['max-per-url'] !== undefined ? { maxPerUrl: numberFlag(flags, 'max-per-url', 2) } : {},
   }
   const opts: EvalOptions = {
-    select, fetchTopK: numberFlag(flags, 'fetch-top-k', 4), blocksPerNeed: numberFlag(flags, 'blocks-per-need', 12),
+    select, fetchTopK: numberFlag(flags, 'fetch-top-k', 4), blocksPerNeed: numberFlag(flags, 'blocks-per-need', 0),
     allowJev: numberFlag(flags, 'allow-jev', 0), jev: !flags['no-jev'],
   }
   console.log(items.length + ' labeled tasks; Jev ' + (opts.jev ? 'arm on, request allowance ' + opts.allowJev : 'arm off'))

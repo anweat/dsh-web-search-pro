@@ -19,7 +19,7 @@
  */
 
 import crypto from 'node:crypto'
-import { weightedOverlap } from './lexical.ts'
+import { termsOf, weightedOverlap } from './lexical.ts'
 import type { Block, Need } from './types.ts'
 
 export interface SplitOptions {
@@ -280,17 +280,72 @@ export function blockScoringText(block: RankableBlock): string {
   return (block.heading ? block.heading + '\n' : '') + block.text
 }
 
+/** Default blocks per need that reach S6 (the r1 setting). */
+export const PRERANK_DEFAULT = 12
+/** Upper bound of the adaptive pre-rank size. */
+export const PRERANK_MAX = 24
+/** Pages with more blocks than this get a larger pre-rank. */
+export const PRERANK_LONG_PAGE = 80
+
+/**
+ * Blocks per need that reach S6: 12 normally, growing by one per 10 blocks of
+ * the longest page beyond 80, bounded at 24 (a long reference page has many
+ * sections and the right one is easier to miss in a short list).
+ */
+export function adaptivePreRankLimit(longestPageBlocks: number): number {
+  if (longestPageBlocks <= PRERANK_LONG_PAGE) return PRERANK_DEFAULT
+  return Math.min(PRERANK_MAX, PRERANK_DEFAULT + Math.ceil((longestPageBlocks - PRERANK_LONG_PAGE) / 10))
+}
+
+/** Floor of the IDF factor: a term present in every block still counts this much of its weight. */
+const IDF_FLOOR = 0.2
+
 /**
  * Pre-rank blocks for one need: weighted lexical overlap of the need (x1.6) and
- * the query (x1.0) with heading + text, best first, ties in input order. This is
- * exactly the r1 experiment's S6 input selection, so judge caches from that
- * run stay valid.
+ * the query (x1.0) with heading + text, best first, ties in input order. Each
+ * term's weight is scaled by an IDF-like factor over the ranked blocks, so a
+ * term that nearly every block contains (`DatabaseSync` on the node:sqlite
+ * page) counts much less than a distinctive one (`timeout`, `options`).
+ * Terms no block contains carry no information and are left out of the score.
+ * With fewer than 4 blocks there is no statistics to speak of and the plain
+ * r1 overlap is used.
  */
 export function preRankBlocks<T extends RankableBlock>(need: Pick<Need, 'text'>, query: string, blocks: readonly T[], limit: number): { item: T; score: number }[] {
   const parts = [{ text: need.text, weight: 1.6 }, { text: query, weight: 1 }]
-  return blocks
-    .map((item, pos) => ({ item, pos, score: weightedOverlap(parts, blockScoringText(item)) }))
+  const scored = blocks.length < 4
+    ? blocks.map((item, pos) => ({ item, pos, score: weightedOverlap(parts, blockScoringText(item)) }))
+    : idfScores(parts, blocks)
+  return scored
     .sort((a, b) => b.score - a.score || a.pos - b.pos)
     .slice(0, Math.max(limit, 0))
     .map(({ item, score }) => ({ item, score }))
+}
+
+function idfScores<T extends RankableBlock>(parts: readonly { text: string; weight: number }[], blocks: readonly T[]): { item: T; pos: number; score: number }[] {
+  const docs = blocks.map(b => termsOf(blockScoringText(b)))
+  const query = new Map<string, number>()
+  for (const part of parts) {
+    for (const [term, w] of termsOf(part.text)) {
+      const weight = w * part.weight
+      if ((query.get(term) ?? 0) < weight) query.set(term, weight)
+    }
+  }
+  const n = docs.length
+  const idfMax = Math.log(1 + (n - 0.5) / 1.5)
+  const weights = new Map<string, number>()
+  let total = 0
+  for (const [term, base] of query) {
+    let df = 0
+    for (const d of docs) if (d.has(term)) df++
+    if (df === 0) continue
+    const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5)) / idfMax
+    const w = base * (IDF_FLOOR + (1 - IDF_FLOOR) * idf)
+    weights.set(term, w)
+    total += w
+  }
+  return blocks.map((item, pos) => {
+    let hit = 0
+    for (const [term, w] of weights) if (docs[pos]!.has(term)) hit += w
+    return { item, pos, score: total === 0 ? 0 : hit / total }
+  })
 }
