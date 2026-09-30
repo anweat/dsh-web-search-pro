@@ -85,7 +85,7 @@ export interface PipelineOptions {
     fetchConcurrency?: number;
     /** Per-page character cap handed to the fetcher (default 60,000). */
     maxPageChars?: number;
-    /** Blocks per need that reach S6 (default 12, the r1 setting). */
+    /** Blocks per need that reach S6. Default: adaptive, 12 up to 24 for pages with more than 80 blocks. */
     blocksPerNeed?: number;
     /** Upper bound of (need, block) questions handed to a remote scorer (default 64). */
     maxScoreQuestions?: number;

@@ -39,11 +39,27 @@ export interface RankableBlock {
 }
 /** The text S6 scores and the pre-ranker reads: heading path, newline, block text. */
 export declare function blockScoringText(block: RankableBlock): string;
+/** Default blocks per need that reach S6 (the r1 setting). */
+export declare const PRERANK_DEFAULT = 12;
+/** Upper bound of the adaptive pre-rank size. */
+export declare const PRERANK_MAX = 24;
+/** Pages with more blocks than this get a larger pre-rank. */
+export declare const PRERANK_LONG_PAGE = 80;
+/**
+ * Blocks per need that reach S6: 12 normally, growing by one per 10 blocks of
+ * the longest page beyond 80, bounded at 24 (a long reference page has many
+ * sections and the right one is easier to miss in a short list).
+ */
+export declare function adaptivePreRankLimit(longestPageBlocks: number): number;
 /**
  * Pre-rank blocks for one need: weighted lexical overlap of the need (x1.6) and
- * the query (x1.0) with heading + text, best first, ties in input order. This is
- * exactly the r1 experiment's S6 input selection, so judge caches from that
- * run stay valid.
+ * the query (x1.0) with heading + text, best first, ties in input order. Each
+ * term's weight is scaled by an IDF-like factor over the ranked blocks, so a
+ * term that nearly every block contains (`DatabaseSync` on the node:sqlite
+ * page) counts much less than a distinctive one (`timeout`, `options`).
+ * Terms no block contains carry no information and are left out of the score.
+ * With fewer than 4 blocks there is no statistics to speak of and the plain
+ * r1 overlap is used.
  */
 export declare function preRankBlocks<T extends RankableBlock>(need: Pick<Need, 'text'>, query: string, blocks: readonly T[], limit: number): {
     item: T;

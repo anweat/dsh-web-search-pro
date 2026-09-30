@@ -42,10 +42,12 @@ export declare function sentenceRanges(text: string): {
     end: number;
 }[];
 /**
- * Excerpt of a block text: the whole text when it fits, else the run of
- * consecutive sentences (<= `max` characters) with the most need overlap
- * (earliest on ties); an over-long single sentence is cut at a clause boundary.
- * `…` marks the side(s) that were cut.
+ * Excerpt of a block text, built from the text with page-UI noise stripped: the
+ * whole text when it fits, else a window of consecutive sentences (<= `max`
+ * characters) centred on the highest-scoring sentence (earliest on ties) and
+ * grown towards the better-scoring neighbour (the following one on ties). An
+ * over-long single sentence is cut at a clause boundary. `…` marks the side(s)
+ * that were cut. Empty when the block is nothing but UI labels.
  */
 export declare function excerptOf(text: string, parts: readonly QueryPart[], max: number): string;
 export interface SelectedBlock {
