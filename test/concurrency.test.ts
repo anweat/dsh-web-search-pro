@@ -497,7 +497,7 @@ test('C7: multi runs every engine through the registry (cooldown, attempts) and 
   } finally { h.cleanup() }
 })
 
-test('C7: multi treats unavailable and empty engines as non-fatal, and all-empty as an error without cooldown', async () => {
+test('C7: multi treats unavailable and empty engines as non-fatal; an unavailable engine plus an empty one is still an error, without cooldown', async () => {
   const h = harness({ parallel: true })
   h.entries.set('e1', { id: 'e1', probe: async () => ({ available: false, reason: 'down' }), run: async () => { throw new Error('unreachable') } })
   h.engine('e2', async () => { throw new EngineError('no results', 'ENGINE_EMPTY', true) })

@@ -4,6 +4,23 @@ export interface BackendRunResult { ok: boolean; lowQuality?: boolean; detail?: 
 /** Per-engine attempt record so callers can report *why* the router fell back. */
 export interface BackendAttempt { id: string; outcome: 'ok' | 'low-quality' | 'empty' | 'error'; detail?: string }
 export interface Backend<I, O> { id: string; probe(): BackendProbe | Promise<BackendProbe>; run(input: I): Promise<O>; assess?(value: O): BackendRunResult }
+/**
+ * Thrown when no backend produced a usable result. Carries the per-engine
+ * attempts so callers can tell "every engine answered with nothing" (all
+ * `empty`) from real failures (any `error`).
+ */
+export class NoBackendError extends Error {
+  constructor(message: string, readonly attempts: readonly BackendAttempt[]) {
+    super(message)
+    this.name = 'NoBackendError'
+  }
+}
+
+/** True when engines were tried and every one of them answered with a legitimate empty result. */
+export function allAttemptsEmpty(attempts: readonly BackendAttempt[]): boolean {
+  return attempts.length > 0 && attempts.every(a => a.outcome === 'empty')
+}
+
 export interface BackendDiagnostic { id: string; available: boolean; state: 'ready' | 'unavailable' | 'cooldown'; reason?: string; lastError?: string; cooldownUntil?: string }
 
 export interface RunSelectedOptions {
@@ -92,7 +109,7 @@ export class BackendRegistry<I, O> {
       }
     }
     if (fallback) return { id: fallback.id, value: fallback.value, attempts }
-    throw new Error('no backend succeeded: ' + errors.join('; '))
+    throw new NoBackendError('no backend succeeded: ' + errors.join('; '), attempts)
   }
 
   diagnostics(): BackendDiagnostic[] {

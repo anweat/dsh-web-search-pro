@@ -19,7 +19,7 @@ import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
 import { browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
-import { BackendRegistry, type BackendDiagnostic } from './backend-registry.ts'
+import { allAttemptsEmpty, BackendRegistry, NoBackendError, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
 import { SingleFlight } from './singleflight.ts'
 import { mergeCandidates, type ProviderOutput } from './pipeline/candidates.ts'
@@ -304,6 +304,9 @@ export class SearchRouter {
         if (r.status === 'fulfilled' && r.value.value.sources.length) outputs.push({ providerId: ids[index]!, query, sources: r.value.value.sources })
       })
       if (!outputs.length) {
+        // Every engine answered with nothing (and none failed): a legitimate empty result.
+        const allEmpty = results.every(r => r.status === 'fulfilled' || (r.reason instanceof NoBackendError && allAttemptsEmpty(r.reason.attempts)))
+        if (allEmpty) return this.emptyResult(ids, 'multi(' + ids.join('+') + ')')
         const failures = results.map((r, index) => ids[index] + ': ' + (r.status === 'rejected' ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : 'empty')).join('; ')
         throw new Error('all engines failed: ' + failures)
       }
@@ -341,6 +344,8 @@ export class SearchRouter {
       } catch (error) {
         if (signal?.aborted) throw error
         enginesTried.push(...ids)
+        // Every engine answered with a legitimate empty result: report that, do not fail or cache it.
+        if (error instanceof NoBackendError && allAttemptsEmpty(error.attempts)) return this.emptyResult(ids, 'none')
         throw error
       }
     }
@@ -371,6 +376,18 @@ export class SearchRouter {
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).
     this.memory.set(memoryKey, result)
     return result
+  }
+
+  /** All tried engines returned ENGINE_EMPTY and none errored: zero sources plus an explanation (never cached). */
+  private emptyResult(ids: readonly string[], engine: string): RouterSearchResult {
+    return {
+      sources: [],
+      engine,
+      enginesTried: [...ids],
+      fromCache: false,
+      availableCount: 0,
+      fallbackNote: 'all engines returned no results (tried: ' + ids.join(', ') + ')',
+    }
   }
 
   /** Platform search (web_platform_search tool) with the same cache+persist flow. */
