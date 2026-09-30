@@ -44,7 +44,8 @@
     "bench:label": "node --experimental-transform-types bench/src/label-llm.ts",
     "bench:judges": "node --experimental-transform-types bench/src/run-judges.ts",
     "bench:report": "node --experimental-transform-types bench/src/report.ts",
-    "bench:eval-gate": "node --experimental-transform-types bench/src/eval-gate.ts"
+    "bench:eval-gate": "node --experimental-transform-types bench/src/eval-gate.ts",
+    "bench:eval-pack": "node --experimental-transform-types bench/src/eval-pack.ts"
   },
   "peerDependencies": {
     "@anweat/dsh-browser": "0.1.15",

@@ -21,15 +21,16 @@ bench/
   src/
     types.ts               # TaskSpec / Need / Constraint、BenchTask、CandidateSnapshot、Label
     tasks.ts               # 任务集加载与校验、calibration/test 划分
-    blocks.ts              # 分块器：标题路径、代码块/表格保持完整、稳定 blockId
     harvest-lib.ts         # 采集逻辑：引擎计划、礼貌限速、页面抓取、快照读写
     harvest.ts             # 命令行入口
     judges/                # E2/E3：Judge 接口与各判定器（见下文）
     label-llm.ts  run-judges.ts  report.ts  metrics.ts  data.ts  cli.ts
     eval-gate.ts           # M2a：src 规则 gate 的离线核对、查询编译预览、GitHub 实测
+    eval-pack.ts           # M2b：证据包管线 S3–S8 的离线评测（基线 / 规则 / Jev 缓存）
   rubrics/                 # 题目模板（gate.*.v1、score.support.v1、profile.choice.v1）
   test/
-    blocks.test.ts         # 分块器（中英文、代码块、表格、稳定 id）
+    eval-pack.test.ts      # 证据包评测的指标、Jev 缓存适配器（与 r1 判定器同一缓存键）
+    score-wording.test.ts  # 运行时 Jev 评分器的措辞与 score.support.v1 一致
     tasks.test.ts          # 任务集结构与覆盖检查
     harvest.test.ts        # URL 归一/选取、引擎计划、限速
   data/                    # 本地数据，git 忽略（见下）
@@ -73,6 +74,17 @@ pnpm run bench:harvest -- --limit 5          # 等价写法：只跑前 5 个任
 4. **选页**：按 rank 轮询各引擎（主查询优先于 `site:` 变体），URL 归一化（去 fragment、跟踪参数、尾部斜杠）后去重，跳过 pdf/压缩包/图片/视频等二进制链接，取前 K 个。`from` 字段记录该 URL 被哪些 `引擎#rank` 返回。
 5. **抓取**：只走纯 HTTP 路径（`httpGet` + `extractText` + 内置提取规则，与 `FetchService.fetchHttp` 同款），页面文本上限 20 万字符。
 6. **分块**：`blocks.ts` 切块，写出 `bench/data/candidates.v1/<taskId>.json`。
+
+## 证据包离线评测（M2b）
+
+```bash
+pnpm run bench:eval-pack                          # 规则评分 + r1 Jev 缓存；不发任何 Jev 请求
+pnpm run bench:eval-pack -- --run-id pack-m2b     # 写 bench/data/runs/<id>/pack-report.md（中文）和 pack-report.json
+pnpm run bench:eval-pack -- --sweep               # 只在 calibration 上扫描选择参数（minGrade / maxItems / budget / 每 URL 块数）
+BOCHA_JEV_API_KEY=... pnpm run bench:eval-pack -- --allow-jev 40   # 缓存缺口需要补请求时才用；每个回答都会写入缓存
+```
+
+全程离线：快照里的引擎结果代替 S2，快照里的页面和块代替 S5。对比 (a) 基线（融合前 8 个候选加其页面全文）、(a′) 截到同等大小的基线、(b) 管线 + 规则评分、(c) 管线 + Jev 评分。`--allow-jev N` 缺省为 0：此时只读 `bench/data/judge-cache/jev`（问题文本与 r1 相同才命中，缓存键与 r1 判定器一致），有缓存缺口的任务回退到规则评分并排除在 Jev 对照之外；N > 0 时最多发 N 个请求，优先补缺口最少的任务。其余参数：`--split`、`--tasks`、`--budget`、`--max-items`、`--min-grade`、`--max-per-url`、`--fetch-top-k`、`--blocks-per-need`、`--no-jev`。
 
 ## 礼貌与成本规则
 
@@ -130,7 +142,7 @@ pnpm run bench:harvest -- --limit 5          # 等价写法：只跑前 5 个任
 - `publishedAt` 是引擎给出的原始字符串（Bing 返回本地化 RFC 822 文本，未做解析）。
 - 块：`text === page.text.slice(start, end)`；`blockId = 'b_' + sha1(url + ':' + start)` 的前 12 位，同一页面文本得到相同 id；`hash` 是块文本 sha1 前 16 位，用于页面重抓后的漂移检测。
 
-### 分块规则（`src/blocks.ts`）
+### 分块规则（`src/pipeline/blocks.ts`，M2b 起属于运行时代码，测试在 `test/pipeline-blocks.test.ts`）
 
 - 围栏代码块（```` ``` ````）与 Markdown 表格是原子单元：不会被切开，超过 `maxChars`（默认 1200）时单独成块。
 - 标题启动新的小节，标题行保留在该小节第一个块里；每个块带标题路径 `A > B > C`。`extractText` 输出的纯文本没有标题标记，所以对纯文本使用保守的启发式（短行、无句末标点、后面跟空行和较长正文）；启发式误判只会影响块边界与 `heading` 注释，**不会丢文字**。HTML 表格被 `extractText` 拍平成单元格行，无法识别为表格。
