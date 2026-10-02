@@ -166,13 +166,18 @@ export function recommendSources(input: RecommendInput, ctx: RecommendContext): 
     const matched = pool.filter(e => e.id === hint || e.platform === hint || e.provider === hint || e.id === 'opencli-' + hint)
     if (matched.length) { pool = matched; hinted = true } else notes.push('no catalog entry for "' + input.platform + '": recommended by profile instead')
   }
-  const candidates = pool
+  const candidates: Assessed[] = pool
     .filter(e => hinted || e.operations.includes('search'))
     .filter(e => hinted || e.profiles.includes(profile))
     // A general web engine in the wrong language is noise; a paper / code index in another language still works.
     .filter(e => hinted || !language || !isWeb(e) || e.languages.includes(language) || e.languages.includes('*'))
     .map(e => assess(e, ctx))
     .sort((a, b) => TIER[a.status] - TIER[b.status] || score(b.entry, profile, language) - score(a.entry, profile, language) || a.entry.id.localeCompare(b.entry.id))
+
+  // A general web engine that can run now leads (reference and vertical sources supplement it, they do not replace it) —
+  // except for academic tasks, where the paper indexes are the primary sources.
+  const lead = profile === 'academic' ? -1 : candidates.findIndex(a => isWeb(a.entry) && (a.status === 'ready' || a.status === 'limited'))
+  if (lead > 0) candidates.unshift(...candidates.splice(lead, 1))
 
   // Greedy pick: one source per upstream family; at most one general web engine that runs now and one that needs setup
   // (the language specialist as an upgrade path). The web limit is relaxed only to fill the slots.

@@ -121,6 +121,10 @@ test('recommend: ready sources come before sources that need setup or exist only
   assert.deepEqual(order, [...order].sort((a, b) => rank[a] - rank[b]), 'sorted by readiness: ' + order.join(','))
   assert.equal(r.picks[0]!.status, 'ready')
   assert.equal(r.picks[0]!.id, 'ddg', 'the curated keyless web engine leads')
+  // a reference or vertical source supplements a general web engine, it does not lead
+  const docs = recommendSources({ ...EN, profile: 'docs_code' }, ctx({ providers: providersOf({ stackexchange: READY, wikipedia: READY }) }))
+  assert.equal(docs.picks[0]!.id, 'ddg')
+  assert.ok(docs.picks.some(p => p.id === 'stackexchange'))
 })
 
 test('recommend: catalog-only and not-ready entries are never executable and say what is missing and how to set it up', () => {
@@ -177,6 +181,7 @@ test('recommend: Chinese and English tasks get different sources', () => {
   assert.ok(zhExp.picks.some(p => p.id === 'v2ex'), 'zh experience: ' + zhExp.picks.map(p => p.id))
   // academic: paper indexes lead, whatever the language
   const acad = recommendSources({ task: 'survey of diffusion models', profile: 'academic' }, ctx())
+  assert.equal(acad.picks[0]!.id, 'arxiv', 'a paper index leads academic tasks, not a web engine')
   assert.ok(acad.picks.some(p => p.id === 'arxiv') && acad.picks.every(p => p.status === 'ready' || p.status === 'limited'), 'paper indexes lead: ' + acad.picks.map(p => p.id))
 })
 
