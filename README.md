@@ -223,6 +223,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
    web-search-pro:
      exaApiKeyEnv: EXA_API_KEY # 推荐：运行环境或凭据服务，不把密钥写入配置
      jinaApiKeyEnv: JINA_API_KEY
+     bochaApiKeyEnv: BOCHA_SEARCH_API_KEY # 博查 Key 的凭据 / 环境变量名；缺省再试 BOCHA_JEV_API_KEY
      engines: [ddg, bing, exa, seam, jina]
      parallelEngines: false
      evidence: # 证据包模式的块评分；默认完全不调用 Jev
@@ -232,6 +233,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
        maxJevQuestions: 64
        maxRounds: 2 # 证据包补搜轮数上限；1 = 关闭第二轮
        maxQueries: 4 # 单任务搜索查询总数（含第一轮；一次 provider 调用算一次）
+       autoProviders: true # 按任务语言提前就绪的来源（中文博查 / 英文 Exa）；false = 只用 profile 表
        # rubrics: ...   # 可选：覆盖 Jev 提示词，见下文“Jev 提示词（rubric）”
        # judge: ...     # 可选：选择/自定义模型 provider，见下文“评分模型 provider 与用量上限”
        # budget: ...    # 可选：模型输入 token 上限（单次搜索 / 每日），默认 60000 / 1000000
@@ -244,7 +246,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
    ```
 
 3. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
-4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`（`exaApiKeyEnv`/`jinaApiKeyEnv` 引用）。
+4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。设置面板暂未提供博查字段，用 settings.yaml / 凭据服务 / 环境变量配置。
 
 ## 外部依赖（按需）
 
@@ -272,9 +274,24 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 ## 平台与引擎
 
-`seam`（ctx.web/DeepSeek 原生）· `exa` · `ddg` · `bing` · `jina` · `github`（REST 搜索 API，免 CLI；可选 `$GITHUB_TOKEN`/`githubToken` 提升限额并解锁代码搜索）· `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；失败后短时冷却，`web_backend_status` 可查看原因；`multi` 并行融合。
+`seam`（ctx.web/DeepSeek 原生）· `exa` · `bocha`（博查，中文强项，需 Key）· `ddg` · `bing` · `jina` · `github`（REST 搜索 API，免 CLI；可选 `$GITHUB_TOKEN`/`githubToken` 提升限额并解锁代码搜索）· `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；失败后短时冷却，`web_backend_status` 可查看原因；`multi` 并行融合。
 
 Exa 优先使用原生 API 客户端：`web_search_pro` 可传 `exaType`、域名包含/排除、发布时间范围和 category。若没有裸 API Key、但启用了 CLI 后端且 Exa MCP 已连接，搜索会自动通过 `mcporter` 完成；该兼容路径只支持 query + 结果数，高级筛选和 `web_exa_contents` 仍要求 `EXA_API_KEY`。不同选项、结果数、引擎顺序和单/多引擎模式使用不同缓存指纹。
+
+### 博查（Bocha）与搜索 provider 注册器 / Bocha and the provider registry
+
+**中文**　博查是第一个中文搜索增量（`POST {bochaBaseUrl}/v1/web-search`，Bearer Key，默认 `https://api.bochaai.com`；官方 MIT 参考实现 `bocha-ai/dsh-web-search-bocha` 用 `https://api.bocha.cn`，可用 `bochaBaseUrl` 切换）。引擎 id `bocha`，也可写 `builtin:bocha`。
+
+- **配置**：Key 来自 `bochaApiKey`、凭据 / 环境变量 `BOCHA_SEARCH_API_KEY`（名称由 `bochaApiKeyEnv` 配置），找不到时回退 `BOCHA_JEV_API_KEY`（博查文档对同一账号的说明；用同一个 Key 也行）。用官方 provider 的 `BOCHA_API_KEY` 的话，把 `bochaApiKeyEnv: BOCHA_API_KEY` 即可。`bochaSummary`（默认 true）请求较长的页面摘要，更利于证据评分。
+- **费用**：按请求计费（余额或套餐），插件只记录请求数（用量账本里的 `bocha-search`，token 不适用、金额未知，`web_backend_status` 显示当日请求数）。**账号没有搜索余额 / 套餐时服务返回 HTTP 403 “You do not have enough money or package quota”**：插件把它归为不可重试的 `ENGINE_QUOTA`（与 401 的 `ENGINE_AUTH` 一样不进冷却），先到博查控制台确认搜索额度。429 按 `Retry-After` 冷却。
+- **原生过滤**（证据模式）：硬性 `site` / `exclude_site` → `include` / `exclude`，硬性 `time_window` → `freshness` 的 `起始..今天` 日期区间；其余约束（`exclude_term` 等）仍在本地校验，`verification.native / local` 如实报告。
+- **验证状态**：成功响应结构取自官方参考实现与文档；唯一一次真实调用（2026-10-02，Jev Key）返回了上述 403，所以成功路径、`include` / `exclude` 与日期区间尚未在真实服务上验证，`web_backend_status` 标注 `[not verified live]`。
+
+**注册器**：搜索来源是 `ProviderDescriptor`（稳定命名空间 id `builtin:ddg`、`aliases`（旧短 id `ddg`）、`operations`、`taskProfiles`、`languages`、`regions`、`resultKinds`、`sourceFamily`（未知留空，绝不假定独立）、`requirements`（Key 环境变量 / CLI）、`supportedFilters`、`costModel`）加运行时（`probeLocal()` 只做本地检查、不联网；`create(deps)` 返回 Engine）。工具参数 `engines`、配置 `engines`、历史与缓存都接受别名或完整 id，输出沿用短 id；未知 id 报错并列出可用项。重复 id / 别名冲突直接抛错，`register()` 返回注销函数（暂不做外部动态加载）。新增来源 = 一个 descriptor + adapter 文件，不改路由器和计划器。
+
+**证据模式的来源规划（S1）按语言**：任务（goal + query）为中文时，已就绪且已配置 Key 的中文来源（博查）排在 profile 表之前；英文时优先 Exa（原生 API Key 才算，仅靠 mcporter 兜底的不提前）；`ddg` 等通用网页引擎退为一个后备（其余留给第二轮），GitHub / arXiv 等垂直来源不受影响。`academic` 保持 arxiv / pubmed。显式 `engines` 不受影响；`evidence.autoProviders: false` 关闭这一规则。`web_backend_status` 的 `providers` 列出每个来源的 installation / credential / health（`health` 只有真实调用成功才是 `ready`，仅通过本地探测为 `unknown`）。
+
+**English**　Bocha (`bocha` / `builtin:bocha`) is a Chinese-strong key-based search source: `POST /v1/web-search`, Bearer key from `bochaApiKey` or `$BOCHA_SEARCH_API_KEY` (env name configurable via `bochaApiKeyEnv`), falling back to `$BOCHA_JEV_API_KEY` (same account). Billed per request; the plugin counts requests in the usage ledger (`bocha-search`, tokens n/a, price unknown). HTTP 401/403 are non-retryable (no cooldown; "no balance or package" is reported as quota), 429 cools down for `Retry-After`. Hard site / exclude_site / time_window are pushed down (`include` / `exclude` / `freshness` date range); everything else is verified locally and reported. The success path is not yet verified live (the only live call answered 403 no-quota). Search sources are registry entries (descriptor + adapter, namespaced ids with legacy aliases, duplicates throw, `register` returns an unregister function); evidence-mode S1 promotes a ready, keyed provider strong in the task language (Bocha for Chinese, Exa for English) ahead of the profile table, keeping one general web fallback.
 
 ## 开发
 
