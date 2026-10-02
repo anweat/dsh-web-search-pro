@@ -85,6 +85,15 @@ const EVIDENCE_OUTPUT_PROPERTIES = {
 
 const DEFAULT_FETCH_CHARS = 20_000
 
+/** One-line explanation per non-content page class (web_fetch_pro render). */
+const PAGE_CLASS_NOTE: Record<string, string> = {
+  shell: 'This page contains no extractable data (navigation/JS shell).',
+  js_shell: 'This page needs JavaScript to show its content and no browser render was available or helpful.',
+  login_wall: 'This page is a login wall; the content is not available without signing in.',
+  captcha: 'This page is a captcha / bot check, not the requested content.',
+  error: 'This page is an error response, not the requested content.',
+}
+
 /**
  * Per-item character limit so that `sum(min(length, limit)) <= total` and `limit <= perItem`:
  * short texts keep all they have and the room they leave over goes to the long ones.
@@ -294,24 +303,26 @@ export function registerTools(deps: ToolDeps): void {
           statusCode: { type: 'number' },
           usedRule: { type: 'string' },
           shellPage: { type: 'boolean' },
+          pageClass: { type: 'string' },
+          attempts: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { source: { type: 'string', required: true }, class: { type: 'string', required: true }, chars: { type: 'number' }, detail: { type: 'string' } } } },
           truncated: { type: 'boolean' },
           nextOffset: { type: 'number' },
           totalChars: { type: 'number' },
         },
       },
       render: (_args, value) => {
-        const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; truncated?: boolean; nextOffset?: number; totalChars?: number }
+        const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; pageClass?: string; attempts?: { source: string; class: string }[]; truncated?: boolean; nextOffset?: number; totalChars?: number }
         const parts: string[] = []
         if (v.title) parts.push('Title: ' + v.title)
         // P1-3: a navigation/JS/form shell has no data — say so and point the
         // model at the links it contains instead of re-fetching the same page.
         if (v.shellPage) {
           const pointed = (v.text.match(/\[[^\]]*\]\((https?:[^)]+)\)/g) ?? []).map(s => s.slice(s.indexOf('(') + 1, -1)).slice(0, 5)
-          parts.push('This page contains no extractable data (navigation/JS shell).')
+          parts.push(PAGE_CLASS_NOTE[v.pageClass ?? 'shell'] ?? PAGE_CLASS_NOTE['shell']!)
           if (pointed.length) parts.push('It points to: ' + pointed.join(', ') + '. Consider fetching one of those instead.')
         }
         parts.push(v.text)
-        parts.push('— Source: ' + v.source + (v.fromCache ? ' (cached snapshot)' : '') + ' · ' + v.url)
+        parts.push('— Source: ' + v.source + (v.fromCache ? ' (cached snapshot)' : '') + ' · ' + v.url + (v.attempts && v.attempts.length > 1 ? ' · tried ' + v.attempts.map(a => a.source + ':' + a.class).join(' → ') : ''))
         if (v.nextOffset !== undefined) parts.push('more: call web_fetch_pro with offset=' + v.nextOffset + (v.totalChars !== undefined ? ' (page has ' + v.totalChars + ' chars)' : ''))
         return [{ type: 'text', text: parts.join('\n\n') }]
       },
@@ -339,6 +350,8 @@ export function registerTools(deps: ToolDeps): void {
         ...page.statusCode !== undefined ? { statusCode: page.statusCode } : {},
         ...page.usedRule ? { usedRule: page.usedRule } : {},
         ...page.shellPage ? { shellPage: true } : {},
+        ...page.pageClass ? { pageClass: page.pageClass } : {},
+        ...page.attempts?.length ? { attempts: page.attempts } : {},
         ...page.truncated ? { truncated: true } : {},
         ...page.nextOffset !== undefined ? { nextOffset: page.nextOffset } : {},
         ...page.totalChars !== undefined ? { totalChars: page.totalChars } : {},

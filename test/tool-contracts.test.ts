@@ -227,8 +227,8 @@ test('web_fetch_pro reports truncation through its documented optional fields an
     assert.equal(out.nextOffset, 4)
     assert.equal(out.totalChars, 9)
     assert.equal(out.text, 'body')
-    // The schema is closed: fetch-service internals (attempts) never leak into the output.
-    assert.equal(Object.hasOwn(out, 'attempts'), false)
+    // The schema is closed: every output key is a declared property.
+    assert.deepEqual(out.attempts, [{ source: 'http', class: 'content' }])
     assert.deepEqual(Object.keys(out).filter(key => !Object.hasOwn(tool.output.schema.properties, key)), [])
     // Default output cap is the configured fetchDefaultChars (20k), offset is forwarded.
     assert.equal(seen[0].maxChars, 20_000)
