@@ -9,7 +9,7 @@ import { Store } from '../src/store.ts'
 
 test('capability ids remain complete and configured custom platforms are accepted', () => {
   assert.deepEqual(SEARCH_ENGINE_IDS, [
-    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha',
+    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng',
   ])
   assert.deepEqual(PLATFORM_IDS, [
     'github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter',

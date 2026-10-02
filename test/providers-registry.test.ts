@@ -39,7 +39,7 @@ function dummy(id: string, over: Partial<ProviderAdapter['descriptor']> = {}, en
 
 test('registry: built-ins carry namespaced ids with the legacy short ids as aliases; both spellings resolve to one route id', () => {
   const r = createBuiltinRegistry()
-  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha'])
+  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng'])
   assert.deepEqual([...SEARCH_ENGINE_IDS], r.searchIds())
   assert.equal(r.resolve('builtin:ddg'), r.resolve('ddg'))
   assert.equal(r.routeId('builtin:bocha'), 'bocha')
@@ -58,7 +58,7 @@ test('registry: built-ins carry namespaced ids with the legacy short ids as alia
 test('registry: validation accepts aliases and full ids, and an unknown id gets a clear error listing the available ones', () => {
   const r = createBuiltinRegistry()
   assert.deepEqual(r.validate(['builtin:ddg', 'bocha', 'ddg']), ['ddg', 'bocha'])
-  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, bocha\)/)
+  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, bocha, wikipedia, hackernews, stackexchange, openalex, semanticscholar, anysearch, searxng\)/)
   assert.throws(() => r.validate(['  ']), /unknown engine/)
 })
 
@@ -69,7 +69,7 @@ test('registry: a duplicate id or a taken alias throws; register returns an unre
   assert.throws(() => r.register(dummy('vendor:x', { aliases: ['same', 'same'] })), /duplicate alias|already used/)
   assert.throws(() => r.register(dummy('Bad Id')), /invalid provider id/)
   assert.throws(() => r.register(dummy('vendor:y', { aliases: ['a b'] })), /invalid provider alias/)
-  assert.equal(r.searchIds().length, 12, 'failed registrations left nothing behind')
+  assert.equal(r.searchIds().length, 19, 'failed registrations left nothing behind')
 
   const before = r.revision
   const off = r.register(dummy('vendor:acme'))
@@ -138,7 +138,7 @@ test('plan: Chinese tasks prefer Bocha, English tasks prefer Exa, ddg stays the 
   assert.deepEqual(ids(zh), ['bocha', 'ddg'])
   assert.equal(zh.language, 'zh')
   assert.match(zh.notes.join('\n'), /language zh: preferred bocha; fallback web engines limited to ddg \(held for a second round: bing, exa, seam, jina\)/)
-  assert.deepEqual(zh.wanted, ['bocha', 'ddg', 'bing', 'exa', 'seam', 'jina'], 'the follow-up round can still use the held engines')
+  assert.deepEqual(zh.wanted, ['bocha', 'ddg', 'bing', 'exa', 'seam', 'jina', 'wikipedia'], 'the follow-up round can still use the held engines, and the supplement (Wikipedia) comes last')
 
   const en = plan({ ...EN, profile: 'general' })
   assert.deepEqual(ids(en), ['exa', 'ddg'])
@@ -148,12 +148,20 @@ test('plan: Chinese tasks prefer Bocha, English tasks prefer Exa, ddg stays the 
   const by = (profile: Profile, t = EN) => ids(plan({ ...t, profile }))
   assert.deepEqual(by('news_fact'), ['exa', 'ddg'])
   assert.deepEqual(by('news_fact', ZH as never), ['bocha', 'ddg'])
-  assert.deepEqual(by('experience'), ['exa', 'ddg', 'v2ex'])
+  assert.deepEqual(by('experience'), ['exa', 'ddg', 'hackernews', 'stackexchange'], 'English experience: V2EX (Chinese community) gives way to the English community sources')
+  assert.deepEqual(by('experience', ZH as never), ['bocha', 'ddg', 'v2ex', 'hackernews'], 'Chinese experience: V2EX first, the English community sources last')
+  assert.match(plan({ ...EN, profile: 'experience' }).notes.join('\n'), /language en: v2ex ordered last \(community source in another language\)/)
+  assert.deepEqual(plan({ ...EN, profile: 'docs_code' }).wanted.slice(-1), ['stackexchange'], 'Stack Overflow is a docs_code supplement: second-round candidate, not in the plan')
+  assert.ok(!ids(plan({ ...EN, profile: 'docs_code' })).includes('stackexchange'))
+  assert.equal(plan({ ...EN, profile: 'news_fact' }).wanted.at(-1), 'wikipedia', 'Wikipedia supplements news_fact, it does not replace web search')
+  assert.deepEqual(by('news_fact'), ['exa', 'ddg'], 'and is not in round 1')
+  assert.equal(plan({ ...EN, profile: 'docs_code' }, { engines: ['ddg'] }).wanted.includes('stackexchange'), false, 'explicit engines: no supplements')
+  assert.equal(plan({ ...EN, profile: 'docs_code' }, { autoProviders: false }).wanted.includes('stackexchange'), false, 'autoProviders off: no supplements')
   assert.deepEqual(by('docs_code'), ['exa', 'ddg', 'github'])
   assert.deepEqual(by('docs_code', ZH as never), ['bocha', 'ddg', 'github'])
   assert.deepEqual(by('compare'), ['exa', 'ddg', 'github'])
-  assert.deepEqual(by('academic'), [...PROFILE_PROVIDERS.academic], 'academic keeps its own sources: neither Exa nor Bocha serves that profile')
-  assert.deepEqual(by('academic', ZH as never), [...PROFILE_PROVIDERS.academic])
+  assert.deepEqual(by('academic'), PROFILE_PROVIDERS.academic.slice(0, 4), 'academic keeps its own sources: neither Exa nor Bocha serves that profile')
+  assert.deepEqual(by('academic', ZH as never), PROFILE_PROVIDERS.academic.slice(0, 4))
 
   // not ready / no key / switched off / explicit engines: the tables as before
   const status = (id: string): ProviderStatus => id === 'bocha' ? { state: 'unavailable', reason: 'no key' } : ready()
@@ -188,7 +196,7 @@ test('plan: a dummy English provider registered by descriptor + adapter alone is
   assert.deepEqual(ids(plan(EN)), ['tavily', 'exa', 'ddg'], 'priority orders the promoted providers: the dummy (5) before exa (10)')
   assert.deepEqual(ids(plan(ZH)), ['bocha', 'ddg'], 'a Chinese task is untouched by an English-only provider')
   assert.deepEqual(ids(plan(EN, { status: (id: string) => id === 'tavily' ? { state: 'unavailable' as const } : ready() })), ['exa', 'ddg'])
-  assert.deepEqual(ids(plan({ ...EN, profile: 'academic' })), [...PROFILE_PROVIDERS.academic], 'its taskProfiles do not include academic')
+  assert.deepEqual(ids(plan({ ...EN, profile: 'academic' })), PROFILE_PROVIDERS.academic.slice(0, 4), 'its taskProfiles do not include academic')
   assert.equal(ids(plan({ ...EN, profile: 'news_fact' }))[0], 'tavily')
   assert.equal(ids(plan({ ...EN, profile: 'docs_code' }))[0], 'exa', 'the dummy does not serve docs_code')
   // the adapter's own compile hook is used when the caller wires the registry's compiler

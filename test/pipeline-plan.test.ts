@@ -13,11 +13,12 @@ const allReady = (): ProviderStatus => ({ state: 'ready' })
 
 test('plan: every profile maps to its provider table, general uses the configured engines', () => {
   for (const [profile, table] of Object.entries(PROFILE_PROVIDERS)) {
-    assert.deepEqual(ids(planSources(spec({ profile: profile as Profile }), { configured: CONFIGURED, status: allReady })), [...table], profile)
+    assert.deepEqual(ids(planSources(spec({ profile: profile as Profile }), { configured: CONFIGURED, status: allReady })), table.slice(0, 4), profile)
   }
+  // the plan holds at most 4 providers (the rest stays in `wanted` for the second round)
   assert.deepEqual(PROFILE_PROVIDERS.docs_code, ['ddg', 'bing', 'github'])
-  assert.deepEqual(PROFILE_PROVIDERS.academic, ['arxiv', 'pubmed', 'ddg'])
-  assert.deepEqual(PROFILE_PROVIDERS.experience, ['ddg', 'bing', 'v2ex'])
+  assert.deepEqual(PROFILE_PROVIDERS.academic, ['arxiv', 'openalex', 'pubmed', 'semanticscholar', 'ddg'])
+  assert.deepEqual(PROFILE_PROVIDERS.experience, ['ddg', 'bing', 'v2ex', 'hackernews', 'stackexchange'])
   assert.deepEqual(PROFILE_PROVIDERS.news_fact, ['ddg', 'bing'])
   assert.deepEqual(PROFILE_PROVIDERS.compare, ['ddg', 'bing', 'github'])
   const general = planSources(spec({ profile: 'general' }), { configured: CONFIGURED, status: allReady })

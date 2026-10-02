@@ -12,7 +12,7 @@ import path from 'node:path'
 import crossSpawn from 'cross-spawn'
 import { load as yamlLoad } from 'js-yaml'
 import { parse as parseHtml } from 'node-html-parser'
-import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect } from './safe-http.ts'
+import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect, type ResolvePublicUrlOptions } from './safe-http.ts'
 
 /** js-yaml parser (npm dep). */
 export const jsYaml: { load(input: string): unknown } = { load: (input: string) => yamlLoad(input) }
@@ -106,6 +106,8 @@ export interface HttpResult {
   text: string
   finalUrl: string
   contentType?: string
+  /** Response headers of the final answer (Retry-After and rate-limit headers for API clients). */
+  headers?: Headers
 }
 
 /**
@@ -114,7 +116,7 @@ export interface HttpResult {
  */
 export async function httpGet(
   url: string,
-  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean } = { signal: undefined },
+  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean; /** Test seams: replace the global fetch and the DNS lookup. */ fetchImpl?: typeof fetch; lookup?: ResolvePublicUrlOptions['lookup'] } = { signal: undefined },
 ): Promise<HttpResult> {
   const controller = new AbortController()
   const timer = opts.timeoutMs ? setTimeout(() => controller.abort(new Error('dsh-web-search-pro: request timed out')), opts.timeoutMs) : undefined
@@ -122,14 +124,15 @@ export async function httpGet(
   if (opts.signal?.aborted) onAbort()
   else opts.signal?.addEventListener('abort', onAbort)
   try {
-    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false }
+    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false, ...opts.lookup ? { lookup: opts.lookup } : {} }
+    const doFetch = opts.fetchImpl ?? fetch
     let current = (await assertResolvedPublicUrl(url, resolution)).href
     let method = opts.method ?? 'GET'
     let body = opts.body
     let requestHeaders: Record<string, string> = { ...opts.headers }
     let res: Response | undefined
     for (let redirects = 0; redirects <= 5; redirects++) {
-      res = await fetch(current, {
+      res = await doFetch(current, {
         redirect: 'manual', signal: controller.signal, method,
         ...body !== undefined ? { body } : {},
         headers: {
@@ -159,6 +162,7 @@ export async function httpGet(
       text,
       finalUrl: current,
       ...contentType != null ? { contentType } : {},
+      headers: res.headers,
     }
   } finally {
     clearTimeout(timer)

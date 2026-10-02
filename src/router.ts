@@ -15,6 +15,9 @@ import {
 } from './engines.ts'
 import { defaultProviderRegistry, routeIdOf, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
+import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
+import { SEMANTICSCHOLAR_KEY_ENV } from './providers/semanticscholar.ts'
+import { ANYSEARCH_KEY_ENV } from './providers/anysearch.ts'
 import { resolveBudget, UsageLedger } from './pipeline/ledger.ts'
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
@@ -278,7 +281,16 @@ export class SearchRouter {
     const githubToken = await this.resolveKey(cfg.githubTokenEnv, cfg.githubToken)
     // One Bocha account key serves search and Jev: the search name first, then the documented Jev name.
     const bochaApiKey = await this.resolveKey(cfg.bochaApiKeyEnv ?? BOCHA_KEY_ENV, cfg.bochaApiKey) ?? await this.resolveKey(BOCHA_FALLBACK_KEY_ENV)
+    // Optional free keys of the anonymous APIs: they raise limits, nothing needs them.
+    const openalexApiKey = await this.resolveKey(OPENALEX_KEY_ENV)
+    const semanticScholarApiKey = await this.resolveKey(SEMANTICSCHOLAR_KEY_ENV)
+    const anysearchApiKey = await this.resolveKey(ANYSEARCH_KEY_ENV)
     return {
+      ...openalexApiKey ? { openalexApiKey } : {},
+      ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
+      ...anysearchApiKey ? { anysearchApiKey } : {},
+      ...cfg.searxngUrl ? { searxngUrl: cfg.searxngUrl } : {},
+      ...cfg.openalexMailto ? { openalexMailto: cfg.openalexMailto } : {},
       ...web !== undefined ? { web } : {},
       ...exaApiKey ? { exaApiKey } : {},
       ...jinaApiKey ? { jinaApiKey } : {},
@@ -307,7 +319,15 @@ export class SearchRouter {
     const jinaApiKey = cfg.jinaApiKey || process.env[cfg.jinaApiKeyEnv]
     const githubToken = cfg.githubToken || process.env[cfg.githubTokenEnv] || process.env.GH_TOKEN
     const bochaApiKey = cfg.bochaApiKey || process.env[cfg.bochaApiKeyEnv ?? BOCHA_KEY_ENV] || process.env[BOCHA_FALLBACK_KEY_ENV]
+    const openalexApiKey = process.env[OPENALEX_KEY_ENV]
+    const semanticScholarApiKey = process.env[SEMANTICSCHOLAR_KEY_ENV]
+    const anysearchApiKey = process.env[ANYSEARCH_KEY_ENV]
     return {
+      ...openalexApiKey ? { openalexApiKey } : {},
+      ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
+      ...anysearchApiKey ? { anysearchApiKey } : {},
+      ...cfg.searxngUrl ? { searxngUrl: cfg.searxngUrl } : {},
+      ...cfg.openalexMailto ? { openalexMailto: cfg.openalexMailto } : {},
       ...web !== undefined ? { web } : {},
       ...exaApiKey ? { exaApiKey } : {},
       ...jinaApiKey ? { jinaApiKey } : {},

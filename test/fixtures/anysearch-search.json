@@ -1,0 +1,39 @@
+{
+  "_comment": "LIVE capture, anonymous (no Authorization header), trimmed to the first 3 results.",
+  "status": 200,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "request": "POST https://api.anysearch.com/v1/search {\"query\":\"Go 1.24 release notes\",\"max_results\":5,\"zone\":\"intl\",\"language\":\"en\"}",
+  "contentType": "application/json",
+  "body": {
+    "code": 0,
+    "message": "success",
+    "request_id": "640c78cc-ffd0-40f4-a80f-563a7edce2c2",
+    "data": {
+      "results": [
+        {
+          "title": "Go 1.24 Release Notes",
+          "url": "https://go.dev/doc/go1.24",
+          "snippet": "The latest Go release, version 1.24, arrives in February 2025, Most of its changes are in the implementation of the toolchain, runtime, and libraries. Go 1.24 ...",
+          "content": "The latest Go release, version 1.24, arrives in February 2025, Most of its changes are in the implementation of the toolchain, runtime, and libraries. Go 1.24 ..."
+        },
+        {
+          "title": "Go 1.24.1 is released : r/golang",
+          "url": "https://www.reddit.com/r/golang/comments/1j3jo7i/go_1241_is_released/",
+          "snippet": "UPDATE. The release note for go1.24.1 is now available: https://go.dev/doc/devel/release#go1 ...",
+          "content": "UPDATE. The release note for go1.24.1 is now available: https://go.dev/doc/devel/release#go1 ... date: 1 year ago"
+        },
+        {
+          "title": "Go 1.24 interactive tour",
+          "url": "https://antonz.org/go-1-24/",
+          "snippet": "Go 1.24 introduces many new features, including weak pointers, finalizers, and directory-scoped filesystem access. A lot of effort has gone into ...",
+          "content": "Go 1.24 introduces many new features, including weak pointers, finalizers, and directory-scoped filesystem access. A lot of effort has gone into ... date: Jan 13, 2025"
+        }
+      ],
+      "metadata": {
+        "total_results": 5,
+        "search_time_ms": 1681
+      }
+    }
+  }
+}

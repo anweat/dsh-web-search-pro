@@ -131,6 +131,10 @@ export interface Config {
   bochaBaseUrl?: string
   /** Ask Bocha for its longer per-page summary (default true). */
   bochaSummary?: boolean
+  /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
+  searxngUrl?: string
+  /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
+  openalexMailto?: string
   /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
   githubToken?: string
   /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
@@ -197,6 +201,8 @@ export const Config = z.object({
   bochaApiKeyEnv: z.string().default('BOCHA_SEARCH_API_KEY').volatile(),
   bochaBaseUrl: z.string().default('https://api.bochaai.com').volatile(),
   bochaSummary: z.boolean().default(true).volatile(),
+  searxngUrl: z.string().volatile(),
+  openalexMailto: z.string().volatile(),
   githubToken: z.string().role('secret').volatile(),
   githubTokenEnv: z.string().default('GITHUB_TOKEN').volatile(),
   enableCliBackends: z.boolean().default(true).volatile(),
@@ -282,6 +288,8 @@ export interface ResolvedConfig extends Config {
   bochaApiKeyEnv: string
   bochaBaseUrl: string
   bochaSummary: boolean
+  searxngUrl?: string
+  openalexMailto?: string
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
   evidence: EvidenceConfig
 }
@@ -336,6 +344,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
     bochaApiKeyEnv: vOr(config.bochaApiKeyEnv, 'BOCHA_SEARCH_API_KEY') as string,
     bochaBaseUrl: vOr(config.bochaBaseUrl, 'https://api.bochaai.com') as string,
     bochaSummary: vOr(config.bochaSummary, true) as boolean,
+    searxngUrl: config.searxngUrl !== undefined ? v(config.searxngUrl) : undefined,
+    openalexMailto: config.openalexMailto !== undefined ? v(config.openalexMailto) : undefined,
     githubToken: config.githubToken !== undefined ? v(config.githubToken) : undefined,
     githubTokenEnv: vOr(config.githubTokenEnv, 'GITHUB_TOKEN') as string,
     enableCliBackends: vOr(config.enableCliBackends, true) as boolean,

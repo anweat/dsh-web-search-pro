@@ -1,0 +1,73 @@
+{
+  "_comment": "LIVE capture, trimmed to the first 3 items (bodies cut at 700 characters, owner omitted). The response is gzip-compressed on the wire.",
+  "status": 200,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "request": "GET https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q=python+asyncio+gather+exception+handling&site=stackoverflow&pagesize=5&filter=withbody",
+  "contentType": "application/json",
+  "body": {
+    "items": [
+      {
+        "tags": [
+          "python",
+          "python-3.x"
+        ],
+        "is_answered": true,
+        "view_count": 53796,
+        "accepted_answer_id": 54987732,
+        "answer_count": 2,
+        "score": 53,
+        "last_activity_date": 1684630998,
+        "creation_date": 1551716513,
+        "question_id": 54987361,
+        "content_license": "CC BY-SA 4.0",
+        "link": "https://stackoverflow.com/questions/54987361/python-asyncio-handling-exceptions-in-gather-documentation-unclear",
+        "title": "Python asyncio: handling exceptions in gather() - documentation unclear?",
+        "body": "<p>The <a href=\"https://docs.python.org/3/library/asyncio-task.html#asyncio.gather\" rel=\"noreferrer\">documentation for asyncio.gather</a> says that</p>\n\n<blockquote>\n  <p>If return_exceptions is <code>False</code> (default), the first raised exception is\n  immediately propagated to the task that awaits on <code>gather()</code>. Other\n  awaitables in the aws sequence <strong>won’t be cancelled</strong> and will continue to\n  run.</p>\n</blockquote>\n\n<p>However, from a simple test it seems that if one of the tasks raises an exception when return_exceptions is <code>False</code>, all other awaitable are cancelled (or to be more precise, in case the terminology is not clear to me, the other await"
+      },
+      {
+        "tags": [
+          "python",
+          "tensorflow"
+        ],
+        "is_answered": false,
+        "view_count": 465,
+        "answer_count": 0,
+        "score": 2,
+        "last_activity_date": 1555218694,
+        "creation_date": 1555218694,
+        "question_id": 55672135,
+        "content_license": "CC BY-SA 4.0",
+        "link": "https://stackoverflow.com/questions/55672135/python-tensorarray-has-size-zero-but-element-shape-128-is-not-fully-defin",
+        "title": "Python - TensorArray has size zero, but element shape [?,128] is not fully defined",
+        "body": "<p>Trying to run: <a href=\"https://github.com/huseinzol05/Stock-Prediction-Models/blob/master/deep-learning/17.lstm-seq2seq-bidirectional-attention.ipynb\" rel=\"nofollow noreferrer\">https://github.com/huseinzol05/Stock-Prediction-Models/blob/master/deep-learning/17.lstm-seq2seq-bidirectional-attention.ipynb</a></p>\n\n<p>With the data: <a href=\"https://gist.github.com/TensorTom/d37f4bd605d6a13dfc75015c5e150b82\" rel=\"nofollow noreferrer\">https://gist.github.com/TensorTom/d37f4bd605d6a13dfc75015c5e150b82</a></p>\n\n<p>But this happens during training epochs (Or just at or after the last epoch):</p>\n\n<pre><code>---------------------------------------------------------------------------\nUnimplemented"
+      },
+      {
+        "tags": [
+          "python",
+          "tensorflow",
+          "machine-learning",
+          "keras",
+          "deep-learning"
+        ],
+        "is_answered": true,
+        "view_count": 982,
+        "accepted_answer_id": 62188739,
+        "answer_count": 1,
+        "score": 4,
+        "last_activity_date": 1645053516,
+        "creation_date": 1591253506,
+        "last_edit_date": 1645053516,
+        "question_id": 62188532,
+        "content_license": "CC BY-SA 4.0",
+        "link": "https://stackoverflow.com/questions/62188532/invalidargumenterror-indices24-0-335-is-not-in-0-304-node-user-embed",
+        "title": "InvalidArgumentError: indices[24,0] = 335 is not in [0, 304) [[{{node user-embedding-mlp_1/GatherV2}}]]",
+        "body": "<p>I am using tensorflow 1.15 and keras 2.1.2 with python 3.7\nThis is a multilayer perceptron code for collaborative filtering. Model was already built and there was no error in model summary. But when getting epochs and accuracy below error are getting. I have included my model code and the accuracy code with here.  </p>\n\n<pre><code>latent_dim = 10\n\n*# Define inputs*\narticle_input = Input(shape=[1],name='article-input')\nuser_input = Input(shape=[1], name='user-input')\n\n*# MLP Embeddings*\narticle_embedding_mlp = Embedding(num_article + 1, latent_dim, name='article-embedding-mlp')(article_input)\narticle_vec_mlp = Flatten(name='flatten-article-mlp')(article_embedding_mlp)\n\nuser_embedding_mlp ="
+      }
+    ],
+    "has_more": false,
+    "quota_max": 300,
+    "quota_remaining": 299
+  },
+  "contentEncoding": "gzip"
+}

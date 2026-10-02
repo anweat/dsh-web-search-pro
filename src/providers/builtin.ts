@@ -11,6 +11,13 @@ import {
 } from '../engines.ts'
 import type { ResolvedConfig } from '../config.ts'
 import { bochaAdapter } from './bocha.ts'
+import { wikipediaAdapter } from './wikipedia.ts'
+import { hackerNewsAdapter } from './hackernews.ts'
+import { stackExchangeAdapter } from './stackexchange.ts'
+import { openAlexAdapter } from './openalex.ts'
+import { semanticScholarAdapter } from './semanticscholar.ts'
+import { anySearchAdapter } from './anysearch.ts'
+import { searxngAdapter } from './searxng.ts'
 import { ProviderRegistry, type CostDescriptor, type ProbeEnv, type ProviderAdapter, type ProviderDescriptor, type Readiness, type Requirement } from './registry.ts'
 
 const WEB_PROFILES = ['general', 'news_fact', 'experience', 'compare', 'docs_code'] as const
@@ -117,6 +124,14 @@ export function builtinAdapters(): ProviderAdapter[] {
       (deps) => pubmedEngine(deps.allowProxyFakeIp), noRequirements),
 
     bochaAdapter,
+    // Anonymous API sources (dev-plan M7b): vertical / supplementary, never promoted ahead of web search.
+    wikipediaAdapter,
+    hackerNewsAdapter,
+    stackExchangeAdapter,
+    openAlexAdapter,
+    semanticScholarAdapter,
+    anySearchAdapter,
+    searxngAdapter,
   ]
 }
 

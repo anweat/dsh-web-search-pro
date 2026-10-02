@@ -23,6 +23,7 @@
  */
 
 import { domainOf } from './gate.ts'
+import { detectLang } from './align.ts'
 import { LATIN_STOP } from './lexical.ts'
 import type { Constraint, Need, TaskSpec } from './types.ts'
 
@@ -43,8 +44,8 @@ export interface CompiledQuery {
   providerId: string
   /** Text to send to the provider. */
   query: string
-  /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some). */
-  options?: { exa?: CompiledExaOptions; bocha?: CompiledBochaOptions }
+  /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some; the anonymous APIs take `since` / `lang`). */
+  options?: { exa?: CompiledExaOptions; bocha?: CompiledBochaOptions; since?: string; lang?: 'zh' | 'en' }
   /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
   fallbacks?: string[]
   /** Ids of constraints the provider enforces natively. */
@@ -134,6 +135,26 @@ export function compileBocha(task: TaskLike, providerId: string, now: Date): Com
   return { ...finish(task, providerId, task.query, native), ...Object.keys(bocha).length ? { options: { bocha } } : {} }
 }
 
+/**
+ * Generic compilation for the API sources that take a publication-date lower bound and / or a language edition
+ * (Hacker News, Stack Exchange, OpenAlex, Semantic Scholar: `since`; Wikipedia, AnySearch: `lang`). A HARD
+ * time_window whose lower bound is understood becomes `options.since` (an exact translation, so native); the
+ * strictest of several bounds wins. Everything else stays local.
+ */
+export function compileSince(task: TaskLike, providerId: string, now: Date, opts: { since?: boolean; lang?: boolean; /** The source filters by whole years: only a bound at a year start is an exact translation. */ yearOnly?: boolean }): CompiledQuery {
+  const options: NonNullable<CompiledQuery['options']> = {}
+  const native: string[] = []
+  if (opts.since) {
+    const windows = hard(task, 'time_window').map(c => ({ c, start: parseTimeWindow(c.value, now) })).filter((x): x is { c: Constraint; start: string } => x.start !== undefined && x.start < now.toISOString() && (!opts.yearOnly || x.start.slice(5, 10) === '01-01'))
+    if (windows.length) { options.since = windows.map(x => x.start).sort().at(-1)!; native.push(...windows.map(x => x.c.id)) }
+  }
+  if (opts.lang) {
+    const lang = detectLang(task.goal + ' ' + task.query)
+    if (lang !== 'none') options.lang = lang === 'zh' ? 'zh' : 'en'
+  }
+  return { ...finish(task, providerId, task.query, native), ...Object.keys(options).length ? { options } : {} }
+}
+
 // ── GitHub keyword queries ──────────────────────────────────────────────────
 
 /** Chinese words that carry no topical signal in a repository search. */
@@ -184,6 +205,21 @@ export function githubKeywordQuery(task: TaskLike): string {
 
 /** Repository search ANDs every keyword, so one rare token empties the result: retry with the leading 3 and 2 terms. */
 export const GITHUB_FALLBACK_TERM_COUNTS: readonly number[] = [3, 2]
+
+/**
+ * Sources whose search ANDs every word (Hacker News, Stack Exchange, Wikipedia, and the like) return nothing for a
+ * keyword-stuffed query (live check, 2026-10-02: 6 of 6 task queries empty). They get the short keyword query of
+ * {@link githubKeywordTerms} (at most `terms` of them) plus broader retries with fewer terms; with fewer than two
+ * keywords the query is sent as it is. `since` / `lang` are compiled as in {@link compileSince}.
+ */
+export function compileKeywords(task: TaskLike, providerId: string, now: Date, opts: { terms: number; since?: boolean; lang?: boolean; yearOnly?: boolean }): CompiledQuery {
+  const base = compileSince(task, providerId, now, opts)
+  const terms = githubKeywordTerms(task)
+  if (terms.length < 2) return base
+  const used = Math.min(opts.terms, terms.length)
+  const fallbacks = GITHUB_FALLBACK_TERM_COUNTS.filter(n => n < used).map(n => terms.slice(0, n).join(' '))
+  return { ...base, query: terms.slice(0, used).join(' '), ...fallbacks.length ? { fallbacks } : {} }
+}
 
 function compileGithub(task: TaskLike, providerId: string): CompiledQuery {
   const terms = githubKeywordTerms(task)
