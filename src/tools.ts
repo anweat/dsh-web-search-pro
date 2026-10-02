@@ -122,24 +122,24 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_search_pro',
-    description: 'Enhanced persistent web search: multi-engine routing (DeepSeek/Exa/DuckDuckGo/Bing/Jina), automatic engine fallback, TTL-cached results stored in SQLite, and a query history. Use for current information, then web_fetch_pro for full page content.',
+    description: 'Web search over DeepSeek/Exa/DuckDuckGo/Bing/Jina with engine fallback, SQLite cache and history; web_fetch_pro reads a result. Evidence mode: pass task (one-sentence goal) or profile (docs_code, news_fact, academic, experience, compare, general) to get an evidence pack of only the passages that answer your needs, plus gaps, instead of a result list; also needs, constraints, budget.',
     parameters: {
       query: { type: 'string', required: true, description: 'The search query.' },
-      engines: { type: 'string', description: 'Comma-separated engine ids to try, in order. Options: ' + SEARCH_ENGINE_IDS.join(', ') + '. Defaults to the configured engine list.' },
-      count: { type: 'number', description: 'Max results (1-20). Defaults to ' + String(config.searchMaxResults) + '.' },
-      fresh: { type: 'boolean', description: 'Bypass the TTL cache and force a live search.' },
-      multi: { type: 'boolean', description: 'Query all requested engines in parallel and merge results (slower, broader).' },
-      exaType: { type: 'string', description: 'Exa mode: instant, fast, auto, deep-lite, deep, or deep-reasoning.' },
-      includeDomains: { type: 'string', description: 'Exa only: comma-separated domain allowlist.' },
-      excludeDomains: { type: 'string', description: 'Exa only: comma-separated domain denylist.' },
-      startPublishedDate: { type: 'string', description: 'Exa only: inclusive ISO published-date lower bound.' },
-      endPublishedDate: { type: 'string', description: 'Exa only: inclusive ISO published-date upper bound.' },
+      engines: { type: 'string', description: 'Comma-separated engine ids, tried in order: ' + SEARCH_ENGINE_IDS.join(', ') + '. Default: configured list.' },
+      count: { type: 'number', description: 'Max results (1-20), default ' + String(config.searchMaxResults) + '.' },
+      fresh: { type: 'boolean', description: 'Bypass the cache.' },
+      multi: { type: 'boolean', description: 'Query all engines in parallel and merge.' },
+      exaType: { type: 'string', description: 'Exa mode: instant, fast, auto, deep-lite, deep, deep-reasoning.' },
+      includeDomains: { type: 'string', description: 'Exa only: domain allowlist (comma-separated).' },
+      excludeDomains: { type: 'string', description: 'Exa only: domain denylist (comma-separated).' },
+      startPublishedDate: { type: 'string', description: 'Exa only: ISO published-date lower bound.' },
+      endPublishedDate: { type: 'string', description: 'Exa only: ISO published-date upper bound.' },
       category: { type: 'string', description: 'Exa only: search category.' },
-      task: { type: 'string', description: 'Evidence mode: your goal in one short sentence (not the chat). Giving task or profile switches from a plain result list to an evidence pack: pages are read and only the passages that answer the needs come back, with gaps listed.' },
-      profile: { type: 'string', description: 'Evidence mode: docs_code, news_fact, academic, experience, compare, or general. Selects the sources; inferred by rule when omitted.' },
-      needs: { type: 'string', description: 'Evidence mode: the sub-questions to answer, separated by ";" (or a JSON array). Defaults to the task.' },
-      constraints: { type: 'string', description: 'Evidence mode: JSON array of {"kind","value","strength"}; kind is one of must_term, exclude_term, entity, version, time_window, site, exclude_site, language, region, source_type; strength hard (drop violators) or soft (default).' },
-      budget: { type: 'number', description: 'Evidence mode: total characters of excerpts (default 6000). fresh, multi and the Exa options are ignored in this mode.' },
+      task: { type: 'string', description: 'Evidence mode: your goal in one short sentence (not the chat); switches to an evidence pack.' },
+      profile: { type: 'string', description: 'Evidence mode: docs_code, news_fact, academic, experience, compare or general; selects sources (inferred if omitted).' },
+      needs: { type: 'string', description: 'Evidence mode: sub-questions separated by ";" (or a JSON array); default the task.' },
+      constraints: { type: 'string', description: 'Evidence mode: JSON array of {"kind","value","strength"}; kind: must_term, exclude_term, entity, version, time_window, site, exclude_site, language, region, source_type; strength: hard (drop violators) or soft (default).' },
+      budget: { type: 'number', description: 'Evidence mode: excerpt characters (default 6000, max 30000). fresh, multi and Exa options are ignored there.' },
     },
     output: {
       schema: {
@@ -232,9 +232,9 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_exa_contents',
-    description: 'Fetch full text for up to 100 URLs through the native Exa /contents API in one batch. Requires the configured Exa API key. Text is capped per URL (' + String(config.exaContentsPerUrlChars) + ' chars) and in total (' + String(config.exaContentsTotalChars) + '); use web_fetch_pro with offset for the rest of a page.',
+    description: 'Full text of up to 100 URLs via Exa /contents (needs the Exa key). Capped at ' + String(config.exaContentsPerUrlChars) + ' chars per URL and ' + String(config.exaContentsTotalChars) + ' in total; web_fetch_pro offset reads the rest.',
     parameters: {
-      urls: { type: 'array', required: true, items: { type: 'string' }, description: 'HTTP(S) URLs to fetch, maximum 100.' },
+      urls: { type: 'array', required: true, items: { type: 'string' }, description: 'HTTP(S) URLs, at most 100.' },
     },
     output: {
       schema: {
@@ -281,14 +281,14 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_fetch_pro',
-    description: 'Enhanced persistent page fetch: Jina Reader → direct HTTP with per-site extraction rules (userscript-style, e.g. zhihu/bilibili/github) → Playwright rendering fallback. Snapshots are stored in SQLite and reused within the TTL. Output is capped (default ' + String(config.fetchDefaultChars) + ' chars); read on with offset.',
+    description: 'Fetch a page as readable text: Jina → HTTP with per-site rules → Playwright when the result is a shell or login wall and dsh-browser is ready. Snapshots are cached in SQLite. Output is capped at ' + String(config.fetchDefaultChars) + ' chars; read on with offset.',
     parameters: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to fetch.' },
-      mode: { type: 'string', description: 'Backend: auto (default), jina, http, or playwright. playwright needs the optional dsh-browser plugin; auto skips it when absent.' },
-      maxChars: { type: 'number', description: 'Output cap in characters (1000-500000). Defaults to ' + String(config.fetchDefaultChars) + '.' },
-      offset: { type: 'number', description: 'Continue reading from this character offset (use nextOffset of a truncated result). Served from the stored snapshot.' },
+      mode: { type: 'string', description: 'auto (default), jina, http or playwright (needs dsh-browser; auto skips it when absent).' },
+      maxChars: { type: 'number', description: 'Output cap in chars (1000-500000), default ' + String(config.fetchDefaultChars) + '.' },
+      offset: { type: 'number', description: 'Continue from this character offset (a truncated result gives nextOffset); served from the stored snapshot.' },
       fresh: { type: 'boolean', description: 'Bypass the cached snapshot.' },
-      persist: { type: 'boolean', description: 'Save the snapshot to the persistent store (default true).' },
+      persist: { type: 'boolean', description: 'Store the snapshot (default true).' },
     },
     output: {
       schema: {
@@ -361,14 +361,14 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_platform_search',
-    description: 'Search a built-in or configured custom platform. Built-ins: ' + PLATFORM_IDS.join(', ') + '. Chinese communities (zhihu/weibo/douban/tieba/douyin/kuaishou) drive the logged-in browser search page via Playwright — they need the user to log in once (run scripts/save-login.mjs, or set the dsh-browser storageStatePath), and selectors are tunable via settings.yaml platformRules. Those and the OpenCLI-backed platforms need the optional dsh-browser plugin (an unavailable-platform error says so). Results are persisted to the search history.',
+    description: 'Search one platform (built-in or configured custom); web_backend_status shows what works. Chinese communities need a one-time login (scripts/save-login.mjs or dsh-browser storageStatePath) and, like OpenCLI platforms, the optional dsh-browser plugin. Results go to history.',
     parameters: {
-      platform: { type: 'string', required: true, description: 'Built-in platform (' + PLATFORM_IDS.join(', ') + ') or a configured customPlatforms key.' },
-      query: { type: 'string', description: 'Search query; for rss this is an optional keyword filter. A feed URL here is still accepted for backward compatibility.' },
-      url: { type: 'string', description: 'Feed URL when platform is rss (preferred over putting the URL in query).' },
+      platform: { type: 'string', required: true, description: PLATFORM_IDS.join(', ') + ', or a customPlatforms key.' },
+      query: { type: 'string', description: 'Search query; for rss an optional keyword filter (a feed URL here still works).' },
+      url: { type: 'string', description: 'rss only: the feed URL.' },
       count: { type: 'number', description: 'Max results (1-20).' },
-      authProfile: { type: 'string', description: 'Named, domain-scoped dsh-browser auth profile.' },
-      rulePack: { type: 'string', description: 'Named, domain-scoped dsh-browser enhancement rule pack.' },
+      authProfile: { type: 'string', description: 'Domain-scoped dsh-browser auth profile.' },
+      rulePack: { type: 'string', description: 'Domain-scoped dsh-browser rule pack.' },
     },
     output: {
       schema: {
@@ -400,10 +400,10 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_snapshot',
-    description: 'Render a page in a headless browser (Playwright, optional persisted login state), extract readable text with per-site rules, and save HTML plus an optional full-page screenshot. Returns file paths. Use for JS-heavy pages or when you need a visual capture. Requires the optional dsh-browser plugin; fails with an install/enable hint when it is missing.',
+    description: 'Render a page in headless Playwright (optional saved login): text via per-site rules plus saved HTML and optional PNG; returns file paths. For JS-heavy pages or visual capture. Needs the optional dsh-browser plugin. Text capped like web_fetch_pro.',
     parameters: {
-      url: { type: 'string', required: true, description: 'The HTTP(S) URL to snapshot.' },
-      screenshot: { type: 'boolean', description: 'Save a full-page PNG screenshot (default true).' },
+      url: { type: 'string', required: true, description: 'The HTTP(S) URL.' },
+      screenshot: { type: 'boolean', description: 'Save a full-page PNG (default true).' },
     },
     output: {
       schema: {
@@ -463,17 +463,17 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_history',
-    description: 'Query the persistent search/fetch/snapshot history stored in SQLite (queries, engines, timestamps).',
+    description: 'Search/fetch/snapshot history from SQLite; replay a saved result; action=expand reads an evidence excerpt in context.',
     parameters: {
-      kind: { type: 'string', description: 'Filter: search, fetch, platform, snapshot, or all.' },
-      query: { type: 'string', description: 'Substring filter on the query or URL.' },
-      engine: { type: 'string', description: 'Filter by engine id (e.g. ddg, github, multi(...)).' },
-      platform: { type: 'string', description: 'Filter by platform (e.g. github, zhihu, arxiv).' },
+      kind: { type: 'string', description: 'search, fetch, platform, snapshot or all.' },
+      query: { type: 'string', description: 'Substring of the query or URL.' },
+      engine: { type: 'string', description: 'Engine id (ddg, github, multi(...)).' },
+      platform: { type: 'string', description: 'Platform (github, zhihu, arxiv).' },
       limit: { type: 'number', description: 'Max rows (1-200, default 20).' },
-      replay: { type: 'string', description: 'A query id from web_history records; returns saved sources or the exact persisted fetch/snapshot page.' },
-      export: { type: 'boolean', description: 'Write the filtered history with sources/pages to a JSON file and return its path.' },
-      action: { type: 'string', description: 'expand: return the full stored text of an evidence excerpt plus its neighbouring blocks (needs evidenceId). Omit for the normal history listing.' },
-      evidenceId: { type: 'string', description: 'Evidence id from a web_search_pro evidence pack (action=expand).' },
+      replay: { type: 'string', description: 'Query id from the records: returns the saved sources or page (text capped like web_fetch_pro).' },
+      export: { type: 'boolean', description: 'Write the filtered history to a JSON file and return its path.' },
+      action: { type: 'string', description: 'expand: the stored text of an evidence excerpt plus neighbouring blocks (needs evidenceId); omit to list history.' },
+      evidenceId: { type: 'string', description: 'Evidence id from an evidence pack (action=expand).' },
     },
     output: {
       schema: {
@@ -582,11 +582,11 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_cache_clear',
-    description: 'Purge persisted search results / page snapshots from the SQLite store (by age and/or engine), or delete one query by id. Returns removed counts.',
+    description: 'Purge cached search results and page snapshots (by age and/or engine) or delete one query by id; returns removed counts.',
     parameters: {
-      olderThanDays: { type: 'number', description: 'Only purge records older than N days; omit to purge everything.' },
-      engine: { type: 'string', description: 'Only purge records from this engine.' },
-      queryId: { type: 'string', description: 'Delete one query (and its saved results) by id from web_history.' },
+      olderThanDays: { type: 'number', description: 'Only records older than N days; omit for everything.' },
+      engine: { type: 'string', description: 'Only this engine.' },
+      queryId: { type: 'string', description: 'Delete one query and its results (id from web_history).' },
     },
     output: {
       schema: {
@@ -617,13 +617,13 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_rule',
-    description: 'Manage persistent per-site extraction rules (userscript-style): contentSelectors and removeSelectors applied when fetching/snapshotting pages from that hostname. Rules survive restarts in SQLite and override built-ins. Supports list/upsert/remove plus export/import as a JSON rule pack.',
+    description: 'Per-site extraction rules (contentSelectors/removeSelectors by hostname) used by web_fetch_pro and web_snapshot; stored in SQLite, override built-ins. list, upsert, remove, export/import as a JSON pack.',
     parameters: {
-      action: { type: 'string', required: true, description: 'list, upsert, remove, export, or import.' },
-      hostname: { type: 'string', description: 'Site hostname, e.g. example.com (required for upsert/remove).' },
-      contentSelectors: { type: 'string', description: 'Comma-separated CSS selectors for the main content (upsert).' },
-      removeSelectors: { type: 'string', description: 'Comma-separated CSS selectors to remove before extraction (upsert).' },
-      rulesJson: { type: 'string', description: 'JSON array of rules, or a versioned pack previously produced by export (action=import).' },
+      action: { type: 'string', required: true, description: 'list, upsert, remove, export or import.' },
+      hostname: { type: 'string', description: 'Hostname, e.g. example.com (upsert/remove).' },
+      contentSelectors: { type: 'string', description: 'CSS selectors of the main content, comma-separated (upsert).' },
+      removeSelectors: { type: 'string', description: 'CSS selectors to remove first, comma-separated (upsert).' },
+      rulesJson: { type: 'string', description: 'JSON array of rules or an exported pack (import).' },
     },
     output: {
       schema: {
@@ -694,7 +694,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_search_stats',
-    description: 'Report the persistent store state: database size, per-table counts, per-kind counts, top engines and queries, plus configured engines.',
+    description: 'Store state: database size, table and kind counts, top engines and queries, configured engines.',
     parameters: {},
     output: {
       schema: {
@@ -744,7 +744,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_backend_status',
-    description: 'Side-effect-free backend diagnostics: configured native search engines, availability probes, cooldown state, local CLI dependency health, and whether the optional dsh-browser service is present. Does not make search requests or expose credentials.',
+    description: 'Side-effect-free diagnostics: engine availability and cooldowns, CLI dependency health (twitter also needs its credentials), dsh-browser state, evidence settings. Makes no search requests, shows no credentials.',
     parameters: {},
     output: {
       schema: {
@@ -790,11 +790,11 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_deps',
-    description: 'Detect or install the external tools this plugin shells out to (bili, yt-dlp, agent-reach, mcporter). Playwright/chromium and opencli are bundled in the dsh-browser plugin, not listed here. GitHub uses the native REST API and needs no CLI. check reports which tools are present and how to install them; install runs the package-manager command for one backend. Prefer check first; install only when the user asks.',
+    description: 'Check or install the external CLIs this plugin runs (bili, yt-dlp, twitter, mcporter; agent-reach is an optional helper): check lists what is present with install commands; install runs one command, only when the user asks. Playwright/OpenCLI belong to dsh-browser.',
     parameters: {
       action: { type: 'string', description: 'check (default) or install.' },
-      backend: { type: 'string', description: 'Dependency id to install (bili, yt-dlp, agent-reach, mcporter).' },
-      installer: { type: 'string', description: 'Package manager: winget, choco, uv, pipx, pip, or npm.' },
+      backend: { type: 'string', description: 'Dependency id (bili, yt-dlp, twitter, agent-reach, mcporter).' },
+      installer: { type: 'string', description: 'winget, choco, uv, pipx, pip or npm.' },
     },
     output: {
       schema: {
