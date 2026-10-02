@@ -246,8 +246,8 @@ test('system prompt omits browser_* guidance without a browser and includes it w
     assert.equal(withBrowser, buildPromptText(true))
     h.holder.browser = undefined
     assert.equal(section.text(), without)
-    assert.ok(without.length <= 600, 'base section stays short: ' + without.length)
-    assert.ok(withBrowser.length <= 1100, 'browser section stays short: ' + withBrowser.length)
+    assert.ok(without.length <= 650, 'base section stays short: ' + without.length)
+    assert.ok(withBrowser.length <= 1200, 'browser section stays short: ' + withBrowser.length)
     // The rules survive the condensing.
     assert.match(without, /Cite URLs/)
     assert.match(without, /web_deps action=check/)

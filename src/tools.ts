@@ -19,9 +19,12 @@ import { mergedRules } from './fetch.ts'
 import { PLATFORM_IDS, isPlatformSupported } from './engines.ts'
 import { defaultProviderRegistry } from './providers/index.ts'
 import { detectDeps, installDep } from './deps.ts'
+import { loadCatalog } from './catalog/load.ts'
+import { recommendSources, renderRecommendation, type Recommendation } from './catalog/recommend.ts'
 import { expandEvidence, replayHistory, type ExpandedEvidence } from './history.ts'
 import { EvidenceService, type EvidenceOutput } from './pipeline/service.ts'
 import { renderEvidencePack } from './pipeline/render.ts'
+import { PROFILES, type Profile } from './pipeline/types.ts'
 import { capText } from './util.ts'
 
 export interface ToolDeps {
@@ -101,6 +104,20 @@ const PROVIDER_REPORT_SCHEMA = {
       available: { type: 'boolean', required: true }, installation: { type: 'string' }, credential: { type: 'string' }, health: { type: 'string' }, reason: { type: 'string' }, diagnosticCode: { type: 'string' },
       lastLocalCheck: { type: 'string' }, lastRemoteSuccess: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' },
     } },
+  },
+} as const
+
+/** `web_backend_status action=recommend`: at most three sources for the task, ready ones first. */
+const RECOMMEND_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    profile: { type: 'string', required: true }, profileInferred: { type: 'boolean' }, language: { type: 'string' },
+    picks: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
+      id: { type: 'string', required: true }, label: { type: 'string', required: true }, kind: { type: 'string' }, status: { type: 'string', required: true }, executable: { type: 'boolean', required: true },
+      use: { type: 'string', required: true }, why: { type: 'string' }, missing: { type: 'array', items: { type: 'string' } }, setup: { type: 'string' }, notFor: { type: 'string' }, verified: { type: 'boolean' }, sourceFamily: { type: 'string' },
+    } } },
+    instruction: { type: 'string', required: true },
+    notes: { type: 'array', items: { type: 'string' } },
   },
 } as const
 
@@ -763,13 +780,21 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_backend_status',
-    description: 'Side-effect-free diagnostics: engine availability and cooldowns, CLI dependency health (twitter also needs its credentials), dsh-browser state, evidence settings. Makes no search requests, shows no credentials.',
-    parameters: {},
+    description: 'Side-effect-free diagnostics: engine availability and cooldowns, CLI dependency health (twitter also needs its credentials), dsh-browser state, evidence settings. action=recommend (with task/profile/query) returns at most 3 suggested sources for a task. Makes no search requests, shows no credentials.',
+    parameters: {
+      action: { type: 'string', description: 'status (default) or recommend: up to 3 sources for the task; ready ones first, others with what is missing.' },
+      task: { type: 'string', description: 'recommend: your goal in one sentence.' },
+      profile: { type: 'string', description: 'recommend: docs_code, news_fact, academic, experience, compare or general (inferred if omitted).' },
+      query: { type: 'string', description: 'recommend: the search query, if any.' },
+      language: { type: 'string', description: 'recommend: zh or en (detected from task/query if omitted).' },
+      platform: { type: 'string', description: 'recommend: a platform or source id you lean towards.' },
+    },
     output: {
       schema: {
         type: 'object', additionalProperties: false,
         properties: {
           engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
+          recommend: RECOMMEND_SCHEMA,
           providers: { type: 'array', items: PROVIDER_REPORT_SCHEMA },
           cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' } } } },
           browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
@@ -790,6 +815,8 @@ export function registerTools(deps: ToolDeps): void {
         },
       },
       render: (_args, value) => {
+        const rec = (value as { recommend?: Recommendation }).recommend
+        if (rec) return [{ type: 'text', text: renderRecommendation(rec) }]
         const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
         const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
         for (const p of v.providers ?? []) {
@@ -817,9 +844,30 @@ export function registerTools(deps: ToolDeps): void {
     },
     timeoutMs: 20_000,
     isConcurrencySafe: () => true,
-    async execute() {
+    async execute(args) {
+      const action = args?.action ?? 'status'
+      if (action !== 'status' && action !== 'recommend') throw new Error('action must be status or recommend')
       const cli = await detectDeps()
       const availability = new Map(cli.map(value => [value.id, value.available]))
+      if (action === 'recommend') {
+        const catalog = loadCatalog()
+        const profile = args.profile?.trim()
+        if (profile && !(PROFILES as readonly string[]).includes(profile)) throw new Error('profile must be one of ' + PROFILES.join(', '))
+        const language = args.language?.trim().toLowerCase()
+        if (language && language !== 'zh' && language !== 'en') throw new Error('language must be zh or en')
+        const cfg = dynamic() as unknown as Record<string, unknown>
+        const providerIds = [...new Set(catalog.entries.flatMap(e => (e.provider ? [e.provider] : [])))]
+        const providers = typeof (router as { providerStatuses?: unknown }).providerStatuses === 'function' ? await router.providerStatuses(providerIds) : new Map()
+        const envNames = [...new Set(catalog.entries.flatMap(e => e.keyEnv ?? []))]
+        const present = new Set<string>()
+        if (typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function') await Promise.all(envNames.map(async n => { if (await router.resolveSecret(n)) present.add(n) }))
+        else for (const n of envNames) if (process.env[n]) present.add(n)
+        const recommend = recommendSources({
+          ...args.task?.trim() ? { task: args.task.trim() } : {}, ...args.query?.trim() ? { query: args.query.trim() } : {},
+          ...profile ? { profile: profile as Profile } : {}, ...language ? { language: language as 'zh' | 'en' } : {}, ...args.platform?.trim() ? { platform: args.platform.trim() } : {},
+        }, { catalog, providers, cli: availability, browser: browserState(getBrowser()).state === 'ready', hasEnv: n => present.has(n), hasConfig: n => typeof cfg[n] === 'string' ? (cfg[n] as string).trim().length > 0 : !!cfg[n] })
+        return { engines: [], cli: [], recommend }
+      }
       const ev = dynamic().evidence
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
       const judge = await judgeStatus(ev, store, { hasSecret: typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function' ? async ref => !!(await router.resolveSecret(ref)) : undefined })

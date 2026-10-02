@@ -21,9 +21,9 @@ function definitions(): Map<string, any> {
   return defs
 }
 
-test('always-on text stays condensed: prompt base <= 600, web_search_pro description <= 450, every description short', () => {
-  assert.ok(buildPromptText(false).length <= 600, 'base ' + buildPromptText(false).length)
-  assert.ok(buildPromptText(true).length <= 1100, 'with browser ' + buildPromptText(true).length)
+test('always-on text stays condensed: prompt base <= 650, web_search_pro description <= 450, every description short', () => {
+  assert.ok(buildPromptText(false).length <= 650, 'base ' + buildPromptText(false).length)
+  assert.ok(buildPromptText(true).length <= 1200, 'with browser ' + buildPromptText(true).length)
   const defs = definitions()
   assert.equal(defs.size, 11)
   assert.ok(defs.get('web_search_pro').description.length <= 450, 'web_search_pro ' + defs.get('web_search_pro').description.length)
@@ -47,6 +47,9 @@ test('condensed descriptions keep the rules the model needs', () => {
   assert.match(d('web_deps'), /only when the user asks/)
   assert.match(d('web_deps'), /twitter/)
   assert.match(d('web_backend_status'), /Makes no search requests/)
+  assert.match(d('web_backend_status'), /action=recommend/)
+  assert.match(buildPromptText(false), /never query every source/)
+  assert.match(buildPromptText(false), /action=recommend/)
   // Parameters that carry rules keep them.
   const params = (name: string, key: string): string => defs.get(name).parameters[key].description
   assert.match(params('web_search_pro', 'constraints'), /hard \(drop violators\) or soft/)

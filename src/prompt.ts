@@ -5,7 +5,7 @@
  * @module web-search-pro/prompt
  */
 
-const BASE = 'Web research: prefer web_search_pro (give task/needs for an evidence pack), web_fetch_pro (long pages: read on with offset) and web_platform_search (see web_backend_status for platforms). Cite URLs as markdown links. Run web_deps action=check before relying on CLI backends.'
+const BASE = 'Web research: prefer web_search_pro (give task/needs for an evidence pack), web_fetch_pro (long pages: read on with offset) and web_platform_search (see web_backend_status for platforms). Cite URLs as markdown links. Run web_deps action=check before relying on CLI backends. Prefer evidence mode; set engines/platform only when needed (web_backend_status action=recommend suggests up to 3 sources); never query every source.'
 
 const NO_BROWSER = ' web_snapshot, Chinese-community (知乎/微博/豆瓣…) and OpenCLI (小红书/Twitter/Reddit…) platforms need the optional dsh-browser plugin, not available now; suggest it only when the user needs those.'
 

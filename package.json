@@ -20,6 +20,7 @@
   },
   "files": [
     "lib",
+    "catalog",
     "cordis.patch.yml",
     "README.md",
     "LOGIN.md",
