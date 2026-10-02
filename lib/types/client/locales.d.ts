@@ -67,7 +67,7 @@ export declare const zh: {
     readonly dbPath: "SQLite 路径";
     readonly dbPathHint: "留空恢复插件默认路径。";
     readonly allowProxyFakeIp: "允许代理 fake-IP DNS";
-    readonly allowProxyFakeIpHint: "仅信任 Clash/TUN 的 198.18/15 与 fdfe:dcba:9876::/96；其他私网和字面 IP 仍拒绝。";
+    readonly allowProxyFakeIpHint: "仅信任 Clash/TUN 的 198.18/15、fdfe:dcba:9876::/64 与 2001:2::/48；其他私网和字面 IP 仍拒绝。";
     readonly platformRules: "平台选择器覆盖（JSON）";
     readonly platformRulesHint: "按平台设置 item/title/link/text 选择器。";
     readonly customPlatforms: "自定义平台（JSON）";

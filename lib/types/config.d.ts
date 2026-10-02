@@ -88,7 +88,7 @@ export interface Config {
     exaContentsTotalChars: number;
     /** Cooperative per-call timeout budget in ms. */
     timeoutMs: number;
-    /** Trust Clash/TUN fake-IP DNS ranges while retaining all other SSRF checks. */
+    /** Trust Clash/TUN fake-IP DNS answers (198.18/15, fdfe:dcba:9876::/64, 2001:2::/48) while retaining all other SSRF checks. */
     allowProxyFakeIp: boolean;
     /** Ordered engine list for web_search_pro. */
     engines: string[];
