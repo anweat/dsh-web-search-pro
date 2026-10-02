@@ -56,6 +56,9 @@ export function SettingsCard(props: SettingsCardProps) {
               {text('engines', 'engines', 'enginesHint')}
               {text('searchMaxResults', 'searchMaxResults', 'searchMaxResultsHint', 'number')}
               {text('timeoutMs', 'timeoutMs', 'timeoutMsHint', 'number')}
+              {text('fetchDefaultChars', 'fetchDefaultChars', 'fetchDefaultCharsHint', 'number')}
+              {text('exaContentsPerUrlChars', 'exaContentsPerUrlChars', 'exaContentsPerUrlCharsHint', 'number')}
+              {text('exaContentsTotalChars', 'exaContentsTotalChars', 'exaContentsTotalCharsHint', 'number')}
               {toggle('parallelEngines', 'parallelEngines', 'parallelEnginesHint')}
             </div>
           </section>

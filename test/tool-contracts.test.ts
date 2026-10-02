@@ -211,18 +211,31 @@ test('web_rule export writes an importable versioned JSON rule pack', async () =
   }
 })
 
-test('web_fetch_pro does not leak the provider-only truncated flag into its closed output schema', async () => {
+test('web_fetch_pro reports truncation through its documented optional fields and hints at offset', async () => {
   const h = toolHarness()
   try {
+    const seen: any[] = []
     registerTools({
       ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
       config: h.config, dynamic: () => h.config, store: h.store,
       router: {} as any, browser: {} as any,
-      fetch: { fetchPage: async () => ({ url: 'https://example.com', text: 'body', source: 'http', fromCache: false, truncated: true }) } as any,
+      fetch: { fetchPage: async (_url: string, opts: unknown) => { seen.push(opts); return { url: 'https://example.com', text: 'body', source: 'http', fromCache: false, truncated: true, nextOffset: 4, totalChars: 9, attempts: [{ source: 'http', class: 'content' }] } } } as any,
     })
-    const out = await h.definitions.get('web_fetch_pro').execute({ url: 'https://example.com' }, { signal: undefined })
-    assert.equal(Object.hasOwn(out, 'truncated'), false)
+    const tool = h.definitions.get('web_fetch_pro')
+    const out = await tool.execute({ url: 'https://example.com', offset: 2 }, { signal: undefined })
+    assert.equal(out.truncated, true)
+    assert.equal(out.nextOffset, 4)
+    assert.equal(out.totalChars, 9)
     assert.equal(out.text, 'body')
+    // The schema is closed: fetch-service internals (attempts) never leak into the output.
+    assert.equal(Object.hasOwn(out, 'attempts'), false)
+    assert.deepEqual(Object.keys(out).filter(key => !Object.hasOwn(tool.output.schema.properties, key)), [])
+    // Default output cap is the configured fetchDefaultChars (20k), offset is forwarded.
+    assert.equal(seen[0].maxChars, 20_000)
+    assert.equal(seen[0].offset, 2)
+    const text = tool.output.render({}, out)[0].text as string
+    assert.match(text, /more: call web_fetch_pro with offset=4/)
+    await assert.rejects(tool.execute({ url: 'https://example.com', offset: -1 }, { signal: undefined }), /offset must be/)
   } finally {
     h.store.close()
     fs.rmSync(h.dir, { recursive: true, force: true })

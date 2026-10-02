@@ -46,6 +46,10 @@ export interface EvidenceConfig {
   hybridBorderline: boolean
   /** Upper bound of (need, block) questions sent to Jev per search. */
   maxJevQuestions: number
+  /** Retrieval rounds per task (S8 bounded re-search): 1 disables the second round. Default 2. */
+  maxRounds: number
+  /** Search requests per task over all rounds (a second round only runs while this is not used up). Default 4. */
+  maxQueries: number
   /**
    * Per-rubric overrides of the judge prompts, keyed by rubric id (`score.support`, `gate.relevance`, `gate.constraint`).
    * Each carries its own `version`; an override that fails validation is ignored and the built-in used (see pipeline/rubrics.ts).
@@ -80,6 +84,15 @@ export interface Config {
   authorityDomains: string[]
   /** Default cap on returned sources per search. */
   searchMaxResults: number
+  /**
+   * Default output cap (characters) of one `web_fetch_pro` call. Longer pages are cut here and
+   * continued with `offset`; the ctx.web fetch provider (which cannot be told a size) uses twice this.
+   */
+  fetchDefaultChars: number
+  /** `web_exa_contents`: output cap per URL (characters). */
+  exaContentsPerUrlChars: number
+  /** `web_exa_contents`: output cap over all URLs of one call (characters); shared fairly between them. */
+  exaContentsTotalChars: number
   /** Cooperative per-call timeout budget in ms. */
   timeoutMs: number
   /** Trust Clash/TUN fake-IP DNS ranges while retaining all other SSRF checks. */
@@ -147,6 +160,9 @@ export const Config = z.object({
   authorityBoost: z.number().default(0.25).volatile(),
   authorityDomains: z.array(z.string()).default([]).volatile(),
   searchMaxResults: z.number().default(8).volatile(),
+  fetchDefaultChars: z.number().default(20_000).volatile(),
+  exaContentsPerUrlChars: z.number().default(8_000).volatile(),
+  exaContentsTotalChars: z.number().default(30_000).volatile(),
   timeoutMs: z.number().default(30_000).volatile(),
   allowProxyFakeIp: z.boolean().default(false).volatile(),
   engines: z.array(z.string()).default(['ddg', 'bing', 'exa', 'seam', 'jina']).volatile(),
@@ -190,6 +206,8 @@ export const Config = z.object({
     jevMode: z.union(['off', 'shadow', 'control', 'hybrid']).default('off').volatile(),
     hybridBorderline: z.boolean().default(false).volatile(),
     maxJevQuestions: z.number().default(64).volatile(),
+    maxRounds: z.number().default(2).volatile(),
+    maxQueries: z.number().default(4).volatile(),
     rubrics: z.dict(z.object({
       version: z.string(),
       instructions: z.string(),
@@ -247,6 +265,9 @@ export function resolveConfig(config: Config): ResolvedConfig {
     authorityBoost: vOr(config.authorityBoost, 0.25) as number,
     authorityDomains: vOr(config.authorityDomains, [] as string[]) as string[],
     searchMaxResults: vOr(config.searchMaxResults, 8) as number,
+    fetchDefaultChars: vOr(config.fetchDefaultChars, 20_000) as number,
+    exaContentsPerUrlChars: vOr(config.exaContentsPerUrlChars, 8_000) as number,
+    exaContentsTotalChars: vOr(config.exaContentsTotalChars, 30_000) as number,
     timeoutMs: vOr(config.timeoutMs, 30_000) as number,
     allowProxyFakeIp: vOr(config.allowProxyFakeIp, false) as boolean,
     engines: vOr(config.engines, ['ddg', 'bing', 'exa', 'seam', 'jina']) as string[],
@@ -274,6 +295,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
       jevMode: vOr(ev.jevMode, 'off') as EvidenceConfig['jevMode'],
       hybridBorderline: vOr(ev.hybridBorderline, false) as boolean,
       maxJevQuestions: vOr(ev.maxJevQuestions, 64) as number,
+      maxRounds: vOr(ev.maxRounds, 2) as number,
+      maxQueries: vOr(ev.maxQueries, 4) as number,
       ...ev.rubrics !== undefined && v(ev.rubrics) ? { rubrics: v(ev.rubrics) as Record<string, RubricOverride> } : {},
     },
     verbose: vOr(config.verbose, false) as boolean,

@@ -134,6 +134,21 @@ evidence:
 | `web_backend_status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态 |
 | `web_deps` | 检测/安装搜索后端的外部依赖（省略 action 默认 check；bili/yt-dlp/agent-reach/mcporter）；浏览器依赖由 dsh-browser 管理 |
 
+### 输出预算（所有出口）
+
+每个把正文交给模型的出口都有默认上限；超出部分留在本地存储，按 ID 或偏移续读，不会因为 UI 折叠而仍把全文送进上下文。
+
+| 出口 | 默认预算 | 配置项 | 超出时 |
+|---|---|---|---|
+| `web_search_pro`（证据包） | 摘录总计 6000 字符，每 URL 至多 2~4 块 | 工具参数 `budget`（至多 30000） | 溢出的需求列在 `gaps`；`web_history action=expand evidenceId=…` 读回摘录所在块及前后块 |
+| `web_fetch_pro` | 20000 字符 | `fetchDefaultChars`（1000–500000）；工具参数 `maxChars` | 输出 `truncated`、`nextOffset`、`totalChars`，并提示 “more: call web_fetch_pro with offset=N”；`offset` 从已存的页面快照续读，命中缓存时不重新抓取 |
+| `web_exa_contents` | 每 URL 8000、全部 URL 合计 30000 字符；总量不足时较短的文本原样保留、剩余额度均分给较长的 | `exaContentsPerUrlChars`、`exaContentsTotalChars` | 每条结果带 `truncated`、`totalChars`，并给出 `web_fetch_pro offset` 的续读提示 |
+| ctx.web 抓取 Provider（内置 `web_fetch`） | `fetchDefaultChars` 的两倍（默认 40000）；`WebFetchRequest` 没有大小参数 | `fetchDefaultChars` | `truncated` 如实反映是否被截断 |
+| `web_snapshot` 文本、`web_history replay` 的页面文本 | `fetchDefaultChars` | `fetchDefaultChars` | 文末带截断标记；全文仍在存储里，用 `web_fetch_pro url=… offset=N` 读取 |
+| `web_search_pro`（普通列表）、`web_platform_search` | 每条摘要 500 字符，条数由 `count` 限制 | `searchMaxResults` | 摘要截断 |
+
+抓取时页面至少读取并存储 100000 字符（更大的 `offset + maxChars` 会读更多，上限 500000），所以续读来自 SQLite 快照；超过已存部分的 `offset` 会自动用更大的上限重新读取。
+
 ## 浏览器脚本与自动化分层
 
 `dsh-browser >= 0.1.8` 提供三类脚本入口：

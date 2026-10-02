@@ -20,9 +20,12 @@ export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright'
 export interface FetchOptions {
   mode: FetchMode
   signal: AbortSignal | undefined
+  /** Output cap in characters (clamped to 1000..500000). */
   maxChars: number
   fresh: boolean
   persist: boolean
+  /** Continue reading the page text from this character offset (served from the stored snapshot, no refetch). */
+  offset?: number
 }
 
 export interface FetchResult {
@@ -35,13 +38,62 @@ export interface FetchResult {
   usedRule?: string
   /** True when the page is a navigation/JS/form shell with no extractable data. */
   shellPage?: boolean
-  /** True when `text` was cut at maxChars (internal: reported by the ctx.web provider, not a tool output field). */
+  /** True when `text` stops before the end of the page (cut at maxChars, or the page exceeds the read cap). */
   truncated?: boolean
+  /** Character offset to pass as `offset` to read on; absent when nothing more can be read. */
+  nextOffset?: number
+  /** Length of the whole page text; absent when the page was cut at the read cap and the true length is unknown. */
+  totalChars?: number
 }
+
+/** Pages are read and stored up to this many characters even when the caller wants less, so `offset` can continue from the snapshot. */
+export const FETCH_STORE_CHARS = 100_000
+/** Largest page text read from a backend. */
+export const FETCH_HARD_MAX_CHARS = 500_000
 
 /** True when `text` ends with capText()'s truncation marker. */
 export function isTruncatedText(text: string): boolean {
   return /\(Content truncated at \d+ characters\.\)$/.test(text)
+}
+
+const TRUNCATION_MARKER = /(?:\n\n)?\(Content truncated at (\d+) characters\.\)$/
+
+/** Split a stored page text into its body and the read cap it was cut at (undefined = the page was read whole). */
+function splitStored(text: string): { body: string; cutAt?: number } {
+  const m = TRUNCATION_MARKER.exec(text)
+  return m ? { body: text.slice(0, m.index), cutAt: Number(m[1]) } : { body: text }
+}
+
+/**
+ * Whether a stored/in-memory page text can answer a read that needs characters up to `needEnd`:
+ * yes when it is whole, covers `needEnd`, or was already read at the hard maximum.
+ */
+function covers(text: string, needEnd: number): boolean {
+  const { body, cutAt } = splitStored(text)
+  return cutAt === undefined || needEnd <= body.length || cutAt >= FETCH_HARD_MAX_CHARS
+}
+
+/**
+ * The window `[offset, offset + maxChars)` of a whole stored page result: `text` is that slice, with the
+ * truncation marker and `truncated` / `nextOffset` / `totalChars` set only when something lies beyond it.
+ */
+export function sliceFetchResult(full: FetchResult, offset: number, maxChars: number): FetchResult {
+  const { body, cutAt } = splitStored(full.text)
+  const total = body.length
+  const start = Math.min(Math.max(Math.floor(offset), 0), total)
+  const end = Math.min(start + maxChars, total)
+  const more = end < total
+  const truncated = more || cutAt !== undefined
+  const { truncated: _t, nextOffset: _n, totalChars: _c, ...rest } = full
+  if (!truncated && start === 0) return { ...rest, text: body, totalChars: total }
+  return {
+    ...rest,
+    text: body.slice(start, end) + (truncated ? '\n\n(Content truncated at ' + end + ' characters.)' : ''),
+    ...truncated ? { truncated: true } : {},
+    // A read that stopped at the hard maximum cannot go further; anything else can continue with this offset.
+    ...more || (cutAt !== undefined && cutAt < FETCH_HARD_MAX_CHARS) ? { nextOffset: end } : {},
+    ...cutAt === undefined ? { totalChars: total } : {},
+  }
 }
 
 const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]/g
@@ -118,30 +170,33 @@ export class FetchService {
 
   async fetchPage(url: string, opts: FetchOptions): Promise<FetchResult> {
     const normalized = normalizeUrl(url)
-    const maxChars = Math.min(Math.max(opts.maxChars, 1_000), 500_000)
-    const memoryKey = ['page', normalized, opts.mode, maxChars, opts.persist ? 'persist' : 'ephemeral'].join('|')
-    const run = (signal: AbortSignal | undefined): Promise<FetchResult> => this.runFetch(normalized, maxChars, memoryKey, opts, signal)
-    if (opts.fresh) return run(opts.signal)
-    return this.flights.do(memoryKey, run, opts.signal)
+    const maxChars = Math.min(Math.max(opts.maxChars, 1_000), FETCH_HARD_MAX_CHARS)
+    const offset = Math.max(Math.floor(opts.offset ?? 0), 0)
+    // Backends read at least FETCH_STORE_CHARS (the snapshot `offset` continues from), more when the window needs it.
+    const readCap = Math.min(Math.max(offset + maxChars, FETCH_STORE_CHARS), FETCH_HARD_MAX_CHARS)
+    const memoryKey = ['page', normalized, opts.mode, opts.persist ? 'persist' : 'ephemeral'].join('|')
+    const run = (signal: AbortSignal | undefined): Promise<FetchResult> => this.runFetch(normalized, readCap, offset + maxChars, memoryKey, opts, signal)
+    const full = opts.fresh ? await run(opts.signal) : await this.flights.do(memoryKey + '|' + readCap, run, opts.signal)
+    return sliceFetchResult(full, offset, maxChars)
   }
 
-  private async runFetch(normalized: string, maxChars: number, memoryKey: string, callerOpts: FetchOptions, signal: AbortSignal | undefined): Promise<FetchResult> {
+  /** Fetch (or serve from cache) the WHOLE page text up to `readCap`; callers slice their window out of it. */
+  private async runFetch(normalized: string, maxChars: number, needEnd: number, memoryKey: string, callerOpts: FetchOptions, signal: AbortSignal | undefined): Promise<FetchResult> {
     // Backends see the shared flight signal, not one waiter's own.
     const opts: FetchOptions = { ...callerOpts, signal }
 
     if (!opts.fresh) {
       const ttlMs = this.cfg().ttlSeconds * 1000
       const hot = this.memory.get(memoryKey, ttlMs)
-      if (hot) return { ...hot, fromCache: true }
+      if (hot && covers(hot.text, needEnd)) return { ...hot, fromCache: true }
       // Auto mode may reuse the freshest successful representation. An explicit
       // backend is a caller contract and must not silently replay another mode.
       const cached = this.store.bestEffort('page cache read', () => this.store.getPage(normalized, this.cfg().ttlSeconds, opts.mode === 'auto' ? undefined : opts.mode))
-      if (cached && cached.text) {
+      if (cached && cached.text && covers(cached.text, needEnd)) {
         const page: FetchResult = {
           url: normalized,
           ...cached.title ? { title: cached.title } : {},
-          text: capText(cached.text, maxChars),
-          ...cached.text.length > maxChars || isTruncatedText(cached.text) ? { truncated: true } : {},
+          text: cached.text,
           source: 'cache:' + (cached.source ?? 'unknown'),
           fromCache: true,
           ...typeof cached.status === 'number' ? { statusCode: cached.status } : {},
@@ -193,7 +248,6 @@ export class FetchService {
     // P1-3: flag navigation/JS/form shells so the model knows there is no data
     // here and should follow the pointers instead of re-fetching the same page.
     if (detectShellPage(result.text)) result.shellPage = true
-    if (isTruncatedText(result.text)) result.truncated = true
 
     this.memory.set(memoryKey, result)
     if (opts.persist) {

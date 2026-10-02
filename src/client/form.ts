@@ -4,6 +4,7 @@ import type { Context } from './context-types.ts'
 
 export type SettingField =
   | 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs'
+  | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars'
   | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv'
   | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled'
   | 'providerId' | 'registerProvider' | 'playwright'
@@ -112,6 +113,9 @@ export const FIELD_SPECS: readonly FieldSpec[] = [
   booleanField('parallelEngines'),
   numberField('searchMaxResults', { min: 1, max: 20, integer: true }),
   numberField('timeoutMs', { min: 1_000, integer: true }),
+  numberField('fetchDefaultChars', { min: 1_000, max: 500_000, integer: true }),
+  numberField('exaContentsPerUrlChars', { min: 500, integer: true }),
+  numberField('exaContentsTotalChars', { min: 1_000, integer: true }),
   textField('exaApiKeyEnv', true),
   textField('jinaApiKeyEnv', true),
   textField('githubTokenEnv', true),

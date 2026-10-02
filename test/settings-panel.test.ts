@@ -6,6 +6,7 @@ import { FIELD_SPECS, WebSearchSettingsController } from '../src/client/form.ts'
 test('settings panel covers every non-secret Web Search Pro configuration field', () => {
   assert.deepEqual(FIELD_SPECS.map(spec => spec.field), [
     'engines', 'parallelEngines', 'searchMaxResults', 'timeoutMs',
+    'fetchDefaultChars', 'exaContentsPerUrlChars', 'exaContentsTotalChars',
     'exaApiKeyEnv', 'jinaApiKeyEnv', 'githubTokenEnv',
     'enableCliBackends', 'opencliEnabled', 'agentReachEnabled', 'providerId', 'registerProvider', 'playwright',
     'ttlSeconds', 'memoryCacheEntries', 'rrfConstant', 'freshnessBoost', 'freshnessDays', 'authorityBoost',

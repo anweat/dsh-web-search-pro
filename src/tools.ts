@@ -19,6 +19,7 @@ import { detectDeps, installDep } from './deps.ts'
 import { expandEvidence, replayHistory, type ExpandedEvidence } from './history.ts'
 import { EvidenceService, type EvidenceOutput } from './pipeline/service.ts'
 import { renderEvidencePack } from './pipeline/render.ts'
+import { capText } from './util.ts'
 
 export interface ToolDeps {
   ctx: Context
@@ -82,9 +83,31 @@ const EVIDENCE_OUTPUT_PROPERTIES = {
   },
 } as const
 
+const DEFAULT_FETCH_CHARS = 20_000
+
+/**
+ * Per-item character limit so that `sum(min(length, limit)) <= total` and `limit <= perItem`:
+ * short texts keep all they have and the room they leave over goes to the long ones.
+ */
+export function fairShareLimit(lengths: readonly number[], perItem: number, total: number): number {
+  const sorted = lengths.filter(n => n > 0).sort((a, b) => a - b)
+  let room = total
+  let left = sorted.length
+  for (const n of sorted) {
+    const wanted = Math.min(n, perItem)
+    const share = Math.floor(room / left)
+    if (wanted > share) return Math.max(share, 0)
+    room -= wanted
+    left--
+  }
+  return perItem
+}
+
 export function registerTools(deps: ToolDeps): void {
   const { ctx, config, dynamic, store, router, fetch: fetchSvc } = deps
   const getBrowser = toBrowserGetter(deps.browser)
+  /** Default characters one text exit may return (config `fetchDefaultChars`). */
+  const outputCap = (): number => dynamic().fetchDefaultChars ?? DEFAULT_FETCH_CHARS
   let evidenceService = deps.evidence
   const evidence = (): Pick<EvidenceService, 'search'> => (evidenceService ??= new EvidenceService({ router, fetch: fetchSvc, store, dynamic }))
 
@@ -200,7 +223,7 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_exa_contents',
-    description: 'Fetch full text for up to 100 URLs through the native Exa /contents API in one batch. Requires the configured Exa API key.',
+    description: 'Fetch full text for up to 100 URLs through the native Exa /contents API in one batch. Requires the configured Exa API key. Text is capped per URL (' + String(config.exaContentsPerUrlChars) + ' chars) and in total (' + String(config.exaContentsTotalChars) + '); use web_fetch_pro with offset for the rest of a page.',
     parameters: {
       urls: { type: 'array', required: true, items: { type: 'string' }, description: 'HTTP(S) URLs to fetch, maximum 100.' },
     },
@@ -208,30 +231,53 @@ export function registerTools(deps: ToolDeps): void {
       schema: {
         type: 'object', additionalProperties: false,
         properties: {
-          results: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, text: { type: 'string' }, publishedDate: { type: 'string' } } } },
+          results: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, text: { type: 'string' }, publishedDate: { type: 'string' }, truncated: { type: 'boolean' }, totalChars: { type: 'number' } } } },
+          note: { type: 'string' },
         },
       },
       render: (_args, value) => {
-        const v = value as { results: { url: string; title?: string; text?: string }[] }
-        return [{ type: 'text', text: v.results.map(row => (row.title ? '# ' + row.title + '\n' : '') + row.url + '\n\n' + (row.text ?? '')).join('\n\n---\n\n') }]
+        const v = value as { results: { url: string; title?: string; text?: string }[]; note?: string }
+        const body = v.results.map(row => (row.title ? '# ' + row.title + '\n' : '') + row.url + '\n\n' + (row.text ?? '')).join('\n\n---\n\n')
+        return [{ type: 'text', text: v.note ? body + '\n\n' + v.note : body }]
       },
     },
     timeoutMs: config.timeoutMs + 30_000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       if (!args.urls.length || args.urls.length > 100) throw new Error('urls must contain 1-100 entries')
-      const results = await router.exaContents(args.urls, exec.signal)
-      return { results: results.map(row => ({ url: row.url, ...row.title ? { title: row.title } : {}, ...row.text ? { text: row.text } : {}, ...row.publishedDate ? { publishedDate: row.publishedDate } : {} })) }
+      const cfg = dynamic()
+      const rows = await router.exaContents(args.urls, exec.signal)
+      const perUrl = cfg.exaContentsPerUrlChars ?? 8_000
+      const total = cfg.exaContentsTotalChars ?? 30_000
+      const limit = fairShareLimit(rows.map(row => row.text?.length ?? 0), perUrl, total)
+      let cut = 0
+      const results = rows.map(row => {
+        const text = row.text
+        const over = text !== undefined && text.length > limit
+        if (over) cut++
+        return {
+          url: row.url,
+          ...row.title ? { title: row.title } : {},
+          ...text ? { text: over ? capText(text, limit) : text } : {},
+          ...row.publishedDate ? { publishedDate: row.publishedDate } : {},
+          ...over ? { truncated: true, totalChars: text.length } : {},
+        }
+      })
+      return {
+        results,
+        ...cut ? { note: cut + ' of ' + results.length + ' text(s) cut to ' + limit + ' chars (caps: ' + perUrl + ' per URL, ' + total + ' total). Read the rest with web_fetch_pro url=<url> offset=' + limit + '.' } : {},
+      }
     },
   }))
 
   ctx.tools.register(defineTool({
     name: 'web_fetch_pro',
-    description: 'Enhanced persistent page fetch: Jina Reader → direct HTTP with per-site extraction rules (userscript-style, e.g. zhihu/bilibili/github) → Playwright rendering fallback. Snapshots are stored in SQLite and reused within the TTL.',
+    description: 'Enhanced persistent page fetch: Jina Reader → direct HTTP with per-site extraction rules (userscript-style, e.g. zhihu/bilibili/github) → Playwright rendering fallback. Snapshots are stored in SQLite and reused within the TTL. Output is capped (default ' + String(config.fetchDefaultChars) + ' chars); read on with offset.',
     parameters: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to fetch.' },
       mode: { type: 'string', description: 'Backend: auto (default), jina, http, or playwright. playwright needs the optional dsh-browser plugin; auto skips it when absent.' },
-      maxChars: { type: 'number', description: 'Output cap in characters (1000-500000).' },
+      maxChars: { type: 'number', description: 'Output cap in characters (1000-500000). Defaults to ' + String(config.fetchDefaultChars) + '.' },
+      offset: { type: 'number', description: 'Continue reading from this character offset (use nextOffset of a truncated result). Served from the stored snapshot.' },
       fresh: { type: 'boolean', description: 'Bypass the cached snapshot.' },
       persist: { type: 'boolean', description: 'Save the snapshot to the persistent store (default true).' },
     },
@@ -248,10 +294,13 @@ export function registerTools(deps: ToolDeps): void {
           statusCode: { type: 'number' },
           usedRule: { type: 'string' },
           shellPage: { type: 'boolean' },
+          truncated: { type: 'boolean' },
+          nextOffset: { type: 'number' },
+          totalChars: { type: 'number' },
         },
       },
       render: (_args, value) => {
-        const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean }
+        const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; truncated?: boolean; nextOffset?: number; totalChars?: number }
         const parts: string[] = []
         if (v.title) parts.push('Title: ' + v.title)
         // P1-3: a navigation/JS/form shell has no data — say so and point the
@@ -263,6 +312,7 @@ export function registerTools(deps: ToolDeps): void {
         }
         parts.push(v.text)
         parts.push('— Source: ' + v.source + (v.fromCache ? ' (cached snapshot)' : '') + ' · ' + v.url)
+        if (v.nextOffset !== undefined) parts.push('more: call web_fetch_pro with offset=' + v.nextOffset + (v.totalChars !== undefined ? ' (page has ' + v.totalChars + ' chars)' : ''))
         return [{ type: 'text', text: parts.join('\n\n') }]
       },
     },
@@ -271,15 +321,28 @@ export function registerTools(deps: ToolDeps): void {
     async execute(args, exec) {
       const mode = (args.mode ?? 'auto') as 'auto' | 'jina' | 'http' | 'playwright'
       if (!['auto', 'jina', 'http', 'playwright'].includes(mode)) throw new Error('mode must be auto, jina, http, or playwright')
-      const { truncated: _truncated, ...page } = await fetchSvc.fetchPage(args.url, {
+      if (args.offset !== undefined && (!Number.isFinite(args.offset) || args.offset < 0)) throw new Error('offset must be a non-negative number of characters')
+      const page = await fetchSvc.fetchPage(args.url, {
         mode,
         signal: exec.signal,
-        maxChars: args.maxChars ?? 100_000,
+        maxChars: args.maxChars ?? dynamic().fetchDefaultChars ?? DEFAULT_FETCH_CHARS,
+        ...args.offset !== undefined ? { offset: args.offset } : {},
         fresh: args.fresh ?? false,
         persist: args.persist ?? true,
       })
-      // `truncated` is provider-only; the tool output schema is closed.
-      return page
+      return {
+        url: page.url,
+        ...page.title ? { title: page.title } : {},
+        text: page.text,
+        source: page.source,
+        fromCache: page.fromCache,
+        ...page.statusCode !== undefined ? { statusCode: page.statusCode } : {},
+        ...page.usedRule ? { usedRule: page.usedRule } : {},
+        ...page.shellPage ? { shellPage: true } : {},
+        ...page.truncated ? { truncated: true } : {},
+        ...page.nextOffset !== undefined ? { nextOffset: page.nextOffset } : {},
+        ...page.totalChars !== undefined ? { totalChars: page.totalChars } : {},
+      }
     },
   }))
 
@@ -364,7 +427,8 @@ export function registerTools(deps: ToolDeps): void {
       const out: { url: string; title?: string; text: string; screenshotPath?: string; htmlPath?: string } = {
         url: args.url,
         ...shot.title ? { title: shot.title } : {},
-        text: shot.text,
+        // Same exit budget as web_fetch_pro; the full text is stored (web_fetch_pro offset reads on from it).
+        text: capText(shot.text, outputCap()),
         htmlPath: shot.htmlPath,
       }
       if (args.screenshot !== false && shot.screenshotPath) out.screenshotPath = shot.screenshotPath
@@ -479,7 +543,7 @@ export function registerTools(deps: ToolDeps): void {
           out.replayedSources = replay.sources
         } else {
           const page = replay.page
-          out.replayedPage = { url: page.url, ...page.title ? { title: page.title } : {}, ...page.text ? { text: page.text } : {}, ...page.htmlPath ? { htmlPath: page.htmlPath } : {}, ...page.screenshotPath ? { screenshotPath: page.screenshotPath } : {}, ...typeof page.status === 'number' ? { status: page.status } : {}, fetchedAt: page.fetchedAt, ...page.source ? { source: page.source } : {} }
+          out.replayedPage = { url: page.url, ...page.title ? { title: page.title } : {}, ...page.text ? { text: capText(page.text, outputCap()) } : {}, ...page.htmlPath ? { htmlPath: page.htmlPath } : {}, ...page.screenshotPath ? { screenshotPath: page.screenshotPath } : {}, ...typeof page.status === 'number' ? { status: page.status } : {}, fetchedAt: page.fetchedAt, ...page.source ? { source: page.source } : {} }
         }
       }
       if (args.export) {
