@@ -38,6 +38,9 @@ declare const _default: {
         authorityBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         authorityDomains: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
         searchMaxResults: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        fetchDefaultChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsPerUrlChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsTotalChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         timeoutMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         allowProxyFakeIp: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         engines: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
@@ -100,6 +103,8 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
                 version?: string | null | undefined;
                 instructions?: string | null | undefined;
@@ -118,6 +123,8 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
                 version?: string | null | undefined;
                 instructions?: string | null | undefined;
@@ -143,6 +150,9 @@ declare const _default: {
         authorityBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         authorityDomains: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
         searchMaxResults: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        fetchDefaultChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsPerUrlChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsTotalChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         timeoutMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         allowProxyFakeIp: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         engines: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
@@ -205,6 +215,8 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
                 version?: string | null | undefined;
                 instructions?: string | null | undefined;
@@ -223,6 +235,8 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
                 version?: string | null | undefined;
                 instructions?: string | null | undefined;

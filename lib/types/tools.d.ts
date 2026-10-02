@@ -30,4 +30,20 @@ export declare function formatSources(sources: {
     snippet?: string;
     publishedAt?: string;
 }[]): string;
+/**
+ * Per-item character limit so that `sum(min(length, limit)) <= total` and `limit <= perItem`:
+ * short texts keep all they have and the room they leave over goes to the long ones.
+ */
+export declare function fairShareLimit(lengths: readonly number[], perItem: number, total: number): number;
 export declare function registerTools(deps: ToolDeps): void;
+/**
+ * Whether the twitter platform backend can really run: the `twitter` command works (probed by detectDeps)
+ * AND the backend is enabled in settings AND its credentials are in the environment (same gates as the engine).
+ */
+export declare function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: {
+    available: boolean;
+    diagnostic?: string;
+}): {
+    available: boolean;
+    note?: string;
+};

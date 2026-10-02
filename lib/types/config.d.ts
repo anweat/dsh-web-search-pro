@@ -40,6 +40,10 @@ export interface EvidenceConfig {
     hybridBorderline: boolean;
     /** Upper bound of (need, block) questions sent to Jev per search. */
     maxJevQuestions: number;
+    /** Retrieval rounds per task (S8 bounded re-search): 1 disables the second round. Default 2. */
+    maxRounds: number;
+    /** Search requests per task over all rounds (a second round only runs while this is not used up). Default 4. */
+    maxQueries: number;
     /**
      * Per-rubric overrides of the judge prompts, keyed by rubric id (`score.support`, `gate.relevance`, `gate.constraint`).
      * Each carries its own `version`; an override that fails validation is ignored and the built-in used (see pipeline/rubrics.ts).
@@ -73,6 +77,15 @@ export interface Config {
     authorityDomains: string[];
     /** Default cap on returned sources per search. */
     searchMaxResults: number;
+    /**
+     * Default output cap (characters) of one `web_fetch_pro` call. Longer pages are cut here and
+     * continued with `offset`; the ctx.web fetch provider (which cannot be told a size) uses twice this.
+     */
+    fetchDefaultChars: number;
+    /** `web_exa_contents`: output cap per URL (characters). */
+    exaContentsPerUrlChars: number;
+    /** `web_exa_contents`: output cap over all URLs of one call (characters); shared fairly between them. */
+    exaContentsTotalChars: number;
     /** Cooperative per-call timeout budget in ms. */
     timeoutMs: number;
     /** Trust Clash/TUN fake-IP DNS ranges while retaining all other SSRF checks. */
@@ -135,6 +148,9 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     authorityBoost: z<number, number, "volatile-defined">;
     authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     searchMaxResults: z<number, number, "volatile-defined">;
+    fetchDefaultChars: z<number, number, "volatile-defined">;
+    exaContentsPerUrlChars: z<number, number, "volatile-defined">;
+    exaContentsTotalChars: z<number, number, "volatile-defined">;
     timeoutMs: z<number, number, "volatile-defined">;
     allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
     engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
@@ -197,6 +213,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        maxRounds: z<number, number, "volatile-defined">;
+        maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             version?: string | null | undefined;
             instructions?: string | null | undefined;
@@ -215,6 +233,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        maxRounds: z<number, number, "volatile-defined">;
+        maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             version?: string | null | undefined;
             instructions?: string | null | undefined;
@@ -240,6 +260,9 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     authorityBoost: z<number, number, "volatile-defined">;
     authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     searchMaxResults: z<number, number, "volatile-defined">;
+    fetchDefaultChars: z<number, number, "volatile-defined">;
+    exaContentsPerUrlChars: z<number, number, "volatile-defined">;
+    exaContentsTotalChars: z<number, number, "volatile-defined">;
     timeoutMs: z<number, number, "volatile-defined">;
     allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
     engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
@@ -302,6 +325,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        maxRounds: z<number, number, "volatile-defined">;
+        maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             version?: string | null | undefined;
             instructions?: string | null | undefined;
@@ -320,6 +345,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        maxRounds: z<number, number, "volatile-defined">;
+        maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             version?: string | null | undefined;
             instructions?: string | null | undefined;

@@ -146,6 +146,10 @@ export interface PackStats {
     blocksScored: number;
     excerptChars: number;
     scorer: string;
+    /** Retrieval rounds run (1, or 2 when a follow-up round searched for critical gaps). */
+    rounds?: number;
+    /** Search requests made over all rounds (provider calls, fallback variants included). */
+    queries?: number;
     /** Jev usage of this run (control or shadow). */
     jev?: {
         requests: number;

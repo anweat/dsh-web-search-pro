@@ -14,6 +14,12 @@ export declare const zh: {
     readonly searchMaxResultsHint: "1–20。工具调用未指定 count 时使用。";
     readonly timeoutMs: "超时预算（毫秒）";
     readonly timeoutMsHint: "单次增强搜索的协作超时，至少 1000 毫秒。";
+    readonly fetchDefaultChars: "页面读取默认字数";
+    readonly fetchDefaultCharsHint: "web_fetch_pro 单次输出上限（1000–500000）；更长的页面用 offset 续读。";
+    readonly exaContentsPerUrlChars: "Exa 正文单 URL 上限";
+    readonly exaContentsPerUrlCharsHint: "web_exa_contents 每个 URL 的输出字数上限，至少 500。";
+    readonly exaContentsTotalChars: "Exa 正文总上限";
+    readonly exaContentsTotalCharsHint: "web_exa_contents 一次调用所有 URL 的输出字数总上限，至少 1000。";
     readonly parallelEngines: "并行融合多个引擎";
     readonly parallelEnginesHint: "同时查询全部默认引擎并用 RRF 合并，而非顺序回退。";
     readonly credentialsSection: "服务凭据";

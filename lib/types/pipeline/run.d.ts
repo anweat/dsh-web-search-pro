@@ -1,7 +1,8 @@
 /**
  * The evidence pipeline (dev-plan §4.3): S1 plan -> S2 recall -> S3/S4 merge,
  * fuse, gate -> S5 read and split -> S6 score -> S7 select -> S8 coverage ->
- * EvidencePack. Single round; no re-search loop yet.
+ * EvidencePack. One round, plus (S8) at most one follow-up round for critical
+ * gaps while the round, query and time budgets allow.
  *
  * Every side effect is injected (`PipelineDeps`), so the same stages run
  * against live engines and fetchers (service.ts), against test doubles, and
@@ -21,7 +22,7 @@ import { type FusionOptions } from './fusion.ts';
 import { type ProviderStatus, type SourcePlan } from './plan.ts';
 import { type ScoreJob, type Scorer } from './score.ts';
 import { type SelectOptions } from './select.ts';
-import type { Block, EvidencePack, ScoredBlock, TaskSpec } from './types.ts';
+import type { Block, EvidencePack, Need, ScoredBlock, TaskSpec } from './types.ts';
 export interface ProviderCall {
     id: string;
     query: string;
@@ -93,8 +94,18 @@ export interface PipelineOptions {
     sourcesCount?: number;
     select?: Partial<SelectOptions>;
     blocks?: SplitOptions;
+    /** Retrieval rounds per task; 1 = no follow-up round (default 2). */
+    maxRounds?: number;
+    /** Search requests per task over all rounds, round 1 included (default 4); a follow-up round only runs while some are left. */
+    maxQueries?: number;
+    /** Pages the follow-up round reads at most (default 2, never more than `fetchTopK`). */
+    refineFetchTopK?: number;
+    /** A follow-up round needs at least this long before the deadline (default 15 s). */
+    refineMinRemainingMs?: number;
 }
 export declare const DEFAULT_DEADLINE_MS = 60000;
+export declare const DEFAULT_MAX_ROUNDS = 2;
+export declare const DEFAULT_MAX_QUERIES = 4;
 export declare function verificationOf(task: Pick<TaskSpec, 'constraints'>, compiled: readonly CompiledQuery[]): EvidencePack['verification'];
 export interface PipelineResult {
     pack: EvidencePack;
@@ -129,6 +140,22 @@ export interface PipelineResult {
     };
 }
 export declare function runPipeline(task: TaskSpec, deps: PipelineDeps, options?: PipelineOptions): Promise<PipelineResult>;
+/** What a follow-up search round needs: the gap needs and the request budget of the whole task. */
+export interface RefineRequest {
+    needs: readonly Need[];
+    maxQueries: number;
+}
+export type RefineOutcome = {
+    state: 'ok';
+    outputs: ProviderOutput[];
+    providers: string[];
+    queries: number;
+    notes: string[];
+    cut: boolean;
+} | {
+    state: 'skipped';
+    reason: string;
+};
 export interface StageContext {
     plan: Pick<SourcePlan, 'profile' | 'profileInferred'> & {
         providers: readonly {
@@ -144,6 +171,10 @@ export interface StageContext {
     deadline?: number;
     now: Date;
     verification: EvidencePack['verification'];
+    /** S2 of a follow-up round (supplied by `runPipeline`; absent over frozen snapshots, where no second round can run). */
+    refine?: (request: RefineRequest) => Promise<RefineOutcome>;
+    /** Search requests made so far over all rounds (default: the number of provider outputs). */
+    queryCount?: () => number;
 }
 /** S3–S8 over provider outputs that already exist (live S2, or frozen snapshot results). */
 export declare function runEvidenceStages(task: TaskSpec, outputs: readonly ProviderOutput[], deps: PipelineDeps, options: PipelineOptions, ctx: StageContext): Promise<PipelineResult>;

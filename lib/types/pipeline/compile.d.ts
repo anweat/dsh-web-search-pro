@@ -18,7 +18,7 @@
  * so a provider silently ignoring an operator costs nothing but precision.
  * @module web-search-pro/pipeline/compile
  */
-import type { TaskSpec } from './types.ts';
+import type { Need, TaskSpec } from './types.ts';
 export interface CompiledExaOptions {
     includeDomains?: string[];
     excludeDomains?: string[];
@@ -62,4 +62,15 @@ export declare const GITHUB_FALLBACK_TERM_COUNTS: readonly number[];
 /** Compile the task for one provider id (`ddg`, `bing`, `exa`, `github*`; anything else gets the plain query). */
 export declare function compileQuery(task: TaskLike, providerId: string, now?: Date): CompiledQuery;
 export declare function compileQueries(task: TaskLike, providerIds: readonly string[], now?: Date): CompiledQuery[];
+/** Identifier-like tokens (`node:sqlite`, `DatabaseSync`, `busy_timeout`, `v22.5`): the entities of a query worth repeating in a follow-up. */
+export declare function keyTokens(text: string): string[];
+/** Longest follow-up query (characters); search engines gain nothing from more. */
+export declare const GAP_QUERY_MAX_CHARS = 200;
+/**
+ * Query for a follow-up round targeted at one unsupported need: the need text plus the task's key entities
+ * (entity / must_term / version constraints, then identifier-like tokens of the original query) that the
+ * need does not already mention. Provider-specific shaping (site: operators, Exa options, GitHub keywords)
+ * is left to {@link compileQuery} over a task whose `query` is this text.
+ */
+export declare function gapQueryText(task: Pick<TaskSpec, 'query' | 'constraints'>, need: Pick<Need, 'text'>): string;
 export {};

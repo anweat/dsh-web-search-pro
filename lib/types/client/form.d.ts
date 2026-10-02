@@ -1,7 +1,7 @@
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store';
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { Context } from './context-types.ts';
-export type SettingField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose';
+export type SettingField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose';
 export type CredentialId = 'exa' | 'jina' | 'github';
 export interface CardFieldState {
     text: string;
