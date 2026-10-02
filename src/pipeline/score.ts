@@ -27,6 +27,7 @@ import { blockScoringText } from './blocks.ts'
 import { CorpusStats, type CorpusBlock } from './corpus.ts'
 import { relevancePartsOf } from './gate.ts'
 import { statsOverlap, weightedOverlap } from './lexical.ts'
+import { builtinRubric, refOf, renderTemplate, type ResolvedRubric, type RubricRef } from './rubrics.ts'
 import type { BlockGrade, Need, TaskSpec } from './types.ts'
 
 export type ScoreTask = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>
@@ -55,6 +56,8 @@ export interface ScoreOutcome {
 export interface Scorer {
   id: string
   model: string
+  /** The judge rubric behind the grades (Jev-based scorers); recorded with their results. */
+  rubricRef?: RubricRef | undefined
   score(task: ScoreTask, jobs: readonly ScoreJob[], ctx?: ScoreContext): Promise<ScoreOutcome>
 }
 
@@ -183,6 +186,7 @@ export interface HybridScorerOptions {
 export class HybridScorer implements Scorer {
   readonly id = 'hybrid'
   readonly model: string
+  readonly rubricRef: RubricRef | undefined
   private readonly jev: Scorer
   private readonly rule: Scorer
   private readonly borderline: boolean
@@ -190,6 +194,7 @@ export class HybridScorer implements Scorer {
 
   constructor(options: HybridScorerOptions) {
     this.jev = options.jev
+    this.rubricRef = options.jev.rubricRef
     this.rule = options.rule ?? new RuleScorer()
     this.borderline = options.borderline ?? false
     this.maxQuestions = Math.max(options.maxQuestions ?? 64, 0)
@@ -247,10 +252,15 @@ export const JEV_MODEL = 'bocha-jev-v1'
 /** Credentials ref / environment variable holding the Bocha Jev key. */
 export const JEV_KEY_REF = 'BOCHA_JEV_API_KEY'
 
-/** Wording of bench/rubrics/score.support.v1.json (a bench test pins the two together). */
-export const JEV_STATE_PREFIX = '搜索任务：'
-export const JEV_INSTRUCTIONS = '下面的文本块对该需求的支撑程度如何？\n需求：{need}\n文本块：{candidate}'
-export const JEV_CRITERIA: readonly string[] = ['无关或只有同名词', '同主题但不回答', '部分回答', '直接回答且含可定位证据']
+/**
+ * Built-in wording of the `score.support` rubric (rubrics.ts; a bench test pins it to
+ * bench/rubrics/score.support.v1.json). The scorer itself uses the active rubric, which
+ * `evidence.rubrics` may override.
+ */
+const SUPPORT_V1 = builtinRubric('score.support')
+export const JEV_STATE_PREFIX = SUPPORT_V1.state!.replace('{task}', '')
+export const JEV_INSTRUCTIONS = SUPPORT_V1.instructions
+export const JEV_CRITERIA: readonly string[] = SUPPORT_V1.criteria!
 
 const HAN = /[㐀-䶿一-鿿豈-﫿぀-ヿ가-힯]/g
 
@@ -277,6 +287,10 @@ export interface JevProbe {
   need: string
   /** Full candidate text (heading + block), before trimming. */
   candidate: string
+  /** Trimmed task description (what `{task}` renders to). */
+  task?: string
+  /** `id@version#hash` of the rubric that worded the question: a cache must key on it. */
+  rubric?: string
 }
 export interface JevCachedAnswer { grade: number; probabilities?: Record<string, number> }
 /** Optional answer cache (the offline eval plugs the r1 judge cache in here). */
@@ -287,6 +301,8 @@ export interface JevCache {
 
 export interface JevScorerOptions {
   apiKey: string
+  /** Question rubric (default: the built-in score.support). Its length caps are the defaults of `maxStateChars` / `blockChars`. */
+  rubric?: ResolvedRubric
   url?: string
   model?: string
   fetchImpl?: typeof fetch
@@ -343,40 +359,58 @@ export class JevScorer implements Scorer {
   readonly model: string
   /** HTTP attempts made so far (retries and splits included). */
   requests = 0
-  private readonly cfg: Required<Omit<JevScorerOptions, 'apiKey' | 'cache' | 'requestCap'>> & Pick<JevScorerOptions, 'cache' | 'requestCap'>
+  readonly rubricRef: RubricRef
+  private readonly rubric: ResolvedRubric
+  private readonly cfg: Required<Omit<JevScorerOptions, 'apiKey' | 'cache' | 'requestCap' | 'rubric'>> & Pick<JevScorerOptions, 'cache' | 'requestCap'>
   private readonly apiKey: string
 
   constructor(options: JevScorerOptions) {
     if (!options.apiKey) throw new Error('JevScorer needs an API key')
     this.apiKey = options.apiKey
+    this.rubric = options.rubric ?? SUPPORT_V1
+    if (this.rubric.kind !== 'score') throw new Error('JevScorer needs a score rubric, got ' + this.rubric.id + ' (' + this.rubric.kind + ')')
+    this.rubricRef = refOf(this.rubric)
+    const { rubric: _rubric, ...rest } = options
     this.cfg = {
       url: JEV_URL, model: JEV_MODEL, fetchImpl: globalThis.fetch, sleep: sleepMs,
-      maxQuestionsPerRequest: 32, requestTokenBudget: 26_000, blockChars: 1200, maxNeedChars: 200, maxStateChars: 200,
+      maxQuestionsPerRequest: 32, requestTokenBudget: 26_000, blockChars: this.rubric.maxCandidateChars, maxNeedChars: 200, maxStateChars: this.rubric.maxStateChars,
       maxBodyBytes: 200_000, maxRetries: 2, timeoutMs: 20_000,
-      ...options,
+      ...rest,
     }
     this.model = this.cfg.model
   }
 
-  /** Shared state: a short task description only (it is billed again inside every question). */
-  stateFor(task: Pick<ScoreTask, 'goal'>): string {
-    return JEV_STATE_PREFIX + cut(task.goal.trim().replace(/\s+/g, ' '), this.cfg.maxStateChars)
+  /** The task description as `{task}` renders it. */
+  private taskText(task: Pick<ScoreTask, 'goal'>): string {
+    return cut(task.goal.trim().replace(/\s+/g, ' '), this.cfg.maxStateChars)
   }
 
-  private instructionsFor(need: string, candidate: string): string {
-    return JEV_INSTRUCTIONS.replace('{need}', () => need).replace('{candidate}', () => candidate)
+  /** Grade as the pipeline reads it: criteria with another level count than the built-in 4 are rescaled onto 0..3. */
+  private normalized(grade: number): number {
+    const levels = this.rubric.criteria!.length
+    return levels === 4 ? grade : (grade * 3) / (levels - 1)
+  }
+
+  /** Shared state: a short task description only (it is billed again inside every question). */
+  stateFor(task: Pick<ScoreTask, 'goal'>): string {
+    return renderTemplate(this.rubric.state!, { task: this.taskText(task) })
+  }
+
+  private instructionsFor(need: string, candidate: string, task: string): string {
+    return renderTemplate(this.rubric.instructions, { need, candidate, task })
   }
 
   private buildQuestions(task: ScoreTask, jobs: readonly ScoreJob[]): JevQuestion[] {
     const state = this.stateFor(task)
+    const taskText = this.taskText(task)
     const out: JevQuestion[] = []
     for (const job of jobs) {
       const need = cut(job.need.text.trim().replace(/\s+/g, ' '), this.cfg.maxNeedChars)
       for (const block of job.blocks) {
         const full = blockScoringText(block)
         const candidate = cut(full, this.cfg.blockChars)
-        const tokens = JEV_QUESTION_OVERHEAD_TOKENS + estimateJevTokens(state + this.instructionsFor(need, candidate))
-        out.push({ needId: job.need.id, blockId: block.blockId, probe: { state, need, candidate: full }, candidate, tokens })
+        const tokens = JEV_QUESTION_OVERHEAD_TOKENS + estimateJevTokens(state + this.instructionsFor(need, candidate, taskText))
+        out.push({ needId: job.need.id, blockId: block.blockId, probe: { state, need, candidate: full, task: taskText, rubric: this.rubric.key }, candidate, tokens })
       }
     }
     return out
@@ -389,7 +423,7 @@ export class JevScorer implements Scorer {
     let tokens = 0
     let bytes = Buffer.byteLength(state) + 200
     for (const q of questions) {
-      const qBytes = Buffer.byteLength(this.instructionsFor(q.probe.need, q.candidate)) + 120
+      const qBytes = Buffer.byteLength(this.instructionsFor(q.probe.need, q.candidate, q.probe.task ?? '')) + 120
       if (cur.length && (cur.length >= this.cfg.maxQuestionsPerRequest || tokens + q.tokens > this.cfg.requestTokenBudget || bytes + qBytes > this.cfg.maxBodyBytes)) {
         chunks.push(cur)
         cur = []
@@ -410,7 +444,7 @@ export class JevScorer implements Scorer {
     const usage: ScoreUsage = { requests: 0, questions: 0, cacheHits: 0, inputTokens: 0, outputTokens: 0 }
     const grades = new Map<string, Map<string, BlockGrade>>()
     for (const job of jobs) grades.set(job.need.id, new Map())
-    const put = (q: JevQuestion, grade: number): void => { grades.get(q.needId)!.set(q.blockId, { grade, rank: grade }) }
+    const put = (q: JevQuestion, grade: number): void => { const g = this.normalized(grade); grades.get(q.needId)!.set(q.blockId, { grade: g, rank: g }) }
 
     const misses: JevQuestion[] = []
     for (const q of questions) {
@@ -441,7 +475,7 @@ export class JevScorer implements Scorer {
   /** Send one chunk; splits it when the service reports the token budget exceeded. Returns the number of unanswered questions. */
   private async run(state: string, chunk: JevQuestion[], ctx: ScoreContext, usage: ScoreUsage, put: (q: JevQuestion, grade: number) => void, depth = 0): Promise<number> {
     const questions: Record<string, unknown> = {}
-    chunk.forEach((q, i) => { questions['q' + i] = { type: 'score', instructions: this.instructionsFor(q.probe.need, q.candidate), criteria: JEV_CRITERIA } })
+    chunk.forEach((q, i) => { questions['q' + i] = { type: 'score', instructions: this.instructionsFor(q.probe.need, q.candidate, q.probe.task ?? ''), criteria: this.rubric.criteria } })
     let json: any
     try {
       json = await this.post(JSON.stringify({ model: this.cfg.model, state, questions }), ctx)

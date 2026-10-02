@@ -321,3 +321,45 @@ test('the startup purge of legacy search rows keeps pipeline history queries', a
     assert.ok(h.store.evidenceRun(out.resultId))
   } finally { h.cleanup() }
 })
+
+// ── judge rubrics ───────────────────────────────────────────────────────────
+
+test('evidence.rubrics: the active rubric id+version is recorded in stats, shadow log and evidence rows; invalid overrides fall back with a note', async () => {
+  const rubrics = { 'score.support': { version: 'v2', instructions: '文本块是否直接给出答案？\n需求：{need}\n文本块：{candidate}' } }
+  const args = { query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code', needs: 'busy timeout;WAL mode' }
+
+  const control = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'control', rubrics }, secret: 'sk-secret' })
+  try {
+    const out = await control.def.execute(args, { signal: undefined })
+    assertFits(out, control.def.output.schema)
+    assert.match(out.stats.jev.rubric, /^score\.support@v2#[0-9a-f]{12}$/)
+    assert.equal(out.stats.jev.rubricOverridden, true)
+    assert.ok(control.jevCalls.every(c => Object.values(c.body.questions as Record<string, { instructions: string }>).every(q => q.instructions.startsWith('文本块是否直接给出答案？'))))
+    assert.equal(control.store.evidenceBlock(out.evidence[0].evidenceId)!.rubric, out.stats.jev.rubric)
+  } finally { control.cleanup() }
+
+  const shadow = evidenceHarness({ evidence: { jevMode: 'shadow', rubrics }, secret: 'sk-secret' })
+  try {
+    const out = await shadow.def.execute(args, { signal: undefined })
+    const stored = JSON.parse(shadow.store.evidenceRun(out.resultId)!.packJson)
+    assert.equal(stored.shadow.rubric, out.stats.jev.rubric)
+    assert.match(stored.shadow.rubric, /^score\.support@v2#/)
+    assert.equal(shadow.store.evidenceBlock(out.evidence[0].evidenceId)!.rubric, null, 'the rule scorer decided: no rubric on the rows')
+  } finally { shadow.cleanup() }
+
+  const bad = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'control', rubrics: { 'score.support': { version: 'v2', instructions: '{need} {candidate} {oops}' } } }, secret: 'sk-secret' })
+  try {
+    const out = await bad.def.execute(args, { signal: undefined })
+    assert.match(out.notes.join(' | '), /score\.support: override ignored, built-in v1 used: unknown variable \{oops\}/)
+    assert.match(out.stats.jev.rubric, /^score\.support@v1#/)
+    assert.equal(out.stats.jev.rubricOverridden, false)
+    assert.ok(bad.jevCalls.every(c => Object.values(c.body.questions as Record<string, { instructions: string }>).every(q => q.instructions.startsWith('下面的文本块对该需求的支撑程度如何？'))))
+  } finally { bad.cleanup() }
+
+  const rule = evidenceHarness({ evidence: { rubrics }, secret: 'sk-secret' })
+  try {
+    const out = await rule.def.execute(args, { signal: undefined })
+    assert.equal(out.stats.jev, undefined, 'Jev off: no rubric involved')
+    assert.deepEqual(out.notes.filter((n: string) => /rubric/.test(n)), [])
+  } finally { rule.cleanup() }
+})

@@ -103,6 +103,7 @@ const TRUNCATION_MARKER = /\n*\(Content truncated at \d+ characters\.\)\s*$/
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
+const rubricStats = (scorer: Scorer): { rubric?: string; rubricOverridden?: boolean } => (scorer.rubricRef ? { rubric: scorer.rubricRef.key, rubricOverridden: scorer.rubricRef.overridden } : {})
 const abortReason = (signal: AbortSignal): unknown => signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
 
 /** Run `worker` over `items` with at most `limit` in flight; results keep input order. */
@@ -139,9 +140,9 @@ export interface PipelineResult {
   /** Every block that got an S6 grade (the selection pool). */
   scored: ScoredBlock[]
   /** Full text of every selected block (for storage and `web_history action=expand`). */
-  evidenceBlocks: { evidenceId: string; url: string; blockId: string; heading?: string; text: string; hash: string; grade: number; scorer: string }[]
+  evidenceBlocks: { evidenceId: string; url: string; blockId: string; heading?: string; text: string; hash: string; grade: number; scorer: string; rubric?: string }[]
   /** Shadow scorer output for later comparison (Jev mode `shadow`). */
-  shadow?: { scorer: string; model: string; rows: { needId: string; blockId: string; shadow: number; control: number }[] }
+  shadow?: { scorer: string; model: string; rubric?: string; rows: { needId: string; blockId: string; shadow: number; control: number }[] }
 }
 
 export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: PipelineOptions = {}): Promise<PipelineResult> {
@@ -285,7 +286,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
   const fullJobs: ScoreJob[] = ranked.filter(r => r.ranked.length).map(r => toJob(r.need, r.ranked))
 
   const rule = new RuleScorer()
-  const control = deps.scorers.control ?? rule
+  const control: Scorer = deps.scorers.control ?? rule
   // `none`: no page produced a block, so nothing was scored.
   let scorerUsed = fullJobs.length ? control.id : 'none'
   let outcome: ScoreOutcome | undefined
@@ -298,7 +299,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
       const limited = control.id === 'hybrid' ? fullJobs : limitQuestions(fullJobs, options.maxScoreQuestions ?? 64)
       try {
         outcome = await control.score(task, limited, scoreCtx)
-        if (outcome.usage) jevUsage = { requests: outcome.usage.requests, questions: outcome.usage.questions + outcome.usage.cacheHits, inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, mode: control.id === 'hybrid' ? 'hybrid' : 'control' }
+        if (outcome.usage) jevUsage = { requests: outcome.usage.requests, questions: outcome.usage.questions + outcome.usage.cacheHits, inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, mode: control.id === 'hybrid' ? 'hybrid' : 'control', ...rubricStats(control) }
         if (outcome.notes?.length) notes.push(...outcome.notes.map(n => control.id + ': ' + n))
       } catch (error) {
         checkUser()
@@ -322,8 +323,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
       const out = await shadowScorer.score(task, limited, scoreCtx)
       const rows: NonNullable<PipelineResult['shadow']>['rows'] = []
       for (const [needId, byBlock] of out.grades) for (const [blockId, g] of byBlock) rows.push({ needId, blockId, shadow: Number(g.grade.toFixed(3)), control: Number((reference.grades.get(needId)?.get(blockId)?.grade ?? 0).toFixed(3)) })
-      shadow = { scorer: shadowScorer.id, model: shadowScorer.model, rows }
-      if (out.usage) jevUsage = { requests: out.usage.requests, questions: out.usage.questions + out.usage.cacheHits, inputTokens: out.usage.inputTokens, outputTokens: out.usage.outputTokens, mode: 'shadow' }
+      shadow = { scorer: shadowScorer.id, model: shadowScorer.model, ...shadowScorer.rubricRef ? { rubric: shadowScorer.rubricRef.key } : {}, rows }
+      if (out.usage) jevUsage = { requests: out.usage.requests, questions: out.usage.questions + out.usage.cacheHits, inputTokens: out.usage.inputTokens, outputTokens: out.usage.outputTokens, mode: 'shadow', ...rubricStats(shadowScorer) }
     } catch (error) {
       checkUser()
       notes.push('shadow scorer ' + shadowScorer.id + ' failed: ' + (error instanceof Error ? error.message : String(error)))
@@ -365,7 +366,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
       ...s.block.publishedAt ? { publishedAt: s.block.publishedAt } : {},
       needIds: s.needIds, grade: Number(s.grade.toFixed(2)), source: s.block.providers.join('+'),
     })
-    evidenceBlocks.push({ evidenceId, url: s.block.url, blockId: s.block.block.blockId, ...heading ? { heading } : {}, text: s.block.block.text, hash: s.block.block.hash, grade: Number(s.grade.toFixed(3)), scorer: scorerUsed })
+    evidenceBlocks.push({ evidenceId, url: s.block.url, blockId: s.block.block.blockId, ...heading ? { heading } : {}, text: s.block.block.text, hash: s.block.block.hash, grade: Number(s.grade.toFixed(3)), scorer: scorerUsed, ...scorerUsed !== 'rule' && scorerUsed !== 'none' && control.rubricRef ? { rubric: control.rubricRef.key } : {} })
   }
 
   const sourcesCount = options.sourcesCount ?? 8

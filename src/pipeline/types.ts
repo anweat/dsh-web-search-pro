@@ -161,7 +161,7 @@ export interface PackStats {
   excerptChars: number
   scorer: string
   /** Jev usage of this run (control or shadow). */
-  jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' | 'hybrid' }
+  jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' | 'hybrid'; /** `id@version#hash` of the judge rubric. */ rubric?: string; /** The rubric is a user override of the built-in. */ rubricOverridden?: boolean }
 }
 
 export interface EvidencePack {

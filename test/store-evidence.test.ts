@@ -48,8 +48,29 @@ test('migration: evidence tables are added to an existing M2a database, idempote
     const check = new DatabaseSync(t.file)
     const cols = (table: string): string[] => (check.prepare('PRAGMA table_info(' + table + ')').all() as { name: string }[]).map(c => c.name)
     assert.deepEqual(cols('evidence_runs'), ['id', 'query_id', 'task_json', 'pack_json', 'created_at'])
-    assert.deepEqual(cols('evidence_blocks'), ['evidence_id', 'run_id', 'url', 'block_id', 'heading', 'text', 'hash', 'grade', 'scorer'])
+    assert.deepEqual(cols('evidence_blocks'), ['evidence_id', 'run_id', 'url', 'block_id', 'heading', 'text', 'hash', 'grade', 'scorer', 'rubric'])
     check.close()
+  } finally { t.done() }
+})
+
+test('migration: evidence_blocks of an M2b-M3 database gains the rubric column; rubric round-trips', () => {
+  const t = tmp()
+  try {
+    const db = new DatabaseSync(t.file)
+    db.exec(`CREATE TABLE evidence_blocks (evidence_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, url TEXT NOT NULL, block_id TEXT NOT NULL, heading TEXT, text TEXT NOT NULL, hash TEXT, grade REAL, scorer TEXT);
+      INSERT INTO evidence_blocks (evidence_id, run_id, url, block_id, text, scorer) VALUES ('eold', 'rold', 'https://old.test/', 'b', 'old text', 'rule');`)
+    db.close()
+    for (let i = 0; i < 2; i++) {
+      const store = new Store(t.file)
+      assert.equal(store.evidenceBlock('eold')!.text, 'old text')
+      assert.equal(store.evidenceBlock('eold')!.rubric, null)
+      store.close()
+    }
+    const store = new Store(t.file)
+    try {
+      store.recordEvidenceRun({ ...run('rj', []), blocks: [{ evidenceId: 'ej', url: 'https://ex.test/j', blockId: 'b', text: 't', scorer: 'jev', rubric: 'score.support@v1#abc' }] })
+      assert.equal(store.evidenceBlock('ej')!.rubric, 'score.support@v1#abc')
+    } finally { store.close() }
   } finally { t.done() }
 })
 

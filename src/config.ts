@@ -6,6 +6,7 @@
 import path from 'node:path'
 import os from 'node:os'
 import z from '@deepseek-ai/schemastery'
+import type { RubricOverride } from './pipeline/rubrics.ts'
 
 /** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
 export interface CustomPlatformSpec {
@@ -45,6 +46,12 @@ export interface EvidenceConfig {
   hybridBorderline: boolean
   /** Upper bound of (need, block) questions sent to Jev per search. */
   maxJevQuestions: number
+  /**
+   * Per-rubric overrides of the judge prompts, keyed by rubric id (`score.support`, `gate.relevance`, `gate.constraint`).
+   * Each carries its own `version`; an override that fails validation is ignored and the built-in used (see pipeline/rubrics.ts).
+   * Remove the entry to restore the default.
+   */
+  rubrics?: Record<string, RubricOverride>
 }
 
 export interface Config {
@@ -183,6 +190,13 @@ export const Config = z.object({
     jevMode: z.union(['off', 'shadow', 'control', 'hybrid']).default('off').volatile(),
     hybridBorderline: z.boolean().default(false).volatile(),
     maxJevQuestions: z.number().default(64).volatile(),
+    rubrics: z.dict(z.object({
+      version: z.string(),
+      instructions: z.string(),
+      criteria: z.array(z.string()),
+      maxStateChars: z.number(),
+      maxCandidateChars: z.number(),
+    })).volatile(),
   }),
   verbose: z.boolean().default(false).volatile(),
 })
@@ -260,6 +274,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
       jevMode: vOr(ev.jevMode, 'off') as EvidenceConfig['jevMode'],
       hybridBorderline: vOr(ev.hybridBorderline, false) as boolean,
       maxJevQuestions: vOr(ev.maxJevQuestions, 64) as number,
+      ...ev.rubrics !== undefined && v(ev.rubrics) ? { rubrics: v(ev.rubrics) as Record<string, RubricOverride> } : {},
     },
     verbose: vOr(config.verbose, false) as boolean,
   }

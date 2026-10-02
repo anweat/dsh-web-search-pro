@@ -46,7 +46,7 @@ function fakeBrowser(): FakeBrowser {
 }
 
 /** Boot the real apply() against a fake ctx; `holder.browser` is what ctx.get('browser') returns. */
-function boot() {
+function boot(extra: Record<string, unknown> = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-browser-optional-'))
   const holder: { browser: FakeBrowser | undefined } = { browser: undefined }
   const tools = new Map<string, any>()
@@ -61,6 +61,7 @@ function boot() {
     dbPath: path.join(dir, 'store.db'),
     playwright: { enabled: true, snapshotDir: path.join(dir, 'shots') },
     customPlatforms: { forum: { name: 'Forum', url: 'https://forum.test?q={query}', item: '.i', title: '.t', link: 'a' } },
+    ...extra,
   }
   const ctx: any = {
     fiber: { config },
@@ -266,4 +267,31 @@ test('built lib has no runtime import of @anweat/dsh-browser', () => {
   }
   walk(libDir)
   assert.deepEqual(offenders, [])
+})
+
+test('(d) web_backend_status shows the active judge rubric versions, whether overridden, and why an override was ignored', async () => {
+  const plain = boot()
+  try {
+    const status = await plain.run('web_backend_status', {})
+    assert.deepEqual(status.evidence.scorer, 'rule')
+    assert.deepEqual(status.evidence.rubrics.map((r: any) => [r.id, r.version, r.overridden]), [['score.support', 'v1', false], ['gate.relevance', 'v1', false], ['gate.constraint', 'v1', false]])
+    assert.equal(status.evidence.diagnostics, undefined)
+    const schema = plain.tools.get('web_backend_status').output.schema
+    assert.equal(schema.properties.evidence.required, undefined, 'optional, closed schema extended only')
+    assert.match(plain.tools.get('web_backend_status').output.render({}, status)[0].text, /rubric score\.support@v1 #[0-9a-f]{12} \(built-in\)/)
+  } finally { plain.cleanup() }
+
+  const tuned = boot({ evidence: { rubrics: {
+    'score.support': { version: 'v2', instructions: '文本块直接给出答案吗？\n需求：{need}\n文本块：{candidate}' },
+    'gate.relevance': { version: 'v2', instructions: '主题相关吗？{nope}\n{need}\n{candidate}' },
+    'nope.rubric': { version: 'v1' },
+  } } })
+  try {
+    const status = await tuned.run('web_backend_status', {})
+    assert.deepEqual(status.evidence.rubrics.map((r: any) => [r.id, r.version, r.overridden]), [['score.support', 'v2', true], ['gate.relevance', 'v1', false], ['gate.constraint', 'v1', false]])
+    assert.equal(status.evidence.diagnostics.length, 2)
+    assert.match(status.evidence.diagnostics.join('|'), /gate\.relevance: override ignored, built-in v1 used: unknown variable \{nope\}/)
+    assert.match(status.evidence.diagnostics.join('|'), /nope\.rubric: override ignored: unknown rubric id/)
+    assert.match(tuned.tools.get('web_backend_status').output.render({}, status)[0].text, /rubric score\.support@v2 #[0-9a-f]{12} \(override\)/)
+  } finally { tuned.cleanup() }
 })

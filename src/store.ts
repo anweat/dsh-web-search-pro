@@ -69,6 +69,8 @@ export interface EvidenceBlockRow {
   hash?: string
   grade?: number
   scorer?: string
+  /** `id@version#hash` of the judge rubric when a Jev-based scorer graded the block. */
+  rubric?: string
 }
 
 export interface EvidenceRunRow {
@@ -137,7 +139,8 @@ CREATE TABLE IF NOT EXISTS evidence_blocks (
   text TEXT NOT NULL,
   hash TEXT,
   grade REAL,
-  scorer TEXT
+  scorer TEXT,
+  rubric TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_blocks_run ON evidence_blocks(run_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_runs_query ON evidence_runs(query_id);
@@ -190,6 +193,8 @@ export class Store {
       this.db.exec(SCHEMA)
       const columns = this.db.prepare('PRAGMA table_info(queries)').all() as unknown as { name: string }[]
       if (!columns.some(column => column.name === 'cache_key')) this.db.exec('ALTER TABLE queries ADD COLUMN cache_key TEXT')
+      const blockColumns = this.db.prepare('PRAGMA table_info(evidence_blocks)').all() as unknown as { name: string }[]
+      if (!blockColumns.some(column => column.name === 'rubric')) this.db.exec('ALTER TABLE evidence_blocks ADD COLUMN rubric TEXT')
       const pageColumns = this.db.prepare('PRAGMA table_info(pages)').all() as unknown as { name: string }[]
       if (!pageColumns.some(column => column.name === 'query_id')) {
         this.db.exec(`
@@ -348,15 +353,15 @@ export class Store {
       const queryId = this.recordSearch({ ...input.query, id: fallbackId }, input.sources, input.engine)
       this.db.prepare('INSERT OR REPLACE INTO evidence_runs (id, query_id, task_json, pack_json, created_at) VALUES (?, ?, ?, ?, ?)')
         .run(input.run.id, queryId, input.run.taskJson, input.run.packJson, new Date().toISOString())
-      const stmt = this.db.prepare('INSERT OR REPLACE INTO evidence_blocks (evidence_id, run_id, url, block_id, heading, text, hash, grade, scorer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      for (const b of input.blocks) stmt.run(b.evidenceId, input.run.id, b.url, b.blockId, b.heading ?? null, b.text, b.hash ?? null, b.grade ?? null, b.scorer ?? null)
+      const stmt = this.db.prepare('INSERT OR REPLACE INTO evidence_blocks (evidence_id, run_id, url, block_id, heading, text, hash, grade, scorer, rubric) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      for (const b of input.blocks) stmt.run(b.evidenceId, input.run.id, b.url, b.blockId, b.heading ?? null, b.text, b.hash ?? null, b.grade ?? null, b.scorer ?? null, b.rubric ?? null)
       return queryId
     }))
   }
 
   evidenceBlock(evidenceId: string): EvidenceBlockRow | undefined {
     return this.read(undefined, () => this.db.prepare(
-      `SELECT evidence_id AS evidenceId, run_id AS runId, url, block_id AS blockId, heading, text, hash, grade, scorer FROM evidence_blocks WHERE evidence_id = ?`,
+      `SELECT evidence_id AS evidenceId, run_id AS runId, url, block_id AS blockId, heading, text, hash, grade, scorer, rubric FROM evidence_blocks WHERE evidence_id = ?`,
     ).get(evidenceId) as unknown as EvidenceBlockRow | undefined)
   }
 

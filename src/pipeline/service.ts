@@ -14,6 +14,7 @@ import type { Store } from '../store.ts'
 import { normQuery, shapeSources } from '../util.ts'
 import { buildTaskSpec, type TaskInput } from './task.ts'
 import { runPipeline, type PipelineDeps, type PipelineOptions, type PipelineResult } from './run.ts'
+import { resolveRubric } from './rubrics.ts'
 import { HybridScorer, JEV_KEY_REF, JevScorer, RuleScorer, type Scorer } from './score.ts'
 import type { EvidencePack } from './types.ts'
 
@@ -55,7 +56,9 @@ export class EvidenceService {
       notes.push('Jev ' + cfg.jevMode + ' mode needs ' + JEV_KEY_REF + ' (credentials ref or environment): rule scorer used')
       return { control: rule }
     }
-    const jev = new JevScorer({ apiKey: key, ...this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}, requestCap: 16 })
+    const { rubric, diagnostics } = resolveRubric('score.support', cfg.rubrics)
+    notes.push(...diagnostics)
+    const jev = new JevScorer({ apiKey: key, rubric, ...this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}, requestCap: 16 })
     if (cfg.jevMode === 'shadow') return { control: rule, shadow: jev }
     if (cfg.jevMode === 'hybrid') return { control: new HybridScorer({ jev, rule, borderline: cfg.hybridBorderline, maxQuestions: cfg.maxJevQuestions }) }
     if (cfg.scorer === 'jev') return { control: jev }

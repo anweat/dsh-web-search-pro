@@ -92,6 +92,34 @@ dsh plugin --profile web add @anweat/dsh-browser@0.1.17 dsh-web-search-pro@0.1.1
 
 块评分默认用本地词法规则。可选的博查 Jev 评分（付费，需环境变量或凭据引用 `BOCHA_JEV_API_KEY`）由 `evidence` 配置控制：`jevMode: off`（默认，不调用）、`shadow`（规则决定，Jev 评分只记录到存储 `evidence_runs.pack_json` 供对照）、`control`（且 `scorer: jev` 时由 Jev 决定；任何 Jev 失败都回退到规则并在 `notes` 里说明）、`hybrid`（规则评分全部块，Jev 只重评需求语言与块语言不一致的 (需求, 块) 对；`hybridBorderline: true` 时再加规则评分为 1 的边界对；Jev 失败保留规则评分；与 `scorer` 无关）；`maxJevQuestions`（默认 64）限制每次搜索发送的 (需求, 块) 问题数。规则评分本身对中文需求与英文块做了跨语言对齐（query / 需求 / 约束里的英文词和标识符并入匹配词），默认即生效。发给 Jev 的只有一句话目标、需求文字和页面块文本。
 
+#### Jev 提示词（rubric）：可配置、有版本 / Judge prompts: configurable and versioned
+
+**中文**　发给 Jev 的问题措辞、评分等级和长度上限是带版本的 rubric（内置 `score.support`，另有 `gate.relevance`、`gate.constraint` 备用）。默认值与离线评测（`bench/rubrics/*.v1.json`）逐字相同。要调整，在设置文件 `evidence.rubrics` 里按 rubric id 写覆盖项，无需改代码：
+
+```yaml
+evidence:
+  jevMode: hybrid
+  rubrics:
+    score.support:
+      version: v2                     # 必填；内容有改动就必须换新版本号（不能是 v1）
+      instructions: |                 # 只能用 {task} {need} {candidate}；必须含 {need} 和 {candidate}（≤2000 字符）
+        文本块本身是否直接陈述了需求所问的答案，而不只是提到该主题？
+        需求：{need}
+        文本块：{candidate}
+      criteria: [无关, 只提到主题, 部分回答, 直接回答且含证据]   # 2–10 级，从低到高；不是 4 级时分数按比例换算到 0..3
+      maxStateChars: 200              # 20–2000，任务描述上限
+      maxCandidateChars: 1200         # 100–8000，每个文本块上限
+```
+
+- **校验与回退**：含未知变量、缺必需变量、等级数不在 2–10、长度越界、未换版本等，整条覆盖被忽略，改用内置版本；原因出现在 `web_backend_status` 的 `evidence.diagnostics` 和证据包的 `notes`（仅启用 Jev 时）。
+- **版本规则**：改了措辞、等级或长度就换新 `version`（如 v2、v3）。每次 Jev 评分都记录 `id@version#内容哈希`：证据包 `stats.jev.rubric`、shadow 日志（`evidence_runs.pack_json` 的 `shadow.rubric`）、证据行（`evidence_blocks.rubric`）；离线评测的缓存键同样包含 id、版本和全文，所以改提示词不会复用旧分数。
+- **查看**：`web_backend_status` 的 `evidence.rubrics` 列出每个 rubric 当前生效的版本、是否被覆盖。
+- **恢复默认**：删除对应的 `evidence.rubrics.<id>` 条目即可（设置页暂不提供该项的编辑界面，只读设置文件）。
+- **先离线对照再上线**：`node --experimental-transform-types bench/src/eval-pack.ts --rubric-file bench/rubrics/variants/score.support.v2-example.json`，在同一份冻结数据上评估候选版本；不带 `--allow-jev N` 时不会发出任何请求（用法见 `bench/src/eval-pack.ts` 文件头注释）。
+- **不让线上模型改提示词**：rubric 只能由人通过设置文件修改；插件和任何线上模型都不会自动改写或上线新版本。
+
+**English**　The question wording, grade levels and length caps sent to Jev are versioned rubrics (built in: `score.support`, plus `gate.relevance` and `gate.constraint` for future use). Defaults are byte-identical to the offline-evaluated wording. Override one under `evidence.rubrics.<id>` in settings.yaml with its own `version`, optional `instructions` (variables `{task} {need} {candidate}` only; `{need}` and `{candidate}` required), `criteria` (2-10 levels, lowest first; other than 4 levels are rescaled to 0..3), `maxStateChars`, `maxCandidateChars`. An invalid override (unknown variable, bad level count, out-of-range length, changed content under the old version label) is ignored and the built-in is used; the reason shows in `web_backend_status` (`evidence.diagnostics`) and the pack `notes`. Bump `version` whenever the content changes. Every Jev result records `id@version#hash` (pack `stats.jev.rubric`, shadow log, `evidence_blocks.rubric`), and the offline judge-cache keys include id, version and full text, so a changed prompt never reuses old scores. Restore defaults by deleting the `evidence.rubrics.<id>` entry (there is no settings-page editor for it yet). Compare a candidate offline first with `bench/src/eval-pack.ts --rubric-file`. Online models must never rewrite or roll out rubrics by themselves: they change only through the settings file.
+
 ## 工具（11 个）
 
 | 工具 | 作用 |
@@ -145,6 +173,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
        jevMode: off # off | shadow | control | hybrid
        hybridBorderline: false # 仅 hybrid：同时重评规则边界对
        maxJevQuestions: 64
+       # rubrics: ...   # 可选：覆盖 Jev 提示词，见下文“Jev 提示词（rubric）”
      ttlSeconds: 3600
      searchMaxResults: 8
      browserBindings:

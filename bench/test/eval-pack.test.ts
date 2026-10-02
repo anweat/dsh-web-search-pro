@@ -10,7 +10,7 @@ import {
   type EvalOptions, type LoadedTask, type TaskEval,
 } from '../src/eval-pack.ts'
 import { JudgeCache } from '../src/judges/cache.ts'
-import { loadRubrics, renderQuestion } from '../src/judges/rubrics.ts'
+import { loadRubricFile, loadRubrics, renderQuestion, RUBRICS_DIR } from '../src/judges/rubrics.ts'
 import { SystemOneJudge } from '../src/judges/systemone.ts'
 import { JEV_MODEL } from '../src/judges/jev.ts'
 import type { BenchTask, CandidateSnapshot, Label, PageSnapshot } from '../src/types.ts'
@@ -198,5 +198,73 @@ test('hybrid arms: a Chinese need against English pages costs Jev questions; col
     const md = renderReport({ runId: 't', tasks: hot.tasks, opts, jevRequests: 0, generatedAt: 'now' })
     assert.ok(!md.includes('NaN') && !md.includes('undefined'))
     assert.ok(md.includes('(b′) 管线 + 规则评分（跨语言对齐）') && md.includes('(d) 混合') && md.includes('(d′) 混合 + 规则边界对'))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+// ── alternative rubric versions (--rubric-file) ─────────────────────────────
+
+const VARIANT = path.join(RUBRICS_DIR, 'variants', 'score.support.v2-example.json')
+
+test('--rubric-file: the example variant validates, differs from v1, and is accepted as a plugin override', () => {
+  const { bench, resolved } = loadRubricFile(VARIANT)
+  assert.equal(bench.id, 'score.support.v2')
+  assert.equal(resolved.id, 'score.support')
+  assert.equal(resolved.version, 'v2')
+  assert.equal(resolved.overridden, true)
+  assert.equal(resolved.criteria!.length, 4)
+  assert.notEqual(resolved.hash, loadRubricFile(path.join(RUBRICS_DIR, 'score.support.v1.json')).resolved.hash)
+  assert.ok(!loadRubrics().has('score.support.v2'), 'variants are not part of the default rubric set')
+})
+
+test('--rubric-file: broken variants are rejected with the reasons', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-rubricfile-'))
+  try {
+    const good = JSON.parse(fs.readFileSync(VARIANT, 'utf8'))
+    const write = (name: string, value: unknown): string => { const f = path.join(dir, name); fs.writeFileSync(f, typeof value === 'string' ? value : JSON.stringify(value)); return f }
+    assert.throws(() => loadRubricFile(write('a.json', { ...good, instructions: good.instructions + ' {nope}' })), /unknown (template )?variable \{nope\}/)
+    assert.throws(() => loadRubricFile(write('b.json', { ...good, instructions: '只有 {candidate}' })), /must contain \{need\}/)
+    assert.throws(() => loadRubricFile(write('c.json', { ...good, criteria: ['一个'] })), /2-10 levels/)
+    assert.throws(() => loadRubricFile(write('d.json', { ...good, id: 'score.support.v1', version: 'v1' })), /new version/)
+    assert.throws(() => loadRubricFile(write('e.json', { ...good, id: 'score.other.v2' })), /unknown rubric id/)
+    assert.throws(() => loadRubricFile(write('f.json', 'not json')), /cannot read rubric file/)
+    assert.throws(() => loadRubricFile(path.join(RUBRICS_DIR, 'gate.relevance.v1.json')), /only score rubrics/)
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('--rubric-file dry run: r1 answers (v1) never serve the variant; the variant\'s questions use its wording; no request is made', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-evalpack-'))
+  try {
+    const f = fixture()
+    const v1: EvalOptions = { ...OPTS, jev: true, jevRoot: root }
+    const rubricFile = loadRubricFile(VARIANT)
+    const v2: EvalOptions = { ...v1, rubricFile }
+    // Record what a v1 run asks, answer all of it into the r1 cache.
+    const asked: { state: string; need: string; candidate: string; task?: string; rubric?: string }[] = []
+    const recorder = (rubric?: typeof rubricFile.resolved) => new JevScorer({ apiKey: 'offline', requestCap: 0, ...rubric ? { rubric } : {}, cache: { get: p => { asked.push(p); return undefined }, set() {} }, fetchImpl: (async () => { throw new Error('offline') }) as never })
+    await runStages(f, v1, recorder())
+    assert.ok(asked.length > 0)
+    const cache = r1JevCache(root)
+    for (const q of asked) cache.set(q, { grade: 2 })
+    assert.equal((await jevMisses([f], v1)).get('dc-99'), 0, 'v1: fully answered from the cache')
+    const hot = await evaluate([f], v1)
+    assert.equal(hot.tasks[0]!.jevStatus, 'answered')
+
+    // The same run under the variant: every question is a miss, no request, the task falls back to the rule pack.
+    assert.ok((await jevMisses([f], v2)).get('dc-99')! >= asked.length)
+    const cold = await evaluate([f], v2)
+    assert.equal(cold.jevRequests, 0)
+    assert.equal(cold.tasks[0]!.jevStatus, 'fallback')
+    assert.equal(cold.tasks[0]!.jevCacheHits, 0)
+    const askedV1 = asked.splice(0)
+    await runStages(f, v2, recorder(rubricFile.resolved))
+    assert.ok(askedV1.every(q => q.rubric!.startsWith('score.support@v1#')) && asked.every(q => q.rubric === rubricFile.resolved.key))
+
+    // After caching the variant's answers they are served, from keys of their own, and v1's entries are untouched.
+    const cacheV2 = r1JevCache(root, rubricFile.bench)
+    for (const q of asked) cacheV2.set(q, { grade: 3 })
+    assert.equal((await jevMisses([f], v2)).get('dc-99'), 0)
+    assert.equal((await jevMisses([f], v1)).get('dc-99'), 0)
+    const md = renderReport({ runId: 't', tasks: (await evaluate([f], v2)).tasks, opts: v2, jevRequests: 0, generatedAt: 'now' })
+    assert.ok(md.includes('Jev 提示词版本') && md.includes(rubricFile.resolved.key))
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })

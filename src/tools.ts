@@ -9,6 +9,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { SearchRouter } from './router.ts'
 import type { FetchService } from './fetch.ts'
 import type { Store } from './store.ts'
+import { resolveAllRubrics } from './pipeline/rubrics.ts'
 import { browserState, requireBrowser, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig } from './config.ts'
@@ -76,7 +77,7 @@ const EVIDENCE_OUTPUT_PROPERTIES = {
     type: 'object', additionalProperties: false,
     properties: {
       candidates: { type: 'number' }, kept: { type: 'number' }, fetched: { type: 'number' }, blocksScored: { type: 'number' }, excerptChars: { type: 'number' }, scorer: { type: 'string' },
-      jev: { type: 'object', additionalProperties: false, properties: { requests: { type: 'number' }, questions: { type: 'number' }, inputTokens: { type: 'number' }, outputTokens: { type: 'number' }, mode: { type: 'string' } } },
+      jev: { type: 'object', additionalProperties: false, properties: { requests: { type: 'number' }, questions: { type: 'number' }, inputTokens: { type: 'number' }, outputTokens: { type: 'number' }, mode: { type: 'string' }, rubric: { type: 'string' }, rubricOverridden: { type: 'boolean' } } },
     },
   },
 } as const
@@ -675,13 +676,19 @@ export function registerTools(deps: ToolDeps): void {
           engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
           cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' } } } },
           browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
+          evidence: { type: 'object', additionalProperties: false, properties: { scorer: { type: 'string', required: true }, jevMode: { type: 'string', required: true }, rubrics: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, version: { type: 'string', required: true }, overridden: { type: 'boolean', required: true }, hash: { type: 'string', required: true } } } }, diagnostics: { type: 'array', items: { type: 'string' } } } },
         },
       },
       render: (_args, value) => {
-        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string }[]; browser?: { available: boolean; state: string; reason?: string } }
+        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[] } }
         const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
         lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '')))
         if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
+        if (v.evidence) {
+          lines.push('evidence: scorer=' + v.evidence.scorer + ' jevMode=' + v.evidence.jevMode)
+          lines.push(...v.evidence.rubrics.map(r => '  rubric ' + r.id + '@' + r.version + ' #' + r.hash + (r.overridden ? ' (override)' : ' (built-in)')))
+          lines.push(...(v.evidence.diagnostics ?? []).map(d => '  ⚠ ' + d))
+        }
         return [{ type: 'text', text: lines.join('\n') }]
       },
     },
@@ -690,7 +697,14 @@ export function registerTools(deps: ToolDeps): void {
     async execute() {
       const cli = await detectDeps()
       const availability = new Map(cli.map(value => [value.id, value.available]))
-      return { engines: await router.backendDiagnostics(availability), cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })), browser: browserState(getBrowser()) }
+      const ev = dynamic().evidence
+      const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
+      return {
+        engines: await router.backendDiagnostics(availability),
+        cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })),
+        browser: browserState(getBrowser()),
+        evidence: { scorer: ev.scorer, jevMode: ev.jevMode, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length ? { diagnostics } : {} },
+      }
     },
   }))
 

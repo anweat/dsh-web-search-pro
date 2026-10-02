@@ -25,6 +25,9 @@ export interface Rubric {
   criteria?: string[]
   /** choice: label -> description. */
   options?: Record<string, string>
+  /** score: caps of the shared task description / the candidate text (plugin rubric limits apply). */
+  maxStateChars?: number
+  maxCandidateChars?: number
 }
 
 export const RUBRIC_VARIABLES = ['task', 'need', 'constraint', 'candidate'] as const
