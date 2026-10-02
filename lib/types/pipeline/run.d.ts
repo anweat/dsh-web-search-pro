@@ -113,6 +113,8 @@ export interface PipelineOptions {
 export declare const DEFAULT_DEADLINE_MS = 60000;
 export declare const DEFAULT_MAX_ROUNDS = 2;
 export declare const DEFAULT_MAX_QUERIES = 4;
+/** `provider|protocol|model[|calibration]`: what an evidence row records about the judge behind its grade. */
+export declare const judgeKey: (scorer: Scorer) => string | undefined;
 export declare function verificationOf(task: Pick<TaskSpec, 'constraints'>, compiled: readonly CompiledQuery[]): EvidencePack['verification'];
 export interface PipelineResult {
     pack: EvidencePack;
@@ -132,12 +134,14 @@ export interface PipelineResult {
         grade: number;
         scorer: string;
         rubric?: string;
+        judge?: string;
     }[];
     /** Shadow scorer output for later comparison (Jev mode `shadow`). */
     shadow?: {
         scorer: string;
         model: string;
         rubric?: string;
+        judge?: string;
         rows: {
             needId: string;
             blockId: string;

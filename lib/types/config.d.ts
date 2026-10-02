@@ -3,6 +3,8 @@
  * @module web-search-pro/config
  */
 import z from '@deepseek-ai/schemastery';
+import type { JudgeSettings } from './pipeline/judges/providers.ts';
+import type { BudgetInput } from './pipeline/ledger.ts';
 import type { RubricOverride } from './pipeline/rubrics.ts';
 /** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
 export interface CustomPlatformSpec {
@@ -50,6 +52,15 @@ export interface EvidenceConfig {
      * Remove the entry to restore the default.
      */
     rubrics?: Record<string, RubricOverride>;
+    /**
+     * Which model judge S6 uses and where it lives (dev-plan M5). Absent = the built-in `bocha-jev` preset.
+     * `mode` is the provider-neutral name of `jevMode` (it wins when both are set; `control` then needs no `scorer`).
+     */
+    judge?: JudgeSettings & {
+        mode?: EvidenceConfig['jevMode'];
+    };
+    /** Model usage caps (input tokens) per search and per day, with per-provider overrides. Absent = 60k per search, 1M per day. */
+    budget?: BudgetInput;
 }
 export interface Config {
     /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
@@ -209,8 +220,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         snapshotDir: z<string, string, "plain">;
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
-        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
+        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
@@ -228,9 +239,137 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             maxStateChars: z<number, number, "plain">;
             maxCandidateChars: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
+        budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
-        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
+        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
@@ -248,6 +387,134 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             maxStateChars: z<number, number, "plain">;
             maxCandidateChars: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
+        budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
     }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
@@ -321,8 +588,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         snapshotDir: z<string, string, "plain">;
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
-        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
+        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
@@ -340,9 +607,137 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             maxStateChars: z<number, number, "plain">;
             maxCandidateChars: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
+        budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
-        scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
-        jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
+        scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
+        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
@@ -360,6 +755,134 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             maxStateChars: z<number, number, "plain">;
             maxCandidateChars: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "plain">;
+            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            allowLlm: z<boolean, boolean, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                protocol?: "systemone" | "rerank" | "llm" | null | undefined;
+                baseUrl?: string | null | undefined;
+                model?: string | null | undefined;
+                keyRef?: string | null | undefined;
+                path?: string | null | undefined;
+                rubricId?: string | null | undefined;
+                tokenModel?: "expanded" | "plain" | null | undefined;
+                label?: string | null | undefined;
+                limits?: import("@deepseek-ai/cosmokit").Dict<number, string> | null | undefined;
+                calibration?: ({
+                    version?: string | null | undefined;
+                    points?: number[][] | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+                extraBody?: import("@deepseek-ai/cosmokit").Dict<any, string> | null | undefined;
+                price?: ({
+                    inputPerMTokens?: number | null | undefined;
+                    outputPerMTokens?: number | null | undefined;
+                    currency?: string | null | undefined;
+                } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                protocol: z<"systemone" | "rerank" | "llm", "systemone" | "rerank" | "llm", "plain">;
+                baseUrl: z<string, string, "plain">;
+                model: z<string, string, "plain">;
+                keyRef: z<string, string, "plain">;
+                path: z<string, string, "plain">;
+                rubricId: z<string, string, "plain">;
+                tokenModel: z<"expanded" | "plain", "expanded" | "plain", "plain">;
+                label: z<string, string, "plain">;
+                limits: z<import("@deepseek-ai/cosmokit").Dict<number, string>, import("@deepseek-ai/cosmokit").Dict<number, string>, "plain">;
+                calibration: z<Schemastery.ObjectS<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    version: z<string, string, "plain">;
+                    points: z<number[][], number[][], "plain">;
+                }>>, "plain">;
+                extraBody: z<import("@deepseek-ai/cosmokit").Dict<any, string>, import("@deepseek-ai/cosmokit").Dict<any, string>, "plain">;
+                price: z<Schemastery.ObjectS<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    inputPerMTokens: z<number, number, "plain">;
+                    outputPerMTokens: z<number, number, "plain">;
+                    currency: z<string, string, "plain">;
+                }>>, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
+        budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            perSearchInputTokens: z<number, number, "plain">;
+            dailyInputTokens: z<number, number, "plain">;
+            timezone: z<string, string, "plain">;
+            providers: z<import("@deepseek-ai/cosmokit").Dict<{
+                perSearchInputTokens?: number | null | undefined;
+                dailyInputTokens?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                perSearchInputTokens: z<number, number, "plain">;
+                dailyInputTokens: z<number, number, "plain">;
+            }>>, string>, "plain">;
+        }>>>, "volatile">;
     }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, "plain">;

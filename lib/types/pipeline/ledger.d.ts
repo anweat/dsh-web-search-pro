@@ -1,0 +1,103 @@
+/**
+ * Model usage ledger with caps (design §9, dev-plan M5).
+ *
+ * Every call to a model judge (hosted or local) is RESERVED before it is sent and
+ * SETTLED after: a reservation that would pass a cap is refused and the optional
+ * model stage falls back to the rule scorer. Reservations are rows of the
+ * `usage_ledger` table written in an immediate transaction, so two searches (or two
+ * DSH processes sharing the store) cannot both spend the same headroom, reserved rows
+ * count until settled (a crash never frees them), and today's total survives a restart.
+ *
+ *  - Caps are input tokens: `perSearchInputTokens` (one search, all rounds),
+ *    `dailyInputTokens` (a calendar day in `timezone`), each with per-provider
+ *    overrides; the stricter of every applicable cap wins.
+ *  - Actual tokens come from the service's `usage`; when it reports none the
+ *    conservative estimate is booked and flagged `estimated`.
+ *  - Money: only when the provider declares a price; otherwise `amount` is null (never 0).
+ * @module web-search-pro/pipeline/ledger
+ */
+import type { Store, UsageTotals } from '../store.ts';
+import type { ProviderConfig, UsageMeter } from './judges/types.ts';
+export interface ProviderBudgetInput {
+    perSearchInputTokens?: number;
+    dailyInputTokens?: number;
+}
+/** `evidence.budget` as the user writes it. */
+export interface BudgetInput extends ProviderBudgetInput {
+    /** IANA time zone of the day boundary (default: the system's). */
+    timezone?: string;
+    providers?: Record<string, ProviderBudgetInput>;
+}
+export interface BudgetCaps {
+    perSearchInputTokens: number;
+    dailyInputTokens: number;
+    timezone?: string;
+    providers: Record<string, ProviderBudgetInput>;
+}
+export declare const DEFAULT_BUDGET: {
+    readonly perSearchInputTokens: 60000;
+    readonly dailyInputTokens: 1000000;
+};
+/** Validate the budget settings; invalid values fall back to the defaults and are reported. */
+export declare function resolveBudget(input?: BudgetInput | undefined): {
+    caps: BudgetCaps;
+    diagnostics: string[];
+};
+/** Calendar day `YYYY-MM-DD` of `ts` in `timezone` (the system zone when absent). */
+export declare function dayKey(ts: number, timezone?: string): string;
+export interface UsageSnapshot {
+    day: string;
+    timezone?: string;
+    caps: {
+        perSearchInputTokens: number;
+        dailyInputTokens: number;
+        providers: Record<string, ProviderBudgetInput>;
+    };
+    totals: UsageTotals;
+    providers: (UsageTotals & {
+        provider: string;
+        protocol: string;
+    })[];
+}
+export declare class UsageLedger {
+    private readonly store;
+    readonly caps: BudgetCaps;
+    private readonly now;
+    constructor(store: Store, caps: BudgetCaps, now?: () => number);
+    /** Today's day key in the budget time zone. */
+    day(): string;
+    /** A per-search budget (one `web_search_pro` evidence call, all its rounds). */
+    forSearch(searchId?: string): SearchBudget;
+    /** Today's usage over reserved and settled calls, with the caps (read-only). */
+    today(): UsageSnapshot;
+    /** @internal */
+    dailyUsed(provider?: string): number;
+    /** @internal */
+    reserve(searchId: string, provider: ProviderConfig, inputTokens: number): string | {
+        refused: string;
+    };
+    /** @internal */
+    close(id: string, provider: ProviderConfig, final: {
+        status: 'settled' | 'released';
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        estimated: boolean;
+        note?: string;
+    }): void;
+}
+/** Counts one search's reservations against the per-search caps; hands out a meter per provider. */
+export declare class SearchBudget {
+    private readonly ledger;
+    readonly searchId: string;
+    /** Input tokens reserved or settled by this search, all providers. */
+    used: number;
+    private readonly byProvider;
+    constructor(ledger: UsageLedger, searchId: string);
+    providerUsed(id: string): number;
+    /** @internal */
+    add(provider: string, delta: number): void;
+    /** @internal */
+    get caps(): BudgetCaps;
+    meterFor(provider: ProviderConfig): UsageMeter;
+}

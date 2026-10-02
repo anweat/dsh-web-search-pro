@@ -24,8 +24,10 @@ export interface EvidenceServiceDeps {
     fetch: Pick<FetchService, 'fetchPage'>;
     store: Store;
     dynamic: () => ResolvedConfig;
-    /** Test seam for the Jev HTTP client. */
+    /** Test seam for the judge HTTP client. */
     fetchImpl?: typeof fetch;
+    /** Test seam for the usage ledger's clock (epoch ms). */
+    now?: () => number;
 }
 /** Pack as returned by the tool: `sources` shaped like every other exit. */
 export type EvidenceOutput = Omit<EvidencePack, 'sources'> & {
@@ -36,7 +38,11 @@ export declare const PAGE_MAX_CHARS = 60000;
 export declare class EvidenceService {
     private readonly deps;
     constructor(deps: EvidenceServiceDeps);
-    /** Which scorer decides and which (if any) only observes, from `evidence.scorer` / `evidence.jevMode`. */
+    /**
+     * Which scorer decides and which (if any) only observes. The mode is `evidence.judge.mode`, or its legacy alias
+     * `evidence.jevMode`; the model behind it is `evidence.judge.provider` (default `bocha-jev`). Whatever cannot be set
+     * up (unknown provider, missing key, uncalibrated reranker, ...) leaves the rule scorer in charge and says why.
+     */
     private scorers;
     search(request: EvidenceRequest): Promise<EvidenceOutput>;
     /** Best-effort: the pack already exists, a storage failure must not lose it. */

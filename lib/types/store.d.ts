@@ -60,6 +60,39 @@ export interface EvidenceBlockRow {
     scorer?: string;
     /** `id@version#hash` of the judge rubric when a Jev-based scorer graded the block. */
     rubric?: string;
+    /** `provider|protocol|model[|calibration]` of the model judge that graded the block (dev-plan M5). */
+    judge?: string;
+}
+/** One model call (or reservation) of the usage ledger (design §9). */
+export interface UsageRow {
+    id: string;
+    ts: string;
+    /** Calendar day (YYYY-MM-DD) in the configured budget time zone at reservation time. */
+    day: string;
+    searchId?: string;
+    provider: string;
+    protocol: string;
+    model?: string;
+    /** reserved: estimate held while the call runs (counts against the caps); settled: final; released: refused or failed without billing. */
+    status: 'reserved' | 'settled' | 'released';
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    /** Some token figures are the plugin's estimate (the service reported none, or the call outcome is unknown). */
+    estimated: boolean;
+    /** Money spent in `currency`; null = price unknown (never 0). */
+    amount: number | null;
+    currency?: string;
+    note?: string;
+}
+export interface UsageTotals {
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    estimated: boolean;
+    calls: number;
+    amount: number | null;
+    currency?: string;
 }
 export interface EvidenceRunRow {
     id: string;
@@ -157,6 +190,49 @@ export declare class Store {
         };
         blocks: readonly Omit<EvidenceBlockRow, 'runId'>[];
     }): string;
+    /**
+     * Reserve `inputTokens` for a model call, atomically across processes sharing this file
+     * (BEGIN IMMEDIATE): refused when today's reserved + settled input tokens, over all providers or
+     * for this provider, plus the request would pass a daily cap. Reserved rows count until settled,
+     * so a crash between reserve and settle never frees the tokens. A closed or failing store refuses.
+     */
+    reserveUsage(input: {
+        id: string;
+        ts: string;
+        day: string;
+        searchId?: string;
+        provider: string;
+        protocol: string;
+        model?: string;
+        inputTokens: number;
+        dailyCap?: number;
+        providerDailyCap?: number;
+    }): {
+        ok: true;
+    } | {
+        ok: false;
+        scope: 'daily' | 'provider-daily' | 'unavailable';
+        used: number;
+        cap: number;
+    };
+    /** Close a reservation: final tokens (actual, or the estimate flagged `estimated`) and amount (null = unknown price). */
+    settleUsage(id: string, final: {
+        status: 'settled' | 'released';
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        estimated: boolean;
+        amount: number | null;
+        currency?: string;
+        note?: string;
+    }): void;
+    /** Ledger rows of one day, oldest first (optionally one provider). */
+    usageRows(day: string, provider?: string): UsageRow[];
+    /** Per-provider totals of one day over reserved and settled rows (released rows only add their request). */
+    usageByProvider(day: string): (UsageTotals & {
+        provider: string;
+        protocol: string;
+    })[];
     evidenceBlock(evidenceId: string): EvidenceBlockRow | undefined;
     evidenceRun(runId: string): EvidenceRunRow | undefined;
     /** Newest stored page text for a URL, regardless of age (evidence expansion reads around a block). */
