@@ -17,6 +17,35 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 export const BENCH_ROOT = path.resolve(here, '..')
 export const TASKS_FILE = path.join(BENCH_ROOT, 'tasks', 'tasks.v1.jsonl')
 
+/**
+ * Task-set versions. v1 is the tuning set (calibration/test split). v2 is the held-out set:
+ * its tasks must never be used to choose thresholds, prompts or any other parameter.
+ */
+export type TaskSet = 'v1' | 'v2'
+export const TASK_SETS: readonly TaskSet[] = ['v1', 'v2']
+
+export interface TaskSetPaths { tasksFile: string; candidatesDir: string; labelsDir: string }
+
+export function taskSetPaths(set: TaskSet = 'v1'): TaskSetPaths {
+  return {
+    tasksFile: path.join(BENCH_ROOT, 'tasks', 'tasks.' + set + '.jsonl'),
+    candidatesDir: path.join(BENCH_ROOT, 'data', 'candidates.' + set),
+    labelsDir: path.join(BENCH_ROOT, 'data', 'labels.' + set),
+  }
+}
+
+/** Parse the `--task-set` flag value (default v1). */
+export function parseTaskSet(value: string | true | undefined): TaskSet {
+  if (value === undefined) return 'v1'
+  if (typeof value === 'string' && (TASK_SETS as readonly string[]).includes(value)) return value as TaskSet
+  throw new Error('--task-set must be ' + TASK_SETS.join('|'))
+}
+
+/** Load the tasks of a task-set version. */
+export function loadTaskSet(set: TaskSet = 'v1'): BenchTask[] {
+  return loadTasks(taskSetPaths(set).tasksFile)
+}
+
 /** Validate one parsed task; returns a list of problems (empty = valid). */
 export function validateTask(task: unknown): string[] {
   const errors: string[] = []
@@ -26,7 +55,7 @@ export function validateTask(task: unknown): string[] {
     if (typeof t[key] !== 'string' || !(t[key] as string).trim()) errors.push(key + ' must be a non-empty string')
   }
   str('id'); str('goal'); str('query'); str('notes')
-  if (typeof t.id === 'string' && !/^[a-z]{2}-\d{2,3}$/.test(t.id)) errors.push('id must look like dc-01')
+  if (typeof t.id === 'string' && !/^(v\d+-)?[a-z]{2}-\d{2,3}$/.test(t.id)) errors.push('id must look like dc-01 or v2-dc-01')
   if (!PROFILES.includes(t.profile as never)) errors.push('bad profile: ' + String(t.profile))
   if (!TASK_LANGS.includes(t.lang as never)) errors.push('bad lang: ' + String(t.lang))
   if (!Array.isArray(t.needs) || t.needs.length === 0) errors.push('needs must be a non-empty array')
@@ -82,9 +111,16 @@ export function loadTasks(file = TASKS_FILE): BenchTask[] {
  * profile tasks are ordered by sha1(id) and the first half (rounded up) goes
  * to `calibration`. Adding tasks later can move existing ones, so freeze the
  * result into a file before labeling (see README).
+ *
+ * For the v2 set every task is `heldout` (no calibration half): v2 is only used
+ * to check parameters that were frozen on v1.
  */
-export function assignSplits(tasks: readonly BenchTask[]): Map<string, Split> {
+export function assignSplits(tasks: readonly BenchTask[], set: TaskSet = 'v1'): Map<string, Split> {
   const out = new Map<string, Split>()
+  if (set === 'v2') {
+    for (const t of tasks) out.set(t.id, 'heldout')
+    return out
+  }
   const byProfile = new Map<string, BenchTask[]>()
   for (const t of tasks) byProfile.set(t.profile, [...byProfile.get(t.profile) ?? [], t])
   for (const group of byProfile.values()) {

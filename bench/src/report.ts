@@ -11,13 +11,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { numberFlag, parseFlags } from './cli.ts'
-import { CANDIDATES_DIR, LABELS_DIR, readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
+import { readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
 import { canonicalUrl } from './harvest-lib.ts'
 import {
   brier, chooseDropThreshold, ece, evalThreshold, mean, ndcgAtK, percentile, rocAuc, spearman,
 } from './metrics.ts'
 import type { ResultRow } from './run-judges.ts'
-import { assignSplits, loadTasks } from './tasks.ts'
+import { assignSplits, loadTaskSet, parseTaskSet, taskSetPaths } from './tasks.ts'
 import type { BenchTask, CandidateSnapshot, Label, Satisfied, Split } from './types.ts'
 
 export const SLICES = ['all', 'zh', 'en', 'mixed'] as const
@@ -59,6 +59,11 @@ export interface ReportInput {
   truth: ReadonlyMap<string, TaskTruth>
   labelers: string[]
   minRecall?: number
+  /**
+   * Drop thresholds frozen on another run (key `judge|rubricId`). Used when the input has no
+   * calibration tasks (v2 held-out set): the threshold is never derived from held-out data.
+   */
+  frozenThresholds?: Readonly<Record<string, number>>
 }
 
 // ── result types ────────────────────────────────────────────────────────────
@@ -72,8 +77,10 @@ export interface GateReport {
   tasks: number
   calibrationTasks: number
   testTasks: number
-  /** Drop threshold picked on calibration (recall of label>=2 >= minRecall); undefined for non-relevance rubrics. */
+  /** Drop threshold picked on calibration (recall of label>=2 >= minRecall) or frozen from a v1 report; undefined for non-relevance rubrics. */
   threshold?: number
+  /** `frozen` when the threshold was supplied (`--thresholds-from`) instead of derived on calibration. */
+  thresholdSource?: 'calibration' | 'frozen'
   calibrationDropped?: number
   slices: Record<string, GateSliceMetrics>
   test: Record<string, GateTestMetrics>
@@ -107,7 +114,7 @@ export interface ReportJson {
   generatedAt: string
   minRecall: number
   labelers: string[]
-  tasks: { total: number; calibration: number; test: number }
+  tasks: { total: number; calibration: number; test: number; heldout?: number }
   coverage: Record<string, number>
   gate: GateReport[]
   gateCommon: Record<string, { tasks: number; auc: Record<string, number | undefined> }>
@@ -187,17 +194,22 @@ export function buildReport(input: ReportInput): ReportJson {
         judge, rubricId, rubricVersion: sub[0]!.rubricVersion,
         tasks: new Set(samples.map(s => s.taskId)).size,
         calibrationTasks: new Set(samples.filter(s => s.split === 'calibration').map(s => s.taskId)).size,
-        testTasks: new Set(samples.filter(s => s.split === 'test').map(s => s.taskId)).size,
+        testTasks: new Set(samples.filter(s => s.split === 'test' || s.split === 'heldout').map(s => s.taskId)).size,
         slices: {}, test: {},
       }
       for (const slice of SLICES) report.slices[slice] = sliceMetrics(samples.filter(s => inSlice(s.lang, slice)), isRel)
       if (isRel) {
         const cal = samples.filter(s => s.split === 'calibration')
-        const t = chooseDropThreshold(cal.map(s => s.prob), cal.map(s => (s.rel ?? 0) >= 2), minRecall)
+        let t = chooseDropThreshold(cal.map(s => s.prob), cal.map(s => (s.rel ?? 0) >= 2), minRecall)
+        if (t !== undefined) report.thresholdSource = 'calibration'
+        else if (!cal.length && input.frozenThresholds?.[judge + '|' + rubricId] !== undefined) {
+          t = input.frozenThresholds[judge + '|' + rubricId]
+          report.thresholdSource = 'frozen'
+        }
         if (t !== undefined) {
           report.threshold = t
-          report.calibrationDropped = evalThreshold(cal.map(s => s.prob), cal.map(s => (s.rel ?? 0) >= 2), t).dropped
-          const test = samples.filter(s => s.split === 'test')
+          if (cal.length) report.calibrationDropped = evalThreshold(cal.map(s => s.prob), cal.map(s => (s.rel ?? 0) >= 2), t).dropped
+          const test = samples.filter(s => s.split === 'test' || s.split === 'heldout')
           for (const slice of SLICES) report.test[slice] = testMetrics(test.filter(s => inSlice(s.lang, slice)), t)
         }
       }
@@ -289,6 +301,7 @@ export function buildReport(input: ReportInput): ReportJson {
       total: labeledTasks.length,
       calibration: labeledTasks.filter(t => splits.get(t) === 'calibration').length,
       test: labeledTasks.filter(t => splits.get(t) === 'test').length,
+      ...labeledTasks.some(t => splits.get(t) === 'heldout') ? { heldout: labeledTasks.filter(t => splits.get(t) === 'heldout').length } : {},
     },
     coverage, gate, gateCommon, score, profile, cost,
   }
@@ -306,7 +319,9 @@ export function renderMarkdown(r: ReportJson): string {
   out.push('# 判定器对照实验报告：' + r.runId, '')
   out.push('> **注意：标注为 LLM 初稿，未经人工复核**（标注者：' + (r.labelers.join('、') || '未知') + '）。所有指标都是对该初稿的一致性，不是对真值的一致性；DeepSeek 判定器与标注者同源，存在泄漏，仅作参考。', '')
   out.push('- 生成时间：' + r.generatedAt)
-  out.push('- 已标注任务：' + r.tasks.total + '（calibration ' + r.tasks.calibration + '，test ' + r.tasks.test + '）')
+  out.push('- 已标注任务：' + r.tasks.total + (r.tasks.heldout !== undefined
+    ? '（calibration ' + r.tasks.calibration + '，test ' + r.tasks.test + '，heldout ' + r.tasks.heldout + '；heldout 为 v2 留出集，只用于检验已冻结的参数，**不得据此调参**）'
+    : '（calibration ' + r.tasks.calibration + '，test ' + r.tasks.test + '）'))
   out.push('- 各判定器覆盖任务数：' + Object.entries(r.coverage).map(([j, n]) => j + ' ' + n).join('，'))
   out.push('- Gate 正例：标注相关度 ≥ 2（另报 ≥ 1）；drop 阈值在 calibration 上选取，使正例召回 ≥ ' + r.minRecall + '（prob < 阈值则丢弃），在 test 上评估。', '')
 
@@ -335,7 +350,7 @@ export function renderMarkdown(r: ReportJson): string {
 
   out.push('## 2. S4 Gate：drop 阈值（calibration 选取 → test 评估）', '')
   const thr = relGate.filter(g => g.threshold !== undefined)
-  if (!thr.length) out.push('（没有足够的 calibration 正例来选阈值）', '')
+  if (!thr.length) out.push('（没有足够的 calibration 正例来选阈值；留出集报告需用 `--thresholds-from <v1 report.json>` 提供冻结阈值）', '')
   else {
     const body: string[][] = []
     for (const g of thr) {
@@ -345,6 +360,7 @@ export function renderMarkdown(r: ReportJson): string {
         body.push([g.judge, g.rubricId, slice === 'all' ? f(g.threshold, 4) : '', slice, String(t.n), pct(t.recall2), pct(t.recall1), pct(t.dropped), pct(t.goldRecall) + ' (' + t.goldN + ')'])
       }
     }
+    if (thr.some(g => g.thresholdSource === 'frozen')) out.push('阈值取自 v1 报告（冻结），未在本数据集上选取或调整；指标列为留出集（heldout）上的结果。', '')
     out.push(table(['判定器', 'rubric', '阈值', '范围(test)', 'n', '正例召回(≥2)', '正例召回(≥1)', '丢弃比例', '含金标准块候选召回(n)'], body), '')
     out.push('通过门槛（§6.4）：金标准证据保留率 ≥ 0.95，且读取/评分候选数减少 ≥ 40%（即丢弃比例 ≥ 40%）。', '')
   }
@@ -383,14 +399,21 @@ export function loadRows(file: string): ResultRow[] {
 }
 
 async function main(): Promise<number> {
-  const flags = parseFlags(process.argv.slice(2), { values: ['run', 'min-recall', 'labels-dir', 'candidates-dir'], booleans: [] })
+  const flags = parseFlags(process.argv.slice(2), { values: ['run', 'min-recall', 'labels-dir', 'candidates-dir', 'task-set', 'thresholds-from'], booleans: [] })
   if (typeof flags.run !== 'string') throw new Error('--run <runId|dir> is required')
   const dir = fs.existsSync(flags.run) ? path.resolve(flags.run) : path.join(RUNS_DIR, flags.run)
   const rows = loadRows(path.join(dir, 'results.jsonl'))
-  const labelsDir = typeof flags['labels-dir'] === 'string' ? path.resolve(flags['labels-dir']) : LABELS_DIR
-  const candidatesDir = typeof flags['candidates-dir'] === 'string' ? path.resolve(flags['candidates-dir']) : CANDIDATES_DIR
-  const tasks = loadTasks()
-  const splits = assignSplits(tasks)
+  const taskSet = parseTaskSet(flags['task-set'])
+  const setPaths = taskSetPaths(taskSet)
+  const labelsDir = typeof flags['labels-dir'] === 'string' ? path.resolve(flags['labels-dir']) : setPaths.labelsDir
+  const candidatesDir = typeof flags['candidates-dir'] === 'string' ? path.resolve(flags['candidates-dir']) : setPaths.candidatesDir
+  const tasks = loadTaskSet(taskSet)
+  const splits = assignSplits(tasks, taskSet)
+  let frozenThresholds: Record<string, number> | undefined
+  if (typeof flags['thresholds-from'] === 'string') {
+    const ref = JSON.parse(fs.readFileSync(path.resolve(flags['thresholds-from']), 'utf8')) as ReportJson
+    frozenThresholds = Object.fromEntries(ref.gate.filter(g => g.threshold !== undefined).map(g => [g.judge + '|' + g.rubricId, g.threshold!]))
+  }
   const truth = new Map<string, TaskTruth>()
   const labelers = new Set<string>()
   for (const id of new Set(rows.map(r => r.taskId))) {
@@ -399,7 +422,7 @@ async function main(): Promise<number> {
     truth.set(id, buildTruth(label, readSnapshotFile(candidatesDir, id)))
     labelers.add(label.labeler.id + (label.labeler.effort ? '/' + label.labeler.effort : '') + (label.labeler.reviewed ? '（已复核）' : '（未复核）'))
   }
-  const report = buildReport({ runId: path.basename(dir), rows, tasks, splits, truth, labelers: [...labelers], minRecall: numberFlag(flags, 'min-recall', 0.95) })
+  const report = buildReport({ runId: path.basename(dir), rows, tasks, splits, truth, labelers: [...labelers], minRecall: numberFlag(flags, 'min-recall', 0.95), ...frozenThresholds ? { frozenThresholds } : {} })
   fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(report, null, 2) + '\n')
   fs.writeFileSync(path.join(dir, 'report.md'), renderMarkdown(report) + '\n')
   console.log('wrote ' + path.join(dir, 'report.md') + ' and report.json')

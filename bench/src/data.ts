@@ -7,12 +7,15 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { canonicalUrl } from './harvest-lib.ts'
-import { BENCH_ROOT } from './tasks.ts'
+import { BENCH_ROOT, taskSetPaths, type TaskSet } from './tasks.ts'
 import type { Block, CandidateSnapshot, Label, PageSnapshot } from './types.ts'
 
 export const DATA_DIR = path.join(BENCH_ROOT, 'data')
 export const CANDIDATES_DIR = path.join(DATA_DIR, 'candidates.v1')
 export const LABELS_DIR = path.join(DATA_DIR, 'labels.v1')
+/** Snapshot / label directories of a task-set version (v1 = the constants above). */
+export const candidatesDirOf = (set: TaskSet = 'v1'): string => taskSetPaths(set).candidatesDir
+export const labelsDirOf = (set: TaskSet = 'v1'): string => taskSetPaths(set).labelsDir
 export const RUNS_DIR = path.join(DATA_DIR, 'runs')
 export const JUDGE_CACHE_ROOT = path.join(DATA_DIR, 'judge-cache')
 

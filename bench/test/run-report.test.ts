@@ -55,6 +55,12 @@ test('interleaveBySplit alternates calibration and test', () => {
   assert.deepEqual(interleaveBySplit([{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }], splits).map(t => t.id), ['a', 'c', 'b', 'd'])
 })
 
+test('interleaveBySplit keeps heldout tasks (v2) after the interleaved ones', () => {
+  const splits = new Map<string, Split>([['a', 'calibration'], ['b', 'test'], ['h1', 'heldout'], ['h2', 'heldout']])
+  assert.deepEqual(interleaveBySplit([{ id: 'h1' }, { id: 'a' }, { id: 'h2' }, { id: 'b' }], splits).map(t => t.id), ['a', 'b', 'h1', 'h2'])
+  assert.deepEqual(interleaveBySplit([{ id: 'h1' }, { id: 'h2' }], splits).map(t => t.id), ['h1', 'h2'])
+})
+
 // ── report ──────────────────────────────────────────────────────────────────
 
 function label(taskId: string, cands: [string, number, boolean?][], gold: Record<string, [string, string][]>): Label {
@@ -181,4 +187,26 @@ test('rowsOf carries split, language and usage into result rows', () => {
   assert.equal(r!.split, 'test')
   assert.equal(r!.lang, 'zh')
   assert.equal(r!.usage!.inputTokens, 5)
+})
+
+test('buildReport on a heldout-only input: threshold comes from --thresholds-from, never from heldout data', () => {
+  const truth = new Map([['H', buildTruth(label('H', [['https://h/u1', 3], ['https://h/u2', 0], ['https://h/u3', 2], ['https://h/u4', 0]], { n1: [['https://h/u1', 'bH1']] }), undefined)]])
+  const splits = new Map<string, Split>([['H', 'heldout']])
+  const rows: ResultRow[] = [['https://h/u1', 0.9], ['https://h/u2', 0.2], ['https://h/u3', 0.5], ['https://h/u4', 0.4]]
+    .map(([u, p]) => row({ taskId: 'H', split: 'heldout', itemId: u as string, prob: p as number }))
+  const none = buildReport({ runId: 'r', rows, tasks: [], splits, truth, labelers: [] })
+  const g0 = none.gate.find(x => x.rubricId === 'gate.single.v1')!
+  assert.equal(g0.threshold, undefined)
+  assert.deepEqual(g0.test, {})
+  assert.equal(none.tasks.heldout, 1)
+  const rep = buildReport({ runId: 'r', rows, tasks: [], splits, truth, labelers: [], frozenThresholds: { 'x|gate.single.v1': 0.45 } })
+  const g = rep.gate.find(x => x.rubricId === 'gate.single.v1')!
+  assert.equal(g.threshold, 0.45)
+  assert.equal(g.thresholdSource, 'frozen')
+  assert.equal(g.calibrationDropped, undefined)
+  assert.equal(g.testTasks, 1)
+  // keep prob >= 0.45: u1 (0.9) and u3 (0.5); u2, u4 dropped
+  assert.equal(g.test.all!.recall2, 1)
+  assert.equal(g.test.all!.dropped, 0.5)
+  assert.match(renderMarkdown(rep), /heldout 1/)
 })

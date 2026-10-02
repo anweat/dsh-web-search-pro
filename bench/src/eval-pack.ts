@@ -13,7 +13,7 @@
  *   (d') hybrid plus the rule-borderline pairs (grade 1).
  *
  *   node --experimental-transform-types bench/src/eval-pack.ts \
- *     [--run-id ID] [--split all|calibration|test] [--tasks a,b] [--allow-jev N] [--no-jev] \
+ *     [--task-set v1|v2] [--run-id ID] [--split all|calibration|test|heldout] [--tasks a,b] [--allow-jev N] [--no-jev] \
  *     [--budget 6000] [--max-items 10] [--min-grade 1] [--fetch-top-k 4] [--blocks-per-need N (default: adaptive 12..24)] [--sweep] \
  *     [--rubric-file bench/rubrics/variants/score.support.v2-example.json]
  *
@@ -27,6 +27,7 @@
  * printed. A task whose Jev questions cannot all be answered falls back to the
  * rule scorer and is excluded from the Jev comparison.
  * Labels are LLM drafts (not human reviewed), so numbers are for ordering work.
+ * `--task-set v2` evaluates the held-out set with the parameters as they are (no `--sweep`).
  * @module bench/eval-pack
  */
 
@@ -43,11 +44,11 @@ import { HybridScorer, JEV_MODEL, JevScorer, RuleScorer, type JevCache, type Jev
 import { DEFAULT_SELECT_OPTIONS, type SelectOptions } from '../../src/pipeline/select.ts'
 import { canonicalizeUrl } from '../../src/pipeline/url.ts'
 import { listFlag, numberFlag, parseFlags } from './cli.ts'
-import { CANDIDATES_DIR, JUDGE_CACHE_ROOT, LABELS_DIR, readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
+import { JUDGE_CACHE_ROOT, readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
 import { cacheKey, JudgeCache } from './judges/cache.ts'
 import { loadRubricFile, loadRubrics, renderQuestion } from './judges/rubrics.ts'
 import type { Rubric } from './judges/types.ts'
-import { assignSplits, loadTasks } from './tasks.ts'
+import { assignSplits, loadTaskSet, parseTaskSet, taskSetPaths, type TaskSet } from './tasks.ts'
 import { toTaskSpec, type BenchTask, type CandidateSnapshot, type Label, type PageSnapshot, type Split } from './types.ts'
 
 // ── parameters ──────────────────────────────────────────────────────────────
@@ -284,15 +285,16 @@ export interface JevUse { status: JevStatus; questions: number; cacheHits: numbe
 
 export interface LoadedTask { task: BenchTask; split: Split; snapshot: CandidateSnapshot; label: Label }
 
-export function loadEvalTasks(only?: readonly string[], split: 'all' | Split = 'all'): LoadedTask[] {
-  const tasks = loadTasks()
-  const splits = assignSplits(tasks)
+export function loadEvalTasks(only?: readonly string[], split: 'all' | Split = 'all', taskSet: TaskSet = 'v1'): LoadedTask[] {
+  const tasks = loadTaskSet(taskSet)
+  const splits = assignSplits(tasks, taskSet)
+  const { candidatesDir, labelsDir } = taskSetPaths(taskSet)
   const out: LoadedTask[] = []
   for (const task of tasks) {
     if (only && !only.includes(task.id)) continue
     if (split !== 'all' && splits.get(task.id) !== split) continue
-    const snapshot = readSnapshotFile(CANDIDATES_DIR, task.id)
-    const label = readLabel(LABELS_DIR, task.id)
+    const snapshot = readSnapshotFile(candidatesDir, task.id)
+    const label = readLabel(labelsDir, task.id)
     if (snapshot && label) out.push({ task, split: splits.get(task.id)!, snapshot, label })
   }
   return out
@@ -526,15 +528,21 @@ export function renderReport(r: ReportInput): string {
   }
   out.push('## 2. 总体对比', '')
   section('### 全部任务', all, false)
-  section('### calibration', all.filter(t => t.split === 'calibration'), false)
-  section('### test', all.filter(t => t.split === 'test'), false)
+  const heldout = all.filter(t => t.split === 'heldout')
+  if (heldout.length) out.push('> 留出集（v2，heldout）：只用于检验已冻结的参数，**不得据此调参**。', '')
+  else {
+    section('### calibration', all.filter(t => t.split === 'calibration'), false)
+    section('### test', all.filter(t => t.split === 'test'), false)
+  }
   if (r.opts.jev) {
     out.push('## 3. Jev 对照（仅 Jev 评分全部可回答的任务，三组在同一子集上比较）', '')
     const nothing = all.filter(t => t.jevStatus === 'nothing').length
   out.push('Jev 评分了的任务：' + matched.length + ' / ' + all.length + '；无页面块可评分（两组相同，不计入）' + nothing + ' 个；因缓存缺口回退到规则评分 ' + (all.length - matched.length - nothing) + ' 个。', '')
     section('### 匹配子集（全部）', matched, true)
-    section('### 匹配子集 · test', matched.filter(t => t.split === 'test'), true)
-    section('### 匹配子集 · calibration', matched.filter(t => t.split === 'calibration'), true)
+    if (!heldout.length) {
+      section('### 匹配子集 · test', matched.filter(t => t.split === 'test'), true)
+      section('### 匹配子集 · calibration', matched.filter(t => t.split === 'calibration'), true)
+    }
     out.push('## 3b. M3a：Jev 用量与质量（匹配子集，' + matched.length + ' 个任务）', '')
     out.push('“Jev 问题”= 该组向 Jev 提出的 (需求, 块) 问题数（含缓存命中，即冷启动时要付费的数量）；“冷缓存请求”= 缓存为空时需要的 HTTP 请求数（由桩服务统计，不发送任何数据）；“实际请求”= 本次调用真正发出的请求数。', '')
     out.push(table(usageRows(matched), USAGE_HEAD, USAGE_ALIGN), '')
@@ -600,12 +608,14 @@ export async function sweep(items: readonly LoadedTask[], base: EvalOptions, log
 
 async function main(): Promise<number> {
   const flags = parseFlags(process.argv.slice(2), {
-    values: ['rubric-file', 'run-id', 'split', 'tasks', 'allow-jev', 'budget', 'max-items', 'min-grade', 'max-per-url', 'fetch-top-k', 'blocks-per-need'],
+    values: ['rubric-file', 'run-id', 'task-set', 'split', 'tasks', 'allow-jev', 'budget', 'max-items', 'min-grade', 'max-per-url', 'fetch-top-k', 'blocks-per-need'],
     booleans: ['no-jev', 'sweep'],
   })
   const split = typeof flags.split === 'string' ? flags.split : 'all'
-  if (!['all', 'calibration', 'test'].includes(split)) throw new Error('--split must be all|calibration|test')
-  const items = loadEvalTasks(listFlag(flags, 'tasks'), split as 'all' | Split)
+  if (!['all', 'calibration', 'test', 'heldout'].includes(split)) throw new Error('--split must be all|calibration|test|heldout')
+  const taskSet = parseTaskSet(flags['task-set'])
+  if (taskSet === 'v2' && flags.sweep) throw new Error('--sweep is not allowed with --task-set v2: the held-out set is never used for tuning')
+  const items = loadEvalTasks(listFlag(flags, 'tasks'), split as 'all' | Split, taskSet)
   if (!items.length) { console.log('no labeled tasks with snapshots found (bench/data is local-only)'); return 1 }
   const select: Partial<SelectOptions> = {
     ...flags.budget !== undefined ? { charBudget: numberFlag(flags, 'budget', 6000) } : {},
@@ -622,7 +632,7 @@ async function main(): Promise<number> {
   console.log(items.length + ' labeled tasks; Jev ' + (opts.jev ? 'arm on, request allowance ' + opts.allowJev : 'arm off'))
   if (flags.sweep) { await sweep(items, opts, line => console.log(line)); return 0 }
   const { tasks, jevRequests } = await evaluate(items, opts, line => console.log(line))
-  const runId = typeof flags['run-id'] === 'string' ? flags['run-id'] : 'pack-' + new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const runId = typeof flags['run-id'] === 'string' ? flags['run-id'] : 'pack-' + (taskSet === 'v2' ? 'v2-' : '') + new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const dir = path.join(RUNS_DIR, runId)
   fs.mkdirSync(dir, { recursive: true })
   const variants: { label: string; tasks: TaskEval[] }[] = []

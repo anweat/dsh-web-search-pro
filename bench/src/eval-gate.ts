@@ -1,7 +1,7 @@
 /**
  * Offline check of the src rule gate (dev-plan M2a) on the labeled bench data.
  *
- *   node --experimental-transform-types bench/src/eval-gate.ts [--run r1-20261001] [--min-recall 0.95]
+ *   node --experimental-transform-types bench/src/eval-gate.ts [--task-set v1|v2] [--run r1-20261001] [--min-recall 0.95]
  *   node --experimental-transform-types bench/src/eval-gate.ts --compile [--github-live 5]
  *
  * Default mode: runs `gateItem` from src/pipeline/gate.ts over every labeled
@@ -10,6 +10,8 @@
  * r1 `rule / gate.relevance.v1` numbers from the run's report.json (parity
  * within 1 point is expected: same lexical function, same threshold rule).
  * A second table adds the hard-constraint drops (the gate's default policy).
+ * With `--task-set v2` (held-out set) the frozen default threshold is evaluated on all v2
+ * tasks; nothing is derived from them and the r1 parity check is skipped.
  *
  * `--compile`: compiles all tasks per provider and lists the GitHub keyword
  * queries of docs_code / compare tasks; `--github-live N` sends N of those
@@ -24,11 +26,11 @@ import { DEFAULT_RELEVANCE_THRESHOLD, gateItem, type GateItem } from '../../src/
 import { mergeCandidates } from '../../src/pipeline/candidates.ts'
 import { githubEngine, EngineError } from '../../src/engines.ts'
 import { numberFlag, parseFlags, sleep } from './cli.ts'
-import { candidatesOf, CANDIDATES_DIR, LABELS_DIR, readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
+import { candidatesOf, readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
 import { enginesFor } from './harvest-lib.ts'
 import { chooseDropThreshold, evalThreshold } from './metrics.ts'
 import { buildTruth, type ReportJson } from './report.ts'
-import { assignSplits, loadTasks } from './tasks.ts'
+import { assignSplits, loadTaskSet, parseTaskSet, taskSetPaths, type TaskSet } from './tasks.ts'
 import { toTaskSpec, type Split } from './types.ts'
 
 interface Sample {
@@ -44,15 +46,16 @@ interface Sample {
 
 const pct = (n: number | undefined): string => (n === undefined ? '—' : (n * 100).toFixed(1) + '%')
 
-function collect(): { samples: Sample[]; tasks: number; candidates: number; canonicalMismatch: number } {
-  const tasks = loadTasks()
-  const splits = assignSplits(tasks)
+function collect(taskSet: TaskSet): { samples: Sample[]; tasks: number; candidates: number; canonicalMismatch: number } {
+  const tasks = loadTaskSet(taskSet)
+  const splits = assignSplits(tasks, taskSet)
+  const { candidatesDir, labelsDir } = taskSetPaths(taskSet)
   const samples: Sample[] = []
   let labeled = 0
   let canonicalMismatch = 0
   for (const task of tasks) {
-    const label = readLabel(LABELS_DIR, task.id)
-    const snapshot = readSnapshotFile(CANDIDATES_DIR, task.id)
+    const label = readLabel(labelsDir, task.id)
+    const snapshot = readSnapshotFile(candidatesDir, task.id)
     if (!label || !snapshot) continue
     labeled++
     const truth = buildTruth(label, snapshot)
@@ -110,18 +113,20 @@ function evalMode(flags: Record<string, string | true>): number {
   const runId = typeof flags.run === 'string' ? flags.run : 'r1-20261001'
   const runDir = fs.existsSync(runId) ? path.resolve(runId) : path.join(RUNS_DIR, runId)
   const minRecall = numberFlag(flags, 'min-recall', 0.95)
-  const { samples, tasks, candidates, canonicalMismatch } = collect()
+  const taskSet = parseTaskSet(flags['task-set'])
+  const { samples, tasks, candidates, canonicalMismatch } = collect(taskSet)
   const cal = samples.filter(s => s.split === 'calibration')
-  const test = samples.filter(s => s.split === 'test')
+  const test = samples.filter(s => s.split === 'test' || s.split === 'heldout')
   const derived = chooseDropThreshold(cal.map(s => s.relevance), cal.map(s => s.rel >= 2), minRecall)
   const ref = r1Reference(runDir)
 
+  console.log('task set ' + taskSet + (taskSet === 'v2' ? ' (held-out: frozen parameters only, never tune on it)' : ''))
   console.log('labeled tasks: ' + tasks + ', candidates: ' + candidates + ' (calibration ' + cal.length + ', test ' + test.length + ')')
   console.log('labels are LLM drafts (not human reviewed); gate = lexical relevance on title + snippet')
   console.log('threshold re-derived on calibration (recall >= ' + minRecall + '): ' + derived + '   default in src: ' + DEFAULT_RELEVANCE_THRESHOLD)
   console.log('calibration drop ratio at default: ' + pct(evalThreshold(cal.map(s => s.relevance), cal.map(s => s.rel >= 2), DEFAULT_RELEVANCE_THRESHOLD).dropped))
   console.log('canonical-URL cross-check: ' + canonicalMismatch + ' task(s) where src canonicalization merges a different number of candidates than the bench key\n')
-  console.log('TEST split'.padEnd(44) + ['recall(>=2)', 'recall(>=1)', 'gold-cand recall', 'dropped', 'n'].map(x => x.padStart(14)).join(''))
+  console.log((taskSet === 'v2' ? 'HELDOUT (v2)' : 'TEST split').padEnd(44) + ['recall(>=2)', 'recall(>=1)', 'gold-cand recall', 'dropped', 'n'].map(x => x.padStart(14)).join(''))
   printRow('r1 report: rule / gate.relevance.v1', ref)
   const relOnly = measure(test, DEFAULT_RELEVANCE_THRESHOLD, false)
   printRow('src gate, relevance only (default thr)', relOnly)
@@ -136,6 +141,7 @@ function evalMode(flags: Record<string, string | true>): number {
   const calC = cal.filter(s => s.constraintDrop && s.relevance >= DEFAULT_RELEVANCE_THRESHOLD)
   console.log('hard-constraint drops on calibration (beyond relevance): ' + calC.length + '; labeled relevant (>=2): ' + calC.filter(s => s.rel >= 2).length)
 
+  if (taskSet !== 'v1') { console.log('\nparity vs r1: skipped (v1 only)'); return 0 }
   if (!ref) { console.log('\nparity: no r1 report.json found at ' + runDir); return 0 }
   const diffs = (['recall2', 'recall1', 'goldRecall', 'dropped'] as const).map(k => Math.abs((relOnly[k] ?? 0) - (ref[k] ?? 0)))
   const worst = Math.max(...diffs)
@@ -144,7 +150,7 @@ function evalMode(flags: Record<string, string | true>): number {
 }
 
 async function compileMode(flags: Record<string, string | true>): Promise<number> {
-  const tasks = loadTasks()
+  const tasks = loadTaskSet(parseTaskSet(flags['task-set']))
   const liveCount = numberFlag(flags, 'github-live', 0)
   let natives = 0
   let locals = 0
@@ -201,7 +207,7 @@ async function compileMode(flags: Record<string, string | true>): Promise<number
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
-  const flags = parseFlags(process.argv.slice(2), { values: ['run', 'min-recall', 'github-live'], booleans: ['compile'] })
+  const flags = parseFlags(process.argv.slice(2), { values: ['run', 'min-recall', 'github-live', 'task-set'], booleans: ['compile'] })
   const run = flags.compile || flags['github-live'] !== undefined ? compileMode(flags) : Promise.resolve(evalMode(flags))
   run.then(code => process.exit(code), error => { console.error((error as Error).message); process.exit(1) })
 }

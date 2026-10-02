@@ -3,7 +3,7 @@
  *
  *   node --experimental-transform-types bench/src/harvest.ts \
  *     [--tasks id1,id2] [--limit N] [--fetch-top K] [--engines ddg,bing,...] \
- *     [--force] [--summary-only] [--tasks-file path] [--out-dir dir]
+ *     [--force] [--summary-only] [--task-set v1|v2] [--tasks-file path] [--out-dir dir]
  *
  * Sequential and polite (see harvest-lib.ts); Ctrl-C aborts in-flight requests
  * and leaves no partial snapshot for the interrupted task.
@@ -12,7 +12,7 @@
 
 import path from 'node:path'
 import fs from 'node:fs'
-import { loadTasks, BENCH_ROOT, TASKS_FILE } from './tasks.ts'
+import { loadTasks, parseTaskSet, taskSetPaths } from './tasks.ts'
 import {
   formatSummary, harvestTask, HostGate, readSnapshot, snapshotPath, summarize, writeSnapshot,
   type SnapshotStats,
@@ -34,23 +34,32 @@ function parseArgs(argv: string[]): Args {
     fetchTop: 4,
     force: false,
     summaryOnly: false,
-    tasksFile: TASKS_FILE,
-    outDir: path.join(BENCH_ROOT, 'data', 'candidates.v1'),
+    tasksFile: taskSetPaths().tasksFile,
+    outDir: taskSetPaths().candidatesDir,
   }
   const value = (i: number, flag: string): string => {
     const v = argv[i + 1]
     if (v === undefined || v.startsWith('--')) throw new Error(flag + ' needs a value')
     return v
   }
+  // --task-set picks the default task file and output dir; explicit --tasks-file / --out-dir still win.
+  let explicitTasksFile = false
+  let explicitOutDir = false
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]!
     switch (flag) {
+      case '--task-set': {
+        const paths = taskSetPaths(parseTaskSet(value(i++, flag)))
+        if (!explicitTasksFile) args.tasksFile = paths.tasksFile
+        if (!explicitOutDir) args.outDir = paths.candidatesDir
+        break
+      }
       case '--tasks': args.tasks = value(i++, flag).split(',').map(s => s.trim()).filter(Boolean); break
       case '--limit': args.limit = Number(value(i++, flag)); break
       case '--fetch-top': args.fetchTop = Number(value(i++, flag)); break
       case '--engines': args.engines = value(i++, flag).split(',').map(s => s.trim()).filter(Boolean); break
-      case '--tasks-file': args.tasksFile = path.resolve(value(i++, flag)); break
-      case '--out-dir': args.outDir = path.resolve(value(i++, flag)); break
+      case '--tasks-file': args.tasksFile = path.resolve(value(i++, flag)); explicitTasksFile = true; break
+      case '--out-dir': args.outDir = path.resolve(value(i++, flag)); explicitOutDir = true; break
       case '--force': args.force = true; break
       case '--summary-only': args.summaryOnly = true; break
       default: throw new Error('unknown argument: ' + flag)

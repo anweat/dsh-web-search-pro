@@ -1,18 +1,18 @@
 /**
  * DeepSeek label drafter (dev-plan §6.5): writes DRAFT labels
- * (`labeler.reviewed: false`) to bench/data/labels.v1/<taskId>.json —
+ * (`labeler.reviewed: false`) to bench/data/labels.<set>/<taskId>.json —
  * candidate relevance 0–3, per-constraint yes/no/unknown, nav flag and gold
  * evidence blocks per need. Not human-reviewed; reports must say so.
  *
  *   node --experimental-transform-types bench/src/label-llm.ts \
- *     [--tasks id1,id2] [--limit N] [--effort low|high, default low] [--model deepseek-flash] \
+ *     [--task-set v1|v2] [--tasks id1,id2] [--limit N] [--effort low|high, default low] [--model deepseek-flash] \
  *     [--max-tokens 12000] [--max-total-tokens 3000000] \
  *     [--max-spend-cny 2] [--min-balance-cny 41] [--force] [--dry-run]
  *
  * Budget guard (mandatory): the balance is read from GET /user/balance before
  * the first request and after EVERY request; the run stops as soon as
  * spend >= --max-spend-cny or balance < --min-balance-cny. Per-request token
- * usage and balance go to bench/data/labels.v1/_ledger.jsonl.
+ * usage and balance go to bench/data/labels.<set>/_ledger.jsonl.
  * Key: env DEEPSEEK_API_KEY (never printed).
  * @module bench/label-llm
  */
@@ -22,7 +22,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { listFlag, numberFlag, parseFlags } from './cli.ts'
 import {
-  candidatesOf, candidateText, fetchedBlocks, LABELS_DIR, CANDIDATES_DIR, readLabel, readSnapshotFile, writeLabel,
+  candidatesOf, candidateText, fetchedBlocks, readLabel, readSnapshotFile, writeLabel,
   type Candidate,
 } from './data.ts'
 import { canonicalUrl } from './harvest-lib.ts'
@@ -33,7 +33,7 @@ import {
 import { weightedOverlap } from '../../src/pipeline/lexical.ts'
 import { checkConstraint } from './judges/rule.ts'
 import { BudgetStopError } from './judges/types.ts'
-import { loadTasks } from './tasks.ts'
+import { loadTaskSet, parseTaskSet, taskSetPaths } from './tasks.ts'
 import {
   LABEL_VERSION,
   type BenchTask, type CandidateLabel, type CandidateSnapshot, type ConstraintCheck, type Label, type NeedGold,
@@ -279,7 +279,7 @@ const f2 = (n: number): string => n.toFixed(4)
 
 async function main(): Promise<number> {
   const flags = parseFlags(process.argv.slice(2), {
-    values: ['tasks', 'limit', 'effort', 'model', 'max-tokens', 'max-total-tokens', 'max-spend-cny', 'min-balance-cny', 'candidates-dir', 'labels-dir'],
+    values: ['tasks', 'limit', 'effort', 'model', 'max-tokens', 'max-total-tokens', 'max-spend-cny', 'min-balance-cny', 'candidates-dir', 'labels-dir', 'task-set'],
     booleans: ['force', 'dry-run'],
   })
   const maxSpend = numberFlag(flags, 'max-spend-cny', 2)
@@ -291,11 +291,13 @@ async function main(): Promise<number> {
   const maxTotalTokens = numberFlag(flags, 'max-total-tokens', 3_000_000)
   let totalTokens = 0
   if (effort && !EFFORTS.includes(effort)) throw new Error('--effort must be one of ' + EFFORTS.join('|') + ' (low or high recommended)')
-  const candidatesDir = typeof flags['candidates-dir'] === 'string' ? path.resolve(flags['candidates-dir']) : CANDIDATES_DIR
-  const labelsDir = typeof flags['labels-dir'] === 'string' ? path.resolve(flags['labels-dir']) : LABELS_DIR
+  const taskSet = parseTaskSet(flags['task-set'])
+  const setPaths = taskSetPaths(taskSet)
+  const candidatesDir = typeof flags['candidates-dir'] === 'string' ? path.resolve(flags['candidates-dir']) : setPaths.candidatesDir
+  const labelsDir = typeof flags['labels-dir'] === 'string' ? path.resolve(flags['labels-dir']) : setPaths.labelsDir
   const ledgerFile = path.join(labelsDir, '_ledger.jsonl')
 
-  let tasks = loadTasks()
+  let tasks = loadTaskSet(taskSet)
   const only = listFlag(flags, 'tasks')
   if (only) {
     const unknown = only.filter(id => !tasks.some(t => t.id === id))

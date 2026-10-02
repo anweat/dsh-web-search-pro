@@ -162,4 +162,5 @@ export interface Label {
   gold: NeedGold[]
 }
 
-export type Split = 'calibration' | 'test'
+/** `heldout` = every task of the v2 set: never used for tuning, only for the final check of frozen parameters. */
+export type Split = 'calibration' | 'test' | 'heldout'

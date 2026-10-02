@@ -3,7 +3,7 @@
  *
  *   node --experimental-transform-types bench/src/run-judges.ts \
  *     [--judges rule,laya,jev] [--with-deepseek] [--tasks id1,id2] \
- *     [--split calibration|test|all] [--groups s4,s6,s1] [--gates single,relevance,constraint,nav] \
+ *     [--task-set v1|v2] [--split calibration|test|heldout|all] [--groups s4,s6,s1] [--gates single,relevance,constraint,nav] \
  *     [--max-jev-requests 50] [--blocks-per-need 12] [--laya-model multilingual|english|router] \
  *     [--run-id ID] [--max-spend-cny 2] [--min-balance-cny 41] [--effort low|high]
  *
@@ -23,7 +23,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { listFlag, numberFlag, parseFlags } from './cli.ts'
 import {
-  candidatesOf, candidateText, CANDIDATES_DIR, fetchedBlocks, JUDGE_CACHE_ROOT, LABELS_DIR, readLabel, readSnapshotFile, RUNS_DIR,
+  candidatesOf, candidateText, fetchedBlocks, JUDGE_CACHE_ROOT, readLabel, readSnapshotFile, RUNS_DIR,
 } from './data.ts'
 import { BudgetGuard } from './judges/budget.ts'
 import { JudgeCache } from './judges/cache.ts'
@@ -39,7 +39,7 @@ import {
   BudgetStopError,
   type Judge, type JudgeContext, type JudgeItem, type JudgeQuestion, type JudgeResult,
 } from './judges/types.ts'
-import { assignSplits, loadTasks } from './tasks.ts'
+import { assignSplits, loadTaskSet, parseTaskSet, taskSetPaths } from './tasks.ts'
 import type { BenchTask, Split } from './types.ts'
 
 /** Constraint kinds decided by rule only (remote judges are not asked). */
@@ -160,7 +160,7 @@ export function rowsOf(runId: string, job: Job, task: BenchTask, split: Split, j
   }))
 }
 
-/** Interleave calibration and test tasks so a capped run covers both splits. */
+/** Interleave calibration and test tasks so a capped run covers both splits (other splits, e.g. heldout, follow in order). */
 export function interleaveBySplit<T extends { id: string }>(tasks: readonly T[], splits: ReadonlyMap<string, Split>): T[] {
   const cal = tasks.filter(t => splits.get(t.id) === 'calibration')
   const test = tasks.filter(t => splits.get(t.id) === 'test')
@@ -169,19 +169,22 @@ export function interleaveBySplit<T extends { id: string }>(tasks: readonly T[],
     if (cal[i]) out.push(cal[i]!)
     if (test[i]) out.push(test[i]!)
   }
+  for (const t of tasks) if (splits.get(t.id) !== 'calibration' && splits.get(t.id) !== 'test') out.push(t)
   return out
 }
 
 async function main(): Promise<number> {
   const flags = parseFlags(process.argv.slice(2), {
     values: ['judges', 'tasks', 'split', 'groups', 'gates', 'max-jev-requests', 'blocks-per-need', 'laya-model', 'run-id',
-      'max-spend-cny', 'min-balance-cny', 'effort', 'out-dir'],
+      'max-spend-cny', 'min-balance-cny', 'effort', 'out-dir', 'task-set'],
     booleans: ['with-deepseek'],
   })
   const judgeNames = listFlag(flags, 'judges') ?? ['rule']
   if (flags['with-deepseek'] && !judgeNames.includes('deepseek')) judgeNames.push('deepseek')
   const splitFlag = typeof flags.split === 'string' ? flags.split : 'all'
-  if (!['calibration', 'test', 'all'].includes(splitFlag)) throw new Error('--split must be calibration|test|all')
+  if (!['calibration', 'test', 'heldout', 'all'].includes(splitFlag)) throw new Error('--split must be calibration|test|heldout|all')
+  const taskSet = parseTaskSet(flags['task-set'])
+  const { candidatesDir, labelsDir } = taskSetPaths(taskSet)
   const groups = (listFlag(flags, 'groups') ?? ['s4', 's6']) as Group[]
   for (const g of groups) if (!['s4', 's6', 's1'].includes(g)) throw new Error('unknown group ' + g)
   const gates = listFlag(flags, 'gates') ?? ['single', 'relevance', 'constraint', 'nav']
@@ -193,8 +196,8 @@ async function main(): Promise<number> {
   const runId = typeof flags['run-id'] === 'string' ? flags['run-id'] : new Date().toISOString().replace(/[:.]/g, '-')
   const outDir = typeof flags['out-dir'] === 'string' ? path.resolve(flags['out-dir']) : path.join(RUNS_DIR, runId)
 
-  const allTasks = loadTasks()
-  const splits = assignSplits(allTasks)
+  const allTasks = loadTaskSet(taskSet)
+  const splits = assignSplits(allTasks, taskSet)
   let tasks = allTasks
   const only = listFlag(flags, 'tasks')
   if (only) {
@@ -205,7 +208,7 @@ async function main(): Promise<number> {
   if (splitFlag !== 'all') tasks = tasks.filter(t => splits.get(t.id) === splitFlag)
   tasks = interleaveBySplit(tasks, splits)
 
-  const labeled = tasks.filter(t => readLabel(LABELS_DIR, t.id) && readSnapshotFile(CANDIDATES_DIR, t.id))
+  const labeled = tasks.filter(t => readLabel(labelsDir, t.id) && readSnapshotFile(candidatesDir, t.id))
   console.log('tasks selected ' + tasks.length + ', labeled with snapshot ' + labeled.length + '; run ' + runId)
   if (!labeled.length) { console.log('nothing to run'); return 1 }
 
@@ -261,7 +264,7 @@ async function main(): Promise<number> {
   }
 
   for (const task of labeled) {
-    const snapshot = readSnapshotFile(CANDIDATES_DIR, task.id)!
+    const snapshot = readSnapshotFile(candidatesDir, task.id)!
     const split = splits.get(task.id)
     const jobs = buildJobs(task, snapshot, rubrics, { groups, gates, blocksPerNeed })
     const before = written

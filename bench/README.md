@@ -2,7 +2,7 @@
 
 本目录**不随插件发布**（不在 `package.json` 的 `files` 中，也不在主 `tsconfig` 的 `include` 中）。它为 M3 的判定器实验（规则 / Jev / Laya 对照）准备一份**固定不变的数据基础**：
 
-1. 任务集：60 个固定任务（草案 v1），覆盖 6 个 profile、中英文、以及计划里列出的各类陷阱；
+1. 任务集：60 个固定任务（v1，调参用）加 40 个留出任务（v2，只做最终检验，见下文「v2 留出集」），覆盖 6 个 profile、中英文、以及计划里列出的各类陷阱；
 2. 候选快照：用现有免费引擎对每个任务采集**一次**原始候选（标题、snippet、URL）和 top-K 页面正文块；
 3. 标注格式：候选相关度 0–3、逐约束满足情况、每个 need 的金标准证据块（本目录只定义格式，标注本身是后续工作）。
 
@@ -17,7 +17,8 @@ bench/
   README.md
   tsconfig.json            # 仅供 bench 类型检查：pnpm run bench:typecheck
   tasks/
-    tasks.v1.jsonl         # 任务集草案，每行一个任务（提交入库）
+    tasks.v1.jsonl         # 任务集 v1（调参用），每行一个任务（提交入库）
+    tasks.v2.jsonl         # 任务集 v2（留出集，只用于最终检验，提交入库）
   src/
     types.ts               # TaskSpec / Need / Constraint、BenchTask、CandidateSnapshot、Label
     tasks.ts               # 任务集加载与校验、calibration/test 划分
@@ -34,7 +35,7 @@ bench/
     tasks.test.ts          # 任务集结构与覆盖检查
     harvest.test.ts        # URL 归一/选取、引擎计划、限速
   data/                    # 本地数据，git 忽略（见下）
-    candidates.v1/<taskId>.json
+    candidates.v1/<taskId>.json    # v2 对应 candidates.v2/、labels.v2/
     labels.v1/<taskId>.json        # 标注（LLM 初稿或人工）
     judge-cache/  runs/<runId>/    # 判定缓存；对照实验结果与报告
 ```
@@ -60,7 +61,8 @@ pnpm run bench:harvest -- --limit 5          # 等价写法：只跑前 5 个任
 | `--engines ddg,bing,...` | 覆盖默认引擎选择（可选：`ddg bing github arxiv v2ex`） |
 | `--force` | 已有快照也重新采集（**标注开始后不要使用**，见下） |
 | `--summary-only` | 不联网，只汇总已有快照 |
-| `--tasks-file` / `--out-dir` | 指定其他任务文件 / 输出目录 |
+| `--task-set v1\|v2` | 任务集版本，默认 v1；v2 读 `tasks/tasks.v2.jsonl`，写 `data/candidates.v2/`（见「v2 留出集」） |
+| `--tasks-file` / `--out-dir` | 指定其他任务文件 / 输出目录（优先于 `--task-set` 的默认值） |
 
 环境变量：`BENCH_ALLOW_FAKE_IP=0` 会关闭对代理 fake-IP（198.18.0.0/15）的放行；默认放行，以便在 TUN 代理环境下运行。
 
@@ -91,18 +93,18 @@ BOCHA_JEV_API_KEY=... pnpm run bench:eval-pack -- --allow-jev 40   # 缓存缺�
 - **完全顺序执行**，不并发；同主机两次请求间隔至少 1.5 秒，且从上一次请求**结束**时计时。特例：`api.github.com` 6.5 秒（匿名搜索限额 10 次/分钟）、`export.arxiv.org` 3.1 秒、`html.duckduckgo.com` 3 秒。
 - 单次请求超时 20 秒；遵守 `AbortSignal`。
 - 不使用任何付费服务或 API Key；不要把采集脚本改成带 Key 的版本。
-- 全量 60 个任务、每任务抓 4 页，粗估 10–20 分钟（dry run 平均每任务约 9 秒；受 GitHub/DDG 间隔和 DDG 重试影响），无金钱成本。调试时用 `--tasks` / `--limit`，不要反复全量重跑。
+- 全量 60 个任务（v2 为 40 个）、每任务抓 4 页，粗估 10–20 分钟（dry run 平均每任务约 9 秒；受 GitHub/DDG 间隔和 DDG 重试影响），无金钱成本。调试时用 `--tasks` / `--limit`，不要反复全量重跑。
 - 只抓公开页面，不登录、不绕过验证。`403`/登录墙页面按 `error` 记录，不做规避。
 
 ## 数据格式
 
 完整类型见 `src/types.ts`，下面是要点。
 
-### 任务（`tasks/tasks.v1.jsonl`）
+### 任务（`tasks/tasks.v1.jsonl`，v2 格式相同）
 
 | 字段 | 说明 |
 |---|---|
-| `id` | 形如 `dc-01`；前缀对应 profile：`dc` docs_code、`nf` news_fact、`ac` academic、`ex` experience、`cp` compare、`gn` general |
+| `id` | 形如 `dc-01`（v2 为 `v2-dc-01`）；前缀对应 profile：`dc` docs_code、`nf` news_fact、`ac` academic、`ex` experience、`cp` compare、`gn` general |
 | `profile` | `docs_code` / `news_fact` / `academic` / `experience` / `compare` / `general` |
 | `lang` | `zh` / `en` / `mixed`（按 query 与 goal 的主要语言） |
 | `goal`、`query` | 对应 TaskSpec；`query` 是送给引擎的实际查询串 |
@@ -170,7 +172,43 @@ BOCHA_JEV_API_KEY=... pnpm run bench:eval-pack -- --allow-jev 40   # 缓存缺�
 
 - `gold[].evidence` 为空数组表示快照内没有页面支持该 need；它是有意义的结果（覆盖判定 S8 的负例）。
 - `evidence` 同时记录 `blockId` 与块 `hash`，页面重抓或分块规则变化后可以据此重新对齐。
-- **calibration/test 划分**：`assignSplits()`（`src/tasks.ts`）按 profile 分层、按 `sha1(id)` 排序、前一半为 calibration，确定且可复现。任务集有增删时分配会变化，所以开始标注前把划分结果固化到文件。阈值与提示词只在 calibration 上调。
+- **calibration/test 划分**（仅 v1；v2 全部为 `heldout`）：`assignSplits()`（`src/tasks.ts`）按 profile 分层、按 `sha1(id)` 排序、前一半为 calibration，确定且可复现。任务集有增删时分配会变化，所以开始标注前把划分结果固化到文件。阈值与提示词只在 calibration 上调。
+
+## v2 留出集（dev-plan §3.2、§6.2）
+
+**为什么有 v2**：v1 的 60 个任务的 calibration 与 test 都参与过调参（IDF 下限、等级边缘缩放、区分度阈值、每 URL 块数等常数是在同一批任务上选出来的），test 上的数字已经偏乐观。v2 是 40 个**从未参与调参**的新任务，用来对已冻结的参数做最终检验。
+
+**政策（务必遵守）**
+
+1. **只用于最终检验，永远不用于调参。** 不在 v2 上扫描阈值、不改提示词、不改评分常数、不据 v2 的失败样例改规则；v2 的结果出来之后若要改参数，只能回到 v1 上改，并且该参数此后不能再算“冻结”，需要新建 v3 才能再做留出检验。
+2. **参数先冻结，再看 v2。** 运行 v2 评测前，把要检验的参数（`DEFAULT_RELEVANCE_THRESHOLD`、选择参数、评分常数、`jevMode` 等）与对应提交写进评测记录；评测期间 `src/` 的相关常数不得改动。
+3. **划分**：v2 的全部 40 个任务的 split 都是 `heldout`（没有 calibration 一半，`assignSplits(tasks, 'v2')`）。凡是“在 calibration 上选参数”的步骤，在 v2 上都不适用：`eval-pack --sweep` 在 `--task-set v2` 下直接报错；`report` 的 drop 阈值必须用 `--thresholds-from <v1 的 report.json>` 提供（冻结阈值），不会从 v2 数据里推导；`eval-gate` 只在 v2 上评估默认阈值，不再对比 r1 的一致性。
+4. **标注**：标注（DeepSeek 初稿或人工）与 v1 同一套流程，但先采集、再标注，标注后快照同样视为冻结。v2 标注同样是 LLM 初稿，报告里的“未复核”提示保持不变。
+
+**组成**：40 个任务（id 形如 `v2-dc-01`），docs_code 7 / news_fact 7 / academic 7 / experience 7 / compare 6 / general 6；中文 21、英文 13、中英混合 6。与 v1 不重复库、产品、论文与事件。除了 v1 已有的陷阱，还刻意加入：
+
+- **中文需求、英文一手来源**（跨语言）：如 Go 循环变量语义、LoRA、思维链、Scaling Laws；
+- **版本相关的 API 问题**：FastAPI lifespan、Next.js 15 异步请求 API、Tailwind v4 配置、Zod 4、Docker Compose watch；
+- **“缺席型”问题**，诚实回答可能是“不支持 / 没有文档”：Redis Cluster 跨槽事务、标准 JSON 是否允许注释、ruff 能否完全替代 pylint、UTF-8 BOM 是否被推荐；
+- **冲突报道、转载与镜像、导航页**：Windows 10 ESU、CrowdStrike 事故、npmmirror 域名变更、RFC 索引页与厂商文档目录页。
+
+任务只涉及公开页面，不含登录后才能访问的来源，也不含敏感或个人话题。
+
+**命令**（与 v1 相同，加 `--task-set v2`；`harvest` / `label` / `eval-pack` / `judges` / `report` / `eval-gate` 都支持）
+
+```bash
+# 采集（免费引擎 + 纯 HTTP，礼貌限速不变）
+node --experimental-transform-types bench/src/harvest.ts --task-set v2 --fetch-top 4
+# 标注（DeepSeek 草稿，付费；写入 data/labels.v2/）
+node --experimental-transform-types bench/src/label-llm.ts --task-set v2 --effort low --max-spend-cny 2 --min-balance-cny 41
+# 对已冻结参数的最终检验（不要加 --sweep）
+pnpm run bench:eval-pack -- --task-set v2 --run-id pack-v2-final
+pnpm run bench:eval-gate -- --task-set v2
+node --experimental-transform-types bench/src/run-judges.ts --task-set v2 --split heldout --judges rule --run-id v2-rule
+node --experimental-transform-types bench/src/report.ts --task-set v2 --run v2-rule --thresholds-from bench/data/runs/e3-1/report.json
+```
+
+备份：采集完成后打包 `candidates.v2/` 到仓库之外（`experiments/bench-data/candidates.v2-<日期时间>.tgz`），标注完成后同样备份 `labels.v2/`，之后视为冻结，不要 `--force` 重采。
 
 ## E2/E3：LLM 标注初稿与判定器对照（dev-plan §6.3、§6.5）
 
@@ -209,7 +247,7 @@ pnpm run bench:eval-gate -- --github-live 5  # 另发 5 次匿名 GitHub 仓库�
 | 路径 | 是否入库 |
 |---|---|
 | `bench/README.md`、`bench/src/`、`bench/test/`、`bench/tasks/`、`bench/tsconfig.json` | 入库 |
-| `bench/data/`（候选快照、标注） | **`.gitignore` 忽略**，仅本地保存 |
+| `bench/data/`（候选快照、标注，含 v1 与 v2） | **`.gitignore` 忽略**，仅本地保存 |
 
 快照是本地数据（含第三方页面正文，体积也会增长）。注意两点：
 
