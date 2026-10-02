@@ -20,6 +20,7 @@ import { type SplitOptions } from './blocks.ts';
 import { type CompiledQuery } from './compile.ts';
 import { type FusionOptions } from './fusion.ts';
 import { type ProviderStatus, type SourcePlan } from './plan.ts';
+import { type ProviderDescriptor } from '../providers/registry.ts';
 import { type ScoreJob, type Scorer } from './score.ts';
 import { type SelectOptions } from './select.ts';
 import type { Block, EvidencePack, Need, ScoredBlock, TaskSpec } from './types.ts';
@@ -68,6 +69,12 @@ export interface PipelineDeps {
         shadow?: Scorer;
     };
     configuredEngines: readonly string[];
+    /** Registry descriptors of the search providers: S1 prefers providers strong in the task's language (plan.ts). Omitted = the profile tables only. */
+    descriptors?: readonly ProviderDescriptor[];
+    /** `evidence.autoProviders` (default true). */
+    autoProviders?: boolean;
+    /** Per-provider query compilation (registry adapters may bring their own); default the core compiler. */
+    compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery;
     fusion: Omit<FusionOptions, 'nProviders' | 'now'>;
     now?: () => Date;
     newId?: () => string;

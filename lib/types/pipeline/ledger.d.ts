@@ -68,7 +68,22 @@ export declare class UsageLedger {
     day(): string;
     /** A per-search budget (one `web_search_pro` evidence call, all its rounds). */
     forSearch(searchId?: string): SearchBudget;
-    /** Today's usage over reserved and settled calls, with the caps (read-only). */
+    /**
+     * Count requests of a metered NON-model provider (Bocha search): one settled row with `requests`, tokens 0 (n/a)
+     * and amount null (price unknown, never 0). Not capped: the caps are input-token caps of model calls.
+     */
+    recordRequests(entry: {
+        provider: string;
+        protocol: string;
+        requests: number;
+        model?: string;
+        searchId?: string;
+        note?: string;
+    }): void;
+    /**
+     * Today's usage over reserved and settled MODEL calls, with the caps (read-only). Request-counted providers
+     * (protocol `search`) are listed in `providers` but kept out of `totals`, so their unknown price does not blank the model cost.
+     */
     today(): UsageSnapshot;
     /** @internal */
     dailyUsed(provider?: string): number;

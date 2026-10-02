@@ -9,6 +9,9 @@
  *  - exa: includeDomains / excludeDomains / startPublishedDate options for HARD
  *    site / exclude_site / time_window (Exa omits undated pages when a date
  *    bound is set, hence hard only);
+ *  - bocha: include / exclude (domain lists) for HARD site / exclude_site, and `freshness` as an
+ *    inclusive `start..today` date range for a HARD time_window whose lower bound is understood
+ *    (an exact translation, so it is reported as native);
  *  - github*: the natural-language query returns nothing on repository search
  *    (E1: 0 of 20), so it is replaced by a short keyword query;
  *  - everything else: the plain query.
@@ -24,13 +27,20 @@ export interface CompiledExaOptions {
     excludeDomains?: string[];
     startPublishedDate?: string;
 }
+export interface CompiledBochaOptions {
+    /** `YYYY-MM-DD..YYYY-MM-DD` (inclusive), Bocha's date-range form of `freshness`. */
+    freshness?: string;
+    include?: string[];
+    exclude?: string[];
+}
 export interface CompiledQuery {
     providerId: string;
     /** Text to send to the provider. */
     query: string;
-    /** Provider-native options, shaped like `EngineSearchOptions` (only Exa has any today). */
+    /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some). */
     options?: {
-        exa: CompiledExaOptions;
+        exa?: CompiledExaOptions;
+        bocha?: CompiledBochaOptions;
     };
     /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
     fallbacks?: string[];
@@ -48,6 +58,7 @@ type TaskLike = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>;
  * undefined when the value is not understood (the constraint then stays local).
  */
 export declare function parseTimeWindow(value: string, now?: Date): string | undefined;
+export declare function compileBocha(task: TaskLike, providerId: string, now: Date): CompiledQuery;
 export declare const GITHUB_MAX_TERMS = 5;
 /**
  * Short keyword query for repository search: entities, then must_terms, then a
@@ -59,7 +70,7 @@ export declare function githubKeywordTerms(task: TaskLike): string[];
 export declare function githubKeywordQuery(task: TaskLike): string;
 /** Repository search ANDs every keyword, so one rare token empties the result: retry with the leading 3 and 2 terms. */
 export declare const GITHUB_FALLBACK_TERM_COUNTS: readonly number[];
-/** Compile the task for one provider id (`ddg`, `bing`, `exa`, `github*`; anything else gets the plain query). */
+/** Compile the task for one provider id (`ddg`, `bing`, `exa`, `bocha`, `github*`; anything else gets the plain query). */
 export declare function compileQuery(task: TaskLike, providerId: string, now?: Date): CompiledQuery;
 export declare function compileQueries(task: TaskLike, providerIds: readonly string[], now?: Date): CompiledQuery[];
 /** Identifier-like tokens (`node:sqlite`, `DatabaseSync`, `busy_timeout`, `v22.5`): the entities of a query worth repeating in a follow-up. */

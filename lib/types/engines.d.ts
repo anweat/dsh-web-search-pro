@@ -26,6 +26,12 @@ export interface Engine {
 }
 export interface EngineSearchOptions {
     exa?: Omit<ExaSearchRequest, 'query' | 'numResults'>;
+    /** Bocha native request fields compiled from hard constraints (pipeline/compile.ts). */
+    bocha?: {
+        freshness?: string;
+        include?: string[];
+        exclude?: string[];
+    };
     browser?: {
         authProfile?: string;
         rulePack?: string;
@@ -34,12 +40,33 @@ export interface EngineSearchOptions {
 export declare class EngineError extends Error {
     readonly code: string;
     readonly retryable: boolean;
-    constructor(message: string, code: string, retryable?: boolean);
+    readonly retryAfterMs?: number | undefined;
+    /** `retryAfterMs`: the service's own wait hint (Retry-After); the router uses it as the cooldown. */
+    constructor(message: string, code: string, retryable?: boolean, retryAfterMs?: number | undefined);
+}
+/** One metered request of a non-model provider (Bocha search): counted in the usage ledger, tokens n/a, price unknown. */
+export interface UsageRecorder {
+    record(entry: {
+        provider: string;
+        protocol: string;
+        requests: number;
+        note?: string;
+    }): void;
 }
 export interface EngineDeps {
     web?: WebRuntime;
     exaApiKey?: string;
     jinaApiKey?: string;
+    /** Bocha web-search key (config bochaApiKey / credentials ref / $BOCHA_SEARCH_API_KEY, then the Jev key of the same account). */
+    bochaApiKey?: string;
+    /** Bocha endpoint base, default https://api.bochaai.com. */
+    bochaBaseUrl?: string;
+    /** Ask Bocha for its longer per-page summary (default true). */
+    bochaSummary?: boolean;
+    /** Records requests of metered non-model providers in the usage ledger (best effort, never throws). */
+    usage?: UsageRecorder;
+    /** Test seam: replaces the global fetch of API clients that accept one. */
+    fetchImpl?: typeof fetch;
     /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
     githubToken?: string;
     enableCli: boolean;
@@ -98,7 +125,6 @@ export declare function playwrightPlatformEngine(platform: string, deps: EngineD
 export declare function rssEngine(url: string, allowProxyFakeIp?: boolean): Engine;
 /** Build the ordered engine list for a platform search. */
 export declare function platformEngines(platform: string, deps: EngineDeps): Engine[];
-export declare const SEARCH_ENGINE_IDS: readonly ["seam", "exa", "ddg", "bing", "jina", "github", "bilibili", "v2ex", "youtube", "arxiv", "pubmed"];
 export declare const PLATFORM_IDS: readonly ["github", "github-code", "github-issues", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss", "zhihu", "weibo", "douban", "tieba", "douyin", "kuaishou", "arxiv", "pubmed"];
 /** Whether web_platform_search may route this built-in or configured custom id. */
 export declare function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean;

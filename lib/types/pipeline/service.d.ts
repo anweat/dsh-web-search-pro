@@ -12,6 +12,7 @@ import type { Store } from '../store.ts';
 import { shapeSources } from '../util.ts';
 import { type TaskInput } from './task.ts';
 import type { EvidencePack } from './types.ts';
+import type { ProviderRegistry } from '../providers/registry.ts';
 export interface EvidenceRequest extends TaskInput {
     /** Explicit engine ids (tool `engines`). */
     engines?: string[] | undefined;
@@ -20,7 +21,9 @@ export interface EvidenceRequest extends TaskInput {
     signal?: AbortSignal | undefined;
 }
 export interface EvidenceServiceDeps {
-    router: Pick<SearchRouter, 'providerStatuses' | 'runProvider' | 'resolveSecret'>;
+    router: Pick<SearchRouter, 'providerStatuses' | 'runProvider' | 'resolveSecret'> & {
+        registry?: ProviderRegistry;
+    };
     fetch: Pick<FetchService, 'fetchPage'>;
     store: Store;
     dynamic: () => ResolvedConfig;

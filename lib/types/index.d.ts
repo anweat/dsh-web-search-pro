@@ -49,6 +49,10 @@ declare const _default: {
         exaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         jinaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         jinaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -103,6 +107,7 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -251,6 +256,7 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -417,6 +423,10 @@ declare const _default: {
         exaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         jinaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         jinaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -471,6 +481,7 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -619,6 +630,7 @@ declare const _default: {
             jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{

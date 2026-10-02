@@ -6,6 +6,7 @@
  * @module web-search-pro/pipeline/plan
  */
 import { type CompiledQuery } from './compile.ts';
+import { type CredentialState, type ProviderDescriptor } from '../providers/registry.ts';
 import type { Profile, TaskSpec } from './types.ts';
 /** Provider ids per profile (`general` uses the configured `engines`). */
 export declare const PROFILE_PROVIDERS: Readonly<Record<Exclude<Profile, 'general'>, readonly string[]>>;
@@ -15,6 +16,8 @@ export type ProviderState = 'ready' | 'unavailable' | 'cooldown';
 export interface ProviderStatus {
     state: ProviderState;
     reason?: string;
+    /** Local credential dimension from the registry probe; `missing` keeps a provider out of automatic promotion (it still runs when asked for). */
+    credential?: CredentialState;
 }
 export interface PlannedProvider {
     id: string;
@@ -25,6 +28,10 @@ export interface SourcePlan {
     /** The profile came from rule inference, not from the caller. */
     profileInferred: boolean;
     providers: PlannedProvider[];
+    /** Task language the plan was made for (`zh`, `en`); absent when the text has no letters. */
+    language?: 'zh' | 'en';
+    /** The ordered provider ids the plan drew from before availability filtering and caps (the follow-up round reuses it). */
+    wanted: string[];
     /** Providers dropped by the availability filter, with the reason. */
     skipped: {
         id: string;
@@ -41,7 +48,23 @@ export interface PlanOptions {
     status?: (id: string) => ProviderStatus | undefined;
     maxProviders?: number;
     now?: Date;
+    /**
+     * Registry descriptors (search providers). With them S1 is language-aware: a provider that is strong in the
+     * task's language (`languages` names `zh` / `en`), serves the profile (`taskProfiles`), returns `web` results and is
+     * ready with a configured key is PROMOTED ahead of the profile table (by `priority`), and the other web engines
+     * behind it shrink to `webFallbacks` (vertical sources such as GitHub or arXiv are untouched). Nothing names a provider: a new adapter's descriptor is enough.
+     */
+    descriptors?: readonly ProviderDescriptor[];
+    /** false = no promotion (the profile table / configured engines as they are). Default true. */
+    autoProviders?: boolean;
+    /** Other web engines kept behind promoted providers, in table order (default 1). */
+    webFallbacks?: number;
+    /** Per-provider compilation; defaults to the core compiler (adapters may supply their own). */
+    compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery;
 }
+export declare const DEFAULT_WEB_FALLBACKS = 1;
+/** `zh` / `en` from the task text (goal + query); undefined when there is no letter to tell. */
+export declare function taskLanguage(task: Pick<TaskSpec, 'goal' | 'query'>): 'zh' | 'en' | undefined;
 /** Keyword hit counts per profile (general has no keywords). */
 export declare function profileHits(text: string): Record<Exclude<Profile, 'general'>, number>;
 /** Softmax over keyword hits with a fixed prior for `general` (the r1 bench rule judge's choice scores). */

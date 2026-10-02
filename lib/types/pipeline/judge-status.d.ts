@@ -6,7 +6,19 @@
  */
 import type { EvidenceConfig } from '../config.ts';
 import type { Store } from '../store.ts';
+export type JudgeMode = EvidenceConfig['jevMode'];
+/** What decides S6 for the configured mode, ignoring whether the provider is usable (service.ts `scorers` makes the same choice). */
+export declare function configuredDecider(cfg: EvidenceConfig): {
+    mode: JudgeMode;
+    decides: 'rule' | 'hybrid' | 'model';
+    note?: string;
+};
 export interface JudgeStatus {
+    /** Effective judge mode (`judge.mode`, else the legacy `jevMode`), not the legacy `scorer` flag. */
+    mode: JudgeMode;
+    /** Who decides S6 right now: the rule scorer, the hybrid rule+model scorer, or the model; a model mode falls back to `rule` when the provider is unusable or its key is missing. */
+    decides: 'rule' | 'hybrid' | 'model';
+    modeNote?: string;
     provider: {
         id: string;
         protocol?: string;
@@ -38,6 +50,7 @@ export interface JudgeStatus {
         };
         byProvider: {
             provider: string;
+            protocol?: string;
             requests: number;
             inputTokens: number;
             outputTokens: number;

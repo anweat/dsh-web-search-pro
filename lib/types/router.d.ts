@@ -8,6 +8,7 @@ import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
 import { type Engine, type EngineDeps, type EngineSearchOptions } from './engines.ts';
+import { type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
 import { LruCache } from './memory-cache.ts';
 import type { BrowserService } from './browser-service.ts';
 import { type BrowserGetter } from './browser-access.ts';
@@ -46,18 +47,59 @@ export interface RouterSearchResult {
     /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
     fallbackNote?: string;
 }
+/** One provider as `web_backend_status` reports it: the registry descriptor plus local readiness by dimension. */
+export interface ProviderReport {
+    id: string;
+    /** Id used in tool output and history (the first alias, else `id`). */
+    route: string;
+    aliases: string[];
+    label: string;
+    operations: string[];
+    taskProfiles: string[];
+    languages: string[];
+    regions: string[];
+    resultKinds: string[];
+    sourceFamily?: string;
+    requirements: (Omit<ProviderDescriptor['requirements'][number], 'env'> & {
+        env?: string[];
+    })[];
+    supportedFilters: string[];
+    costModel: ProviderDescriptor['costModel'];
+    /** Not verified against the live service (descriptor.verification). */
+    unverified?: boolean;
+    readiness: Readiness & {
+        lastLocalCheck: string;
+        lastRemoteSuccess?: string;
+        lastError?: string;
+        cooldownUntil?: string;
+    };
+}
 export declare class SearchRouter {
     private readonly ctx;
     private readonly config;
     private readonly store;
     private readonly dynamic;
     private readonly memory;
+    readonly registry: ProviderRegistry;
     /** In-flight de-duplication of identical non-fresh requests (C3). */
     private readonly searchFlights;
     private readonly platformFlights;
     private readonly getBrowser;
     private readonly backends;
-    constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | BrowserGetter, memory?: LruCache<RouterSearchResult>);
+    /** Backend ids this router created from the registry (a stub a test installed under another id is never touched). */
+    private readonly owned;
+    private syncedRevision;
+    /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
+    private readonly readiness;
+    /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
+    private readonly outcomes;
+    constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | BrowserGetter, memory?: LruCache<RouterSearchResult>, registry?: ProviderRegistry);
+    /** Mirror the registry into the backend registry: new providers appear, unregistered ones stop being scheduled. */
+    private syncBackends;
+    private backendFor;
+    private probeEnv;
+    /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
+    private canonicalIds;
     backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]>;
     exaContents(urls: string[], signal?: AbortSignal): Promise<ExaResult[]>;
     /** Resolve a secret by credentials ref / environment variable name (credentials service first, then env). */
@@ -79,10 +121,18 @@ export declare class SearchRouter {
     private deps;
     /** Sync key check for available() (no credential resolution — env/literal only). */
     private depsSync;
+    /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
+    private usageRecorder;
     /** Whether any configured engine is currently usable. */
     anyEngineAvailable(): boolean;
     private build;
     private buildSync;
+    /**
+     * Every registered search provider with its descriptor and LOCAL readiness by dimension (installation / credential /
+     * health), for `web_backend_status`. No network. Health is only `ready` after a real call succeeded in this process,
+     * `cooldown` / `error` after failures; a provider that merely passed its local probe is `unknown`, not verified.
+     */
+    providerReport(cliAvailability?: ReadonlyMap<string, boolean>): Promise<ProviderReport[]>;
     /** Run a full search with caching + persistence. */
     search(opts: RouterSearchOptions): Promise<RouterSearchResult>;
     private runSearch;

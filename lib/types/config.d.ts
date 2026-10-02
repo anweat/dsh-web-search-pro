@@ -42,6 +42,11 @@ export interface EvidenceConfig {
     hybridBorderline: boolean;
     /** Upper bound of (need, block) questions sent to Jev per search. */
     maxJevQuestions: number;
+    /**
+     * S1 promotes registry providers that are strong in the task's language (Bocha for Chinese, Exa for English) and ready
+     * (key configured) ahead of the profile table. Default true; false keeps the profile table / configured `engines` as they are.
+     */
+    autoProviders: boolean;
     /** Retrieval rounds per task (S8 bounded re-search): 1 disables the second round. Default 2. */
     maxRounds: number;
     /** Search requests per task over all rounds (a second round only runs while this is not used up). Default 4. */
@@ -113,6 +118,14 @@ export interface Config {
     jinaApiKey?: string;
     /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
     jinaApiKeyEnv?: string;
+    /** Bocha web-search API key (falls back to the credentials ref / $BOCHA_SEARCH_API_KEY, then $BOCHA_JEV_API_KEY of the same account). */
+    bochaApiKey?: string;
+    /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
+    bochaApiKeyEnv?: string;
+    /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bochaai.com. */
+    bochaBaseUrl?: string;
+    /** Ask Bocha for its longer per-page summary (default true). */
+    bochaSummary?: boolean;
     /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
     githubToken?: string;
     /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
@@ -170,6 +183,10 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     exaApiKeyEnv: z<string, string, "volatile-defined">;
     jinaApiKey: z<string, string, "volatile">;
     jinaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaApiKey: z<string, string, "volatile">;
+    bochaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaBaseUrl: z<string, string, "volatile-defined">;
+    bochaSummary: z<boolean, boolean, "volatile-defined">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
@@ -224,6 +241,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        autoProviders: z<boolean, boolean, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -372,6 +390,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        autoProviders: z<boolean, boolean, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -538,6 +557,10 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     exaApiKeyEnv: z<string, string, "volatile-defined">;
     jinaApiKey: z<string, string, "volatile">;
     jinaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaApiKey: z<string, string, "volatile">;
+    bochaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaBaseUrl: z<string, string, "volatile-defined">;
+    bochaSummary: z<boolean, boolean, "volatile-defined">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
@@ -592,6 +615,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        autoProviders: z<boolean, boolean, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -740,6 +764,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        autoProviders: z<boolean, boolean, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -893,6 +918,10 @@ export interface ResolvedConfig extends Config {
     jinaApiKey?: string;
     jinaApiKeyEnv: string;
     githubTokenEnv: string;
+    bochaApiKey?: string;
+    bochaApiKeyEnv: string;
+    bochaBaseUrl: string;
+    bochaSummary: boolean;
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
     evidence: EvidenceConfig;
 }

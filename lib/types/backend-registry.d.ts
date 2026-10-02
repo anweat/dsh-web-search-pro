@@ -62,6 +62,9 @@ export declare class BackendRegistry<I, O> {
         cooldownMs?: number;
     });
     register(backend: Backend<I, O>): this;
+    has(id: string): boolean;
+    /** Remove a backend (and its cooldown). Returns whether it existed. */
+    unregister(id: string): boolean;
     run(input: I, options: RunSelectedOptions): Promise<O>;
     /**
      * Try engines in order. A successful engine wins by default, but when its
