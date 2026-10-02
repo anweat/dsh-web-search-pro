@@ -10,6 +10,11 @@ import { type CredentialState, type ProviderDescriptor } from '../providers/regi
 import type { Profile, TaskSpec } from './types.ts';
 /** Provider ids per profile (`general` uses the configured `engines`). */
 export declare const PROFILE_PROVIDERS: Readonly<Record<Exclude<Profile, 'general'>, readonly string[]>>;
+/**
+ * Supplementary sources per profile (registered ones only): candidates for the second round and for recommendations, never
+ * part of round 1 and never a replacement for web search (Wikipedia for facts and background, Stack Overflow for code questions).
+ */
+export declare const PROFILE_SUPPLEMENTS: Readonly<Record<Profile, readonly string[]>>;
 /** Default cap on providers of one plan (general profile with a long engine list). */
 export declare const DEFAULT_MAX_PROVIDERS = 4;
 export type ProviderState = 'ready' | 'unavailable' | 'cooldown';

@@ -126,6 +126,10 @@ export interface Config {
     bochaBaseUrl?: string;
     /** Ask Bocha for its longer per-page summary (default true). */
     bochaSummary?: boolean;
+    /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
+    searxngUrl?: string;
+    /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
+    openalexMailto?: string;
     /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
     githubToken?: string;
     /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
@@ -187,6 +191,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     bochaApiKeyEnv: z<string, string, "volatile-defined">;
     bochaBaseUrl: z<string, string, "volatile-defined">;
     bochaSummary: z<boolean, boolean, "volatile-defined">;
+    searxngUrl: z<string, string, "volatile">;
+    openalexMailto: z<string, string, "volatile">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
@@ -561,6 +567,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     bochaApiKeyEnv: z<string, string, "volatile-defined">;
     bochaBaseUrl: z<string, string, "volatile-defined">;
     bochaSummary: z<boolean, boolean, "volatile-defined">;
+    searxngUrl: z<string, string, "volatile">;
+    openalexMailto: z<string, string, "volatile">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
@@ -922,6 +930,8 @@ export interface ResolvedConfig extends Config {
     bochaApiKeyEnv: string;
     bochaBaseUrl: string;
     bochaSummary: boolean;
+    searxngUrl?: string;
+    openalexMailto?: string;
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
     evidence: EvidenceConfig;
 }

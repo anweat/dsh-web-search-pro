@@ -4,6 +4,7 @@
  * resolves from the global npm root or config playwright.modulePath.
  * @module dsh-web-search-pro/util
  */
+import { type ResolvePublicUrlOptions } from './safe-http.ts';
 /** js-yaml parser (npm dep). */
 export declare const jsYaml: {
     load(input: string): unknown;
@@ -45,6 +46,8 @@ export interface HttpResult {
     text: string;
     finalUrl: string;
     contentType?: string;
+    /** Response headers of the final answer (Retry-After and rate-limit headers for API clients). */
+    headers?: Headers;
 }
 /**
  * One HTTP request (GET by default) with UA spoofing, cooperative timeout,
@@ -58,7 +61,9 @@ export declare function httpGet(url: string, opts?: {
     method?: string;
     body?: string;
     maxBytes?: number;
-    allowProxyFakeIp?: boolean;
+    allowProxyFakeIp?: boolean; /** Test seams: replace the global fetch and the DNS lookup. */
+    fetchImpl?: typeof fetch;
+    lookup?: ResolvePublicUrlOptions['lookup'];
 }): Promise<HttpResult>;
 /** Decode bytes honoring charset; UTF-8 first with GBK fallback on garbage. */
 export declare function decodeText(buf: Buffer, contentType?: string): string;

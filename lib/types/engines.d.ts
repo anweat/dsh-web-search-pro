@@ -32,6 +32,10 @@ export interface EngineSearchOptions {
         include?: string[];
         exclude?: string[];
     };
+    /** Lower bound of the publication date (ISO 8601), compiled from a hard time_window; the engine maps it to its native filter. */
+    since?: string;
+    /** Task language (`zh` / `en`) for engines with per-language editions or zones (Wikipedia, AnySearch); absent = detect from the query. */
+    lang?: 'zh' | 'en';
     browser?: {
         authProfile?: string;
         rulePack?: string;
@@ -67,6 +71,19 @@ export interface EngineDeps {
     usage?: UsageRecorder;
     /** Test seam: replaces the global fetch of API clients that accept one. */
     fetchImpl?: typeof fetch;
+    /** Test seam: replaces the DNS lookup of the SSRF check. */
+    lookup?: (hostname: string) => Promise<{
+        address: string;
+        family?: number;
+    }[]>;
+    /** Self-hosted SearXNG instance (settings `searxngUrl`); no default public instance exists. */
+    searxngUrl?: string;
+    /** Contact address appended to the User-Agent of OpenAlex requests (settings `openalexMailto`). */
+    openalexMailto?: string;
+    /** Optional free keys of the anonymous APIs (credentials / environment); they raise limits, nothing needs them. */
+    openalexApiKey?: string;
+    semanticScholarApiKey?: string;
+    anysearchApiKey?: string;
     /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
     githubToken?: string;
     enableCli: boolean;

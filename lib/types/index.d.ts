@@ -53,6 +53,8 @@ declare const _default: {
         bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -427,6 +429,8 @@ declare const _default: {
         bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;

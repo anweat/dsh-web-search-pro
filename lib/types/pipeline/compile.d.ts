@@ -37,10 +37,12 @@ export interface CompiledQuery {
     providerId: string;
     /** Text to send to the provider. */
     query: string;
-    /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some). */
+    /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some; the anonymous APIs take `since` / `lang`). */
     options?: {
         exa?: CompiledExaOptions;
         bocha?: CompiledBochaOptions;
+        since?: string;
+        lang?: 'zh' | 'en';
     };
     /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
     fallbacks?: string[];
@@ -59,6 +61,17 @@ type TaskLike = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>;
  */
 export declare function parseTimeWindow(value: string, now?: Date): string | undefined;
 export declare function compileBocha(task: TaskLike, providerId: string, now: Date): CompiledQuery;
+/**
+ * Generic compilation for the API sources that take a publication-date lower bound and / or a language edition
+ * (Hacker News, Stack Exchange, OpenAlex, Semantic Scholar: `since`; Wikipedia, AnySearch: `lang`). A HARD
+ * time_window whose lower bound is understood becomes `options.since` (an exact translation, so native); the
+ * strictest of several bounds wins. Everything else stays local.
+ */
+export declare function compileSince(task: TaskLike, providerId: string, now: Date, opts: {
+    since?: boolean;
+    lang?: boolean; /** The source filters by whole years: only a bound at a year start is an exact translation. */
+    yearOnly?: boolean;
+}): CompiledQuery;
 export declare const GITHUB_MAX_TERMS = 5;
 /**
  * Short keyword query for repository search: entities, then must_terms, then a
@@ -70,6 +83,18 @@ export declare function githubKeywordTerms(task: TaskLike): string[];
 export declare function githubKeywordQuery(task: TaskLike): string;
 /** Repository search ANDs every keyword, so one rare token empties the result: retry with the leading 3 and 2 terms. */
 export declare const GITHUB_FALLBACK_TERM_COUNTS: readonly number[];
+/**
+ * Sources whose search ANDs every word (Hacker News, Stack Exchange, Wikipedia, and the like) return nothing for a
+ * keyword-stuffed query (live check, 2026-10-02: 6 of 6 task queries empty). They get the short keyword query of
+ * {@link githubKeywordTerms} (at most `terms` of them) plus broader retries with fewer terms; with fewer than two
+ * keywords the query is sent as it is. `since` / `lang` are compiled as in {@link compileSince}.
+ */
+export declare function compileKeywords(task: TaskLike, providerId: string, now: Date, opts: {
+    terms: number;
+    since?: boolean;
+    lang?: boolean;
+    yearOnly?: boolean;
+}): CompiledQuery;
 /** Compile the task for one provider id (`ddg`, `bing`, `exa`, `bocha`, `github*`; anything else gets the plain query). */
 export declare function compileQuery(task: TaskLike, providerId: string, now?: Date): CompiledQuery;
 export declare function compileQueries(task: TaskLike, providerIds: readonly string[], now?: Date): CompiledQuery[];
