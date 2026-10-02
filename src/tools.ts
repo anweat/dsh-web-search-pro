@@ -57,7 +57,7 @@ const EVIDENCE_ITEM_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
     evidenceId: { type: 'string', required: true }, blockId: { type: 'string' }, url: { type: 'string', required: true }, title: { type: 'string' },
-    excerpt: { type: 'string', required: true }, heading: { type: 'string' }, publishedAt: { type: 'string' },
+    excerpt: { type: 'string', required: true }, heading: { type: 'string' }, publishedAt: { type: 'string' }, lowConfidence: { type: 'boolean' },
     needIds: { type: 'array', required: true, items: { type: 'string' } }, grade: { type: 'number', required: true }, source: { type: 'string', required: true },
   },
 } as const
@@ -77,7 +77,7 @@ const EVIDENCE_OUTPUT_PROPERTIES = {
   stats: {
     type: 'object', additionalProperties: false,
     properties: {
-      candidates: { type: 'number' }, kept: { type: 'number' }, fetched: { type: 'number' }, blocksScored: { type: 'number' }, excerptChars: { type: 'number' }, scorer: { type: 'string' }, rounds: { type: 'number' }, queries: { type: 'number' },
+      candidates: { type: 'number' }, kept: { type: 'number' }, lowConfidence: { type: 'number' }, fetched: { type: 'number' }, blocksScored: { type: 'number' }, excerptChars: { type: 'number' }, scorer: { type: 'string' }, rounds: { type: 'number' }, queries: { type: 'number' },
       jev: { type: 'object', additionalProperties: false, properties: { requests: { type: 'number' }, questions: { type: 'number' }, inputTokens: { type: 'number' }, outputTokens: { type: 'number' }, mode: { type: 'string' }, rubric: { type: 'string' }, rubricOverridden: { type: 'boolean' } } },
     },
   },
@@ -148,7 +148,7 @@ export function registerTools(deps: ToolDeps): void {
         properties: {
           ...EVIDENCE_OUTPUT_PROPERTIES,
           content: { type: 'string' },
-          sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' } } } },
+          sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, lowConfidence: { type: 'boolean' } } } },
           engine: { type: 'string', required: true },
           enginesTried: { type: 'array', required: true, items: { type: 'string' } },
           fromCache: { type: 'boolean', required: true },
@@ -156,7 +156,7 @@ export function registerTools(deps: ToolDeps): void {
         },
       },
       render: (_args, value) => {
-        const v = value as { content?: string; sources: { url: string; title?: string; snippet?: string; publishedAt?: string }[]; engine: string; enginesTried: string[]; fromCache: boolean; fallbackNote?: string }
+        const v = value as { content?: string; sources: { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: boolean }[]; engine: string; enginesTried: string[]; fromCache: boolean; fallbackNote?: string }
         const pack = value as unknown as Partial<EvidenceOutput>
         if (pack.resultId !== undefined && pack.evidence && pack.needs && pack.coveredNeeds && pack.gaps && pack.verification) {
           return [{ type: 'text', text: renderEvidencePack({ resultId: pack.resultId, profile: pack.profile ?? 'general', needs: pack.needs, evidence: pack.evidence, coveredNeeds: pack.coveredNeeds, gaps: pack.gaps, partial: pack.partial === true, notes: pack.notes ?? [], verification: pack.verification }, v.sources, 'Engine: ' + v.engine + (v.enginesTried.length ? '; tried: ' + v.enginesTried.join(', ') : '')) }]

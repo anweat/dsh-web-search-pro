@@ -21,7 +21,7 @@ import { mergeCandidates, type ProviderOutput, type ProviderSource } from './can
 import { adaptivePreRankLimit, splitBlocks, preRankBlocks, type SplitOptions } from './blocks.ts'
 import { compileQuery, gapQueryText, type CompiledQuery } from './compile.ts'
 import { fuseCandidates, type FusionOptions } from './fusion.ts'
-import { gateCandidates, keptCandidates } from './gate.ts'
+import { applyFloor, DEFAULT_MIN_KEEP, gateCandidates } from './gate.ts'
 import { PROFILE_PROVIDERS, planSources, type ProviderStatus, type SourcePlan } from './plan.ts'
 import { capDiscussionGrades, RuleScorer, type ScoreJob, type ScoreOutcome, type Scorer } from './score.ts'
 import { computeCoverage, selectEvidence, DEFAULT_SELECT_OPTIONS, type SelectOptions } from './select.ts'
@@ -99,8 +99,15 @@ export interface PipelineOptions {
   blocks?: SplitOptions
   /** Retrieval rounds per task; 1 = no follow-up round (default 2). */
   maxRounds?: number
-  /** Search requests per task over all rounds, round 1 included (default 4); a follow-up round only runs while some are left. */
+  /**
+   * Search queries per task over all rounds, round 1 included (default 4). One query = one provider call: the broader
+   * fallback retries of a provider (GitHub keyword relaxation) count once together. While a follow-up round is allowed
+   * (`maxRounds` > 1), round 1 runs at most `maxQueries - 1` of the planned providers (the last ones in plan order wait
+   * for round 2) so that one query is left for it; explicit `engines` are never trimmed.
+   */
   maxQueries?: number
+  /** The S4 gate keeps at least this many candidates (best-fused, flagged low-confidence) when it would leave fewer (default 3; 0 = no floor). */
+  minKeep?: number
   /** Pages the follow-up round reads at most (default 2, never more than `fetchTopK`). */
   refineFetchTopK?: number
   /** A follow-up round needs at least this long before the deadline (default 15 s). */
@@ -181,16 +188,16 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   })
   notes.push(...plan.notes)
 
-  // S2: one provider with one compiled query (and its broader fallbacks while the answer is empty). `take` meters
-  // the search requests of a follow-up round; the first round is never metered.
+  // S2: one provider with one compiled query (and its broader fallbacks while the answer is empty). The provider call
+  // counts as ONE query however many fallback variants it needs. `take` meters the queries of a follow-up round.
   const failures: string[] = []
   let cut = false
   let queries = 0
   const searchOne = async (id: string, compiled: CompiledQuery, sink: string[], take: () => boolean): Promise<ProviderOutput | undefined> => {
     const search = deps.searchProvider!
+    if (!take()) return undefined
+    queries++
     for (const query of [compiled.query, ...compiled.fallbacks ?? []]) {
-      if (!take()) return undefined
-      queries++
       let outcome: ProviderOutcome
       try {
         outcome = await search({ id, query, count: options.perProviderCount ?? 10, ...compiled.options ? { options: compiled.options } : {}, signal: stage })
@@ -209,14 +216,20 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
     return undefined
   }
 
+  // Round 1 leaves one query for a follow-up round whenever one may run (explicit engines are the caller's choice and stay whole).
+  const maxQueries = Math.max(options.maxQueries ?? DEFAULT_MAX_QUERIES, 1)
+  const round1Cap = (options.maxRounds ?? DEFAULT_MAX_ROUNDS) > 1 && !options.engines?.length ? Math.max(maxQueries - 1, 1) : Infinity
+  const firstRound = plan.providers.slice(0, round1Cap)
+  if (firstRound.length < plan.providers.length) notes.push('round 1 limited to ' + firstRound.length + ' provider(s) to keep a query for a second round (' + plan.providers.slice(round1Cap).map(p => p.id).join(',') + ' held back; evidence.maxQueries=' + maxQueries + ')')
+
   const outputs: ProviderOutput[] = []
-  if (plan.providers.length && deps.searchProvider) {
-    const found = await Promise.all(plan.providers.map(({ id, compiled }) => searchOne(id, compiled, failures, () => true)))
+  if (firstRound.length && deps.searchProvider) {
+    const found = await Promise.all(firstRound.map(({ id, compiled }) => searchOne(id, compiled, failures, () => true)))
     for (const output of found) if (output) outputs.push(output)
     checkUser()
   }
   // Keep plan order regardless of which provider answered first.
-  const planned = plan.providers.map(p => p.id)
+  const planned = firstRound.map(p => p.id)
   outputs.sort((a, b) => planned.indexOf(a.providerId) - planned.indexOf(b.providerId))
   if (failures.length) notes.push('provider failures: ' + failures.join('; '))
   if (!outputs.length && failures.length && !cut && !deadlineSignal.aborted) throw new Error('all providers failed: ' + failures.join('; '))
@@ -264,8 +277,8 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   }
 
   return runEvidenceStages(task, outputs, deps, options, {
-    plan, notes, partial: cut || deadlineSignal.aborted, signal: options.signal, stage, deadline: deadlineAt, now,
-    verification: verificationOf(task, plan.providers.map(p => p.compiled)), deadlineSignal,
+    plan: { ...plan, providers: firstRound }, notes, partial: cut || deadlineSignal.aborted, signal: options.signal, stage, deadline: deadlineAt, now,
+    verification: verificationOf(task, firstRound.map(p => p.compiled)), deadlineSignal,
     refine, queryCount: () => queries,
   })
 }
@@ -314,11 +327,12 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     const merged = mergeCandidates(all)
     const answered = new Set(all.filter(o => o.sources.length).map(o => o.providerId))
     const fused = fuseCandidates(merged, { ...deps.fusion, nProviders: Math.max(answered.size, 1), now: ctx.now })
-    const kept = keptCandidates(gateCandidates(task, fused.map(r => r.candidate)))
-    return { merged, answered, kept }
+    const gated = gateCandidates(task, fused.map(r => r.candidate))
+    const { kept, added } = applyFloor(gated, options.minKeep ?? DEFAULT_MIN_KEEP)
+    return { merged, answered, kept, floor: { added, of: gated.length } }
   }
   let allOutputs: readonly ProviderOutput[] = outputs
-  let { merged, answered, kept } = retrieve(allOutputs)
+  let { merged, answered, kept, floor } = retrieve(allOutputs)
 
   // State shared by the rounds.
   const pages = new Map<string, ReadPage>()
@@ -376,7 +390,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     const blocks: PageBlock[] = []
     for (const { candidate, page, blocks: split } of fresh) {
       const providers = [...new Set(candidate.contributions.map(c => c.providerId))]
-      for (const block of split) blocks.push({ candidateId: candidate.candidateId, url: candidate.url, title: candidate.title || page.title || '', ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}, providers, block })
+      const low = candidate.gate?.lowConfidence === true
+      for (const block of split) blocks.push({ candidateId: candidate.candidateId, url: candidate.url, title: candidate.title || page.title || '', ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}, providers, ...low ? { lowConfidence: true as const } : {}, block })
     }
     pageBlocks.push(...blocks)
     const longestPage = Math.max(0, ...fresh.map(p => p.blocks.length))
@@ -481,7 +496,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
         extraEngines = outcome.providers
         const known = new Set(merged.map(c => c.candidateId))
         allOutputs = [...allOutputs, ...outcome.outputs]
-        ;({ merged, answered, kept } = retrieve(allOutputs))
+        ;({ merged, answered, kept, floor } = retrieve(allOutputs))
         // New candidates first (they came from the gap queries), then unread ones of the first round, each in fused order.
         const pool = kept.filter(c => !attempted.has(c.candidateId)).sort((a, b) => Number(known.has(a.candidateId)) - Number(known.has(b.candidateId)))
         const fresh = await readPages(pool, Math.min(topK, options.refineFetchTopK ?? REFINE_FETCH_TOP_K))
@@ -494,6 +509,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     }
   }
 
+  if (floor.added) notes.push('relevance gate left ' + (kept.length - floor.added) + ' of ' + floor.of + ' candidate(s): kept the ' + floor.added + ' best-ranked one(s) as low relevance (floor ' + (options.minKeep ?? DEFAULT_MIN_KEEP) + ')')
   const resultId = deps.newId?.() ?? 'r_' + crypto.randomBytes(5).toString('hex')
   const evidence: EvidenceItem[] = []
   const evidenceBlocks: PipelineResult['evidenceBlocks'] = []
@@ -508,6 +524,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
       ...heading ? { heading } : {},
       ...s.block.publishedAt ? { publishedAt: s.block.publishedAt } : {},
       needIds: s.needIds, grade: Number(s.grade.toFixed(2)), source: s.block.providers.join('+'),
+      ...s.block.lowConfidence ? { lowConfidence: true as const } : {},
     })
     evidenceBlocks.push({ evidenceId, url: s.block.url, blockId: s.block.block.blockId, ...heading ? { heading } : {}, text: s.block.block.text, hash: s.block.block.hash, grade: Number(s.grade.toFixed(3)), scorer, ...scorer !== 'rule' && scorer !== 'none' && control.rubricRef ? { rubric: control.rubricRef.key } : {} })
   }
@@ -522,14 +539,14 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     evidence,
     coveredNeeds: coverage.covered,
     gaps: coverage.gaps,
-    sources: kept.slice(0, sourcesCount).map(c => ({ url: c.url, ...c.title ? { title: c.title } : {}, ...c.snippet ? { snippet: c.snippet } : {}, ...c.publishedAt ? { publishedAt: c.publishedAt } : {} })),
+    sources: kept.slice(0, sourcesCount).map(c => ({ url: c.url, ...c.title ? { title: c.title } : {}, ...c.snippet ? { snippet: c.snippet } : {}, ...c.publishedAt ? { publishedAt: c.publishedAt } : {}, ...c.gate?.lowConfidence ? { lowConfidence: true as const } : {} })),
     engine: 'pipeline(' + (used.length ? used.join('+') : 'none') + ')',
     enginesTried: [...new Set([...ctx.plan.providers.map(p => p.id), ...extraEngines])],
     partial,
     notes,
     verification: ctx.verification,
     stats: {
-      candidates: merged.length, kept: kept.length, fetched: pages.size, blocksScored: scored.length,
+      candidates: merged.length, kept: kept.length, ...floor.added ? { lowConfidence: floor.added } : {}, fetched: pages.size, blocksScored: scored.length,
       excerptChars: selection.usedChars, scorer: scorerUsed, ...jevUsage ? { jev: jevUsage } : {},
       rounds, queries: ctx.queryCount?.() ?? allOutputs.length,
     },

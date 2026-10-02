@@ -9,6 +9,11 @@
  * test-split positive recall / gold-candidate recall / drop ratio next to the
  * r1 `rule / gate.relevance.v1` numbers from the run's report.json (parity
  * within 1 point is expected: same lexical function, same threshold rule).
+ * Since the cross-lingual gate (needs and candidate text in different languages
+ * are scored with align.ts), the r1 parity rows use the LEXICAL score alone
+ * (the calibrated function; identical to the gate for same-language pairs, which
+ * is verified pair by pair), and extra rows show the gate as it runs now plus
+ * the split into same-language and cross-lingual pairs.
  * A second table adds the hard-constraint drops (the gate's default policy).
  * With `--task-set v2` (held-out set) the frozen default threshold is evaluated on all v2
  * tasks; nothing is derived from them and the r1 parity check is skipped.
@@ -22,7 +27,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { compileQueries, githubKeywordQuery } from '../../src/pipeline/compile.ts'
-import { DEFAULT_RELEVANCE_THRESHOLD, gateItem, type GateItem } from '../../src/pipeline/gate.ts'
+import { DEFAULT_RELEVANCE_THRESHOLD, gateItem, lexicalRelevance, relevanceContextOf, type GateItem } from '../../src/pipeline/gate.ts'
 import { mergeCandidates } from '../../src/pipeline/candidates.ts'
 import { githubEngine, EngineError } from '../../src/engines.ts'
 import { numberFlag, parseFlags, sleep } from './cli.ts'
@@ -36,8 +41,12 @@ import { toTaskSpec, type Split } from './types.ts'
 interface Sample {
   taskId: string
   split: Split
-  /** Lexical relevance (the gate's score). */
+  /** The gate's score (lexical-v1, or the aligned score for cross-lingual pairs). */
   relevance: number
+  /** Lexical-v1 score alone (what the gate computed before the cross-lingual change). */
+  legacy: number
+  /** The pair is cross-lingual: `relevance` came from align.ts. */
+  aligned: boolean
   rel: number
   goldCand: boolean
   /** Dropped by a definite hard-constraint violation. */
@@ -67,7 +76,8 @@ function collect(taskSet: TaskSet): { samples: Sample[]; tasks: number; candidat
       if (rel === undefined) continue
       const item: GateItem = { url: c.url, title: c.title, text: c.snippet, ...c.publishedAt ? { publishedAt: c.publishedAt } : {} }
       const { gate } = gateItem(spec, item, { relevanceThreshold: 0 })
-      samples.push({ taskId: task.id, split, relevance: gate.relevance, rel, goldCand: truth.goldUrls.has(c.key), constraintDrop: gate.reason === 'constraint' })
+      const legacy = lexicalRelevance(relevanceContextOf(spec), item, false)
+      samples.push({ taskId: task.id, split, relevance: gate.relevance, legacy, aligned: gate.aligned === true, rel, goldCand: truth.goldUrls.has(c.key), constraintDrop: gate.reason === 'constraint' })
     }
     // Cross-check: the src canonicalization should merge the same candidates as the bench key does.
     const merged = mergeCandidates(snapshot.engineRuns.map(run => ({ providerId: run.engine, query: run.query, sources: run.results })))
@@ -78,8 +88,8 @@ function collect(taskSet: TaskSet): { samples: Sample[]; tasks: number; candidat
 
 interface Row { recall2: number | undefined; recall1: number | undefined; dropped: number | undefined; goldRecall: number | undefined; goldN: number; n: number }
 
-function measure(samples: readonly Sample[], threshold: number, withConstraints: boolean): Row {
-  const keep = (s: Sample): boolean => s.relevance >= threshold && !(withConstraints && s.constraintDrop)
+function measure(samples: readonly Sample[], threshold: number, withConstraints: boolean, score: 'relevance' | 'legacy' = 'relevance'): Row {
+  const keep = (s: Sample): boolean => s[score] >= threshold && !(withConstraints && s.constraintDrop)
   const ev = (minRel: number): { recall: number | undefined } => {
     const pos = samples.filter(s => s.rel >= minRel)
     return { recall: pos.length ? pos.filter(keep).length / pos.length : undefined }
@@ -117,22 +127,40 @@ function evalMode(flags: Record<string, string | true>): number {
   const { samples, tasks, candidates, canonicalMismatch } = collect(taskSet)
   const cal = samples.filter(s => s.split === 'calibration')
   const test = samples.filter(s => s.split === 'test' || s.split === 'heldout')
-  const derived = chooseDropThreshold(cal.map(s => s.relevance), cal.map(s => s.rel >= 2), minRecall)
+  const derived = chooseDropThreshold(cal.map(s => s.legacy), cal.map(s => s.rel >= 2), minRecall)
   const ref = r1Reference(runDir)
 
   console.log('task set ' + taskSet + (taskSet === 'v2' ? ' (held-out: frozen parameters only, never tune on it)' : ''))
   console.log('labeled tasks: ' + tasks + ', candidates: ' + candidates + ' (calibration ' + cal.length + ', test ' + test.length + ')')
   console.log('labels are LLM drafts (not human reviewed); gate = lexical relevance on title + snippet')
   console.log('threshold re-derived on calibration (recall >= ' + minRecall + '): ' + derived + '   default in src: ' + DEFAULT_RELEVANCE_THRESHOLD)
-  console.log('calibration drop ratio at default: ' + pct(evalThreshold(cal.map(s => s.relevance), cal.map(s => s.rel >= 2), DEFAULT_RELEVANCE_THRESHOLD).dropped))
+  console.log('calibration drop ratio at default: ' + pct(evalThreshold(cal.map(s => s.legacy), cal.map(s => s.rel >= 2), DEFAULT_RELEVANCE_THRESHOLD).dropped))
   console.log('canonical-URL cross-check: ' + canonicalMismatch + ' task(s) where src canonicalization merges a different number of candidates than the bench key\n')
   console.log((taskSet === 'v2' ? 'HELDOUT (v2)' : 'TEST split').padEnd(44) + ['recall(>=2)', 'recall(>=1)', 'gold-cand recall', 'dropped', 'n'].map(x => x.padStart(14)).join(''))
   printRow('r1 report: rule / gate.relevance.v1', ref)
-  const relOnly = measure(test, DEFAULT_RELEVANCE_THRESHOLD, false)
-  printRow('src gate, relevance only (default thr)', relOnly)
-  if (derived !== undefined) printRow('src gate, relevance only (re-derived thr)', measure(test, derived, false))
+  const relOnly = measure(test, DEFAULT_RELEVANCE_THRESHOLD, false, 'legacy')
+  printRow('lexical-v1 only, relevance (default thr)', relOnly)
+  if (derived !== undefined) printRow('lexical-v1 only, relevance (re-derived thr)', measure(test, derived, false, 'legacy'))
+  printRow('lexical-v1 only, + hard constraints', measure(test, DEFAULT_RELEVANCE_THRESHOLD, true, 'legacy'))
+  const gateRow = measure(test, DEFAULT_RELEVANCE_THRESHOLD, false)
+  printRow('src gate NOW, relevance only (default thr)', gateRow)
   const full = measure(test, DEFAULT_RELEVANCE_THRESHOLD, true)
-  printRow('src gate, + hard constraints (default)', full)
+  printRow('src gate NOW, + hard constraints (default)', full)
+
+  const all = [...cal, ...test]
+  const sameLang = all.filter(s => !s.aligned)
+  const cross = all.filter(s => s.aligned)
+  const sameDiff = sameLang.filter(s => s.relevance !== s.legacy).length
+  console.log('\ncross-lingual split (calibration + ' + (taskSet === 'v2' ? 'heldout' : 'test') + '): same-language pairs ' + sameLang.length + ', cross-lingual pairs ' + cross.length + '; same-language pairs whose score differs from lexical-v1: ' + sameDiff + (sameDiff === 0 ? ' (byte-identical)' : ' (UNEXPECTED)'))
+  console.log('CROSS-LINGUAL pairs only'.padEnd(44) + ['recall(>=2)', 'recall(>=1)', 'gold-cand recall', 'dropped', 'n'].map(x => x.padStart(14)).join(''))
+  printRow('  lexical-v1 (before)', measure(cross, DEFAULT_RELEVANCE_THRESHOLD, false, 'legacy'))
+  printRow('  aligned (now)', measure(cross, DEFAULT_RELEVANCE_THRESHOLD, false))
+  const flips = (from: 'legacy', to: 'relevance'): string => {
+    const a = cross.filter(s => s[from] < DEFAULT_RELEVANCE_THRESHOLD && s[to] >= DEFAULT_RELEVANCE_THRESHOLD)
+    const b = cross.filter(s => s[from] >= DEFAULT_RELEVANCE_THRESHOLD && s[to] < DEFAULT_RELEVANCE_THRESHOLD)
+    return a.length + ' pairs newly kept (' + a.filter(s => s.rel >= 2).length + ' labeled >=2, ' + a.filter(s => s.rel < 1).length + ' labeled 0), ' + b.length + ' newly dropped (' + b.filter(s => s.rel >= 2).length + ' labeled >=2)'
+  }
+  console.log('  flips at the default threshold: ' + flips('legacy', 'relevance'))
 
   const cDrops = test.filter(s => s.constraintDrop)
   const cDropsAlso = cDrops.filter(s => s.relevance >= DEFAULT_RELEVANCE_THRESHOLD)

@@ -7,7 +7,10 @@
 
 import type { EvidencePack } from './types.ts'
 
-export interface RenderSource { url: string; title?: string; snippet?: string; publishedAt?: string }
+export interface RenderSource { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: boolean }
+
+/** Marker for a source / excerpt whose page only passed the S4 floor, not the relevance gate (dev-plan §3.1). */
+export const LOW_RELEVANCE = ' (low relevance)'
 
 const hostOf = (url: string): string => { try { return new URL(url).hostname } catch { return url } }
 
@@ -20,7 +23,7 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
   parts.push('Evidence pack ' + pack.resultId + ' (' + pack.profile + (pack.partial ? ', PARTIAL: deadline reached' : '') + '): ' + pack.evidence.length + ' excerpt(s); needs covered ' + pack.coveredNeeds.length + '/' + pack.needs.length + '.\n' + COVERAGE_CAVEAT)
   if (pack.evidence.length) {
     parts.push(pack.evidence.map((e, i) => {
-      const lines = ['[' + (i + 1) + '] ' + e.evidenceId + ' — ' + (e.title ? e.title + ' — ' : '') + e.url + (e.publishedAt ? ' (' + e.publishedAt + ')' : '')]
+      const lines = ['[' + (i + 1) + '] ' + e.evidenceId + ' — ' + (e.title ? e.title + ' — ' : '') + e.url + (e.publishedAt ? ' (' + e.publishedAt + ')' : '') + (e.lowConfidence ? LOW_RELEVANCE : '')]
       if (e.heading) lines.push('    § ' + e.heading)
       lines.push('    ' + e.excerpt.replace(/\n+/g, '\n    '))
       lines.push('    needs ' + e.needIds.join(',') + ' · grade ' + e.grade + (e.source ? ' · via ' + e.source : ''))
@@ -36,7 +39,7 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
   }
   const shown = new Set(pack.evidence.map(e => e.url))
   const others = sources.filter(s => !shown.has(s.url))
-  if (others.length) parts.push('Other sources:\n' + others.map(s => '- [' + (s.title || hostOf(s.url)) + '](' + s.url + ')' + (s.publishedAt ? ' (' + s.publishedAt + ')' : '')).join('\n'))
+  if (others.length) parts.push('Other sources:\n' + others.map(s => '- [' + (s.title || hostOf(s.url)) + '](' + s.url + ')' + (s.publishedAt ? ' (' + s.publishedAt + ')' : '') + (s.lowConfidence ? LOW_RELEVANCE : '')).join('\n'))
   const v = pack.verification
   if (v.native.length || v.local.length) parts.push('Constraints — enforced by the search provider: ' + (v.native.join(', ') || 'none') + '; checked locally only: ' + (v.local.join(', ') || 'none') + '.')
   parts.push(engineLine + (pack.notes.length ? '\nNotes: ' + pack.notes.join(' | ') : ''))

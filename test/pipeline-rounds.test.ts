@@ -100,11 +100,30 @@ test('round 2: evidence.maxRounds=1 turns it off; maxQueries caps the whole task
   assert.equal(off.calls.length, 3)
   assert.deepEqual(a.pack.gaps.map(g => g.needId), ['n2'])
 
+  // maxQueries=3 with a follow-up round allowed: round 1 runs two of the three planned providers and keeps one query
+  // for round 2, where the held-back provider is tried first.
   const capped = harness()
   const b = await runPipeline(TASK, capped.deps, { maxQueries: 3 })
-  assert.equal(b.pack.stats.rounds, 1)
-  assert.match(b.pack.notes.join('\n'), /second round skipped: query budget used up \(3\/3\)/)
-  assert.equal(capped.calls.length, 3)
+  assert.equal(b.pack.stats.rounds, 2)
+  assert.equal(b.pack.stats.queries, 3)
+  assert.deepEqual(capped.calls.map(c => c.id), ['ddg', 'bing', 'github'])
+  assert.match(b.pack.notes.join('\n'), /round 1 limited to 2 provider\(s\) to keep a query for a second round \(github held back; evidence\.maxQueries=3\)/)
+  assert.deepEqual(b.pack.enginesTried, ['ddg', 'bing', 'github'])
+
+  // One query in all: round 1 gets it, the follow-up is skipped for lack of budget.
+  const one = harness()
+  const b1 = await runPipeline(TASK, one.deps, { maxQueries: 1 })
+  assert.equal(b1.pack.stats.rounds, 1)
+  assert.equal(b1.pack.stats.queries, 1)
+  assert.match(b1.pack.notes.join('\n'), /second round skipped: query budget used up \(1\/1\)/)
+
+  // Explicit engines are the caller's choice: not trimmed, so the budget is spent by round 1.
+  const explicit = harness()
+  const b2 = await runPipeline(TASK, explicit.deps, { maxQueries: 3, engines: ['ddg', 'bing', 'github'] })
+  assert.equal(b2.pack.stats.rounds, 1)
+  assert.match(b2.pack.notes.join('\n'), /second round skipped: query budget used up \(3\/3\)/)
+  assert.doesNotMatch(b2.pack.notes.join('\n'), /round 1 limited/)
+  assert.equal(explicit.calls.length, 3)
 
   const roomy = harness()
   const c = await runPipeline(TASK, roomy.deps, { maxQueries: 6 })
@@ -160,27 +179,58 @@ test('round 2: the caller aborting during the follow-up search is rethrown', asy
   assert.equal(controller.signal.aborted, true)
 })
 
-test('round 2: broader GitHub variants of the follow-up count against the query budget; first-round fallbacks use it up', async () => {
+test('queries: a provider call counts once however many broader GitHub variants it needs', async () => {
   const github = harness({
     configured: ['ddg', 'bing', 'exa', 'seam', 'github'],
     search: call => (call.id === 'github' ? { state: 'empty' } : ok('https://docs.test/busy')),
   })
   const general: TaskSpec = { ...TASK, profile: 'general' }
   const a = await runPipeline(general, github.deps, { maxQueries: 5 })
-  assert.deepEqual(github.calls.slice(4).map(c => c.id), ['github'], 'one request left: no broader variant after the empty answer')
-  assert.equal(github.calls.length, 5)
+  // Round 2 has one query left: GitHub (unused in round 1), whose three keyword variants (4, 3 and 2 terms) are ONE query.
+  const ghCalls = github.calls.filter(c => c.id === 'github')
+  assert.equal(ghCalls.length, 3, 'every broader variant is still sent')
+  assert.ok(ghCalls[0]!.query.split(' ').length > ghCalls[1]!.query.split(' ').length && ghCalls[1]!.query.split(' ').length > ghCalls[2]!.query.split(' ').length)
+  assert.equal(github.calls.length, 7)
   assert.equal(a.pack.stats.queries, 5)
+  assert.equal(a.pack.stats.rounds, 2)
+
   const two = harness({ configured: ['ddg', 'bing', 'exa', 'seam', 'github'], search: call => (call.id === 'github' ? { state: 'empty' } : ok('https://docs.test/busy')) })
   const c = await runPipeline(general, two.deps, { maxQueries: 6 })
-  assert.deepEqual(two.calls.slice(4).map(x => x.id).sort(), ['ddg', 'github'], 'two requests: the unused provider, then a reused one, still no variant')
+  assert.deepEqual([...new Set(two.calls.slice(4).map(x => x.id))].sort(), ['ddg', 'github'], 'two queries: the unused provider, then a reused one')
   assert.equal(c.pack.stats.queries, 6)
 
-  // GitHub empty in round 1 burns its variants (3 requests) and with them the budget.
+  // GitHub empty in round 1 (three variants, ONE query) no longer burns the budget: the default of 4 still reaches round 2.
   const spent = harness({ search: call => (call.id === 'github' ? { state: 'empty' } : ok('https://docs.test/busy')) })
   const b = await runPipeline({ ...TASK, constraints: [{ id: 'c1', kind: 'entity', value: 'node:sqlite', strength: 'soft', origin: 'param' }, { id: 'c2', kind: 'must_term', value: 'journal_mode', strength: 'soft', origin: 'param' }] }, spent.deps)
-  assert.ok(b.pack.stats.queries! >= 4)
-  assert.equal(b.pack.stats.rounds, 1)
-  assert.match(b.pack.notes.join('\n'), /second round skipped: query budget used up \(\d+\/4\)/)
+  assert.ok(spent.calls.filter(c => c.id === 'github').length >= 3, 'the first-round GitHub query retried broader variants')
+  assert.equal(b.pack.stats.rounds, 2, 'second round reachable')
+  assert.equal(b.pack.stats.queries, 4)
+  assert.doesNotMatch(b.pack.notes.join('\n'), /second round skipped/)
+})
+
+test('queries: the default budget reaches round 2 in a 3-provider plan; a 4-provider plan holds its last provider back for it', async () => {
+  const three = harness()
+  const a = await runPipeline(TASK, three.deps) // docs_code: ddg, bing, github with the defaults maxRounds 2, maxQueries 4
+  assert.equal(a.pack.stats.rounds, 2)
+  assert.equal(a.pack.stats.queries, 4)
+
+  const configured = ['ddg', 'bing', 'exa', 'seam']
+  const general: TaskSpec = { ...TASK, profile: 'general' }
+  const four = harness({ configured })
+  const b = await runPipeline(general, four.deps)
+  assert.deepEqual(four.calls.slice(0, 3).map(c => c.id).sort(), ['bing', 'ddg', 'exa'])
+  assert.equal(four.calls[3]!.id, 'seam', 'the held-back provider serves the follow-up')
+  assert.equal(b.pack.stats.rounds, 2)
+  assert.equal(b.pack.stats.queries, 4)
+  assert.match(b.pack.notes.join('\n'), /round 1 limited to 3 provider\(s\).*\(seam held back; evidence\.maxQueries=4\)/)
+
+  // Only round 1 allowed: nothing to reserve, all four providers run.
+  const only = harness({ configured })
+  const c = await runPipeline(general, only.deps, { maxRounds: 1 })
+  assert.equal(only.calls.length, 4)
+  assert.equal(c.pack.stats.queries, 4)
+  assert.equal(c.pack.stats.rounds, 1)
+  assert.doesNotMatch(c.pack.notes.join('\n'), /round 1 limited/)
 })
 
 test('gapQueryText: the need text plus the task entities it does not mention, capped', () => {

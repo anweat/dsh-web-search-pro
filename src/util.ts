@@ -287,13 +287,14 @@ export const SNIPPET_MAX_CHARS = 500
  * slice to `count`, cap snippets, drop empty optional fields.
  */
 export function shapeSources(
-  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null }[],
+  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; lowConfidence?: boolean }[],
   count: number,
-): { url: string; title?: string; snippet?: string; publishedAt?: string }[] {
+): { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: true }[] {
   return sources.slice(0, count).map(s => ({
     url: s.url,
     ...s.title ? { title: s.title } : {},
     ...s.snippet ? { snippet: capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
     ...s.publishedAt ? { publishedAt: s.publishedAt } : {},
+    ...s.lowConfidence ? { lowConfidence: true as const } : {},
   }))
 }

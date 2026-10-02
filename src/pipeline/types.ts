@@ -79,6 +79,10 @@ export interface GateVerdict {
   reason?: 'constraint' | 'relevance'
   /** Ids of the hard constraints definitely violated. */
   violated?: string[]
+  /** Relevance was computed with the cross-lingual alignment (needs and candidate text in different languages); absent for the lexical-v1 score. */
+  aligned?: true
+  /** Dropped on relevance alone but kept by the floor (`keep` is true): too few candidates passed the gate. */
+  lowConfidence?: true
 }
 
 export interface Candidate {
@@ -121,6 +125,8 @@ export interface PageBlock {
   publishedAt?: string
   /** Provider ids that returned the URL (`ddg+bing`): provenance shown to the model as `source`. */
   providers: string[]
+  /** The candidate only passed the S4 floor, not the relevance gate. */
+  lowConfidence?: true
   block: Block
 }
 
@@ -147,6 +153,8 @@ export interface EvidenceItem {
   grade: number
   /** Provider ids that returned the page (`ddg+bing`). */
   source: string
+  /** The page's candidate failed the relevance gate and was kept only by the floor. */
+  lowConfidence?: true
 }
 
 export type GapReason = 'no_candidates' | 'no_page_content' | 'weak_support' | 'budget'
@@ -156,13 +164,15 @@ export interface Gap { needId: string; text: string; critical: boolean; reason: 
 export interface PackStats {
   candidates: number
   kept: number
+  /** Of `kept`: candidates that failed the relevance gate and were kept by the floor. */
+  lowConfidence?: number
   fetched: number
   blocksScored: number
   excerptChars: number
   scorer: string
   /** Retrieval rounds run (1, or 2 when a follow-up round searched for critical gaps). */
   rounds?: number
-  /** Search requests made over all rounds (provider calls, fallback variants included). */
+  /** Search queries made over all rounds: one per provider call (broader fallback retries of one provider, e.g. GitHub keywords, count once). */
   queries?: number
   /** Jev usage of this run (control or shadow). */
   jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' | 'hybrid'; /** `id@version#hash` of the judge rubric. */ rubric?: string; /** The rubric is a user override of the built-in. */ rubricOverridden?: boolean }
@@ -180,7 +190,7 @@ export interface EvidencePack {
   coveredNeeds: string[]
   gaps: Gap[]
   /** Fused kept candidates, best first (unshaped; the tool exit applies `shapeSources`). */
-  sources: { url: string; title?: string; snippet?: string; publishedAt?: string }[]
+  sources: { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: true }[]
   engine: string
   enginesTried: string[]
   partial: boolean
