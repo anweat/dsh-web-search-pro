@@ -1,12 +1,15 @@
 /**
- * Local Laya sidecar judge (experiments/laya, 127.0.0.1:8765), same request
- * shape as Jev. `model`: multilingual (default) | english | router.
+ * Local Laya sidecar judge (experiments/laya, 127.0.0.1:8765), built from the
+ * plugin's `laya-local` provider preset; same request shape as Jev.
+ * `model`: multilingual (default) | english | router.
  * @module bench/judges/laya
  */
 
-import { SystemOneJudge, type SystemOneConfig } from './systemone.ts'
+import { PRESETS } from '../../../src/pipeline/judges/providers.ts'
+import { createProviderJudge } from './provider.ts'
+import type { SystemOneConfig, SystemOneJudge } from './systemone.ts'
 
-export const LAYA_BASE = 'http://127.0.0.1:8765'
+export const LAYA_BASE = PRESETS['laya-local']!.baseUrl
 
 export type LayaModel = 'multilingual' | 'english' | 'router'
 
@@ -21,13 +24,8 @@ export const layaJudgeId = (model: LayaModel): string => (model === 'multilingua
 
 export function createLayaJudge(options: LayaOptions = {}): SystemOneJudge {
   const { layaModel = 'multilingual', baseUrl = LAYA_BASE, maxLen = 1024, ...rest } = options
-  return new SystemOneJudge({
-    id: layaJudgeId(layaModel),
-    model: layaModel,
-    url: baseUrl + '/v1/systemone',
-    healthUrl: baseUrl + '/health',
-    candidateChars: 700,
-    extraBody: { max_len: maxLen },
-    ...rest,
+  const preset = PRESETS['laya-local']!
+  return createProviderJudge({ ...preset, baseUrl, model: layaModel, extraBody: { ...preset.extraBody, max_len: maxLen } }, {
+    id: layaJudgeId(layaModel), healthUrl: baseUrl + '/health', ...rest,
   })
 }

@@ -1,19 +1,25 @@
 /**
- * Shared client for the Jev-compatible `POST /v1/systemone` shape (hosted Bocha
- * Jev and the local Laya sidecar). One question per item; requests are chunked
- * to the documented limits (<=32 questions, <=1024 candidates with noul = 2,
- * bounded body size) and cached per item.
+ * Bench client for the Jev-compatible `POST /v1/systemone` shape (hosted Bocha
+ * Jev, other Jev deployments, the local Laya sidecar). The wire format, the
+ * limits-aware chunking and the transport (Retry-After aware retries, request
+ * cap) are the plugin's own (src/pipeline/judges): the bench only adds its Judge
+ * interface (noul / score / choice questions over items), per-item results and
+ * its on-disk cache.
  * @module bench/judges/systemone
  */
 
 import crypto from 'node:crypto'
-import { sleep as realSleep } from '../cli.ts'
+import { JudgeError } from '../../../src/pipeline/judges/errors.ts'
+import { JudgeHttp, parseRetryAfter, sleepMs } from '../../../src/pipeline/judges/http.ts'
+import { candidatesFor, chunkItems, decodeAnswer, encodeQuestion, encodeRequest, usageOfSystemOne } from '../../../src/pipeline/judges/protocols/systemone.ts'
 import { evaluateCached, type JudgeCache } from './cache.ts'
 import { bindCandidate } from './rubrics.ts'
 import {
   RequestCapError,
   type Judge, type JudgeItem, type JudgeQuestion, type JudgeResult, type Readiness,
 } from './types.ts'
+
+export { candidatesFor, chunkItems, parseRetryAfter }
 
 export interface SystemOneConfig {
   id: string
@@ -43,44 +49,7 @@ export class SystemOneError extends Error {
   }
 }
 
-const RETRY_STATUSES = new Set([429, 503, 529])
 const MAX_RETRY_WAIT_MS = 60_000
-
-export function candidatesFor(q: Pick<JudgeQuestion, 'kind' | 'criteria' | 'options'>): number {
-  if (q.kind === 'noul') return 2
-  if (q.kind === 'score') return q.criteria?.length ?? 4
-  return Object.keys(q.options ?? {}).length
-}
-
-/** Split items into request-sized groups: question count, candidate total and body size bounds. */
-export function chunkItems(
-  items: readonly JudgeItem[], q: JudgeQuestion, size: (item: JudgeItem) => number,
-  limits: { maxQuestions: number; maxCandidates: number; maxBodyBytes: number; baseBytes: number },
-): JudgeItem[][] {
-  const perQuestion = candidatesFor(q)
-  const chunks: JudgeItem[][] = []
-  let cur: JudgeItem[] = []
-  let bytes = limits.baseBytes
-  for (const item of items) {
-    const itemBytes = size(item)
-    const full = cur.length >= limits.maxQuestions
-      || (cur.length + 1) * perQuestion > limits.maxCandidates
-      || bytes + itemBytes > limits.maxBodyBytes
-    if (cur.length && full) { chunks.push(cur); cur = []; bytes = limits.baseBytes }
-    cur.push(item)
-    bytes += itemBytes
-  }
-  if (cur.length) chunks.push(cur)
-  return chunks
-}
-
-export function parseRetryAfter(value: string | null, now = Date.now()): number | undefined {
-  if (!value) return undefined
-  const seconds = Number(value)
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
-  const date = Date.parse(value)
-  return Number.isFinite(date) ? Math.max(0, date - now) : undefined
-}
 
 function cut(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max) + '…'
@@ -89,12 +58,10 @@ function cut(text: string, max: number): string {
 export class SystemOneJudge implements Judge {
   readonly id: string
   readonly model: string
-  /** HTTP attempts made so far (retries included). */
-  requests = 0
   capReached = false
   protected readonly cfg: Required<Pick<SystemOneConfig, 'maxQuestions' | 'maxCandidates' | 'maxBodyBytes' | 'maxRetries' | 'candidateChars' | 'timeoutMs'>> & SystemOneConfig
   private readonly doFetch: typeof fetch
-  private readonly sleeper: (ms: number) => Promise<void>
+  private readonly http: JudgeHttp
 
   constructor(cfg: SystemOneConfig) {
     this.cfg = {
@@ -104,8 +71,15 @@ export class SystemOneJudge implements Judge {
     this.id = cfg.id
     this.model = cfg.model
     this.doFetch = cfg.fetchImpl ?? globalThis.fetch
-    this.sleeper = cfg.sleep ?? realSleep
+    this.http = new JudgeHttp({
+      url: this.cfg.url, headers: { ...this.cfg.headers }, label: this.id + ':', fetchImpl: this.doFetch, sleep: cfg.sleep ?? sleepMs,
+      timeoutMs: this.cfg.timeoutMs, maxRetries: this.cfg.maxRetries, requestCap: this.cfg.requestCap, maxRetryWaitMs: MAX_RETRY_WAIT_MS,
+      capError: cap => new RequestCapError(this.id, cap),
+    })
   }
+
+  /** HTTP attempts made so far (retries included). */
+  get requests(): number { return this.http.requests }
 
   async ready(): Promise<Readiness> {
     if (!this.cfg.healthUrl) return { ready: true }
@@ -126,13 +100,7 @@ export class SystemOneJudge implements Judge {
   }
 
   protected questionBody(q: JudgeQuestion, item: JudgeItem): Record<string, unknown> {
-    const body: Record<string, unknown> = {
-      type: q.kind,
-      instructions: bindCandidate(q.instructions, cut(item.text, this.cfg.candidateChars)),
-    }
-    if (q.kind === 'score') body.criteria = q.criteria
-    if (q.kind === 'choice') body.criteria = q.options
-    return body
+    return encodeQuestion(q.kind, bindCandidate(q.instructions, cut(item.text, this.cfg.candidateChars)), q.kind === 'choice' ? q.options : q.criteria)
   }
 
   private async runMisses(state: string, q: JudgeQuestion, items: JudgeItem[]): Promise<JudgeResult[]> {
@@ -167,68 +135,31 @@ export class SystemOneJudge implements Judge {
   private async runChunk(state: string, q: JudgeQuestion, chunk: JudgeItem[]): Promise<JudgeResult[]> {
     const questions: Record<string, unknown> = {}
     chunk.forEach((item, i) => { questions['q' + i] = this.questionBody(q, item) })
-    const body = JSON.stringify({ model: this.model, state, questions, ...this.cfg.extraBody })
-    const { json, latencyMs } = await this.post(body)
+    const body = encodeRequest(this.model, state, questions, this.cfg.extraBody)
+    let result
+    try {
+      result = await this.http.post(body, {}, { estimatedInputTokens: 0, usageOf: usageOfSystemOne })
+    } catch (error) {
+      // The transport's errors become the bench's; a RequestCapError (raised by the transport's capError hook) passes through.
+      if (error instanceof JudgeError) throw new SystemOneError(error.message, error.status, error.fatal)
+      throw error
+    }
+    const { json, latencyMs } = result
     const requestId = this.id + '-' + crypto.randomUUID().slice(0, 8)
     const usage = json.usage
       ? { inputTokens: Number(json.usage.input_tokens ?? 0), outputTokens: Number(json.usage.output_tokens ?? 0) }
       : undefined
     return chunk.map((item, i): JudgeResult => {
-      const answer = json.answers?.['q' + i]
       const common = {
         id: item.id, judge: this.id, model: this.model, rubricId: q.rubricId, rubricVersion: q.rubricVersion,
         latencyMs, requestId, batchSize: chunk.length, usage: i === 0 ? usage : undefined,
         ...(json.usage?.truncated ? { truncated: true } : {}),
       }
-      if (!answer) return { ...common, error: 'missing answer' }
-      if (q.kind === 'noul') {
-        const p = Number(answer.noul)
-        if (!Number.isFinite(p)) return { ...common, error: 'bad noul answer' }
-        return { ...common, prob: p, decision: p >= 0.5 ? 'true' : 'false' }
-      }
-      if (q.kind === 'score') {
-        const g = Number(answer.score)
-        if (!Number.isFinite(g)) return { ...common, error: 'bad score answer' }
-        return { ...common, grade: g, decision: String(Math.round(g)), probabilities: answer.probabilities }
-      }
-      const probs = (answer.probabilities ?? {}) as Record<string, number>
-      const choice = String(answer.choice ?? '')
-      if (!choice) return { ...common, error: 'bad choice answer' }
-      return { ...common, decision: choice, prob: probs[choice] ?? Number(answer.answer_confidence ?? answer.confidence), probabilities: probs }
+      const d = decodeAnswer(q.kind, json.answers?.['q' + i])
+      if ('error' in d) return { ...common, error: d.error }
+      if (d.kind === 'noul') return { ...common, prob: d.prob, decision: d.prob >= 0.5 ? 'true' : 'false' }
+      if (d.kind === 'score') return { ...common, grade: d.grade, decision: String(Math.round(d.grade)), probabilities: d.probabilities }
+      return { ...common, decision: d.choice, prob: d.prob, probabilities: d.probabilities }
     })
-  }
-
-  /** POST with Retry-After aware retries on 429/503/529 (no retry on 401/413/422). */
-  private async post(body: string): Promise<{ json: any; latencyMs: number }> {
-    for (let attempt = 0; ; attempt++) {
-      if (this.cfg.requestCap !== undefined && this.requests >= this.cfg.requestCap) {
-        throw new RequestCapError(this.id, this.cfg.requestCap)
-      }
-      this.requests++
-      const started = Date.now()
-      let res: Response
-      try {
-        res = await this.doFetch(this.cfg.url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', ...this.cfg.headers },
-          body,
-          signal: AbortSignal.timeout(this.cfg.timeoutMs),
-        })
-      } catch (error) {
-        throw new SystemOneError(this.id + ': network error: ' + (error as Error).message)
-      }
-      if (res.ok) {
-        // Headers can arrive long before the body: measure the whole exchange.
-        const json = await res.json()
-        return { json, latencyMs: Date.now() - started }
-      }
-      const text = (await res.text().catch(() => '')).slice(0, 300)
-      if (RETRY_STATUSES.has(res.status) && attempt < this.cfg.maxRetries) {
-        const wait = parseRetryAfter(res.headers.get('retry-after')) ?? 1_000 * 2 ** attempt
-        await this.sleeper(Math.min(wait, MAX_RETRY_WAIT_MS))
-        continue
-      }
-      throw new SystemOneError(this.id + ': HTTP ' + res.status + ' ' + text, res.status, res.status === 401)
-    }
   }
 }

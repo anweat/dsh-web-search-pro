@@ -124,6 +124,44 @@ evidence:
 
 **English**　The question wording, grade levels and length caps sent to Jev are versioned rubrics (built in: `score.support`, plus `gate.relevance` and `gate.constraint` for future use). Defaults are byte-identical to the offline-evaluated wording. Override one under `evidence.rubrics.<id>` in settings.yaml with its own `version`, optional `instructions` (variables `{task} {need} {candidate}` only; `{need}` and `{candidate}` required), `criteria` (2-10 levels, lowest first; other than 4 levels are rescaled to 0..3), `maxStateChars`, `maxCandidateChars`. An invalid override (unknown variable, bad level count, out-of-range length, changed content under the old version label) is ignored and the built-in is used; the reason shows in `web_backend_status` (`evidence.diagnostics`) and the pack `notes`. Bump `version` whenever the content changes. Every Jev result records `id@version#hash` (pack `stats.jev.rubric`, shadow log, `evidence_blocks.rubric`), and the offline judge-cache keys include id, version and full text, so a changed prompt never reuses old scores. Restore defaults by deleting the `evidence.rubrics.<id>` entry (there is no settings-page editor for it yet). Compare a candidate offline first with `bench/src/eval-pack.ts --rubric-file`. Online models must never rewrite or roll out rubrics by themselves: they change only through the settings file.
 
+#### 评分模型 provider 与用量上限 / Judge providers and usage caps
+
+**中文**　S6 的模型评分分成「协议 × provider」两层，换模型只改配置：
+
+- **协议**：`systemone`（Jev 兼容的 `POST /v1/systemone`：博查 Jev、其他 Jev 部署、本地 Laya sidecar）；`rerank`（Jina / Cohere 风格的 `{model, query, documents, top_n}` → `results[{index, relevance_score}]`，也适用于暴露同形状接口的本地 bge / Qwen reranker）；`llm`（OpenAI 兼容 chat completions，温度 0、严格 JSON 校验，仅供参考/实验，默认关闭，需 `evidence.judge.allowLlm: true`）。`systemone` 与 `llm` 用 `score.support` rubric；`rerank` 以需求文本作 query。
+- **内置 provider**：`bocha-jev`（默认；`https://jev.bocha.cn`，`bocha-jev-v1`，密钥 `BOCHA_JEV_API_KEY`，请求与旧版逐字节相同）、`typesafe-jev`（占位预设，须自行填 `baseUrl` / `model`，**未验证**）、`laya-local`（`http://127.0.0.1:8765`，无密钥；实验 r1 里在当前提示词下接近随机，用前必须自己校准）、`jina-rerank`、`cohere-rerank`（**未验证**，从未对真实服务调用过）。
+- **自定义 provider**（`jevMode` / `judge.mode` 决定怎么用；`judge.mode` 是 `jevMode` 的中性写法，两者都设时前者优先，且 `control` 不再需要 `scorer: jev`）：
+
+```yaml
+evidence:
+  judge:
+    mode: hybrid                 # off | shadow | control | hybrid
+    provider: my-reranker        # 默认 bocha-jev
+    providers:
+      my-reranker:
+        protocol: rerank
+        baseUrl: http://127.0.0.1:8080/v1   # 非本机必须 https；路径可用 path 覆盖（默认 /rerank）
+        model: bge-reranker-v2-m3
+        keyRef: MY_RERANK_KEY    # 可选：凭据引用或环境变量名，永远不写密钥本身
+        limits: { maxDocumentsPerRequest: 50, blockChars: 1000 }
+        calibration:             # rerank 必填，见下
+          version: v1
+          points: [[0.1, 0], [0.4, 1], [0.7, 2], [0.9, 3]]
+      bocha-jev:                 # 与预设同名 = 覆盖预设的个别字段
+        limits: { maxQuestionsPerRequest: 16 }
+  budget:
+    perSearchInputTokens: 60000  # 默认
+    dailyInputTokens: 1000000    # 默认
+    timezone: Asia/Shanghai      # 日界线时区，默认系统时区
+    providers: { laya-local: { dailyInputTokens: 200000 } }   # 按 provider 覆盖，取更严格者
+```
+
+- **校准是硬要求**：reranker 的相关度分数不是等级，不同模型/语言差异很大。`calibration.points` 是 `[原始分, 等级0..3]` 的单调分段线性映射（原始分严格递增、等级不降；区间外取端点），版本号和内容哈希随结果记录；没有校准的 rerank provider 不会被使用（规则评分继续，并在 `notes` 说明）。不同 provider 的分数从不混用，离线缓存也按 provider+模型分开（rerank 缓存的是原始分，换校准无需重新请求）。`systemone` 也可选填 `calibration`（Laya 建议）。先用 `shadow` 观察，再考虑 `hybrid` / `control`。
+- **用量账本与上限**：每次模型调用前按保守估算预留 token、调用后按服务返回的 `usage` 结算（服务不返回则按估算记账并标 `estimated`；价格未声明时金额为空，不是 0；`price` 可选声明）。预留是原子的（SQLite `usage_ledger` 表，跨搜索、跨进程，重启不清零，未结算的预留继续占用额度）。超过单次搜索或当日上限时跳过模型阶段、回退规则评分，`notes` 出现 “model budget exceeded”。`web_backend_status` 的 `evidence.provider` / `evidence.usage` 显示当前 provider 是否可用、今日用量与上限。注意默认单次上限 60000 输入 token 小于 `maxJevQuestions: 64` 全量发送的估算量，较大的 hybrid 搜索可能提前停在上限处。
+- **离线评测**：`bench/src/eval-pack.ts --provider <id> [--providers-file providers.json]`、`bench/src/run-judges.ts --provider <id>`；文件格式同 `evidence.judge.providers`。
+
+**English**　S6 model scoring is split into protocol x provider; switching models is configuration. Protocols: `systemone` (Jev-compatible API: Bocha Jev, other Jev deployments, the local Laya sidecar), `rerank` (Jina/Cohere-style query-documents API, also local bge/Qwen servers) and an opt-in `llm` (OpenAI-compatible chat, temperature 0, strict JSON; off unless `evidence.judge.allowLlm`). Presets: `bocha-jev` (default, requests byte-identical to before), `typesafe-jev` (placeholder, unverified), `laya-local` (no key; near random with the current prompts, calibrate first), `jina-rerank` / `cohere-rerank` (unverified, never called live). Add your own under `evidence.judge.providers` (same-id entries override a preset's fields); `evidence.judge.mode` is the neutral name of `jevMode`. A reranker's relevance score is not a grade: `calibration.points` (monotone piecewise-linear `[raw, grade 0..3]`) is mandatory, versioned and recorded with results; provider scores are never mixed and caches are per provider+model. Every model call is reserved before and settled after in a persisted ledger (actual tokens from the API, otherwise a flagged estimate; unknown price = null, never 0), under `evidence.budget` caps (default 60k input tokens per search, 1M per day, per-provider overrides, day boundary in `timezone`). Over a cap the model stage is skipped and rule grades are used ("model budget exceeded"). `web_backend_status` shows the provider and today's usage. Offline: `eval-pack.ts` / `run-judges.ts --provider <id>`.
+
 ## 工具（11 个）
 
 | 工具 | 作用 |
@@ -195,6 +233,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
        maxRounds: 2 # 证据包补搜轮数上限；1 = 关闭第二轮
        maxQueries: 4 # 单任务搜索查询总数（含第一轮；一次 provider 调用算一次）
        # rubrics: ...   # 可选：覆盖 Jev 提示词，见下文“Jev 提示词（rubric）”
+       # judge: ...     # 可选：选择/自定义模型 provider，见下文“评分模型 provider 与用量上限”
+       # budget: ...    # 可选：模型输入 token 上限（单次搜索 / 每日），默认 60000 / 1000000
      ttlSeconds: 3600
      searchMaxResults: 8
      browserBindings:

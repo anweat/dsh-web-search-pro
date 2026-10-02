@@ -5,7 +5,12 @@
  *     [--judges rule,laya,jev] [--with-deepseek] [--tasks id1,id2] \
  *     [--task-set v1|v2] [--split calibration|test|heldout|all] [--groups s4,s6,s1] [--gates single,relevance,constraint,nav] \
  *     [--max-jev-requests 50] [--blocks-per-need 12] [--laya-model multilingual|english|router] \
+ *     [--provider ID[,ID]] [--providers-file providers.json] \
  *     [--run-id ID] [--max-spend-cny 2] [--min-balance-cny 41] [--effort low|high]
+ *
+ * `--provider` adds any `systemone` provider of the plugin's registry (presets: bocha-jev, typesafe-jev, laya-local; or
+ * entries of `--providers-file`, a JSON object shaped like `evidence.judge.providers`) as a judge named after the
+ * provider (the hosted bocha-jev keeps the name `jev` and its cache). Its key comes from the env var its `keyRef` names.
  *
  * S4: candidates at title+snippet level with each gate rubric per judge.
  * S6: (need, block) pairs for fetched pages with score.support.v1 (blocks
@@ -31,6 +36,7 @@ import { DeepSeekClient, DEEPSEEK_MODEL, EFFORTS, type Effort } from './judges/d
 import { DeepSeekJudge } from './judges/deepseek.ts'
 import { createJevJudge } from './judges/jev.ts'
 import { createLayaJudge, layaJudgeId, type LayaModel } from './judges/laya.ts'
+import { createProviderJudge, judgeIdOf, loadProvidersFile, pickProvider } from './judges/provider.ts'
 import { weightedOverlap } from '../../src/pipeline/lexical.ts'
 import { loadRubrics, renderQuestion } from './judges/rubrics.ts'
 import { RuleJudge } from './judges/rule.ts'
@@ -176,10 +182,12 @@ export function interleaveBySplit<T extends { id: string }>(tasks: readonly T[],
 async function main(): Promise<number> {
   const flags = parseFlags(process.argv.slice(2), {
     values: ['judges', 'tasks', 'split', 'groups', 'gates', 'max-jev-requests', 'blocks-per-need', 'laya-model', 'run-id',
-      'max-spend-cny', 'min-balance-cny', 'effort', 'out-dir', 'task-set'],
+      'max-spend-cny', 'min-balance-cny', 'effort', 'out-dir', 'task-set', 'provider', 'providers-file'],
     booleans: ['with-deepseek'],
   })
-  const judgeNames = listFlag(flags, 'judges') ?? ['rule']
+  const providerIds = listFlag(flags, 'provider') ?? []
+  const customProviders = typeof flags['providers-file'] === 'string' ? loadProvidersFile(path.resolve(flags['providers-file'])) : undefined
+  const judgeNames = listFlag(flags, 'judges') ?? (providerIds.length ? [] : ['rule'])
   if (flags['with-deepseek'] && !judgeNames.includes('deepseek')) judgeNames.push('deepseek')
   const splitFlag = typeof flags.split === 'string' ? flags.split : 'all'
   if (!['calibration', 'test', 'heldout', 'all'].includes(splitFlag)) throw new Error('--split must be calibration|test|heldout|all')
@@ -227,7 +235,15 @@ async function main(): Promise<number> {
       console.log('deepseek balance at start ' + start.balance.toFixed(4) + ' CNY')
       if (!start.ok) { console.log('deepseek skipped: ' + start.reason); continue }
       judge = new DeepSeekJudge({ client, effort, guard, cache: cache('deepseek') })
-    } else throw new Error('unknown judge ' + name + ' (rule, jev, laya, deepseek)')
+    } else throw new Error('unknown judge ' + name + ' (rule, jev, laya, deepseek; or --provider <id>)')
+    const ready = await judge.ready()
+    if (!ready.ready) { console.log(judge.id + ' not ready (' + ready.detail + '), skipped'); continue }
+    judges.push(judge)
+  }
+  for (const id of providerIds) {
+    const provider = pickProvider(id, customProviders)
+    const judge = createProviderJudge(provider, { requestCap: provider.limits?.requestCap ?? maxJev, cache: new JudgeCache(JUDGE_CACHE_ROOT, judgeIdOf(provider)) })
+    if (judges.some(j => j.id === judge.id)) { console.log(judge.id + ' already selected, --provider ' + id + ' skipped'); continue }
     const ready = await judge.ready()
     if (!ready.ready) { console.log(judge.id + ' not ready (' + ready.detail + '), skipped'); continue }
     judges.push(judge)

@@ -15,7 +15,15 @@
  *   node --experimental-transform-types bench/src/eval-pack.ts \
  *     [--task-set v1|v2] [--run-id ID] [--split all|calibration|test|heldout] [--tasks a,b] [--allow-jev N] [--no-jev] \
  *     [--budget 6000] [--max-items 10] [--min-grade 1] [--fetch-top-k 4] [--blocks-per-need N (default: adaptive 12..24)] [--sweep] \
- *     [--rubric-file bench/rubrics/variants/score.support.v2-example.json]
+ *     [--rubric-file bench/rubrics/variants/score.support.v2-example.json] \
+ *     [--provider ID] [--providers-file providers.json]
+ *
+ * `--provider` runs the model arms (c) / (d) / (d') with another provider of the plugin's registry (default bocha-jev;
+ * presets bocha-jev, typesafe-jev, laya-local, jina-rerank, cohere-rerank, or entries of `--providers-file`, a JSON object
+ * shaped like `evidence.judge.providers`; a reranker needs `calibration.points`). The judge cache is per provider and model
+ * (bench/data/judge-cache/<provider>): scores of one provider are never reused for another, and a reranker's cache holds its
+ * RAW scores, so a new calibration is evaluated offline without a request. The key comes from the env var the provider's
+ * `keyRef` names.
  *
  * `--rubric-file` evaluates another score.support rubric version offline against the same frozen data: the Jev
  * arms ask with its wording / levels / caps, and its id + version + wording are part of the judge-cache keys, so
@@ -40,12 +48,16 @@ import { fuseCandidates, type FusionOptions } from '../../src/pipeline/fusion.ts
 import { runEvidenceStages, type PageInput, type PipelineDeps, type PipelineOptions, type PipelineResult, type StageContext } from '../../src/pipeline/run.ts'
 import { renderEvidencePack } from '../../src/pipeline/render.ts'
 import type { ResolvedRubric } from '../../src/pipeline/rubrics.ts'
-import { HybridScorer, JEV_MODEL, JevScorer, RuleScorer, type JevCache, type JevProbe, type Scorer } from '../../src/pipeline/score.ts'
+import { createModelScorer, PRESETS } from '../../src/pipeline/judges/providers.ts'
+import type { ModelScorerBase } from '../../src/pipeline/judges/model-scorer.ts'
+import type { ProviderConfig } from '../../src/pipeline/judges/types.ts'
+import { HybridScorer, RuleScorer, type JevCache, type JevProbe, type Scorer } from '../../src/pipeline/score.ts'
 import { DEFAULT_SELECT_OPTIONS, type SelectOptions } from '../../src/pipeline/select.ts'
 import { canonicalizeUrl } from '../../src/pipeline/url.ts'
 import { listFlag, numberFlag, parseFlags } from './cli.ts'
 import { JUDGE_CACHE_ROOT, readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
 import { cacheKey, JudgeCache } from './judges/cache.ts'
+import { judgeIdOf, loadProvidersFile, pickProvider } from './judges/provider.ts'
 import { loadRubricFile, loadRubrics, renderQuestion } from './judges/rubrics.ts'
 import type { Rubric } from './judges/types.ts'
 import { assignSplits, loadTaskSet, parseTaskSet, taskSetPaths, type TaskSet } from './tasks.ts'
@@ -92,17 +104,30 @@ function offlineContext(task: ReturnType<typeof toTaskSpec>, outputs: readonly P
   }
 }
 
-// ── Jev cache adapter (r1 judge cache) ──────────────────────────────────────
+// ── judge cache adapter (r1 judge cache, one directory per provider) ────────
 
 /** SystemOneJudge: JSON.stringify(extraBody ?? {}) + '|' + candidateChars */
-const jevExtraKey = (rubric: Rubric): string => '{}|' + (rubric.maxCandidateChars ?? 1200)
+const jevExtraKey = (rubric: Rubric, provider: ProviderConfig): string => JSON.stringify(provider.extraBody ?? {}) + '|' + (provider.limits?.blockChars ?? rubric.maxCandidateChars ?? 1200)
 
-/** The r1 judge cache as a JevScorer cache. `rubric` (default score.support.v1) is part of every key: another version or wording never hits r1 answers. */
-export function r1JevCache(root = JUDGE_CACHE_ROOT, rubricOverride?: Rubric): JevCache & { misses: number; hits: number } {
+const DEFAULT_PROVIDER = PRESETS['bocha-jev']!
+
+/**
+ * The judge cache as a scorer answer cache. Keys cover the provider (cache directory = its judge id, `jev` for the hosted
+ * Bocha Jev so the r1 answers stay valid), the model, the rubric (default score.support.v1: another version or wording never
+ * hits r1 answers) and the question text, so one provider's scores are never reused for another. A reranker stores its RAW
+ * relevance score (the calibration is applied after the cache, so a new calibration needs no request).
+ */
+export function r1JevCache(root = JUDGE_CACHE_ROOT, rubricOverride?: Rubric, provider: ProviderConfig = DEFAULT_PROVIDER): JevCache & { misses: number; hits: number } {
   const rubric = rubricOverride ?? loadRubrics().get('score.support.v1')!
-  const cache = new JudgeCache(root, 'jev')
-  const judge = { id: 'jev', model: JEV_MODEL }
-  const keyOf = (probe: JevProbe): string => cacheKey(judge, probe.state, renderQuestion(rubric, { need: probe.need, ...probe.task !== undefined ? { task: probe.task } : {} }), { id: '', text: probe.candidate }, jevExtraKey(rubric))
+  const judgeId = judgeIdOf(provider)
+  const cache = new JudgeCache(root, judgeId)
+  const judge = { id: judgeId, model: provider.model }
+  const rerank = provider.protocol === 'rerank'
+  const extra = rerank ? 'rerank|' + JSON.stringify(provider.extraBody ?? {}) + '|' + (provider.limits?.blockChars ?? 1200) : provider.protocol === 'llm' ? 'llm|' + jevExtraKey(rubric, provider) : jevExtraKey(rubric, provider)
+  const keyOf = (probe: JevProbe): string => rerank
+    // The query is the need text: it is the cache key's state; the document is the candidate.
+    ? cacheKey(judge, probe.need, { kind: 'score', rubricId: 'rerank', rubricVersion: 'raw', instructions: '{candidate}' } as never, { id: '', text: probe.candidate }, extra)
+    : cacheKey(judge, probe.state, renderQuestion(rubric, { need: probe.need, ...probe.task !== undefined ? { task: probe.task } : {} }), { id: '', text: probe.candidate }, extra)
   const adapter = {
     misses: 0, hits: 0,
     get(probe: JevProbe) {
@@ -112,7 +137,7 @@ export function r1JevCache(root = JUDGE_CACHE_ROOT, rubricOverride?: Rubric): Je
       return undefined
     },
     set(probe: JevProbe, answer: { grade: number; probabilities?: Record<string, number> }) {
-      cache.set(keyOf(probe), { judge: 'jev', model: JEV_MODEL, rubricId: rubric.id, rubricVersion: rubric.version, latencyMs: 0, grade: answer.grade, decision: String(Math.round(answer.grade)), ...answer.probabilities ? { probabilities: answer.probabilities } : {}, kind: 'score' } as never)
+      cache.set(keyOf(probe), { judge: judgeId, model: provider.model, rubricId: rerank ? 'rerank' : rubric.id, rubricVersion: rerank ? 'raw' : rubric.version, latencyMs: 0, grade: answer.grade, decision: String(Math.round(answer.grade)), ...answer.probabilities ? { probabilities: answer.probabilities } : {}, kind: 'score' } as never)
     },
   }
   return adapter
@@ -249,6 +274,8 @@ export interface EvalOptions {
   jevRoot?: string
   /** Alternative score.support rubric for the Jev arms (`--rubric-file`); default: the built-in v1. */
   rubricFile?: { bench: Rubric; resolved: ResolvedRubric }
+  /** Model provider of the Jev arms (`--provider`); default: the hosted bocha-jev preset. */
+  provider?: ProviderConfig
 }
 
 /** `nothing`: no page gave a block, so there was nothing to score (the arm equals the rule arm). */
@@ -315,7 +342,7 @@ const noNetwork = (async () => { throw new Error('offline evaluation: no network
 
 export type JevKind = 'jev' | 'hybrid' | 'hybridB'
 
-function scorerFor(kind: JevKind, jev: JevScorer): Scorer {
+function scorerFor(kind: JevKind, jev: ModelScorerBase): Scorer {
   return kind === 'jev' ? jev : new HybridScorer({ jev, borderline: kind === 'hybridB', maxQuestions: 64 })
 }
 
@@ -323,8 +350,9 @@ interface JevRun { result: PipelineResult; cache: ReturnType<typeof r1JevCache>;
 
 /** One Jev-using arm of one task; `cap` HTTP requests may be spent (0 = cache only). */
 async function jevArm(item: LoadedTask, opts: EvalOptions, cap: number, key: string | undefined, kind: JevKind): Promise<JevRun> {
-  const cache = r1JevCache(opts.jevRoot, opts.rubricFile?.bench)
-  const scorer = new JevScorer({ apiKey: key || 'offline', cache, requestCap: cap, ...opts.rubricFile ? { rubric: opts.rubricFile.resolved } : {}, ...cap > 0 ? {} : { fetchImpl: noNetwork } })
+  const provider = opts.provider ?? DEFAULT_PROVIDER
+  const cache = r1JevCache(opts.jevRoot, opts.rubricFile?.bench, provider)
+  const scorer = createModelScorer(provider, { apiKey: key || 'offline', cache, requestCap: cap, ...opts.rubricFile ? { rubric: opts.rubricFile.resolved } : {}, ...cap > 0 ? {} : { fetchImpl: noNetwork } })
   const result = await runStages(item, opts, scorerFor(kind, scorer))
   return { result, cache, requests: scorer.requests }
 }
@@ -332,10 +360,16 @@ async function jevArm(item: LoadedTask, opts: EvalOptions, cap: number, key: str
 /** HTTP requests the arm would need with an EMPTY cache (a stub service answers every question; nothing is sent anywhere). */
 async function coldRequests(item: LoadedTask, opts: EvalOptions, kind: JevKind): Promise<number> {
   const stub = (async (_url: string, init: { body: string }) => {
-    const questions = Object.keys(JSON.parse(init.body).questions as Record<string, unknown>)
+    const body = JSON.parse(init.body) as { questions?: Record<string, unknown>; documents?: unknown[]; messages?: { content: string }[] }
+    if (body.documents) return new Response(JSON.stringify({ results: body.documents.map((_, index) => ({ index, relevance_score: 0.5 })), usage: { total_tokens: 0 } }), { status: 200 })
+    if (body.messages) {
+      const ids = (body.messages[1]!.content.match(/^\[(q\d+)\]$/gm) ?? []).map(x => x.slice(1, -1))
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ grades: Object.fromEntries(ids.map(id => [id, 1])) }) } }], usage: { prompt_tokens: 0, completion_tokens: 0 } }), { status: 200 })
+    }
+    const questions = Object.keys(body.questions ?? {})
     return new Response(JSON.stringify({ answers: Object.fromEntries(questions.map(q => [q, { score: 1 }])), usage: { input_tokens: 0, output_tokens: 0 } }), { status: 200 })
   }) as unknown as typeof fetch
-  const scorer = new JevScorer({ apiKey: 'offline', fetchImpl: stub, ...opts.rubricFile ? { rubric: opts.rubricFile.resolved } : {} })
+  const scorer = createModelScorer(opts.provider ?? DEFAULT_PROVIDER, { apiKey: 'offline', fetchImpl: stub, ...opts.rubricFile ? { rubric: opts.rubricFile.resolved } : {} })
   await runStages(item, opts, scorerFor(kind, scorer))
   return scorer.requests
 }
@@ -353,12 +387,13 @@ function statusOf(result: PipelineResult): JevStatus {
   const { stats, notes } = result.pack
   if (stats.scorer === 'none') return 'nothing'
   if (stats.scorer === 'hybrid') return notes.some(n => n.includes('kept the rule grades')) ? 'fallback' : 'answered'
-  return stats.scorer === 'jev' ? 'answered' : 'fallback'
+  return stats.scorer === 'rule' ? 'fallback' : 'answered'
 }
 
 export async function evaluate(items: readonly LoadedTask[], opts: EvalOptions, log: (line: string) => void = () => {}): Promise<{ tasks: TaskEval[]; jevRequests: number }> {
-  const key = process.env.BOCHA_JEV_API_KEY
-  if (opts.jev && opts.allowJev > 0 && !key) throw new Error('--allow-jev needs BOCHA_JEV_API_KEY in the environment')
+  const keyRef = (opts.provider ?? DEFAULT_PROVIDER).keyRef
+  const key = keyRef ? process.env[keyRef] : undefined
+  if (opts.jev && opts.allowJev > 0 && keyRef && !key) throw new Error('--allow-jev needs ' + keyRef + ' in the environment')
   const jevRuns = new Map<string, JevRun>()
   const cold = new Map<string, number>()
   let remaining = opts.allowJev
@@ -520,7 +555,7 @@ export function renderReport(r: ReportInput): string {
   out.push('- (b′) 规则评分 + 跨语言对齐（M3a）：同 (b)，但块评分用 align.ts——需求 / 查询 / 目标 / 实体与必含词里的拉丁词和标识符（camelCase、snake_case、点号路径拆开后匹配，`DatabaseSync` 对 `DatabaseSyncOptions` 有部分分）；块为拉丁文时不把汉字 bigram 计入分母，并在拉丁词权重不足时按比例收缩。(b) 是 M2 的 lexical-v1，仅作对照。')
   out.push('- (d) 混合：(b′) 评分全部块，Jev 只重评“需求语言 ≠ 块语言”的对（汉字占比检测），至多 64 问；(d′) 在此基础上再重评规则评分为 1 的边界对。Jev 失败或没有回答的问题保留规则评分。')
   if (r.opts.rubricFile) out.push('- **Jev 提示词版本**：' + r.opts.rubricFile.resolved.key + '（来自 `--rubric-file`，与线上默认 score.support@v1 不同；缓存键含版本与全文，不复用 v1 的回答）。')
-  out.push('- (c) 管线 + Jev 评分：同 (b)，评分改用 JevScorer；问题文本与 r1 相同时直接读 r1 评分缓存。' + (r.opts.jev ? '本次调用实际发出 **' + r.jevRequests + '** 次 Jev 请求（上限 ' + r.opts.allowJev + '）' + (r.jevRequestsTotal !== undefined && r.jevRequestsTotal !== r.jevRequests ? '；该运行目录累计 **' + r.jevRequestsTotal + '** 次（此前的调用补全了缓存缺口，之后的回答都已缓存，可重复运行不再计费）' : '') + '。无法全部回答的任务回退到规则评分并排除在 Jev 对照之外。' : '未运行 Jev 组。'))
+  out.push('- (c) 管线 + 模型评分（provider ' + (r.opts.provider?.id ?? 'bocha-jev') + '，' + (r.opts.provider?.protocol ?? 'systemone') + '，模型 ' + (r.opts.provider?.model ?? 'bocha-jev-v1') + '；Jev 组即此模型组）：同 (b)，评分改用该 provider；问题文本与缓存相同时直接读评分缓存（默认 provider 读 r1 缓存）。' + (r.opts.jev ? '本次调用实际发出 **' + r.jevRequests + '** 次 Jev 请求（上限 ' + r.opts.allowJev + '）' + (r.jevRequestsTotal !== undefined && r.jevRequestsTotal !== r.jevRequests ? '；该运行目录累计 **' + r.jevRequestsTotal + '** 次（此前的调用补全了缓存缺口，之后的回答都已缓存，可重复运行不再计费）' : '') + '。无法全部回答的任务回退到规则评分并排除在 Jev 对照之外。' : '未运行 Jev 组。'))
   out.push('- 指标：**金标块保留** = 金标 (需求, 块) 对中，该块出现在最终送给主模型的内容里的比例（基线按“所在页面被整页送入”计）；**金标页到达** = 金标块所在页面被读取的比例；**需求命中** = 有金标的需求中，至少一个金标块在内容里的比例；**声称覆盖的正确率** = 管线声称已覆盖的需求里，确有金标块在包内的比例（无金标的需求算错）；**无金标需求标缺口** = 快照里没有任何金标的需求，管线把它列为缺口的比例；字符与 tokens 为主模型实际看到的渲染文本（tokens 为粗估：汉字 0.7、其他 0.3 每字符）。', '')
 
   const section = (title: string, evals: TaskEval[], jev: boolean): void => {
@@ -608,7 +643,7 @@ export async function sweep(items: readonly LoadedTask[], base: EvalOptions, log
 
 async function main(): Promise<number> {
   const flags = parseFlags(process.argv.slice(2), {
-    values: ['rubric-file', 'run-id', 'task-set', 'split', 'tasks', 'allow-jev', 'budget', 'max-items', 'min-grade', 'max-per-url', 'fetch-top-k', 'blocks-per-need'],
+    values: ['rubric-file', 'run-id', 'task-set', 'split', 'tasks', 'allow-jev', 'budget', 'max-items', 'min-grade', 'max-per-url', 'fetch-top-k', 'blocks-per-need', 'provider', 'providers-file'],
     booleans: ['no-jev', 'sweep'],
   })
   const split = typeof flags.split === 'string' ? flags.split : 'all'
@@ -627,8 +662,12 @@ async function main(): Promise<number> {
     select, fetchTopK: numberFlag(flags, 'fetch-top-k', 4), blocksPerNeed: numberFlag(flags, 'blocks-per-need', 0),
     allowJev: numberFlag(flags, 'allow-jev', 0), jev: !flags['no-jev'],
     ...typeof flags['rubric-file'] === 'string' ? { rubricFile: loadRubricFile(path.resolve(flags['rubric-file'])) } : {},
+    ...typeof flags.provider === 'string' || typeof flags['providers-file'] === 'string'
+      ? { provider: pickProvider(typeof flags.provider === 'string' ? flags.provider : undefined, typeof flags['providers-file'] === 'string' ? loadProvidersFile(path.resolve(flags['providers-file'])) : undefined) }
+      : {},
   }
   if (opts.rubricFile) console.log('Jev rubric: ' + opts.rubricFile.resolved.key + ' (from --rubric-file; the r1 cache cannot answer it, so every Jev question is a miss unless an earlier run with this file cached it)')
+  if (opts.provider) console.log('model provider: ' + opts.provider.id + ' (' + opts.provider.protocol + ', ' + opts.provider.model + ')' + (opts.provider.unverified ? ' [preset not verified live]' : ''))
   console.log(items.length + ' labeled tasks; Jev ' + (opts.jev ? 'arm on, request allowance ' + opts.allowJev : 'arm off'))
   if (flags.sweep) { await sweep(items, opts, line => console.log(line)); return 0 }
   const { tasks, jevRequests } = await evaluate(items, opts, line => console.log(line))
