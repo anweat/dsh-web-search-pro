@@ -71,7 +71,34 @@ export interface EvidenceBlockRow {
   scorer?: string
   /** `id@version#hash` of the judge rubric when a Jev-based scorer graded the block. */
   rubric?: string
+  /** `provider|protocol|model[|calibration]` of the model judge that graded the block (dev-plan M5). */
+  judge?: string
 }
+
+/** One model call (or reservation) of the usage ledger (design §9). */
+export interface UsageRow {
+  id: string
+  ts: string
+  /** Calendar day (YYYY-MM-DD) in the configured budget time zone at reservation time. */
+  day: string
+  searchId?: string
+  provider: string
+  protocol: string
+  model?: string
+  /** reserved: estimate held while the call runs (counts against the caps); settled: final; released: refused or failed without billing. */
+  status: 'reserved' | 'settled' | 'released'
+  requests: number
+  inputTokens: number
+  outputTokens: number
+  /** Some token figures are the plugin's estimate (the service reported none, or the call outcome is unknown). */
+  estimated: boolean
+  /** Money spent in `currency`; null = price unknown (never 0). */
+  amount: number | null
+  currency?: string
+  note?: string
+}
+
+export interface UsageTotals { requests: number; inputTokens: number; outputTokens: number; estimated: boolean; calls: number; amount: number | null; currency?: string }
 
 export interface EvidenceRunRow {
   id: string
@@ -140,8 +167,27 @@ CREATE TABLE IF NOT EXISTS evidence_blocks (
   hash TEXT,
   grade REAL,
   scorer TEXT,
-  rubric TEXT
+  rubric TEXT,
+  judge TEXT
 );
+CREATE TABLE IF NOT EXISTS usage_ledger (
+  id TEXT PRIMARY KEY,
+  ts TEXT NOT NULL,
+  day TEXT NOT NULL,
+  search_id TEXT,
+  provider TEXT NOT NULL,
+  protocol TEXT NOT NULL,
+  model TEXT,
+  status TEXT NOT NULL,
+  requests INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  estimated INTEGER NOT NULL DEFAULT 0,
+  amount REAL,
+  currency TEXT,
+  note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_usage_day ON usage_ledger(day, provider);
 CREATE INDEX IF NOT EXISTS idx_evidence_blocks_run ON evidence_blocks(run_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_runs_query ON evidence_runs(query_id);
 CREATE INDEX IF NOT EXISTS idx_results_query ON results(query_id);
@@ -195,6 +241,7 @@ export class Store {
       if (!columns.some(column => column.name === 'cache_key')) this.db.exec('ALTER TABLE queries ADD COLUMN cache_key TEXT')
       const blockColumns = this.db.prepare('PRAGMA table_info(evidence_blocks)').all() as unknown as { name: string }[]
       if (!blockColumns.some(column => column.name === 'rubric')) this.db.exec('ALTER TABLE evidence_blocks ADD COLUMN rubric TEXT')
+      if (!blockColumns.some(column => column.name === 'judge')) this.db.exec('ALTER TABLE evidence_blocks ADD COLUMN judge TEXT')
       const pageColumns = this.db.prepare('PRAGMA table_info(pages)').all() as unknown as { name: string }[]
       if (!pageColumns.some(column => column.name === 'query_id')) {
         this.db.exec(`
@@ -353,15 +400,91 @@ export class Store {
       const queryId = this.recordSearch({ ...input.query, id: fallbackId }, input.sources, input.engine)
       this.db.prepare('INSERT OR REPLACE INTO evidence_runs (id, query_id, task_json, pack_json, created_at) VALUES (?, ?, ?, ?, ?)')
         .run(input.run.id, queryId, input.run.taskJson, input.run.packJson, new Date().toISOString())
-      const stmt = this.db.prepare('INSERT OR REPLACE INTO evidence_blocks (evidence_id, run_id, url, block_id, heading, text, hash, grade, scorer, rubric) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      for (const b of input.blocks) stmt.run(b.evidenceId, input.run.id, b.url, b.blockId, b.heading ?? null, b.text, b.hash ?? null, b.grade ?? null, b.scorer ?? null, b.rubric ?? null)
+      const stmt = this.db.prepare('INSERT OR REPLACE INTO evidence_blocks (evidence_id, run_id, url, block_id, heading, text, hash, grade, scorer, rubric, judge) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      for (const b of input.blocks) stmt.run(b.evidenceId, input.run.id, b.url, b.blockId, b.heading ?? null, b.text, b.hash ?? null, b.grade ?? null, b.scorer ?? null, b.rubric ?? null, b.judge ?? null)
       return queryId
     }))
   }
 
+  // ── usage ledger (dev-plan M5, design §9) ──────────────────────────────────
+
+  /**
+   * Reserve `inputTokens` for a model call, atomically across processes sharing this file
+   * (BEGIN IMMEDIATE): refused when today's reserved + settled input tokens, over all providers or
+   * for this provider, plus the request would pass a daily cap. Reserved rows count until settled,
+   * so a crash between reserve and settle never frees the tokens. A closed or failing store refuses.
+   */
+  reserveUsage(input: {
+    id: string; ts: string; day: string; searchId?: string; provider: string; protocol: string; model?: string
+    inputTokens: number; dailyCap?: number; providerDailyCap?: number
+  }): { ok: true } | { ok: false; scope: 'daily' | 'provider-daily' | 'unavailable'; used: number; cap: number } {
+    if (this.closed) return { ok: false, scope: 'unavailable', used: 0, cap: 0 }
+    try {
+      return this.transaction(() => {
+        const sum = (provider?: string): number => (this.db.prepare(
+          `SELECT COALESCE(SUM(input_tokens), 0) AS t FROM usage_ledger WHERE day = ? AND status != 'released'` + (provider ? ' AND provider = ?' : ''),
+        ).get(...provider ? [input.day, provider] : [input.day]) as { t: number }).t
+        if (input.dailyCap !== undefined) {
+          const used = sum()
+          if (used + input.inputTokens > input.dailyCap) return { ok: false as const, scope: 'daily' as const, used, cap: input.dailyCap }
+        }
+        if (input.providerDailyCap !== undefined) {
+          const used = sum(input.provider)
+          if (used + input.inputTokens > input.providerDailyCap) return { ok: false as const, scope: 'provider-daily' as const, used, cap: input.providerDailyCap }
+        }
+        this.db.prepare(
+          `INSERT INTO usage_ledger (id, ts, day, search_id, provider, protocol, model, status, requests, input_tokens, output_tokens, estimated, amount, currency, note)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'reserved', 0, ?, 0, 1, NULL, NULL, NULL)`,
+        ).run(input.id, input.ts, input.day, input.searchId ?? null, input.provider, input.protocol, input.model ?? null, input.inputTokens)
+        return { ok: true as const }
+      })
+    } catch (error) {
+      this.note('usage reserve failed: ' + (error as Error).message)
+      return { ok: false, scope: 'unavailable', used: 0, cap: 0 }
+    }
+  }
+
+  /** Close a reservation: final tokens (actual, or the estimate flagged `estimated`) and amount (null = unknown price). */
+  settleUsage(id: string, final: { status: 'settled' | 'released'; requests: number; inputTokens: number; outputTokens: number; estimated: boolean; amount: number | null; currency?: string; note?: string }): void {
+    this.write('settleUsage', undefined, () => {
+      this.db.prepare(
+        'UPDATE usage_ledger SET status = ?, requests = ?, input_tokens = ?, output_tokens = ?, estimated = ?, amount = ?, currency = ?, note = ? WHERE id = ?',
+      ).run(final.status, final.requests, final.inputTokens, final.outputTokens, final.estimated ? 1 : 0, final.amount, final.currency ?? null, final.note ?? null, id)
+    })
+  }
+
+  /** Ledger rows of one day, oldest first (optionally one provider). */
+  usageRows(day: string, provider?: string): UsageRow[] {
+    type Raw = { id: string; ts: string; day: string; searchId: string | null; provider: string; protocol: string; model: string | null; status: UsageRow['status']; requests: number; inputTokens: number; outputTokens: number; estimated: number; amount: number | null; currency: string | null; note: string | null }
+    return this.read([], () => (this.db.prepare(
+      `SELECT id, ts, day, search_id AS searchId, provider, protocol, model, status, requests, input_tokens AS inputTokens, output_tokens AS outputTokens, estimated, amount, currency, note
+       FROM usage_ledger WHERE day = ?` + (provider ? ' AND provider = ?' : '') + ' ORDER BY rowid ASC',
+    ).all(...provider ? [day, provider] : [day]) as unknown as Raw[]).map((r): UsageRow => ({
+      id: r.id, ts: r.ts, day: r.day, provider: r.provider, protocol: r.protocol, status: r.status, requests: r.requests,
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens, estimated: r.estimated === 1, amount: r.amount,
+      ...r.searchId !== null ? { searchId: r.searchId } : {}, ...r.model !== null ? { model: r.model } : {},
+      ...r.currency !== null ? { currency: r.currency } : {}, ...r.note !== null ? { note: r.note } : {},
+    })))
+  }
+
+  /** Per-provider totals of one day over reserved and settled rows (released rows only add their request). */
+  usageByProvider(day: string): (UsageTotals & { provider: string; protocol: string })[] {
+    const out = new Map<string, UsageTotals & { provider: string; protocol: string }>()
+    for (const r of this.usageRows(day)) {
+      const t = out.get(r.provider) ?? { provider: r.provider, protocol: r.protocol, requests: 0, inputTokens: 0, outputTokens: 0, estimated: false, calls: 0, amount: 0 as number | null }
+      t.requests += r.requests
+      if (r.status !== 'released') { t.inputTokens += r.inputTokens; t.outputTokens += r.outputTokens; t.calls++ }
+      if (r.estimated && r.status !== 'released') t.estimated = true
+      // A day's amount is known only when every billed row has one.
+      if (r.status !== 'released') { t.amount = t.amount !== null && r.amount !== null ? t.amount + r.amount : null; if (r.currency) t.currency = r.currency }
+      out.set(r.provider, t)
+    }
+    return [...out.values()]
+  }
+
   evidenceBlock(evidenceId: string): EvidenceBlockRow | undefined {
     return this.read(undefined, () => this.db.prepare(
-      `SELECT evidence_id AS evidenceId, run_id AS runId, url, block_id AS blockId, heading, text, hash, grade, scorer, rubric FROM evidence_blocks WHERE evidence_id = ?`,
+      `SELECT evidence_id AS evidenceId, run_id AS runId, url, block_id AS blockId, heading, text, hash, grade, scorer, rubric, judge FROM evidence_blocks WHERE evidence_id = ?`,
     ).get(evidenceId) as unknown as EvidenceBlockRow | undefined)
   }
 

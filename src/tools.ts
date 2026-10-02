@@ -10,6 +10,7 @@ import type { SearchRouter } from './router.ts'
 import type { FetchService } from './fetch.ts'
 import type { Store } from './store.ts'
 import { resolveAllRubrics } from './pipeline/rubrics.ts'
+import { judgeStatus, type JudgeStatus } from './pipeline/judge-status.ts'
 import { browserState, requireBrowser, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig } from './config.ts'
@@ -78,7 +79,7 @@ const EVIDENCE_OUTPUT_PROPERTIES = {
     type: 'object', additionalProperties: false,
     properties: {
       candidates: { type: 'number' }, kept: { type: 'number' }, lowConfidence: { type: 'number' }, fetched: { type: 'number' }, blocksScored: { type: 'number' }, excerptChars: { type: 'number' }, scorer: { type: 'string' }, rounds: { type: 'number' }, queries: { type: 'number' },
-      jev: { type: 'object', additionalProperties: false, properties: { requests: { type: 'number' }, questions: { type: 'number' }, inputTokens: { type: 'number' }, outputTokens: { type: 'number' }, mode: { type: 'string' }, rubric: { type: 'string' }, rubricOverridden: { type: 'boolean' } } },
+      jev: { type: 'object', additionalProperties: false, properties: { requests: { type: 'number' }, questions: { type: 'number' }, inputTokens: { type: 'number' }, outputTokens: { type: 'number' }, mode: { type: 'string' }, rubric: { type: 'string' }, rubricOverridden: { type: 'boolean' }, provider: { type: 'string' }, protocol: { type: 'string' }, model: { type: 'string' }, calibration: { type: 'string' }, estimated: { type: 'boolean' } } },
     },
   },
 } as const
@@ -753,17 +754,33 @@ export function registerTools(deps: ToolDeps): void {
           engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
           cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' } } } },
           browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
-          evidence: { type: 'object', additionalProperties: false, properties: { scorer: { type: 'string', required: true }, jevMode: { type: 'string', required: true }, rubrics: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, version: { type: 'string', required: true }, overridden: { type: 'boolean', required: true }, hash: { type: 'string', required: true } } } }, diagnostics: { type: 'array', items: { type: 'string' } } } },
+          evidence: { type: 'object', additionalProperties: false, properties: {
+            scorer: { type: 'string', required: true }, jevMode: { type: 'string', required: true },
+            rubrics: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, version: { type: 'string', required: true }, overridden: { type: 'boolean', required: true }, hash: { type: 'string', required: true } } } },
+            diagnostics: { type: 'array', items: { type: 'string' } },
+            provider: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, protocol: { type: 'string' }, model: { type: 'string' }, usable: { type: 'boolean', required: true }, reason: { type: 'string' }, unverified: { type: 'boolean' }, calibration: { type: 'string' }, keyConfigured: { type: 'boolean' } } },
+            providers: { type: 'array', items: { type: 'string' } },
+            usage: { type: 'object', additionalProperties: false, properties: {
+              day: { type: 'string', required: true }, timezone: { type: 'string' }, requests: { type: 'number', required: true }, inputTokens: { type: 'number', required: true }, outputTokens: { type: 'number', required: true },
+              estimated: { type: 'boolean', required: true }, amountKnown: { type: 'boolean', required: true }, amount: { type: 'number' }, currency: { type: 'string' },
+              caps: { type: 'object', additionalProperties: false, properties: { perSearchInputTokens: { type: 'number', required: true }, dailyInputTokens: { type: 'number', required: true } } },
+              byProvider: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { provider: { type: 'string', required: true }, requests: { type: 'number', required: true }, inputTokens: { type: 'number', required: true }, outputTokens: { type: 'number', required: true }, estimated: { type: 'boolean', required: true } } } },
+            } },
+          } },
         },
       },
       render: (_args, value) => {
-        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[] } }
+        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
         const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
         lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
         if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
         if (v.evidence) {
           lines.push('evidence: scorer=' + v.evidence.scorer + ' jevMode=' + v.evidence.jevMode)
           lines.push(...v.evidence.rubrics.map(r => '  rubric ' + r.id + '@' + r.version + ' #' + r.hash + (r.overridden ? ' (override)' : ' (built-in)')))
+          const p = v.evidence.provider
+          if (p) lines.push('  judge provider: ' + p.id + (p.protocol ? ' (' + p.protocol + ', ' + p.model + ')' : '') + (p.usable ? '' : ' [unusable: ' + p.reason + ']') + (p.unverified ? ' [preset not verified live]' : '') + (p.calibration ? ' calibration ' + p.calibration : '') + (p.keyConfigured === false ? ' [key not found]' : ''))
+          const u = v.evidence.usage
+          if (u) lines.push('  model usage ' + u.day + (u.timezone ? ' ' + u.timezone : '') + ': ' + u.requests + ' request(s), ' + u.inputTokens + ' input / ' + u.outputTokens + ' output tokens' + (u.estimated ? ' (partly estimated)' : '') + (u.amount !== undefined ? ', ' + u.amount.toFixed(4) + ' ' + (u.currency ?? '') : u.requests ? ', cost unknown' : '') + '; caps: ' + u.caps.perSearchInputTokens + '/search, ' + u.caps.dailyInputTokens + '/day input tokens')
           lines.push(...(v.evidence.diagnostics ?? []).map(d => '  ⚠ ' + d))
         }
         return [{ type: 'text', text: lines.join('\n') }]
@@ -776,6 +793,7 @@ export function registerTools(deps: ToolDeps): void {
       const availability = new Map(cli.map(value => [value.id, value.available]))
       const ev = dynamic().evidence
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
+      const judge = await judgeStatus(ev, store, { hasSecret: typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function' ? async ref => !!(await router.resolveSecret(ref)) : undefined })
       return {
         engines: await router.backendDiagnostics(availability),
         cli: cli.map(v => {
@@ -783,7 +801,7 @@ export function registerTools(deps: ToolDeps): void {
           return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
         }),
         browser: browserState(getBrowser()),
-        evidence: { scorer: ev.scorer, jevMode: ev.jevMode, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length ? { diagnostics } : {} },
+        evidence: { scorer: ev.scorer, jevMode: ev.jevMode, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
   }))

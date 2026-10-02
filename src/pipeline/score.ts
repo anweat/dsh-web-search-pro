@@ -26,40 +26,17 @@ import { alignedScore, languagesDiffer } from './align.ts'
 import { blockScoringText } from './blocks.ts'
 import { CorpusStats, type CorpusBlock } from './corpus.ts'
 import { relevancePartsOf } from './gate.ts'
+import { JudgeError } from './judges/errors.ts'
+import { SystemOneScorer, type SystemOneScorerOptions } from './judges/protocols/systemone.ts'
+import { JEV_KEY_REF, JEV_MODEL, JEV_URL } from './judges/providers.ts'
+import { estimateJevTokens, JEV_QUESTION_OVERHEAD_TOKENS } from './judges/tokens.ts'
+import type { JudgeAnswerCache, JudgeCachedAnswer, JudgeProbe, ProviderRecord, ScoreBlock, ScoreContext, ScoreJob, ScoreOutcome, ScoreTask, ScoreUsage, Scorer } from './judges/types.ts'
 import { statsOverlap, weightedOverlap } from './lexical.ts'
-import { builtinRubric, refOf, renderTemplate, type ResolvedRubric, type RubricRef } from './rubrics.ts'
-import type { BlockGrade, Need, TaskSpec } from './types.ts'
+import { builtinRubric, type ResolvedRubric } from './rubrics.ts'
+import type { BlockGrade } from './types.ts'
 
-export type ScoreTask = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>
-
-export interface ScoreBlock { blockId: string; url: string; heading?: string; text: string }
-export interface ScoreJob { need: Need; blocks: ScoreBlock[] }
-
-export interface ScoreContext {
-  signal?: AbortSignal | undefined
-  /** Epoch ms after which no new request may start (the run's overall deadline). */
-  deadline?: number | undefined
-  /** Every block of the pages read (the rule scorer takes term statistics from it, dev-plan M3b); absent = no statistics. */
-  corpus?: readonly CorpusBlock[] | undefined
-}
-
-export interface ScoreUsage { requests: number; questions: number; cacheHits: number; inputTokens: number; outputTokens: number }
-
-export interface ScoreOutcome {
-  /** needId -> blockId -> grade. Questions that got no answer are absent. */
-  grades: Map<string, Map<string, BlockGrade>>
-  usage?: ScoreUsage
-  /** Non-fatal problems (unanswered questions, ...). */
-  notes?: string[]
-}
-
-export interface Scorer {
-  id: string
-  model: string
-  /** The judge rubric behind the grades (Jev-based scorers); recorded with their results. */
-  rubricRef?: RubricRef | undefined
-  score(task: ScoreTask, jobs: readonly ScoreJob[], ctx?: ScoreContext): Promise<ScoreOutcome>
-}
+export type { ScoreBlock, ScoreContext, ScoreJob, ScoreOutcome, ScoreTask, ScoreUsage, Scorer }
+export type { CorpusBlock }
 
 // ── rule scorer ─────────────────────────────────────────────────────────────
 
@@ -186,7 +163,9 @@ export interface HybridScorerOptions {
 export class HybridScorer implements Scorer {
   readonly id = 'hybrid'
   readonly model: string
-  readonly rubricRef: RubricRef | undefined
+  readonly rubricRef: Scorer['rubricRef']
+  /** The provider behind the re-scored pairs. */
+  readonly provider: ProviderRecord | undefined
   private readonly jev: Scorer
   private readonly rule: Scorer
   private readonly borderline: boolean
@@ -195,6 +174,7 @@ export class HybridScorer implements Scorer {
   constructor(options: HybridScorerOptions) {
     this.jev = options.jev
     this.rubricRef = options.jev.rubricRef
+    this.provider = options.jev.provider
     this.rule = options.rule ?? new RuleScorer()
     this.borderline = options.borderline ?? false
     this.maxQuestions = Math.max(options.maxQuestions ?? 64, 0)
@@ -247,10 +227,9 @@ export class HybridScorer implements Scorer {
 
 // ── Jev scorer ──────────────────────────────────────────────────────────────
 
-export const JEV_URL = 'https://jev.bocha.cn/v1/systemone'
-export const JEV_MODEL = 'bocha-jev-v1'
-/** Credentials ref / environment variable holding the Bocha Jev key. */
-export const JEV_KEY_REF = 'BOCHA_JEV_API_KEY'
+export { estimateJevTokens, JEV_KEY_REF, JEV_MODEL, JEV_QUESTION_OVERHEAD_TOKENS, JEV_URL }
+/** The Jev errors are the judge layer's errors. */
+export { JudgeError as JevError }
 
 /**
  * Built-in wording of the `score.support` rubric (rubrics.ts; a bench test pins it to
@@ -262,291 +241,27 @@ export const JEV_STATE_PREFIX = SUPPORT_V1.state!.replace('{task}', '')
 export const JEV_INSTRUCTIONS = SUPPORT_V1.instructions
 export const JEV_CRITERIA: readonly string[] = SUPPORT_V1.criteria!
 
-const HAN = /[㐀-䶿一-鿿豈-﫿぀-ヿ가-힯]/g
-
-/**
- * Conservative estimate of the EXPANDED input tokens Jev bills for a `score`
- * question's text. Jev expands each question once per level (4 for score), so
- * the cost is about four times the plain token count: a regression over the
- * 122 r1 requests gave 3.8 per Han character, 0.97 per other character and
- * 706 per question. The constants here (5 / 1.3 / 950) sit above the fit and
- * above the worst r1 request (nf-07, 33,331 counted tokens against an estimate
- * of 38,052), so an estimate within budget never meets the 32,768 limit. A
- * generic "chars / 1.5" would be far too low for CJK-heavy text.
- */
-export function estimateJevTokens(text: string): number {
-  const han = text.match(HAN)?.length ?? 0
-  return Math.ceil(han * 5 + (text.length - han) * 1.3)
-}
-
-/** Fixed expanded-token overhead of one `score` question (the level descriptions; r1 fit: 706). */
-export const JEV_QUESTION_OVERHEAD_TOKENS = 950
-
-export interface JevProbe {
-  state: string
-  need: string
-  /** Full candidate text (heading + block), before trimming. */
-  candidate: string
-  /** Trimmed task description (what `{task}` renders to). */
-  task?: string
-  /** `id@version#hash` of the rubric that worded the question: a cache must key on it. */
-  rubric?: string
-}
-export interface JevCachedAnswer { grade: number; probabilities?: Record<string, number> }
+export type JevProbe = JudgeProbe
+export type JevCachedAnswer = JudgeCachedAnswer
 /** Optional answer cache (the offline eval plugs the r1 judge cache in here). */
-export interface JevCache {
-  get(probe: JevProbe): JevCachedAnswer | undefined
-  set(probe: JevProbe, answer: JevCachedAnswer): void
-}
+export type JevCache = JudgeAnswerCache
 
-export interface JevScorerOptions {
+export interface JevScorerOptions extends Omit<SystemOneScorerOptions, 'id' | 'label' | 'model' | 'url' | 'apiKey'> {
   apiKey: string
-  /** Question rubric (default: the built-in score.support). Its length caps are the defaults of `maxStateChars` / `blockChars`. */
-  rubric?: ResolvedRubric
+  /** Full endpoint (default: the hosted Jev). */
   url?: string
   model?: string
-  fetchImpl?: typeof fetch
-  sleep?: (ms: number) => Promise<void>
-  /** Service limit: questions per request. */
-  maxQuestionsPerRequest?: number
-  /** Estimated expanded tokens per request (the hosted limit is 32768 for the request total; r1 failed at 33k). */
-  requestTokenBudget?: number
-  /** Candidate (heading + block) is cut to this many characters. */
-  blockChars?: number
-  maxNeedChars?: number
-  maxStateChars?: number
-  maxBodyBytes?: number
-  /** Retries per request for 429 / 503 / 529 / network errors. */
-  maxRetries?: number
-  timeoutMs?: number
-  /** Hard cap on HTTP attempts of this scorer (retries and splits included). */
-  requestCap?: number
-  cache?: JevCache
 }
 
-export class JevError extends Error {
-  constructor(message: string, readonly status?: number, readonly fatal = false) {
-    super(message)
-    this.name = 'JevError'
-  }
-}
-
-interface JevQuestion {
-  needId: string
-  blockId: string
-  probe: JevProbe
-  /** Text actually sent (trimmed). */
-  candidate: string
-  tokens: number
-}
-
-const RETRY_STATUSES = new Set([429, 503, 529])
-const MAX_RETRY_WAIT_MS = 10_000
-
-const cut = (text: string, max: number): string => (text.length <= max ? text : text.slice(0, Math.max(max - 1, 1)) + '…')
-const sleepMs = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
-
-function parseRetryAfter(value: string | null): number | undefined {
-  if (!value) return undefined
-  const seconds = Number(value)
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
-  const date = Date.parse(value)
-  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined
-}
-
-export class JevScorer implements Scorer {
-  readonly id = 'jev'
-  readonly model: string
-  /** HTTP attempts made so far (retries and splits included). */
-  requests = 0
-  readonly rubricRef: RubricRef
-  private readonly rubric: ResolvedRubric
-  private readonly cfg: Required<Omit<JevScorerOptions, 'apiKey' | 'cache' | 'requestCap' | 'rubric'>> & Pick<JevScorerOptions, 'cache' | 'requestCap'>
-  private readonly apiKey: string
-
+/**
+ * The hosted Bocha Jev: the `systemone` protocol with the Jev defaults, kept as its own class for
+ * callers (the bench, tests) that build it directly. The plugin builds its scorer from the configured
+ * provider (judges/providers.ts); with the default provider the requests are byte for byte these.
+ */
+export class JevScorer extends SystemOneScorer {
   constructor(options: JevScorerOptions) {
     if (!options.apiKey) throw new Error('JevScorer needs an API key')
-    this.apiKey = options.apiKey
-    this.rubric = options.rubric ?? SUPPORT_V1
-    if (this.rubric.kind !== 'score') throw new Error('JevScorer needs a score rubric, got ' + this.rubric.id + ' (' + this.rubric.kind + ')')
-    this.rubricRef = refOf(this.rubric)
-    const { rubric: _rubric, ...rest } = options
-    this.cfg = {
-      url: JEV_URL, model: JEV_MODEL, fetchImpl: globalThis.fetch, sleep: sleepMs,
-      maxQuestionsPerRequest: 32, requestTokenBudget: 26_000, blockChars: this.rubric.maxCandidateChars, maxNeedChars: 200, maxStateChars: this.rubric.maxStateChars,
-      maxBodyBytes: 200_000, maxRetries: 2, timeoutMs: 20_000,
-      ...rest,
-    }
-    this.model = this.cfg.model
-  }
-
-  /** The task description as `{task}` renders it. */
-  private taskText(task: Pick<ScoreTask, 'goal'>): string {
-    return cut(task.goal.trim().replace(/\s+/g, ' '), this.cfg.maxStateChars)
-  }
-
-  /** Grade as the pipeline reads it: criteria with another level count than the built-in 4 are rescaled onto 0..3. */
-  private normalized(grade: number): number {
-    const levels = this.rubric.criteria!.length
-    return levels === 4 ? grade : (grade * 3) / (levels - 1)
-  }
-
-  /** Shared state: a short task description only (it is billed again inside every question). */
-  stateFor(task: Pick<ScoreTask, 'goal'>): string {
-    return renderTemplate(this.rubric.state!, { task: this.taskText(task) })
-  }
-
-  private instructionsFor(need: string, candidate: string, task: string): string {
-    return renderTemplate(this.rubric.instructions, { need, candidate, task })
-  }
-
-  private buildQuestions(task: ScoreTask, jobs: readonly ScoreJob[]): JevQuestion[] {
-    const state = this.stateFor(task)
-    const taskText = this.taskText(task)
-    const out: JevQuestion[] = []
-    for (const job of jobs) {
-      const need = cut(job.need.text.trim().replace(/\s+/g, ' '), this.cfg.maxNeedChars)
-      for (const block of job.blocks) {
-        const full = blockScoringText(block)
-        const candidate = cut(full, this.cfg.blockChars)
-        const tokens = JEV_QUESTION_OVERHEAD_TOKENS + estimateJevTokens(state + this.instructionsFor(need, candidate, taskText))
-        out.push({ needId: job.need.id, blockId: block.blockId, probe: { state, need, candidate: full, task: taskText, rubric: this.rubric.key }, candidate, tokens })
-      }
-    }
-    return out
-  }
-
-  /** Greedy request chunks bounded by question count, estimated tokens and body bytes. */
-  private chunk(questions: readonly JevQuestion[], state: string): JevQuestion[][] {
-    const chunks: JevQuestion[][] = []
-    let cur: JevQuestion[] = []
-    let tokens = 0
-    let bytes = Buffer.byteLength(state) + 200
-    for (const q of questions) {
-      const qBytes = Buffer.byteLength(this.instructionsFor(q.probe.need, q.candidate, q.probe.task ?? '')) + 120
-      if (cur.length && (cur.length >= this.cfg.maxQuestionsPerRequest || tokens + q.tokens > this.cfg.requestTokenBudget || bytes + qBytes > this.cfg.maxBodyBytes)) {
-        chunks.push(cur)
-        cur = []
-        tokens = 0
-        bytes = Buffer.byteLength(state) + 200
-      }
-      cur.push(q)
-      tokens += q.tokens
-      bytes += qBytes
-    }
-    if (cur.length) chunks.push(cur)
-    return chunks
-  }
-
-  async score(task: ScoreTask, jobs: readonly ScoreJob[], ctx: ScoreContext = {}): Promise<ScoreOutcome> {
-    const state = this.stateFor(task)
-    const questions = this.buildQuestions(task, jobs)
-    const usage: ScoreUsage = { requests: 0, questions: 0, cacheHits: 0, inputTokens: 0, outputTokens: 0 }
-    const grades = new Map<string, Map<string, BlockGrade>>()
-    for (const job of jobs) grades.set(job.need.id, new Map())
-    const put = (q: JevQuestion, grade: number): void => { const g = this.normalized(grade); grades.get(q.needId)!.set(q.blockId, { grade: g, rank: g }) }
-
-    const misses: JevQuestion[] = []
-    for (const q of questions) {
-      const hit = this.cfg.cache?.get(q.probe)
-      if (hit) { put(q, hit.grade); usage.cacheHits++ } else misses.push(q)
-    }
-
-    const notes: string[] = []
-    let failed = 0
-    const requestsBefore = this.requests
-    for (const chunk of this.chunk(misses, state)) {
-      try {
-        failed += await this.run(state, chunk, ctx, usage, put)
-      } catch (error) {
-        if (ctx.signal?.aborted) throw error
-        if (error instanceof JevError && error.fatal) throw error
-        failed += chunk.length
-        notes.push((error as Error).message)
-      }
-    }
-    usage.requests = this.requests - requestsBefore
-    usage.questions = misses.length - failed
-    if (failed) notes.push(failed + ' of ' + questions.length + ' Jev questions got no answer')
-    if (questions.length && failed / questions.length > 0.5) throw new JevError('Jev answered only ' + (questions.length - failed) + ' of ' + questions.length + ' questions' + (notes[0] ? ' (' + notes[0] + ')' : ''))
-    return { grades, usage, notes }
-  }
-
-  /** Send one chunk; splits it when the service reports the token budget exceeded. Returns the number of unanswered questions. */
-  private async run(state: string, chunk: JevQuestion[], ctx: ScoreContext, usage: ScoreUsage, put: (q: JevQuestion, grade: number) => void, depth = 0): Promise<number> {
-    const questions: Record<string, unknown> = {}
-    chunk.forEach((q, i) => { questions['q' + i] = { type: 'score', instructions: this.instructionsFor(q.probe.need, q.candidate, q.probe.task ?? ''), criteria: this.rubric.criteria } })
-    let json: any
-    try {
-      json = await this.post(JSON.stringify({ model: this.cfg.model, state, questions }), ctx)
-    } catch (error) {
-      if (error instanceof JevError && error.status === 422 && /token_budget_exceeded/.test(error.message) && depth < 6) {
-        if (chunk.length > 1) {
-          const mid = Math.ceil(chunk.length / 2)
-          let missing = 0
-          for (const half of [chunk.slice(0, mid), chunk.slice(mid)]) {
-            try {
-              missing += await this.run(state, half, ctx, usage, put, depth + 1)
-            } catch (inner) {
-              if (ctx.signal?.aborted || (inner instanceof JevError && inner.fatal)) throw inner
-              missing += half.length
-            }
-          }
-          return missing
-        }
-        // One question alone is too long: halve its text once.
-        const only = chunk[0]!
-        if (only.candidate.length > 200) return this.run(state, [{ ...only, candidate: cut(only.candidate, Math.floor(only.candidate.length / 2)) }], ctx, usage, put, depth + 1)
-      }
-      throw error
-    }
-    usage.inputTokens += Number(json?.usage?.input_tokens ?? 0)
-    usage.outputTokens += Number(json?.usage?.output_tokens ?? 0)
-    let missing = 0
-    chunk.forEach((q, i) => {
-      const answer = json?.answers?.['q' + i]
-      const grade = Number(answer?.score)
-      if (!answer || !Number.isFinite(grade)) { missing++; return }
-      put(q, grade)
-      this.cfg.cache?.set(q.probe, { grade, ...answer.probabilities ? { probabilities: answer.probabilities } : {} })
-    })
-    return missing
-  }
-
-  /** POST with bounded retries (429 / 503 / 529 / network); 401 is fatal, other statuses fail the request. */
-  private async post(body: string, ctx: ScoreContext): Promise<any> {
-    for (let attempt = 0; ; attempt++) {
-      if (this.cfg.requestCap !== undefined && this.requests >= this.cfg.requestCap) throw new JevError('Jev request cap reached (' + this.cfg.requestCap + ')', undefined, true)
-      if (ctx.deadline !== undefined && Date.now() >= ctx.deadline) throw new JevError('Jev skipped: deadline reached')
-      if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
-      this.requests++
-      const signal = ctx.signal ? AbortSignal.any([ctx.signal, AbortSignal.timeout(this.cfg.timeoutMs)]) : AbortSignal.timeout(this.cfg.timeoutMs)
-      let res: Response
-      try {
-        res = await this.cfg.fetchImpl(this.cfg.url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: 'Bearer ' + this.apiKey },
-          body,
-          signal,
-        })
-      } catch (error) {
-        if (ctx.signal?.aborted) throw error
-        if (attempt < this.cfg.maxRetries) { await this.wait(1_000 * 2 ** attempt, ctx); continue }
-        throw new JevError('Jev network error: ' + (error as Error).message)
-      }
-      if (res.ok) return res.json()
-      const text = (await res.text().catch(() => '')).slice(0, 300)
-      if (RETRY_STATUSES.has(res.status) && attempt < this.cfg.maxRetries) {
-        await this.wait(parseRetryAfter(res.headers.get('retry-after')) ?? 1_000 * 2 ** attempt, ctx)
-        continue
-      }
-      throw new JevError('Jev HTTP ' + res.status + ' ' + text, res.status, res.status === 401 || res.status === 403)
-    }
-  }
-
-  private async wait(ms: number, ctx: ScoreContext): Promise<void> {
-    const wait = Math.min(ms, MAX_RETRY_WAIT_MS)
-    if (ctx.deadline !== undefined && Date.now() + wait >= ctx.deadline) throw new JevError('Jev retry would pass the deadline')
-    await this.cfg.sleep(wait)
+    const { url, model, ...rest } = options
+    super({ id: 'jev', label: 'Jev', model: model ?? JEV_MODEL, url: url ?? JEV_URL, ...rest })
   }
 }

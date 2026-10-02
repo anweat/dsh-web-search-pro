@@ -48,7 +48,7 @@ test('migration: evidence tables are added to an existing M2a database, idempote
     const check = new DatabaseSync(t.file)
     const cols = (table: string): string[] => (check.prepare('PRAGMA table_info(' + table + ')').all() as { name: string }[]).map(c => c.name)
     assert.deepEqual(cols('evidence_runs'), ['id', 'query_id', 'task_json', 'pack_json', 'created_at'])
-    assert.deepEqual(cols('evidence_blocks'), ['evidence_id', 'run_id', 'url', 'block_id', 'heading', 'text', 'hash', 'grade', 'scorer', 'rubric'])
+    assert.deepEqual(cols('evidence_blocks'), ['evidence_id', 'run_id', 'url', 'block_id', 'heading', 'text', 'hash', 'grade', 'scorer', 'rubric', 'judge'])
     check.close()
   } finally { t.done() }
 })

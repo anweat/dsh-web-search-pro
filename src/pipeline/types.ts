@@ -175,7 +175,7 @@ export interface PackStats {
   /** Search queries made over all rounds: one per provider call (broader fallback retries of one provider, e.g. GitHub keywords, count once). */
   queries?: number
   /** Jev usage of this run (control or shadow). */
-  jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' | 'hybrid'; /** `id@version#hash` of the judge rubric. */ rubric?: string; /** The rubric is a user override of the built-in. */ rubricOverridden?: boolean }
+  jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' | 'hybrid'; /** `id@version#hash` of the judge rubric. */ rubric?: string; /** The rubric is a user override of the built-in. */ rubricOverridden?: boolean; /** Model judge behind the grades (dev-plan M5): provider id, protocol, model and the calibration version. */ provider?: string; protocol?: string; model?: string; calibration?: string; /** Some input tokens are the plugin's estimate (the service reported none). */ estimated?: boolean }
 }
 
 export interface EvidencePack {

@@ -14,8 +14,10 @@ import type { Store } from '../store.ts'
 import { normQuery, shapeSources } from '../util.ts'
 import { buildTaskSpec, type TaskInput } from './task.ts'
 import { runPipeline, type PipelineDeps, type PipelineOptions, type PipelineResult } from './run.ts'
+import { createModelScorer, selectProvider } from './judges/providers.ts'
+import { resolveBudget, UsageLedger, type SearchBudget } from './ledger.ts'
 import { resolveRubric } from './rubrics.ts'
-import { HybridScorer, JEV_KEY_REF, JevScorer, RuleScorer, type Scorer } from './score.ts'
+import { HybridScorer, RuleScorer, type Scorer } from './score.ts'
 import type { EvidencePack } from './types.ts'
 
 export interface EvidenceRequest extends TaskInput {
@@ -31,8 +33,10 @@ export interface EvidenceServiceDeps {
   fetch: Pick<FetchService, 'fetchPage'>
   store: Store
   dynamic: () => ResolvedConfig
-  /** Test seam for the Jev HTTP client. */
+  /** Test seam for the judge HTTP client. */
   fetchImpl?: typeof fetch
+  /** Test seam for the usage ledger's clock (epoch ms). */
+  now?: () => number
 }
 
 /** Pack as returned by the tool: `sources` shaped like every other exit. */
@@ -43,25 +47,50 @@ export const PAGE_MAX_CHARS = 60_000
 export class EvidenceService {
   constructor(private readonly deps: EvidenceServiceDeps) {}
 
-  /** Which scorer decides and which (if any) only observes, from `evidence.scorer` / `evidence.jevMode`. */
-  private async scorers(notes: string[]): Promise<{ control: Scorer; shadow?: Scorer }> {
+  /**
+   * Which scorer decides and which (if any) only observes. The mode is `evidence.judge.mode`, or its legacy alias
+   * `evidence.jevMode`; the model behind it is `evidence.judge.provider` (default `bocha-jev`). Whatever cannot be set
+   * up (unknown provider, missing key, uncalibrated reranker, ...) leaves the rule scorer in charge and says why.
+   */
+  private async scorers(notes: string[], budget: SearchBudget): Promise<{ control: Scorer; shadow?: Scorer }> {
     const cfg = this.deps.dynamic().evidence
     const rule = new RuleScorer()
-    if (cfg.jevMode === 'off') {
+    const mode = cfg.judge?.mode ?? cfg.jevMode
+    if (mode === 'off') {
       if (cfg.scorer === 'jev') notes.push('evidence.scorer=jev ignored: evidence.jevMode is off')
       return { control: rule }
     }
-    const key = await this.deps.router.resolveSecret(JEV_KEY_REF)
-    if (!key) {
-      notes.push('Jev ' + cfg.jevMode + ' mode needs ' + JEV_KEY_REF + ' (credentials ref or environment): rule scorer used')
+    const selection = selectProvider(cfg.judge)
+    notes.push(...selection.diagnostics, ...resolveBudget(cfg.budget).diagnostics)
+    const provider = selection.provider
+    if (!provider) {
+      notes.push((selection.unusable ?? 'no judge provider') + ': rule scorer used')
       return { control: rule }
     }
-    const { rubric, diagnostics } = resolveRubric('score.support', cfg.rubrics)
-    notes.push(...diagnostics)
-    const jev = new JevScorer({ apiKey: key, rubric, ...this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}, requestCap: 16 })
-    if (cfg.jevMode === 'shadow') return { control: rule, shadow: jev }
-    if (cfg.jevMode === 'hybrid') return { control: new HybridScorer({ jev, rule, borderline: cfg.hybridBorderline, maxQuestions: cfg.maxJevQuestions }) }
-    if (cfg.scorer === 'jev') return { control: jev }
+    const label = provider.label ?? provider.id
+    const key = provider.keyRef ? await this.deps.router.resolveSecret(provider.keyRef) : undefined
+    if (provider.keyRef && !key) {
+      notes.push(label + ' ' + mode + ' mode needs ' + provider.keyRef + ' (credentials ref or environment): rule scorer used')
+      return { control: rule }
+    }
+    // The rubric words the questions of the rubric-driven protocols; a reranker takes the need text as its query.
+    let rubric
+    if (provider.protocol !== 'rerank') {
+      const resolved = resolveRubric(provider.rubricId ?? 'score.support', cfg.rubrics)
+      notes.push(...resolved.diagnostics)
+      rubric = resolved.rubric
+    }
+    let model: Scorer
+    try {
+      model = createModelScorer(provider, { apiKey: key, rubric, ...this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}, meter: budget.meterFor(provider), requestCap: provider.limits?.requestCap ?? 16 })
+    } catch (error) {
+      notes.push(label + ' could not be set up, rule scorer used: ' + (error instanceof Error ? error.message : String(error)))
+      return { control: rule }
+    }
+    if (mode === 'shadow') return { control: rule, shadow: model }
+    if (mode === 'hybrid') return { control: new HybridScorer({ jev: model, rule, borderline: cfg.hybridBorderline, maxQuestions: cfg.maxJevQuestions }) }
+    // `control`: the legacy key pair needs `scorer: jev` as well; the neutral `judge.mode` is a single explicit switch.
+    if (cfg.judge?.mode === 'control' || cfg.scorer === 'jev') return { control: model }
     notes.push('evidence.jevMode=control needs evidence.scorer=jev: rule scorer used')
     return { control: rule }
   }
@@ -70,7 +99,8 @@ export class EvidenceService {
     const { spec, notes: specNotes } = buildTaskSpec(request)
     const cfg = this.deps.dynamic()
     const scorerNotes: string[] = []
-    const scorers = await this.scorers(scorerNotes)
+    const ledger = new UsageLedger(this.deps.store, resolveBudget(cfg.evidence.budget).caps, this.deps.now)
+    const scorers = await this.scorers(scorerNotes, ledger.forSearch())
     const { router, fetch: fetchSvc } = this.deps
 
     const deps: PipelineDeps = {

@@ -6,6 +6,8 @@
 import path from 'node:path'
 import os from 'node:os'
 import z from '@deepseek-ai/schemastery'
+import type { JudgeSettings } from './pipeline/judges/providers.ts'
+import type { BudgetInput } from './pipeline/ledger.ts'
 import type { RubricOverride } from './pipeline/rubrics.ts'
 
 /** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
@@ -56,6 +58,13 @@ export interface EvidenceConfig {
    * Remove the entry to restore the default.
    */
   rubrics?: Record<string, RubricOverride>
+  /**
+   * Which model judge S6 uses and where it lives (dev-plan M5). Absent = the built-in `bocha-jev` preset.
+   * `mode` is the provider-neutral name of `jevMode` (it wins when both are set; `control` then needs no `scorer`).
+   */
+  judge?: JudgeSettings & { mode?: EvidenceConfig['jevMode'] }
+  /** Model usage caps (input tokens) per search and per day, with per-provider overrides. Absent = 60k per search, 1M per day. */
+  budget?: BudgetInput
 }
 
 export interface Config {
@@ -215,6 +224,31 @@ export const Config = z.object({
       maxStateChars: z.number(),
       maxCandidateChars: z.number(),
     })).volatile(),
+    judge: z.object({
+      provider: z.string(),
+      mode: z.union(['off', 'shadow', 'control', 'hybrid']),
+      allowLlm: z.boolean(),
+      providers: z.dict(z.object({
+        protocol: z.union(['systemone', 'rerank', 'llm']),
+        baseUrl: z.string(),
+        model: z.string(),
+        keyRef: z.string(),
+        path: z.string(),
+        rubricId: z.string(),
+        tokenModel: z.union(['expanded', 'plain']),
+        label: z.string(),
+        limits: z.dict(z.number()),
+        calibration: z.object({ version: z.string(), points: z.array(z.array(z.number())) }),
+        extraBody: z.dict(z.any()),
+        price: z.object({ inputPerMTokens: z.number(), outputPerMTokens: z.number(), currency: z.string() }),
+      })),
+    }).volatile(),
+    budget: z.object({
+      perSearchInputTokens: z.number(),
+      dailyInputTokens: z.number(),
+      timezone: z.string(),
+      providers: z.dict(z.object({ perSearchInputTokens: z.number(), dailyInputTokens: z.number() })),
+    }).volatile(),
   }),
   verbose: z.boolean().default(false).volatile(),
 })
@@ -298,6 +332,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
       maxRounds: vOr(ev.maxRounds, 2) as number,
       maxQueries: vOr(ev.maxQueries, 4) as number,
       ...ev.rubrics !== undefined && v(ev.rubrics) ? { rubrics: v(ev.rubrics) as Record<string, RubricOverride> } : {},
+      ...ev.judge !== undefined && v(ev.judge) ? { judge: v(ev.judge) as NonNullable<EvidenceConfig['judge']> } : {},
+      ...ev.budget !== undefined && v(ev.budget) ? { budget: v(ev.budget) as NonNullable<EvidenceConfig['budget']> } : {},
     },
     verbose: vOr(config.verbose, false) as boolean,
   }
