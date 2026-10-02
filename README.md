@@ -133,8 +133,8 @@ evidence:
 | `web_snapshot` | Playwright HTML + 文本落盘；`screenshot=false` 时不生成 PNG |
 | `web_history` / `web_cache_clear` / `web_search_stats` | 持久历史 / 清缓存 / 存储统计 |
 | `web_rule` | 持久化按站提取规则（脚本猫式，list/upsert/remove/import/export）；export 会写出可再导入的版本化 JSON rule pack |
-| `web_backend_status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态 |
-| `web_deps` | 检测/安装搜索后端的外部依赖（省略 action 默认 check；bili/yt-dlp/agent-reach/mcporter）；浏览器依赖由 dsh-browser 管理 |
+| `web_backend_status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态（Twitter 项同时检查 `twitter` 命令、设置开关和凭据环境变量，`note` 说明缺什么） |
+| `web_deps` | 检测/安装搜索后端的外部依赖（省略 action 默认 check；bili/yt-dlp/twitter/agent-reach/mcporter；每项探测的是后端真正执行的命令）；浏览器依赖由 dsh-browser 管理 |
 
 ### 输出预算（所有出口）
 
@@ -213,7 +213,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | bili-cli `0.6.2` | B站后端 | `uv tool install --force git+https://github.com/public-clis/bilibili-cli@489607468f967e0e11f3cdff6efc022d011e982a` |
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
 | opencli | 小红书/Twitter/Reddit/IG/FB | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
-| agent-reach | agent-reach 后端 | `uv tool install agent-reach` / `pip install agent-reach` |
+| twitter-cli（命令 `twitter`） | Twitter 平台的 CLI 回退（执行 `twitter search`，另需环境变量 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
+| agent-reach（可选） | 仅作安装助手，本插件不直接执行它；装了它**不代表** Twitter 搜索可用 | `uv tool install agent-reach` / `pip install agent-reach` |
 | mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |
 | playwright / patchright | 渲染/截图后端 | 由 dsh-browser 内置；默认 Playwright，兼容场景可显式切 Patchright；缺 Chromium 时调用 `browser_install` |
 

@@ -595,6 +595,8 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
       available: () => deps.enableCli && deps.agentReachEnabled && !!process.env.TWITTER_AUTH_TOKEN && !!process.env.TWITTER_CT0,
       async search(query, count, signal) {
         const res = await runCli('twitter', ['search', query, '-n', String(Math.min(count, 10))], { timeoutMs: 45_000, signal })
+        // Spawn failure (no `twitter` on PATH) comes back as exit -1 with no output: say what is missing.
+        if (res.code === -1 && !res.timedOut && !res.stderr.trim() && !res.stdout.trim()) throw new EngineError('the twitter command could not be started: install twitter-cli (web_deps action=install backend=twitter); Agent-Reach alone does not provide it', 'ENGINE_UNAVAILABLE', false)
         if (res.code !== 0) throw new EngineError('twitter search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
         const sources: WebSearchSource[] = []
         for (const line of res.stdout.split(/\r?\n/)) {

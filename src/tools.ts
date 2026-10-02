@@ -751,15 +751,15 @@ export function registerTools(deps: ToolDeps): void {
         type: 'object', additionalProperties: false,
         properties: {
           engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
-          cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' } } } },
+          cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' } } } },
           browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
           evidence: { type: 'object', additionalProperties: false, properties: { scorer: { type: 'string', required: true }, jevMode: { type: 'string', required: true }, rubrics: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, version: { type: 'string', required: true }, overridden: { type: 'boolean', required: true }, hash: { type: 'string', required: true } } } }, diagnostics: { type: 'array', items: { type: 'string' } } } },
         },
       },
       render: (_args, value) => {
-        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[] } }
+        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[] } }
         const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
-        lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '')))
+        lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
         if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
         if (v.evidence) {
           lines.push('evidence: scorer=' + v.evidence.scorer + ' jevMode=' + v.evidence.jevMode)
@@ -778,7 +778,10 @@ export function registerTools(deps: ToolDeps): void {
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
       return {
         engines: await router.backendDiagnostics(availability),
-        cli: cli.map(v => ({ id: v.id, available: v.available, ...v.path ? { path: v.path } : {} })),
+        cli: cli.map(v => {
+          const gate = v.id === 'twitter' ? twitterGate(dynamic(), v) : undefined
+          return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
+        }),
         browser: browserState(getBrowser()),
         evidence: { scorer: ev.scorer, jevMode: ev.jevMode, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length ? { diagnostics } : {} },
       }
@@ -798,19 +801,19 @@ export function registerTools(deps: ToolDeps): void {
         type: 'object',
         additionalProperties: false,
         properties: {
-          backends: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, usedBy: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, source: { type: 'string' }, requiredVersion: { type: 'string' }, version: { type: 'string' }, diagnostic: { type: 'string' }, installs: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { installer: { type: 'string', required: true }, command: { type: 'string', required: true } } } } } } },
+          backends: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, usedBy: { type: 'string', required: true }, available: { type: 'boolean', required: true }, optional: { type: 'boolean' }, path: { type: 'string' }, source: { type: 'string' }, requiredVersion: { type: 'string' }, version: { type: 'string' }, diagnostic: { type: 'string' }, installs: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { installer: { type: 'string', required: true }, command: { type: 'string', required: true } } } } } } },
           message: { type: 'string' },
           install: { type: 'object', additionalProperties: false, properties: { code: { type: 'number' }, stdout: { type: 'string' }, stderr: { type: 'string' }, timedOut: { type: 'boolean' } } },
         },
       },
       render: (_args, value) => {
-        const v = value as { backends: { id: string; label: string; usedBy: string; available: boolean; path?: string; source?: string; requiredVersion?: string; version?: string; diagnostic?: string; installs: { installer: string; command: string }[] }[]; message?: string; install?: { code: number; stdout: string; stderr: string; timedOut: boolean } }
+        const v = value as { backends: { id: string; label: string; usedBy: string; available: boolean; optional?: boolean; path?: string; source?: string; requiredVersion?: string; version?: string; diagnostic?: string; installs: { installer: string; command: string }[] }[]; message?: string; install?: { code: number; stdout: string; stderr: string; timedOut: boolean } }
         const parts: string[] = []
         if (v.message) parts.push(v.message)
         if (v.backends.length) {
           for (const b of v.backends) {
             const details = [b.version ? '版本 ' + b.version : '', b.requiredVersion ? '要求 ' + b.requiredVersion : '', b.source ? '来源 ' + b.source : '', b.path ? b.path : ''].filter(Boolean)
-            parts.push((b.available ? '✅' : '❌') + ' ' + b.label + ' (' + b.id + ') — ' + b.usedBy + (details.length ? ' · ' + details.join(' · ') : ''))
+            parts.push((b.available ? '✅' : b.optional ? '➖' : '❌') + ' ' + b.label + ' (' + b.id + ') — ' + b.usedBy + (details.length ? ' · ' + details.join(' · ') : ''))
             if (b.diagnostic) parts.push('   诊断: ' + b.diagnostic)
             if (!b.available) parts.push('   安装: ' + b.installs.map(i => i.installer + ': ' + i.command).join('   |   '))
           }
@@ -831,7 +834,7 @@ export function registerTools(deps: ToolDeps): void {
       }
       if (action !== 'check' && action !== 'install') throw new Error('action must be check or install')
       const backends = await detectDeps()
-      const allOk = backends.every(b => b.available)
+      const allOk = backends.every(b => b.available || b.optional)
       return {
         backends: backends.map(b => ({ ...b, installs: b.installs })),
         ...allOk ? { message: '所有外部依赖已就绪。' } : { message: '部分外部依赖缺失，可对缺失项运行 web_deps action=install（或手动执行列出的安装命令）。' },
@@ -840,11 +843,24 @@ export function registerTools(deps: ToolDeps): void {
   }))
 }
 
+/**
+ * Whether the twitter platform backend can really run: the `twitter` command works (probed by detectDeps)
+ * AND the backend is enabled in settings AND its credentials are in the environment (same gates as the engine).
+ */
+export function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: { available: boolean; diagnostic?: string }): { available: boolean; note?: string } {
+  if (!dep.available) return { available: false, note: dep.diagnostic ?? 'twitter command not found (install twitter-cli; Agent-Reach alone does not provide it)' }
+  if (!cfg.enableCliBackends) return { available: false, note: 'CLI backends are disabled in settings (enableCliBackends)' }
+  if (!cfg.agentReachEnabled) return { available: false, note: 'disabled in settings (agentReachEnabled)' }
+  if (!process.env.TWITTER_AUTH_TOKEN || !process.env.TWITTER_CT0) return { available: false, note: 'twitter command found, but TWITTER_AUTH_TOKEN / TWITTER_CT0 are not set' }
+  return { available: true }
+}
+
 function defaultInstallerFor(backend: string): string {
   switch (backend) {
     case 'bili': return 'uv'
     case 'yt-dlp': return 'uv'
     case 'agent-reach': return 'uv'
+    case 'twitter': return 'uv'
     case 'mcporter': return 'npm'
     default: throw new Error('unknown backend: ' + backend)
   }
