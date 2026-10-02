@@ -11,7 +11,25 @@ import { calibrationKey } from './judges/calibration.ts'
 import { resolveProviders, selectProvider, unusableReason, DEFAULT_PROVIDER_ID } from './judges/providers.ts'
 import { resolveBudget, UsageLedger } from './ledger.ts'
 
+export type JudgeMode = EvidenceConfig['jevMode']
+
+/** What decides S6 for the configured mode, ignoring whether the provider is usable (service.ts `scorers` makes the same choice). */
+export function configuredDecider(cfg: EvidenceConfig): { mode: JudgeMode; decides: 'rule' | 'hybrid' | 'model'; note?: string } {
+  const mode = cfg.judge?.mode ?? cfg.jevMode
+  if (mode === 'off') return { mode, decides: 'rule', ...cfg.scorer === 'jev' ? { note: 'scorer=jev is ignored while the mode is off' } : {} }
+  if (mode === 'shadow') return { mode, decides: 'rule', note: 'the model only observes (scores are recorded, not used)' }
+  if (mode === 'hybrid') return { mode, decides: 'hybrid', note: 'rule grades everything; the model re-scores language-mismatched' + (cfg.hybridBorderline ? ' and borderline' : '') + ' pairs' }
+  // control: the neutral `judge.mode` is a single explicit switch; the legacy `jevMode` also needs `scorer: jev`.
+  if (cfg.judge?.mode === 'control' || cfg.scorer === 'jev') return { mode, decides: 'model' }
+  return { mode, decides: 'rule', note: 'control needs scorer=jev (or judge.mode=control): the rule scorer decides' }
+}
+
 export interface JudgeStatus {
+  /** Effective judge mode (`judge.mode`, else the legacy `jevMode`), not the legacy `scorer` flag. */
+  mode: JudgeMode
+  /** Who decides S6 right now: the rule scorer, the hybrid rule+model scorer, or the model; a model mode falls back to `rule` when the provider is unusable or its key is missing. */
+  decides: 'rule' | 'hybrid' | 'model'
+  modeNote?: string
   provider: { id: string; protocol?: string; model?: string; usable: boolean; reason?: string; unverified?: boolean; calibration?: string; keyConfigured?: boolean }
   /** Ids of every defined provider (presets and custom). */
   providers: string[]
@@ -29,7 +47,7 @@ export interface JudgeStatus {
     amount?: number
     currency?: string
     caps: { perSearchInputTokens: number; dailyInputTokens: number }
-    byProvider: { provider: string; requests: number; inputTokens: number; outputTokens: number; estimated: boolean }[]
+    byProvider: { provider: string; protocol?: string; requests: number; inputTokens: number; outputTokens: number; estimated: boolean }[]
   }
   diagnostics: string[]
 }
@@ -47,7 +65,12 @@ export async function judgeStatus(cfg: EvidenceConfig, store: Store, options: { 
   const budget = resolveBudget(cfg.budget)
   let snapshot: ReturnType<UsageLedger['today']> | undefined
   try { snapshot = new UsageLedger(store, budget.caps, options.now).today() } catch { /* store unreadable: report the rest */ }
+  const configured = configuredDecider(cfg)
+  const fallback = configured.decides !== 'rule' && (reason ? reason : keyConfigured === false ? 'key not found for ' + defined?.keyRef : undefined)
   return {
+    mode: configured.mode,
+    decides: fallback ? 'rule' : configured.decides,
+    ...fallback ? { modeNote: 'the rule scorer decides: ' + fallback } : configured.note ? { modeNote: configured.note } : {},
     provider: {
       id,
       ...defined ? { protocol: defined.protocol, model: defined.model } : {},
@@ -68,7 +91,7 @@ export async function judgeStatus(cfg: EvidenceConfig, store: Store, options: { 
       amountKnown: snapshot.totals.amount !== null,
       ...snapshot.totals.amount !== null && snapshot.totals.calls > 0 ? { amount: snapshot.totals.amount, ...snapshot.totals.currency ? { currency: snapshot.totals.currency } : {} } : {},
       caps: { perSearchInputTokens: budget.caps.perSearchInputTokens, dailyInputTokens: budget.caps.dailyInputTokens },
-      byProvider: snapshot.providers.map(p => ({ provider: p.provider, requests: p.requests, inputTokens: p.inputTokens, outputTokens: p.outputTokens, estimated: p.estimated })),
+      byProvider: snapshot.providers.map(p => ({ provider: p.provider, protocol: p.protocol, requests: p.requests, inputTokens: p.inputTokens, outputTokens: p.outputTokens, estimated: p.estimated })),
     } } : {},
     diagnostics: [...catalog.diagnostics, ...budget.diagnostics],
   }

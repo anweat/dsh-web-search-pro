@@ -36,8 +36,8 @@ test('an unset rc.2 volatile field falls back after unwrapping', () => {
 })
 
 test('evidence settings default to the rule scorer with Jev off, and unwrap volatile values', () => {
-  assert.deepEqual(resolveConfig({} as never).evidence, { scorer: 'rule', jevMode: 'off', hybridBorderline: false, maxJevQuestions: 64, maxRounds: 2, maxQueries: 4 })
+  assert.deepEqual(resolveConfig({} as never).evidence, { scorer: 'rule', jevMode: 'off', hybridBorderline: false, maxJevQuestions: 64, autoProviders: true, maxRounds: 2, maxQueries: 4 })
   const live = <T>(value: T) => ({ get: () => value })
   const resolved = resolveConfig({ evidence: { scorer: live('jev'), jevMode: live('hybrid'), hybridBorderline: live(true), maxJevQuestions: live(24), maxRounds: live(1), maxQueries: live(3) } } as never)
-  assert.deepEqual(resolved.evidence, { scorer: 'jev', jevMode: 'hybrid', hybridBorderline: true, maxJevQuestions: 24, maxRounds: 1, maxQueries: 3 })
+  assert.deepEqual(resolved.evidence, { scorer: 'jev', jevMode: 'hybrid', hybridBorderline: true, maxJevQuestions: 24, autoProviders: true, maxRounds: 1, maxQueries: 3 })
 })

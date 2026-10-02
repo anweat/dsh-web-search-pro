@@ -1,0 +1,59 @@
+{
+  "_comment": "NOT a live capture: constructed from the documented contract (bocha-ai/dsh-web-search-bocha src/types.ts + README: data.webPages.value[] with name/url/snippet/summary/siteName/datePublished, envelope code/msg/log_id). Kept so mapping tests pin the contract until a live success is recorded; replace with a sanitized live response when one exists.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "code": 200,
+    "log_id": "fixture-0001",
+    "msg": null,
+    "data": {
+      "_type": "SearchResponse",
+      "queryContext": {
+        "originalQuery": "博查 搜索 API"
+      },
+      "webPages": {
+        "webSearchUrl": "",
+        "totalEstimatedMatches": 8123,
+        "value": [
+          {
+            "id": null,
+            "name": "博查 AI 开放平台",
+            "url": "https://open.bochaai.com/",
+            "displayUrl": "https://open.bochaai.com/",
+            "snippet": "博查 Web Search API 为 AI 应用提供搜索。",
+            "siteName": "博查AI开放平台",
+            "siteIcon": "https://example.test/i.png",
+            "dateLastCrawled": "2026-09-20T00:00:00Z",
+            "summary": "博查提供面向 AI 的网页搜索 API，返回网页标题、URL、摘要、站点名称与发布时间，单次最多 50 条结果。",
+            "datePublished": "2026-08-14T08:00:00+08:00"
+          },
+          {
+            "name": "Bocha Search API 文档",
+            "url": "https://example.test/docs/web-search",
+            "snippet": "请求参数 query、freshness、summary、count。",
+            "siteName": "Example Docs",
+            "datePublished": null,
+            "summary": null
+          },
+          {
+            "name": "没有链接的条目",
+            "url": " ",
+            "snippet": "dropped"
+          },
+          {
+            "name": "非 http 链接",
+            "url": "ftp://example.test/a",
+            "snippet": "dropped"
+          },
+          {
+            "name": "仅 snippet",
+            "url": "https://news.example.test/a?utm=1",
+            "snippet": "只有简短 snippet，没有 summary。",
+            "summary": "   ",
+            "datePublished": "2026-09-30"
+          }
+        ]
+      }
+    }
+  }
+}

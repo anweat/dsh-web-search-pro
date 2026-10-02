@@ -10,16 +10,18 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { Store } from './store.ts'
 import type { ResolvedConfig } from './config.ts'
 import {
-  seamEngine, exaEngine, ddgEngine, bingEngine, jinaSearchEngine, githubEngine,
-  bilibiliEngine, v2exEngine, youtubeEngine, arxivEngine, pubmedEngine, platformEngines,
-  rssEngine, customPlatformEngine, EngineError, type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions,
+  platformEngines, rssEngine, customPlatformEngine, EngineError,
+  type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
 } from './engines.ts'
+import { defaultProviderRegistry, routeIdOf, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
+import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
+import { resolveBudget, UsageLedger } from './pipeline/ledger.ts'
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
 import { browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
-import { allAttemptsBenign, allAttemptsEmpty, BackendRegistry, NoBackendError, type BackendAttempt, type BackendDiagnostic } from './backend-registry.ts'
+import { allAttemptsBenign, allAttemptsEmpty, BackendRegistry, NoBackendError, type Backend, type BackendAttempt, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
 import { SingleFlight } from './singleflight.ts'
 import { mergeCandidates, type ProviderOutput } from './pipeline/candidates.ts'
@@ -55,18 +57,27 @@ export interface RouterSearchResult {
   fallbackNote?: string
 }
 
-const ENGINE_FACTORIES: Record<string, (deps: any, config: ResolvedConfig) => Engine> = {
-  seam: (_deps) => seamEngine(_deps),
-  exa: (deps) => exaEngine(deps),
-  ddg: (deps) => ddgEngine(deps.allowProxyFakeIp),
-  bing: (deps) => bingEngine(deps.allowProxyFakeIp),
-  jina: (deps) => jinaSearchEngine(deps),
-  github: (deps) => githubEngine(deps),
-  bilibili: (deps) => bilibiliEngine(deps),
-  v2ex: (deps) => v2exEngine(deps.allowProxyFakeIp),
-  youtube: (deps) => youtubeEngine(deps),
-  arxiv: (deps) => arxivEngine(deps.allowProxyFakeIp),
-  pubmed: (deps) => pubmedEngine(deps.allowProxyFakeIp),
+type SearchInput = { query: string; count: number; signal?: AbortSignal; skipSeam: boolean; options?: EngineSearchOptions }
+
+/** One provider as `web_backend_status` reports it: the registry descriptor plus local readiness by dimension. */
+export interface ProviderReport {
+  id: string
+  /** Id used in tool output and history (the first alias, else `id`). */
+  route: string
+  aliases: string[]
+  label: string
+  operations: string[]
+  taskProfiles: string[]
+  languages: string[]
+  regions: string[]
+  resultKinds: string[]
+  sourceFamily?: string
+  requirements: (Omit<ProviderDescriptor['requirements'][number], 'env'> & { env?: string[] })[]
+  supportedFilters: string[]
+  costModel: ProviderDescriptor['costModel']
+  /** Not verified against the live service (descriptor.verification). */
+  unverified?: boolean
+  readiness: Readiness & { lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
 }
 
 export class SearchRouter {
@@ -74,7 +85,14 @@ export class SearchRouter {
   private readonly searchFlights = new SingleFlight<RouterSearchResult>()
   private readonly platformFlights = new SingleFlight<RouterSearchResult>()
   private readonly getBrowser: BrowserGetter
-  private readonly backends: BackendRegistry<{ query: string; count: number; signal?: AbortSignal; skipSeam: boolean; options?: EngineSearchOptions }, SearchOutcome>
+  private readonly backends: BackendRegistry<SearchInput, SearchOutcome>
+  /** Backend ids this router created from the registry (a stub a test installed under another id is never touched). */
+  private readonly owned = new Set<string>()
+  private syncedRevision = -1
+  /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
+  private readonly readiness = new Map<string, Readiness>()
+  /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
+  private readonly outcomes = new Map<string, { ok: boolean; at: string; message?: string; code?: string }>()
 
   constructor(
     private readonly ctx: Context,
@@ -83,47 +101,81 @@ export class SearchRouter {
     private readonly dynamic: () => ResolvedConfig = () => config,
     browser?: BrowserService | BrowserGetter,
     private readonly memory = new LruCache<RouterSearchResult>(config.memoryCacheEntries),
+    readonly registry: ProviderRegistry = defaultProviderRegistry,
   ) {
     this.getBrowser = toBrowserGetter(browser)
     this.backends = new BackendRegistry({ cooldownMs: 30_000 })
-    for (const id of Object.keys(ENGINE_FACTORIES)) {
-      this.backends.register({
-        id,
-        probe: async () => {
-          try {
-            const engine = await this.build(id, false)
-            if (engine.available()) return { available: true }
-            return { available: false, reason: engine.label + ' unavailable' }
-          } catch (error) {
-            return { available: false, reason: error instanceof Error ? error.message : String(error) }
-          }
-        },
-        run: async input => {
-          const engine = await this.build(id, input.skipSeam)
-          if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
-          return engine.search(input.query, input.count, input.signal, input.options)
-        },
-        // Quality gate: a result whose snippet coverage is below 50% is usable
-        // but thin — the router should keep probing later engines instead of
-        // settling for titles-only output (the ddg-regex regression case).
-        // Engines that produce descriptive snippets by construction (GitHub
-        // metadata, bili video cards, YouTube meta lines) are exempt: their
-        // snippet field carries structured info, not prose coverage.
-        assess: outcome => {
-          const sources = outcome.sources
-          if (!sources.length) return { ok: true }
-          const META_SNIPPET_ENGINES = new Set(['github', 'github-code', 'github-issues', 'bilibili', 'youtube'])
-          if (META_SNIPPET_ENGINES.has(id)) return { ok: true }
-          const withSnippet = sources.filter(s => s.snippet && s.snippet.trim()).length
-          const ratio = withSnippet / sources.length
-          if (ratio >= 0.5) return { ok: true }
-          return { ok: true, lowQuality: true, detail: 'snippets=' + withSnippet + '/' + sources.length }
-        },
-      })
+    this.syncBackends()
+  }
+
+  /** Mirror the registry into the backend registry: new providers appear, unregistered ones stop being scheduled. */
+  private syncBackends(): void {
+    if (this.syncedRevision === this.registry.revision) return
+    this.syncedRevision = this.registry.revision
+    const wanted = new Map(this.registry.list({ operation: 'search' }).map(a => [routeIdOf(a.descriptor), a.descriptor] as const))
+    for (const id of [...this.owned]) if (!wanted.has(id)) { this.backends.unregister(id); this.owned.delete(id) }
+    for (const id of wanted.keys()) if (!this.backends.has(id)) { this.backends.register(this.backendFor(id)); this.owned.add(id) }
+  }
+
+  private backendFor(id: string): Backend<SearchInput, SearchOutcome> {
+    return {
+      id,
+      probe: async () => {
+        try {
+          const adapter = this.registry.resolve(id)
+          if (!adapter) return { available: false, reason: 'unregistered' }
+          const readiness = await adapter.probeLocal(await this.probeEnv())
+          this.readiness.set(id, readiness)
+          return { available: readiness.available, ...readiness.reason ? { reason: readiness.reason } : {} }
+        } catch (error) {
+          return { available: false, reason: error instanceof Error ? error.message : String(error) }
+        }
+      },
+      run: async input => {
+        const engine = await this.build(id, input.skipSeam)
+        if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
+        try {
+          const outcome = await engine.search(input.query, input.count, input.signal, input.options)
+          this.outcomes.set(id, { ok: true, at: new Date().toISOString() })
+          return outcome
+        } catch (error) {
+          const code = (error as { code?: unknown } | null)?.code
+          // An empty answer is the service working; a cancelled call says nothing about it.
+          if (code === 'ENGINE_EMPTY') this.outcomes.set(id, { ok: true, at: new Date().toISOString() })
+          else if (!input.signal?.aborted) this.outcomes.set(id, { ok: false, at: new Date().toISOString(), message: error instanceof Error ? error.message : String(error), ...typeof code === 'string' ? { code } : {} })
+          throw error
+        }
+      },
+      // Quality gate: a result whose snippet coverage is below 50% is usable
+      // but thin — the router should keep probing later engines instead of
+      // settling for titles-only output (the ddg-regex regression case).
+      // Engines that produce descriptive snippets by construction (GitHub
+      // metadata, bili video cards, YouTube meta lines) are exempt: their
+      // snippet field carries structured info, not prose coverage.
+      assess: outcome => {
+        const sources = outcome.sources
+        if (!sources.length) return { ok: true }
+        const META_SNIPPET_ENGINES = new Set(['github', 'github-code', 'github-issues', 'bilibili', 'youtube'])
+        if (META_SNIPPET_ENGINES.has(id)) return { ok: true }
+        const withSnippet = sources.filter(s => s.snippet && s.snippet.trim()).length
+        const ratio = withSnippet / sources.length
+        if (ratio >= 0.5) return { ok: true }
+        return { ok: true, lowQuality: true, detail: 'snippets=' + withSnippet + '/' + sources.length }
+      },
     }
   }
 
+  private async probeEnv(cli?: ReadonlyMap<string, boolean>): Promise<ProbeEnv> {
+    return { deps: await this.deps(false), config: this.dynamic(), ...cli ? { cli } : {} }
+  }
+
+  /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
+  private canonicalIds(ids: readonly string[]): string[] {
+    return [...new Set(ids.map(id => this.registry.routeId(id) ?? id))]
+  }
+
   async backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]> {
+    this.syncBackends()
     const diagnostics = await this.backends.diagnosticsAsync()
     if (!cliAvailability || !this.dynamic().enableCliBackends) return diagnostics
 
@@ -163,13 +215,18 @@ export class SearchRouter {
    * cooldown state, without running a search. Ids the registry does not know are absent.
    */
   async providerStatuses(ids: readonly string[]): Promise<Map<string, ProviderStatus>> {
-    const wanted = new Set(ids)
-    const out = new Map<string, ProviderStatus>()
+    this.syncBackends()
+    const route = new Map(ids.map(id => [id, this.registry.routeId(id) ?? id] as const))
+    const wanted = new Set(route.values())
+    const byId = new Map<string, ProviderStatus>()
     for (const d of await this.backends.diagnosticsAsync()) {
       if (!wanted.has(d.id)) continue
       const reason = d.state === 'cooldown' ? d.lastError : d.reason
-      out.set(d.id, { state: d.state, ...reason ? { reason } : {} })
+      const credential = this.readiness.get(d.id)?.credential
+      byId.set(d.id, { state: d.state, ...reason ? { reason } : {}, ...credential ? { credential } : {} })
     }
+    const out = new Map<string, ProviderStatus>()
+    for (const [id, r] of route) { const status = byId.get(r); if (status) out.set(id, status) }
     return out
   }
 
@@ -180,10 +237,11 @@ export class SearchRouter {
    * outcome is a value.
    */
   async runProvider(call: ProviderCall): Promise<ProviderOutcome> {
+    this.syncBackends()
     try {
       const selected = await this.backends.runSelected(
         { query: call.query, count: call.count, signal: call.signal, skipSeam: false, ...call.options ? { options: call.options } : {} },
-        { preferred: [call.id], signal: call.signal },
+        { preferred: this.canonicalIds([call.id]), signal: call.signal },
       )
       const sources = selected.value.sources
       return sources.length ? { state: 'ok', sources } : { state: 'empty' }
@@ -218,11 +276,17 @@ export class SearchRouter {
     const exaApiKey = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
     const jinaApiKey = await this.resolveKey(cfg.jinaApiKeyEnv, cfg.jinaApiKey)
     const githubToken = await this.resolveKey(cfg.githubTokenEnv, cfg.githubToken)
+    // One Bocha account key serves search and Jev: the search name first, then the documented Jev name.
+    const bochaApiKey = await this.resolveKey(cfg.bochaApiKeyEnv ?? BOCHA_KEY_ENV, cfg.bochaApiKey) ?? await this.resolveKey(BOCHA_FALLBACK_KEY_ENV)
     return {
       ...web !== undefined ? { web } : {},
       ...exaApiKey ? { exaApiKey } : {},
       ...jinaApiKey ? { jinaApiKey } : {},
       ...githubToken ? { githubToken } : {},
+      ...bochaApiKey ? { bochaApiKey } : {},
+      ...cfg.bochaBaseUrl ? { bochaBaseUrl: cfg.bochaBaseUrl } : {},
+      ...cfg.bochaSummary !== undefined ? { bochaSummary: cfg.bochaSummary } : {},
+      usage: this.usageRecorder(),
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
@@ -242,11 +306,16 @@ export class SearchRouter {
     const exaApiKey = cfg.exaApiKey || process.env[cfg.exaApiKeyEnv]
     const jinaApiKey = cfg.jinaApiKey || process.env[cfg.jinaApiKeyEnv]
     const githubToken = cfg.githubToken || process.env[cfg.githubTokenEnv] || process.env.GH_TOKEN
+    const bochaApiKey = cfg.bochaApiKey || process.env[cfg.bochaApiKeyEnv ?? BOCHA_KEY_ENV] || process.env[BOCHA_FALLBACK_KEY_ENV]
     return {
       ...web !== undefined ? { web } : {},
       ...exaApiKey ? { exaApiKey } : {},
       ...jinaApiKey ? { jinaApiKey } : {},
       ...githubToken ? { githubToken } : {},
+      ...bochaApiKey ? { bochaApiKey } : {},
+      ...cfg.bochaBaseUrl ? { bochaBaseUrl: cfg.bochaBaseUrl } : {},
+      ...cfg.bochaSummary !== undefined ? { bochaSummary: cfg.bochaSummary } : {},
+      usage: this.usageRecorder(),
       enableCli: cfg.enableCliBackends,
       opencliEnabled: cfg.opencliEnabled,
       agentReachEnabled: cfg.agentReachEnabled,
@@ -258,22 +327,79 @@ export class SearchRouter {
     }
   }
 
+  /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
+  private usageRecorder(): UsageRecorder {
+    return {
+      record: entry => {
+        try { new UsageLedger(this.store, resolveBudget(this.dynamic().evidence?.budget).caps).recordRequests(entry) } catch { /* the ledger is advisory for these providers */ }
+      },
+    }
+  }
+
   /** Whether any configured engine is currently usable. */
   anyEngineAvailable(): boolean {
-    const ids = this.dynamic().engines
-    return ids.some(id => this.buildSync(id, false).available())
+    this.syncBackends()
+    const ids = this.canonicalIds(this.dynamic().engines)
+    return ids.some(id => { try { return this.buildSync(id, false).available() } catch { return false } })
   }
 
   private async build(id: string, skipSeam: boolean): Promise<Engine> {
-    const factory = ENGINE_FACTORIES[id]
-    if (!factory) throw new EngineError('unknown engine: ' + id, 'ENGINE_UNAVAILABLE', false)
-    return factory(await this.deps(skipSeam), this.dynamic())
+    const adapter = this.registry.resolve(id)
+    if (!adapter) throw new EngineError(this.registry.unknownMessage([id]), 'ENGINE_UNAVAILABLE', false)
+    return adapter.create(await this.deps(skipSeam), this.dynamic())
   }
 
   private buildSync(id: string, skipSeam: boolean): Engine {
-    const factory = ENGINE_FACTORIES[id]
-    if (!factory) throw new EngineError('unknown engine: ' + id, 'ENGINE_UNAVAILABLE', false)
-    return factory(this.depsSync(skipSeam), this.dynamic())
+    const adapter = this.registry.resolve(id)
+    if (!adapter) throw new EngineError(this.registry.unknownMessage([id]), 'ENGINE_UNAVAILABLE', false)
+    return adapter.create(this.depsSync(skipSeam), this.dynamic())
+  }
+
+  /**
+   * Every registered search provider with its descriptor and LOCAL readiness by dimension (installation / credential /
+   * health), for `web_backend_status`. No network. Health is only `ready` after a real call succeeded in this process,
+   * `cooldown` / `error` after failures; a provider that merely passed its local probe is `unknown`, not verified.
+   */
+  async providerReport(cliAvailability?: ReadonlyMap<string, boolean>): Promise<ProviderReport[]> {
+    this.syncBackends()
+    const diagnostics = new Map((await this.backendDiagnostics(cliAvailability)).map(d => [d.id, d]))
+    const env = await this.probeEnv(cliAvailability)
+    const now = new Date().toISOString()
+    const out: ProviderReport[] = []
+    for (const adapter of this.registry.list({ operation: 'search' })) {
+      const d = adapter.descriptor
+      const route = routeIdOf(d)
+      let local: Readiness
+      try { local = await adapter.probeLocal(env) } catch (error) { local = { available: false, reason: error instanceof Error ? error.message : String(error), diagnosticCode: 'probe_failed' } }
+      const diag = diagnostics.get(route)
+      // The CLI scan can overrule the engine's own check (same rule as backendDiagnostics).
+      const available = diag ? diag.available : local.available
+      const last = this.outcomes.get(route)
+      const cooling = diag?.state === 'cooldown'
+      const health = cooling ? 'cooldown' as const : last ? (last.ok ? 'ready' as const : 'error' as const) : 'unknown' as const
+      const credential = last?.code === 'ENGINE_AUTH' ? 'rejected' as const : local.credential
+      const reason = !available ? (diag?.reason ?? local.reason) : undefined
+      out.push({
+        id: d.id, route, aliases: [...d.aliases], label: d.label, operations: [...d.operations], taskProfiles: [...d.taskProfiles],
+        languages: [...d.languages], regions: [...d.regions], resultKinds: [...d.resultKinds],
+        ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
+        requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel },
+        ...d.verification?.live ? {} : { unverified: true },
+        readiness: {
+          available,
+          ...local.installation ? { installation: local.installation } : {},
+          ...credential ? { credential } : {},
+          health,
+          ...reason ? { reason } : {},
+          ...local.diagnosticCode ? { diagnosticCode: local.diagnosticCode } : {},
+          lastLocalCheck: now,
+          ...last?.ok ? { lastRemoteSuccess: last.at } : {},
+          ...last && !last.ok && last.message ? { lastError: last.message } : {},
+          ...diag?.cooldownUntil ? { cooldownUntil: diag.cooldownUntil } : {},
+        },
+      })
+    }
+    return out
   }
 
   /** Run a full search with caching + persistence. */
@@ -281,8 +407,8 @@ export class SearchRouter {
     const query = opts.query.trim()
     if (!query) throw new Error('query must be a non-empty string')
     const cfg = this.dynamic()
-    const ids = (opts.engines && opts.engines.length ? opts.engines : cfg.engines)
-      .filter((id, i, arr) => arr.indexOf(id) === i)
+    this.syncBackends()
+    const ids = this.canonicalIds(opts.engines && opts.engines.length ? opts.engines : cfg.engines)
     const nq = normQuery(query)
     const count = Math.min(Math.max(opts.count, 1), 20)
     const multi = opts.multi && ids.length > 1

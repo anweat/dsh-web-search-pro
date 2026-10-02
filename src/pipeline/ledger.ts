@@ -101,11 +101,26 @@ export class UsageLedger {
   /** A per-search budget (one `web_search_pro` evidence call, all its rounds). */
   forSearch(searchId: string = 's_' + crypto.randomUUID().slice(0, 8)): SearchBudget { return new SearchBudget(this, searchId) }
 
-  /** Today's usage over reserved and settled calls, with the caps (read-only). */
+  /**
+   * Count requests of a metered NON-model provider (Bocha search): one settled row with `requests`, tokens 0 (n/a)
+   * and amount null (price unknown, never 0). Not capped: the caps are input-token caps of model calls.
+   */
+  recordRequests(entry: { provider: string; protocol: string; requests: number; model?: string; searchId?: string; note?: string }): void {
+    const ts = this.now()
+    const id = 'u_' + crypto.randomUUID().slice(0, 12)
+    const res = this.store.reserveUsage({ id, ts: new Date(ts).toISOString(), day: dayKey(ts, this.caps.timezone), ...entry.searchId ? { searchId: entry.searchId } : {}, provider: entry.provider, protocol: entry.protocol, ...entry.model ? { model: entry.model } : {}, inputTokens: 0 })
+    if (!res.ok) return
+    this.store.settleUsage(id, { status: 'settled', requests: Math.max(Math.floor(entry.requests), 0), inputTokens: 0, outputTokens: 0, estimated: false, amount: null, ...entry.note ? { note: entry.note } : {} })
+  }
+
+  /**
+   * Today's usage over reserved and settled MODEL calls, with the caps (read-only). Request-counted providers
+   * (protocol `search`) are listed in `providers` but kept out of `totals`, so their unknown price does not blank the model cost.
+   */
   today(): UsageSnapshot {
     const day = this.day()
     const providers = this.store.usageByProvider(day)
-    const totals = providers.reduce<UsageTotals>((t, p) => ({
+    const totals = providers.filter(p => p.protocol !== 'search').reduce<UsageTotals>((t, p) => ({
       requests: t.requests + p.requests, inputTokens: t.inputTokens + p.inputTokens, outputTokens: t.outputTokens + p.outputTokens,
       estimated: t.estimated || p.estimated, calls: t.calls + p.calls, amount: t.amount !== null && p.amount !== null ? t.amount + p.amount : null,
       ...p.currency ? { currency: p.currency } : t.currency ? { currency: t.currency } : {},

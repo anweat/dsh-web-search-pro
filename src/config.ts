@@ -48,6 +48,11 @@ export interface EvidenceConfig {
   hybridBorderline: boolean
   /** Upper bound of (need, block) questions sent to Jev per search. */
   maxJevQuestions: number
+  /**
+   * S1 promotes registry providers that are strong in the task's language (Bocha for Chinese, Exa for English) and ready
+   * (key configured) ahead of the profile table. Default true; false keeps the profile table / configured `engines` as they are.
+   */
+  autoProviders: boolean
   /** Retrieval rounds per task (S8 bounded re-search): 1 disables the second round. Default 2. */
   maxRounds: number
   /** Search requests per task over all rounds (a second round only runs while this is not used up). Default 4. */
@@ -118,6 +123,14 @@ export interface Config {
   jinaApiKey?: string
   /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
   jinaApiKeyEnv?: string
+  /** Bocha web-search API key (falls back to the credentials ref / $BOCHA_SEARCH_API_KEY, then $BOCHA_JEV_API_KEY of the same account). */
+  bochaApiKey?: string
+  /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
+  bochaApiKeyEnv?: string
+  /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bochaai.com. */
+  bochaBaseUrl?: string
+  /** Ask Bocha for its longer per-page summary (default true). */
+  bochaSummary?: boolean
   /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
   githubToken?: string
   /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
@@ -180,6 +193,10 @@ export const Config = z.object({
   exaApiKeyEnv: z.string().default('EXA_API_KEY').volatile(),
   jinaApiKey: z.string().role('secret').volatile(),
   jinaApiKeyEnv: z.string().default('JINA_API_KEY').volatile(),
+  bochaApiKey: z.string().role('secret').volatile(),
+  bochaApiKeyEnv: z.string().default('BOCHA_SEARCH_API_KEY').volatile(),
+  bochaBaseUrl: z.string().default('https://api.bochaai.com').volatile(),
+  bochaSummary: z.boolean().default(true).volatile(),
   githubToken: z.string().role('secret').volatile(),
   githubTokenEnv: z.string().default('GITHUB_TOKEN').volatile(),
   enableCliBackends: z.boolean().default(true).volatile(),
@@ -215,6 +232,7 @@ export const Config = z.object({
     jevMode: z.union(['off', 'shadow', 'control', 'hybrid']).default('off').volatile(),
     hybridBorderline: z.boolean().default(false).volatile(),
     maxJevQuestions: z.number().default(64).volatile(),
+    autoProviders: z.boolean().default(true).volatile(),
     maxRounds: z.number().default(2).volatile(),
     maxQueries: z.number().default(4).volatile(),
     rubrics: z.dict(z.object({
@@ -260,6 +278,10 @@ export interface ResolvedConfig extends Config {
   jinaApiKey?: string
   jinaApiKeyEnv: string
   githubTokenEnv: string
+  bochaApiKey?: string
+  bochaApiKeyEnv: string
+  bochaBaseUrl: string
+  bochaSummary: boolean
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
   evidence: EvidenceConfig
 }
@@ -310,6 +332,10 @@ export function resolveConfig(config: Config): ResolvedConfig {
     exaApiKeyEnv: vOr(config.exaApiKeyEnv, 'EXA_API_KEY') as string,
     jinaApiKey: config.jinaApiKey !== undefined ? v(config.jinaApiKey) : undefined,
     jinaApiKeyEnv: vOr(config.jinaApiKeyEnv, 'JINA_API_KEY') as string,
+    bochaApiKey: config.bochaApiKey !== undefined ? v(config.bochaApiKey) : undefined,
+    bochaApiKeyEnv: vOr(config.bochaApiKeyEnv, 'BOCHA_SEARCH_API_KEY') as string,
+    bochaBaseUrl: vOr(config.bochaBaseUrl, 'https://api.bochaai.com') as string,
+    bochaSummary: vOr(config.bochaSummary, true) as boolean,
     githubToken: config.githubToken !== undefined ? v(config.githubToken) : undefined,
     githubTokenEnv: vOr(config.githubTokenEnv, 'GITHUB_TOKEN') as string,
     enableCliBackends: vOr(config.enableCliBackends, true) as boolean,
@@ -329,6 +355,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
       jevMode: vOr(ev.jevMode, 'off') as EvidenceConfig['jevMode'],
       hybridBorderline: vOr(ev.hybridBorderline, false) as boolean,
       maxJevQuestions: vOr(ev.maxJevQuestions, 64) as number,
+      autoProviders: vOr(ev.autoProviders, true) as boolean,
       maxRounds: vOr(ev.maxRounds, 2) as number,
       maxQueries: vOr(ev.maxQueries, 4) as number,
       ...ev.rubrics !== undefined && v(ev.rubrics) ? { rubrics: v(ev.rubrics) as Record<string, RubricOverride> } : {},

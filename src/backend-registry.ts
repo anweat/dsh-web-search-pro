@@ -59,6 +59,13 @@ function isCooldownWorthy(error: unknown): boolean {
   return true
 }
 
+/** The service's own wait hint (EngineError.retryAfterMs), bounded so a hostile header cannot park an engine for hours. */
+const MAX_RETRY_AFTER_MS = 10 * 60_000
+function retryAfterMsOf(error: unknown): number | undefined {
+  const value = (error as { retryAfterMs?: unknown } | null)?.retryAfterMs
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.min(value, MAX_RETRY_AFTER_MS) : undefined
+}
+
 export class BackendRegistry<I, O> {
   private readonly entries = new Map<string, Backend<I, O>>()
   private readonly failures = new Map<string, { message: string; until: number }>()
@@ -68,6 +75,14 @@ export class BackendRegistry<I, O> {
     if (this.entries.has(backend.id)) throw new Error('duplicate backend: ' + backend.id)
     this.entries.set(backend.id, backend)
     return this
+  }
+
+  has(id: string): boolean { return this.entries.has(id) }
+
+  /** Remove a backend (and its cooldown). Returns whether it existed. */
+  unregister(id: string): boolean {
+    this.failures.delete(id)
+    return this.entries.delete(id)
   }
 
   async run(input: I, options: RunSelectedOptions): Promise<O> {
@@ -116,7 +131,7 @@ export class BackendRegistry<I, O> {
           attempts.push({ id, outcome: 'empty', detail: message })
           continue
         }
-        if (isCooldownWorthy(error)) this.failures.set(id, { message, until: Date.now() + (this.options.cooldownMs ?? 30_000) })
+        if (isCooldownWorthy(error)) this.failures.set(id, { message, until: Date.now() + (retryAfterMsOf(error) ?? this.options.cooldownMs ?? 30_000) })
         attempts.push({ id, outcome: 'error', detail: message })
       }
     }

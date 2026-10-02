@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { isPlatformSupported, PLATFORM_IDS, SEARCH_ENGINE_IDS } from '../src/engines.ts'
+import { isPlatformSupported, PLATFORM_IDS } from '../src/engines.ts'
+import { SEARCH_ENGINE_IDS } from '../src/providers/index.ts'
 import { Store } from '../src/store.ts'
 
 test('capability ids remain complete and configured custom platforms are accepted', () => {
   assert.deepEqual(SEARCH_ENGINE_IDS, [
-    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed',
+    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha',
   ])
   assert.deepEqual(PLATFORM_IDS, [
     'github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter',

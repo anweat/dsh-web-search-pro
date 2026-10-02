@@ -9,6 +9,9 @@
  *  - exa: includeDomains / excludeDomains / startPublishedDate options for HARD
  *    site / exclude_site / time_window (Exa omits undated pages when a date
  *    bound is set, hence hard only);
+ *  - bocha: include / exclude (domain lists) for HARD site / exclude_site, and `freshness` as an
+ *    inclusive `start..today` date range for a HARD time_window whose lower bound is understood
+ *    (an exact translation, so it is reported as native);
  *  - github*: the natural-language query returns nothing on repository search
  *    (E1: 0 of 20), so it is replaced by a short keyword query;
  *  - everything else: the plain query.
@@ -29,12 +32,19 @@ export interface CompiledExaOptions {
   startPublishedDate?: string
 }
 
+export interface CompiledBochaOptions {
+  /** `YYYY-MM-DD..YYYY-MM-DD` (inclusive), Bocha's date-range form of `freshness`. */
+  freshness?: string
+  include?: string[]
+  exclude?: string[]
+}
+
 export interface CompiledQuery {
   providerId: string
   /** Text to send to the provider. */
   query: string
-  /** Provider-native options, shaped like `EngineSearchOptions` (only Exa has any today). */
-  options?: { exa: CompiledExaOptions }
+  /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some). */
+  options?: { exa?: CompiledExaOptions; bocha?: CompiledBochaOptions }
   /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
   fallbacks?: string[]
   /** Ids of constraints the provider enforces natively. */
@@ -107,6 +117,23 @@ function compileExa(task: TaskLike, providerId: string, now: Date): CompiledQuer
   return { ...finish(task, providerId, task.query, native), ...Object.keys(exa).length ? { options: { exa } } : {} }
 }
 
+const isoDay = (iso: string | Date): string => (typeof iso === 'string' ? iso : iso.toISOString()).slice(0, 10)
+
+export function compileBocha(task: TaskLike, providerId: string, now: Date): CompiledQuery {
+  const bocha: CompiledBochaOptions = {}
+  const native: string[] = []
+  const include = hard(task, 'site').map(c => ({ c, d: domainOf(c.value) })).filter(x => x.d)
+  if (include.length) { bocha.include = [...new Set(include.map(x => x.d))]; native.push(...include.map(x => x.c.id)) }
+  const exclude = hard(task, 'exclude_site').map(c => ({ c, d: domainOf(c.value) })).filter(x => x.d)
+  if (exclude.length) { bocha.exclude = [...new Set(exclude.map(x => x.d))]; native.push(...exclude.map(x => x.c.id)) }
+  const windows = hard(task, 'time_window').map(c => ({ c, start: parseTimeWindow(c.value, now) })).filter((x): x is { c: Constraint; start: string } => x.start !== undefined && x.start < now.toISOString())
+  if (windows.length) {
+    bocha.freshness = isoDay(windows.map(x => x.start).sort().at(-1)!) + '..' + isoDay(now) // several lower bounds: the strictest holds
+    native.push(...windows.map(x => x.c.id))
+  }
+  return { ...finish(task, providerId, task.query, native), ...Object.keys(bocha).length ? { options: { bocha } } : {} }
+}
+
 // ── GitHub keyword queries ──────────────────────────────────────────────────
 
 /** Chinese words that carry no topical signal in a repository search. */
@@ -171,10 +198,11 @@ function finish(task: TaskLike, providerId: string, query: string, native: strin
   return { providerId, query, native, local: task.constraints.map(c => c.id).filter(id => !done.has(id)) }
 }
 
-/** Compile the task for one provider id (`ddg`, `bing`, `exa`, `github*`; anything else gets the plain query). */
+/** Compile the task for one provider id (`ddg`, `bing`, `exa`, `bocha`, `github*`; anything else gets the plain query). */
 export function compileQuery(task: TaskLike, providerId: string, now: Date = new Date()): CompiledQuery {
   if (providerId === 'ddg' || providerId === 'bing') return compileOperators(task, providerId)
   if (providerId === 'exa') return compileExa(task, providerId, now)
+  if (providerId === 'bocha') return compileBocha(task, providerId, now)
   if (providerId === 'github' || providerId.startsWith('github-')) return compileGithub(task, providerId)
   return finish(task, providerId, task.query, [])
 }

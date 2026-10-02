@@ -19,6 +19,8 @@ import { resolveBudget, UsageLedger, type SearchBudget } from './ledger.ts'
 import { resolveRubric } from './rubrics.ts'
 import { HybridScorer, RuleScorer, type Scorer } from './score.ts'
 import type { EvidencePack } from './types.ts'
+import { compileQuery } from './compile.ts'
+import type { ProviderRegistry } from '../providers/registry.ts'
 
 export interface EvidenceRequest extends TaskInput {
   /** Explicit engine ids (tool `engines`). */
@@ -29,7 +31,7 @@ export interface EvidenceRequest extends TaskInput {
 }
 
 export interface EvidenceServiceDeps {
-  router: Pick<SearchRouter, 'providerStatuses' | 'runProvider' | 'resolveSecret'>
+  router: Pick<SearchRouter, 'providerStatuses' | 'runProvider' | 'resolveSecret'> & { registry?: ProviderRegistry }
   fetch: Pick<FetchService, 'fetchPage'>
   store: Store
   dynamic: () => ResolvedConfig
@@ -103,6 +105,11 @@ export class EvidenceService {
     const scorers = await this.scorers(scorerNotes, ledger.forSearch())
     const { router, fetch: fetchSvc } = this.deps
 
+    // Registry-aware planning: aliases normalised to route ids, descriptors for language / profile promotion, adapter compilers.
+    const registry = router.registry
+    const normalize = (ids: readonly string[]): string[] => (registry ? [...new Set(ids.map(id => registry.routeId(id) ?? id))] : [...ids])
+    const compiler: PipelineDeps['compiler'] = (task, id, now) => registry?.resolve(id)?.compile?.(task, now) ?? compileQuery(task, id, now)
+
     const deps: PipelineDeps = {
       providerStatus: ids => router.providerStatuses(ids),
       searchProvider: call => router.runProvider(call),
@@ -111,13 +118,15 @@ export class EvidenceService {
         return { url: page.url, ...page.title ? { title: page.title } : {}, text: page.text, ...page.shellPage ? { shellPage: true } : {}, source: page.source }
       },
       scorers,
-      configuredEngines: cfg.engines,
+      configuredEngines: normalize(cfg.engines),
+      ...registry ? { descriptors: registry.list({ operation: 'search' }).map(a => a.descriptor), compiler } : {},
+      autoProviders: cfg.evidence.autoProviders !== false,
       fusion: { k: cfg.rrfConstant, freshnessBoost: cfg.freshnessBoost, freshnessDays: cfg.freshnessDays, authorityBoost: cfg.authorityBoost, authorityDomains: cfg.authorityDomains },
     }
     const options: PipelineOptions = {
       signal: request.signal,
       deadlineMs: cfg.timeoutMs + 30_000,
-      ...request.engines?.length ? { engines: request.engines } : {},
+      ...request.engines?.length ? { engines: normalize(request.engines) } : {},
       sourcesCount: request.count,
       maxScoreQuestions: cfg.evidence.maxJevQuestions,
       maxRounds: cfg.evidence.maxRounds,

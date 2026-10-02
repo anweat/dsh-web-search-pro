@@ -11,11 +11,13 @@ import type { FetchService } from './fetch.ts'
 import type { Store } from './store.ts'
 import { resolveAllRubrics } from './pipeline/rubrics.ts'
 import { judgeStatus, type JudgeStatus } from './pipeline/judge-status.ts'
+import type { ProviderReport } from './router.ts'
 import { browserState, requireBrowser, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig } from './config.ts'
 import { mergedRules } from './fetch.ts'
-import { SEARCH_ENGINE_IDS, PLATFORM_IDS, isPlatformSupported } from './engines.ts'
+import { PLATFORM_IDS, isPlatformSupported } from './engines.ts'
+import { defaultProviderRegistry } from './providers/index.ts'
 import { detectDeps, installDep } from './deps.ts'
 import { expandEvidence, replayHistory, type ExpandedEvidence } from './history.ts'
 import { EvidenceService, type EvidenceOutput } from './pipeline/service.ts'
@@ -84,6 +86,24 @@ const EVIDENCE_OUTPUT_PROPERTIES = {
   },
 } as const
 
+/** One registry provider in `web_backend_status` (all fields beyond id / label / readiness.available are optional extensions). */
+const PROVIDER_REPORT_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    id: { type: 'string', required: true }, route: { type: 'string' }, aliases: { type: 'array', items: { type: 'string' } }, label: { type: 'string', required: true },
+    operations: { type: 'array', items: { type: 'string' } }, taskProfiles: { type: 'array', items: { type: 'string' } }, languages: { type: 'array', items: { type: 'string' } },
+    regions: { type: 'array', items: { type: 'string' } }, resultKinds: { type: 'array', items: { type: 'string' } }, sourceFamily: { type: 'string' },
+    requirements: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, id: { type: 'string', required: true }, env: { type: 'array', items: { type: 'string' } }, optional: { type: 'boolean' }, note: { type: 'string' } } } },
+    supportedFilters: { type: 'array', items: { type: 'string' } },
+    costModel: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, unit: { type: 'string' }, note: { type: 'string' } } },
+    unverified: { type: 'boolean' },
+    readiness: { type: 'object', additionalProperties: false, properties: {
+      available: { type: 'boolean', required: true }, installation: { type: 'string' }, credential: { type: 'string' }, health: { type: 'string' }, reason: { type: 'string' }, diagnosticCode: { type: 'string' },
+      lastLocalCheck: { type: 'string' }, lastRemoteSuccess: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' },
+    } },
+  },
+} as const
+
 const DEFAULT_FETCH_CHARS = 20_000
 
 /** One-line explanation per non-content page class (web_fetch_pro render). */
@@ -123,10 +143,10 @@ export function registerTools(deps: ToolDeps): void {
 
   ctx.tools.register(defineTool({
     name: 'web_search_pro',
-    description: 'Web search over DeepSeek/Exa/DuckDuckGo/Bing/Jina with engine fallback, SQLite cache and history; web_fetch_pro reads a result. Evidence mode: pass task (one-sentence goal) or profile (docs_code, news_fact, academic, experience, compare, general) to get an evidence pack of only the passages that answer your needs, plus gaps, instead of a result list; also needs, constraints, budget.',
+    description: 'Web search over DeepSeek/Exa/Bocha/DuckDuckGo/Bing/Jina with engine fallback, SQLite cache and history; web_fetch_pro reads a result. Evidence mode: pass task (one-sentence goal) or profile (docs_code, news_fact, academic, experience, compare, general) to get an evidence pack of only the passages that answer your needs, plus gaps, instead of a result list; also needs, constraints, budget.',
     parameters: {
       query: { type: 'string', required: true, description: 'The search query.' },
-      engines: { type: 'string', description: 'Comma-separated engine ids, tried in order: ' + SEARCH_ENGINE_IDS.join(', ') + '. Default: configured list.' },
+      engines: { type: 'string', description: 'Comma-separated engine ids, tried in order: ' + (router.registry ?? defaultProviderRegistry).searchIds().join(', ') + '. Default: configured list.' },
       count: { type: 'number', description: 'Max results (1-20), default ' + String(config.searchMaxResults) + '.' },
       fresh: { type: 'boolean', description: 'Bypass the cache.' },
       multi: { type: 'boolean', description: 'Query all engines in parallel and merge.' },
@@ -185,10 +205,8 @@ export function registerTools(deps: ToolDeps): void {
     isConcurrencySafe: () => true,
     presentCall: (args) => ({ card: 'generic', kind: 'search', title: args.query, rawInput: args.query }),
     async execute(args, exec) {
-      const engines = args.engines ? args.engines.split(',').map(s => s.trim()).filter(Boolean) : undefined
-      for (const id of engines ?? []) {
-        if (!SEARCH_ENGINE_IDS.includes(id as never)) throw new Error('unknown engine: ' + id)
-      }
+      // Ids come from the provider registry: aliases and namespaced ids (ddg, builtin:ddg) are accepted, unknown ones list what exists.
+      const engines = args.engines ? (router.registry ?? defaultProviderRegistry).validate(args.engines.split(',').map(s => s.trim()).filter(Boolean)) : undefined
       if (args.task || args.profile) {
         const out = await evidence().search({
           query: args.query,
@@ -752,10 +770,12 @@ export function registerTools(deps: ToolDeps): void {
         type: 'object', additionalProperties: false,
         properties: {
           engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
+          providers: { type: 'array', items: PROVIDER_REPORT_SCHEMA },
           cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' } } } },
           browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
           evidence: { type: 'object', additionalProperties: false, properties: {
             scorer: { type: 'string', required: true }, jevMode: { type: 'string', required: true },
+            mode: { type: 'string' }, decides: { type: 'string' }, modeNote: { type: 'string' },
             rubrics: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, version: { type: 'string', required: true }, overridden: { type: 'boolean', required: true }, hash: { type: 'string', required: true } } } },
             diagnostics: { type: 'array', items: { type: 'string' } },
             provider: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, protocol: { type: 'string' }, model: { type: 'string' }, usable: { type: 'boolean', required: true }, reason: { type: 'string' }, unverified: { type: 'boolean' }, calibration: { type: 'string' }, keyConfigured: { type: 'boolean' } } },
@@ -764,23 +784,32 @@ export function registerTools(deps: ToolDeps): void {
               day: { type: 'string', required: true }, timezone: { type: 'string' }, requests: { type: 'number', required: true }, inputTokens: { type: 'number', required: true }, outputTokens: { type: 'number', required: true },
               estimated: { type: 'boolean', required: true }, amountKnown: { type: 'boolean', required: true }, amount: { type: 'number' }, currency: { type: 'string' },
               caps: { type: 'object', additionalProperties: false, properties: { perSearchInputTokens: { type: 'number', required: true }, dailyInputTokens: { type: 'number', required: true } } },
-              byProvider: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { provider: { type: 'string', required: true }, requests: { type: 'number', required: true }, inputTokens: { type: 'number', required: true }, outputTokens: { type: 'number', required: true }, estimated: { type: 'boolean', required: true } } } },
+              byProvider: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { provider: { type: 'string', required: true }, protocol: { type: 'string' }, requests: { type: 'number', required: true }, inputTokens: { type: 'number', required: true }, outputTokens: { type: 'number', required: true }, estimated: { type: 'boolean', required: true } } } },
             } },
           } },
         },
       },
       render: (_args, value) => {
-        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
+        const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
         const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
+        for (const p of v.providers ?? []) {
+          const r = p.readiness
+          const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health].filter(Boolean).join(' ')
+          lines.push('  provider ' + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
+        }
         lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
         if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
         if (v.evidence) {
-          lines.push('evidence: scorer=' + v.evidence.scorer + ' jevMode=' + v.evidence.jevMode)
+          // The effective judge mode, not the legacy `scorer` flag (which reads "rule" even while hybrid mode is on).
+          lines.push(v.evidence.mode !== undefined
+            ? 'evidence: judge mode=' + v.evidence.mode + ', decides=' + v.evidence.decides + (v.evidence.modeNote ? ' (' + v.evidence.modeNote + ')' : '')
+            : 'evidence: scorer=' + v.evidence.scorer + ' jevMode=' + v.evidence.jevMode)
           lines.push(...v.evidence.rubrics.map(r => '  rubric ' + r.id + '@' + r.version + ' #' + r.hash + (r.overridden ? ' (override)' : ' (built-in)')))
           const p = v.evidence.provider
           if (p) lines.push('  judge provider: ' + p.id + (p.protocol ? ' (' + p.protocol + ', ' + p.model + ')' : '') + (p.usable ? '' : ' [unusable: ' + p.reason + ']') + (p.unverified ? ' [preset not verified live]' : '') + (p.calibration ? ' calibration ' + p.calibration : '') + (p.keyConfigured === false ? ' [key not found]' : ''))
           const u = v.evidence.usage
           if (u) lines.push('  model usage ' + u.day + (u.timezone ? ' ' + u.timezone : '') + ': ' + u.requests + ' request(s), ' + u.inputTokens + ' input / ' + u.outputTokens + ' output tokens' + (u.estimated ? ' (partly estimated)' : '') + (u.amount !== undefined ? ', ' + u.amount.toFixed(4) + ' ' + (u.currency ?? '') : u.requests ? ', cost unknown' : '') + '; caps: ' + u.caps.perSearchInputTokens + '/search, ' + u.caps.dailyInputTokens + '/day input tokens')
+          for (const b of u?.byProvider ?? []) if (b.protocol === 'search') lines.push('  search usage ' + b.provider + ': ' + b.requests + ' request(s) today (tokens n/a, price unknown)')
           lines.push(...(v.evidence.diagnostics ?? []).map(d => '  ⚠ ' + d))
         }
         return [{ type: 'text', text: lines.join('\n') }]
@@ -796,12 +825,13 @@ export function registerTools(deps: ToolDeps): void {
       const judge = await judgeStatus(ev, store, { hasSecret: typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function' ? async ref => !!(await router.resolveSecret(ref)) : undefined })
       return {
         engines: await router.backendDiagnostics(availability),
+        ...typeof (router as { providerReport?: unknown }).providerReport === 'function' ? { providers: await router.providerReport(availability) } : {},
         cli: cli.map(v => {
           const gate = v.id === 'twitter' ? twitterGate(dynamic(), v) : undefined
           return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
         }),
         browser: browserState(getBrowser()),
-        evidence: { scorer: ev.scorer, jevMode: ev.jevMode, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.usage ? { usage: judge.usage } : {} },
+        evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
   }))

@@ -23,6 +23,7 @@ import { compileQuery, gapQueryText, type CompiledQuery } from './compile.ts'
 import { fuseCandidates, type FusionOptions } from './fusion.ts'
 import { applyFloor, DEFAULT_MIN_KEEP, gateCandidates } from './gate.ts'
 import { PROFILE_PROVIDERS, planSources, type ProviderStatus, type SourcePlan } from './plan.ts'
+import { routeIdOf, type ProviderDescriptor } from '../providers/registry.ts'
 import { capDiscussionGrades, RuleScorer, type ScoreJob, type ScoreOutcome, type ScoreUsage, type Scorer } from './score.ts'
 import { computeCoverage, selectEvidence, DEFAULT_SELECT_OPTIONS, type SelectOptions } from './select.ts'
 import type { Block, BlockGrade, Candidate, EvidenceItem, EvidencePack, Need, PageBlock, ScoredBlock, TaskSpec } from './types.ts'
@@ -70,6 +71,12 @@ export interface PipelineDeps {
     shadow?: Scorer
   }
   configuredEngines: readonly string[]
+  /** Registry descriptors of the search providers: S1 prefers providers strong in the task's language (plan.ts). Omitted = the profile tables only. */
+  descriptors?: readonly ProviderDescriptor[]
+  /** `evidence.autoProviders` (default true). */
+  autoProviders?: boolean
+  /** Per-provider query compilation (registry adapters may bring their own); default the core compiler. */
+  compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery
   fusion: Omit<FusionOptions, 'nProviders' | 'now'>
   now?: () => Date
   newId?: () => string
@@ -185,13 +192,16 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   const now = deps.now?.() ?? new Date()
 
   // S1
-  const allIds = [...new Set([...options.engines ?? [], ...Object.values(PROFILE_PROVIDERS).flat(), ...deps.configuredEngines])]
+  const allIds = [...new Set([...options.engines ?? [], ...Object.values(PROFILE_PROVIDERS).flat(), ...deps.configuredEngines, ...(deps.descriptors ?? []).map(routeIdOf)])]
   const statuses = deps.providerStatus ? await deps.providerStatus(allIds) : undefined
   checkUser()
   const plan = planSources(task, {
     ...options.engines ? { engines: options.engines } : {},
     configured: deps.configuredEngines,
     ...statuses ? { status: (id: string) => statuses.get(id) } : {},
+    ...deps.descriptors ? { descriptors: deps.descriptors } : {},
+    ...deps.autoProviders !== undefined ? { autoProviders: deps.autoProviders } : {},
+    ...deps.compiler ? { compiler: deps.compiler } : {},
     now,
   })
   notes.push(...plan.notes)
@@ -248,7 +258,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
     if (!deps.searchProvider) return { state: 'skipped', reason: 'no search provider' }
     const left = request.maxQueries - queries
     if (left <= 0) return { state: 'skipped', reason: 'query budget used up (' + queries + '/' + request.maxQueries + ')' }
-    const wanted = options.engines?.length ? options.engines : plan.profile === 'general' ? deps.configuredEngines : PROFILE_PROVIDERS[plan.profile]
+    const wanted = options.engines?.length ? options.engines : plan.wanted
     const usable = (id: string): boolean => (statuses ? statuses.get(id)?.state === 'ready' : true)
     const roundOne = new Set(planned)
     const answered = new Set(outputs.map(o => o.providerId))
@@ -263,7 +273,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
     for (let i = 0; i < left && i < request.needs.length * order.length; i++) {
       const need = request.needs[i % request.needs.length]!
       const id = order[i % order.length]!
-      const compiled = compileQuery({ ...task, query: gapQueryText(task, need), needs: [need] }, id, now)
+      const compiled = (deps.compiler ?? compileQuery)({ ...task, query: gapQueryText(task, need), needs: [need] }, id, now)
       const key = id + '|' + compiled.query
       if (tried.has(key)) continue
       tried.add(key)

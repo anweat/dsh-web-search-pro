@@ -7,6 +7,8 @@
  */
 
 import { compileQuery, type CompiledQuery } from './compile.ts'
+import { detectLang } from './align.ts'
+import { routeIdOf, type CredentialState, type ProviderDescriptor } from '../providers/registry.ts'
 import type { Profile, TaskSpec } from './types.ts'
 
 /** Provider ids per profile (`general` uses the configured `engines`). */
@@ -22,7 +24,12 @@ export const PROFILE_PROVIDERS: Readonly<Record<Exclude<Profile, 'general'>, rea
 export const DEFAULT_MAX_PROVIDERS = 4
 
 export type ProviderState = 'ready' | 'unavailable' | 'cooldown'
-export interface ProviderStatus { state: ProviderState; reason?: string }
+export interface ProviderStatus {
+  state: ProviderState
+  reason?: string
+  /** Local credential dimension from the registry probe; `missing` keeps a provider out of automatic promotion (it still runs when asked for). */
+  credential?: CredentialState
+}
 
 export interface PlannedProvider { id: string; compiled: CompiledQuery }
 
@@ -31,6 +38,10 @@ export interface SourcePlan {
   /** The profile came from rule inference, not from the caller. */
   profileInferred: boolean
   providers: PlannedProvider[]
+  /** Task language the plan was made for (`zh`, `en`); absent when the text has no letters. */
+  language?: 'zh' | 'en'
+  /** The ordered provider ids the plan drew from before availability filtering and caps (the follow-up round reuses it). */
+  wanted: string[]
   /** Providers dropped by the availability filter, with the reason. */
   skipped: { id: string; reason: string }[]
   notes: string[]
@@ -45,6 +56,29 @@ export interface PlanOptions {
   status?: (id: string) => ProviderStatus | undefined
   maxProviders?: number
   now?: Date
+  /**
+   * Registry descriptors (search providers). With them S1 is language-aware: a provider that is strong in the
+   * task's language (`languages` names `zh` / `en`), serves the profile (`taskProfiles`), returns `web` results and is
+   * ready with a configured key is PROMOTED ahead of the profile table (by `priority`), and the other web engines
+   * behind it shrink to `webFallbacks` (vertical sources such as GitHub or arXiv are untouched). Nothing names a provider: a new adapter's descriptor is enough.
+   */
+  descriptors?: readonly ProviderDescriptor[]
+  /** false = no promotion (the profile table / configured engines as they are). Default true. */
+  autoProviders?: boolean
+  /** Other web engines kept behind promoted providers, in table order (default 1). */
+  webFallbacks?: number
+  /** Per-provider compilation; defaults to the core compiler (adapters may supply their own). */
+  compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery
+}
+
+export const DEFAULT_WEB_FALLBACKS = 1
+
+const PROMOTABLE_CREDENTIALS: readonly (CredentialState | undefined)[] = [undefined, 'configured', 'not_required']
+
+/** `zh` / `en` from the task text (goal + query); undefined when there is no letter to tell. */
+export function taskLanguage(task: Pick<TaskSpec, 'goal' | 'query'>): 'zh' | 'en' | undefined {
+  const lang = detectLang(task.goal + ' ' + task.query)
+  return lang === 'zh' ? 'zh' : lang === 'latin' ? 'en' : undefined
 }
 
 // ── profile inference (rule fallback; the calling model's `profile` wins) ───
@@ -86,26 +120,69 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
   const notes: string[] = []
   const profileInferred = task.profile === undefined
   const profile = task.profile ?? inferProfile(task.goal + ' ' + task.query)
-  const wanted = options.engines?.length
+  const explicit = Boolean(options.engines?.length)
+  const language = taskLanguage(task)
+  const base: readonly string[] = options.engines?.length
     ? options.engines
     : profile === 'general' ? options.configured : PROFILE_PROVIDERS[profile]
-  const explicit = Boolean(options.engines?.length)
+  const descriptors = new Map((options.descriptors ?? []).map(d => [routeIdOf(d), d] as const))
+  const isReady = (id: string): ProviderStatus | undefined => {
+    const status = options.status ? options.status(id) : { state: 'ready' as const }
+    return status && status.state === 'ready' ? status : undefined
+  }
+
+  // Promotion: specialists for the task's language, then the table with its language-agnostic web engines trimmed.
+  let planList = [...base]
+  const held: string[] = []
+  const promoted: string[] = []
+  if (!explicit && language && options.autoProviders !== false && descriptors.size) {
+    const candidates = [...descriptors.values()]
+      .filter(d => d.operations.includes('search') && d.resultKinds.includes('web') && d.languages.includes(language) && d.taskProfiles.includes(profile))
+      .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
+    for (const d of candidates) {
+      const status = isReady(routeIdOf(d))
+      if (status && PROMOTABLE_CREDENTIALS.includes(status.credential)) promoted.push(routeIdOf(d))
+    }
+    if (promoted.length) {
+      // Web engines that were not promoted (language-agnostic ones, or strong in another language) are the fallbacks; vertical sources stay.
+      const generic = (id: string): boolean => !!descriptors.get(id)?.resultKinds.includes('web')
+      const keep = Math.max(options.webFallbacks ?? DEFAULT_WEB_FALLBACKS, 0)
+      let kept = 0
+      const rest = base.filter(id => {
+        if (promoted.includes(id)) return false
+        if (!generic(id) || !isReady(id)) return true // an engine that is not ready is skipped later with its reason and takes no fallback slot
+        if (kept < keep) { kept++; return true }
+        held.push(id)
+        return false
+      })
+      planList = [...promoted, ...rest]
+      notes.push('language ' + language + ': preferred ' + promoted.join(', ') + (held.length ? '; fallback web engines limited to ' + rest.filter(id => generic(id) && isReady(id)).join(', ') + ' (held for a second round: ' + held.join(', ') + ')' : ''))
+      // A hard filter a promoted provider cannot enforce is checked locally, never silently dropped.
+      const hardKinds = [...new Set(task.constraints.filter(c => c.strength === 'hard').map(c => c.kind))]
+      for (const id of promoted) {
+        const unsupported = hardKinds.filter(k => !descriptors.get(id)!.supportedFilters.includes(k) && ['site', 'exclude_site', 'exclude_term', 'time_window'].includes(k))
+        if (unsupported.length) notes.push(id + ' does not enforce hard ' + unsupported.join(', ') + ' natively: verified locally')
+      }
+    }
+  }
+
   const max = Math.max(options.maxProviders ?? DEFAULT_MAX_PROVIDERS, 1)
+  const compile = options.compiler ?? compileQuery
   const providers: PlannedProvider[] = []
   const skipped: { id: string; reason: string }[] = []
   const seen = new Set<string>()
   const now = options.now ?? new Date()
-  for (const id of wanted) {
+  for (const id of planList) {
     if (seen.has(id)) continue
     seen.add(id)
     const status = options.status ? options.status(id) : { state: 'ready' as const }
     if (!status) { skipped.push({ id, reason: 'unknown provider' }); continue }
     if (status.state !== 'ready') { skipped.push({ id, reason: status.state + (status.reason ? ' (' + status.reason + ')' : '') }); continue }
     if (providers.length >= max && !explicit) { skipped.push({ id, reason: 'provider cap ' + max }); continue }
-    providers.push({ id, compiled: compileQuery(task, id, now) })
+    providers.push({ id, compiled: compile(task, id, now) })
   }
   if (profileInferred) notes.push('profile inferred by rule: ' + profile)
   if (skipped.length) notes.push('skipped providers: ' + skipped.map(s => s.id + ' [' + s.reason + ']').join(', '))
   if (!providers.length) notes.push('no usable provider for profile ' + profile + (explicit ? ' (explicit engines)' : ''))
-  return { profile, profileInferred, providers, skipped, notes }
+  return { profile, profileInferred, providers, ...language ? { language } : {}, wanted: [...new Set([...planList, ...held])], skipped, notes }
 }
