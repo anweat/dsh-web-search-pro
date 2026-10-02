@@ -60,7 +60,7 @@ dsh plugin --profile web add @anweat/dsh-browser@0.1.17 dsh-web-search-pro@0.1.1
 
 > `automationMode` 和防止过度调用的 `usagePolicy` 都属于 dsh-browser，升级不会自动改写现有配置。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile，并且仍受并发、突发、页数/深度和 429/503 退避保护。
 
-若 Clash/TUN 使用 fake-IP DNS，原生 HTTP 后端可能看到 `198.18.0.0/15` 或 `fdfe:dcba:9876::/96`。可在可视化面板的高级设置中启用 `allowProxyFakeIp`；默认关闭。该开关只信任这两个代理网段的 **DNS 解析结果**，字面 fake-IP URL、localhost 和其他私网地址仍会被 SSRF 防护拒绝。
+若 Clash/TUN 使用 fake-IP DNS，原生 HTTP 后端可能看到 `198.18.0.0/15`、`fdfe:dcba:9876::/64` 或 `2001:2::/48`（报错信息会直接提示 `resolved to proxy fake-IP …`）。可在可视化面板的高级设置中启用 `allowProxyFakeIp`；默认关闭。该开关只信任这些代理网段的 **DNS 解析结果**，字面 fake-IP URL、localhost 和其他私网地址仍会被 SSRF 防护拒绝。
 
 ## 快速使用与适用情形
 

@@ -353,3 +353,35 @@ test('proxy fake-IP DNS answers require an explicit opt-in and never permit lite
   )
   assert.throws(() => assertSafePublicUrl('http://198.18.0.42/private'), /private or local/)
 })
+
+test('TUN fake-IP answers in 2001:2::/48 are non-public, allowed only with the opt-in, and the error names the fix', async () => {
+  const tunLookup = async () => [
+    { address: '198.18.0.67', family: 4 },
+    { address: '2001:2::40', family: 6 },
+  ]
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: tunLookup }),
+    /proxy fake-IP 198\.18\.0\.67.*allowProxyFakeIp/,
+  )
+  await assert.doesNotReject(
+    () => assertResolvedPublicUrl('https://public.example/path', { allowProxyFakeIp: true, lookup: tunLookup }),
+  )
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: async () => [{ address: '2001:2::40', family: 6 }] }),
+    /allowProxyFakeIp/,
+  )
+  // Real private answers never get the fake-IP hint, and a mix with them is refused even with the opt-in.
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: async () => [{ address: '10.0.0.5', family: 4 }] }),
+    (error: Error) => /public addresses$/.test(error.message),
+  )
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { allowProxyFakeIp: true, lookup: async () => [{ address: '198.18.0.1', family: 4 }, { address: '192.168.1.1', family: 4 }] }),
+    /public addresses/,
+  )
+  // Ordinary global IPv6 stays public; literal benchmarking addresses stay blocked.
+  await assert.doesNotReject(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: async () => [{ address: '2001:4860:4860::8888', family: 6 }] }),
+  )
+  assert.throws(() => assertSafePublicUrl('http://[2001:2::40]/x'), /private or local/)
+})
