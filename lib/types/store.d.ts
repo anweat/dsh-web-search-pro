@@ -58,6 +58,8 @@ export interface EvidenceBlockRow {
     hash?: string;
     grade?: number;
     scorer?: string;
+    /** `id@version#hash` of the judge rubric when a Jev-based scorer graded the block. */
+    rubric?: string;
 }
 export interface EvidenceRunRow {
     id: string;

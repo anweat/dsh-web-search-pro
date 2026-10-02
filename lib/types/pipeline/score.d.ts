@@ -22,6 +22,7 @@
  * @module web-search-pro/pipeline/score
  */
 import { type CorpusBlock } from './corpus.ts';
+import { type ResolvedRubric, type RubricRef } from './rubrics.ts';
 import type { BlockGrade, Need, TaskSpec } from './types.ts';
 export type ScoreTask = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>;
 export interface ScoreBlock {
@@ -58,6 +59,8 @@ export interface ScoreOutcome {
 export interface Scorer {
     id: string;
     model: string;
+    /** The judge rubric behind the grades (Jev-based scorers); recorded with their results. */
+    rubricRef?: RubricRef | undefined;
     score(task: ScoreTask, jobs: readonly ScoreJob[], ctx?: ScoreContext): Promise<ScoreOutcome>;
 }
 /** Relevance -> grade buckets: [0,T1) 0, [T1,T2) 1, [T2,T3) 2, >=T3 3 (bench rule judge, r1). */
@@ -110,6 +113,7 @@ export interface HybridScorerOptions {
 export declare class HybridScorer implements Scorer {
     readonly id = "hybrid";
     readonly model: string;
+    readonly rubricRef: RubricRef | undefined;
     private readonly jev;
     private readonly rule;
     private readonly borderline;
@@ -123,9 +127,8 @@ export declare const JEV_URL = "https://jev.bocha.cn/v1/systemone";
 export declare const JEV_MODEL = "bocha-jev-v1";
 /** Credentials ref / environment variable holding the Bocha Jev key. */
 export declare const JEV_KEY_REF = "BOCHA_JEV_API_KEY";
-/** Wording of bench/rubrics/score.support.v1.json (a bench test pins the two together). */
-export declare const JEV_STATE_PREFIX = "\u641C\u7D22\u4EFB\u52A1\uFF1A";
-export declare const JEV_INSTRUCTIONS = "\u4E0B\u9762\u7684\u6587\u672C\u5757\u5BF9\u8BE5\u9700\u6C42\u7684\u652F\u6491\u7A0B\u5EA6\u5982\u4F55\uFF1F\n\u9700\u6C42\uFF1A{need}\n\u6587\u672C\u5757\uFF1A{candidate}";
+export declare const JEV_STATE_PREFIX: string;
+export declare const JEV_INSTRUCTIONS: string;
 export declare const JEV_CRITERIA: readonly string[];
 /**
  * Conservative estimate of the EXPANDED input tokens Jev bills for a `score`
@@ -145,6 +148,10 @@ export interface JevProbe {
     need: string;
     /** Full candidate text (heading + block), before trimming. */
     candidate: string;
+    /** Trimmed task description (what `{task}` renders to). */
+    task?: string;
+    /** `id@version#hash` of the rubric that worded the question: a cache must key on it. */
+    rubric?: string;
 }
 export interface JevCachedAnswer {
     grade: number;
@@ -157,6 +164,8 @@ export interface JevCache {
 }
 export interface JevScorerOptions {
     apiKey: string;
+    /** Question rubric (default: the built-in score.support). Its length caps are the defaults of `maxStateChars` / `blockChars`. */
+    rubric?: ResolvedRubric;
     url?: string;
     model?: string;
     fetchImpl?: typeof fetch;
@@ -187,9 +196,15 @@ export declare class JevScorer implements Scorer {
     readonly model: string;
     /** HTTP attempts made so far (retries and splits included). */
     requests: number;
+    readonly rubricRef: RubricRef;
+    private readonly rubric;
     private readonly cfg;
     private readonly apiKey;
     constructor(options: JevScorerOptions);
+    /** The task description as `{task}` renders it. */
+    private taskText;
+    /** Grade as the pipeline reads it: criteria with another level count than the built-in 4 are rescaled onto 0..3. */
+    private normalized;
     /** Shared state: a short task description only (it is billed again inside every question). */
     stateFor(task: Pick<ScoreTask, 'goal'>): string;
     private instructionsFor;

@@ -152,7 +152,9 @@ export interface PackStats {
         questions: number;
         inputTokens: number;
         outputTokens: number;
-        mode: 'control' | 'shadow' | 'hybrid';
+        mode: 'control' | 'shadow' | 'hybrid'; /** `id@version#hash` of the judge rubric. */
+        rubric?: string; /** The rubric is a user override of the built-in. */
+        rubricOverridden?: boolean;
     };
 }
 export interface EvidencePack {

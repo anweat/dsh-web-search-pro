@@ -3,6 +3,7 @@
  * @module web-search-pro/config
  */
 import z from '@deepseek-ai/schemastery';
+import type { RubricOverride } from './pipeline/rubrics.ts';
 /** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
 export interface CustomPlatformSpec {
     name: string;
@@ -39,6 +40,12 @@ export interface EvidenceConfig {
     hybridBorderline: boolean;
     /** Upper bound of (need, block) questions sent to Jev per search. */
     maxJevQuestions: number;
+    /**
+     * Per-rubric overrides of the judge prompts, keyed by rubric id (`score.support`, `gate.relevance`, `gate.constraint`).
+     * Each carries its own `version`; an override that fails validation is ignored and the built-in used (see pipeline/rubrics.ts).
+     * Remove the entry to restore the default.
+     */
+    rubrics?: Record<string, RubricOverride>;
 }
 export interface Config {
     /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
@@ -190,11 +197,37 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            version?: string | null | undefined;
+            instructions?: string | null | undefined;
+            criteria?: string[] | null | undefined;
+            maxStateChars?: number | null | undefined;
+            maxCandidateChars?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            version: z<string, string, "plain">;
+            instructions: z<string, string, "plain">;
+            criteria: z<string[], string[], "plain">;
+            maxStateChars: z<number, number, "plain">;
+            maxCandidateChars: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            version?: string | null | undefined;
+            instructions?: string | null | undefined;
+            criteria?: string[] | null | undefined;
+            maxStateChars?: number | null | undefined;
+            maxCandidateChars?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            version: z<string, string, "plain">;
+            instructions: z<string, string, "plain">;
+            criteria: z<string[], string[], "plain">;
+            maxStateChars: z<number, number, "plain">;
+            maxCandidateChars: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
     }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
@@ -269,11 +302,37 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            version?: string | null | undefined;
+            instructions?: string | null | undefined;
+            criteria?: string[] | null | undefined;
+            maxStateChars?: number | null | undefined;
+            maxCandidateChars?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            version: z<string, string, "plain">;
+            instructions: z<string, string, "plain">;
+            criteria: z<string[], string[], "plain">;
+            maxStateChars: z<number, number, "plain">;
+            maxCandidateChars: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         scorer: z<"rule" | "jev", "rule" | "jev", "volatile-defined">;
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
+        rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            version?: string | null | undefined;
+            instructions?: string | null | undefined;
+            criteria?: string[] | null | undefined;
+            maxStateChars?: number | null | undefined;
+            maxCandidateChars?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            version: z<string, string, "plain">;
+            instructions: z<string, string, "plain">;
+            criteria: z<string[], string[], "plain">;
+            maxStateChars: z<number, number, "plain">;
+            maxCandidateChars: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
     }>>, "plain">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, "plain">;

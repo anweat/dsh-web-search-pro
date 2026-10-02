@@ -113,11 +113,13 @@ export interface PipelineResult {
         hash: string;
         grade: number;
         scorer: string;
+        rubric?: string;
     }[];
     /** Shadow scorer output for later comparison (Jev mode `shadow`). */
     shadow?: {
         scorer: string;
         model: string;
+        rubric?: string;
         rows: {
             needId: string;
             blockId: string;
