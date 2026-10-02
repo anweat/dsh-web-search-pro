@@ -100,9 +100,11 @@ export declare function shapeSources(sources: readonly {
     title?: string | null;
     snippet?: string | null;
     publishedAt?: string | null;
+    lowConfidence?: boolean;
 }[], count: number): {
     url: string;
     title?: string;
     snippet?: string;
     publishedAt?: string;
+    lowConfidence?: true;
 }[];

@@ -10,7 +10,10 @@ export interface RenderSource {
     title?: string;
     snippet?: string;
     publishedAt?: string;
+    lowConfidence?: boolean;
 }
+/** Marker for a source / excerpt whose page only passed the S4 floor, not the relevance gate (dev-plan §3.1). */
+export declare const LOW_RELEVANCE = " (low relevance)";
 /** One line under the header (dev-plan M3b): "covered" is a lexical judgement, and a missing passage proves nothing. */
 export declare const COVERAGE_CAVEAT = "Coverage is heuristic: no evidence here does not mean it does not exist; fetch/expand before concluding.";
 export declare function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'>, sources: readonly RenderSource[], engineLine: string): string;

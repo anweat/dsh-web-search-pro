@@ -16,8 +16,16 @@
  *  - relevance below the threshold drops it. The default is the drop threshold
  *    calibrated in experiment r1 (rule / gate.relevance.v1, calibration split,
  *    recall of label >= 2 held at 0.95). The threshold belongs to THIS lexical
- *    function: re-derive it with `bench/src/eval-gate.ts` when lexical.ts changes;
- *  - soft constraints are recorded in `checks` but never drop.
+ *    function: re-derive it with `bench/src/eval-gate.ts` when lexical.ts changes.
+ *    Cross-lingual pairs (the needs and the candidate text are in different
+ *    languages, e.g. Chinese needs against English titles) are scored with the
+ *    M3a alignment of align.ts instead, on the same scale; same-language pairs
+ *    keep the calibrated lexical-v1 function untouched;
+ *  - soft constraints are recorded in `checks` but never drop;
+ *  - floor ({@link applyFloor}): when the gate would leave fewer than `minKeep`
+ *    candidates, the best fused ones that were dropped on relevance alone come
+ *    back, flagged `lowConfidence`. A pack is never empty because of the
+ *    relevance heuristic alone.
  * @module web-search-pro/pipeline/gate
  */
 import { type QueryPart } from './lexical.ts';
@@ -82,6 +90,19 @@ export declare function relevanceContextOf(task: Pick<TaskSpec, 'goal' | 'query'
 export declare function relevancePartsOf(ctx: RelevanceContext, withConstraints: boolean): QueryPart[];
 /** Weighted lexical overlap of query / goal / needs (and optionally entity + must_term values) with the item, 0..1. */
 export declare function lexicalRelevance(ctx: RelevanceContext, item: GateItem, withConstraints: boolean): number;
+/** The needs are in one language and the item text in another (see align.ts `detectLang`): the pairs the lexical rule cannot score. */
+export declare function isCrossLingual(ctx: RelevanceContext, item: GateItem): boolean;
+/**
+ * Relevance the gate compares with its threshold. Same-language pairs: exactly
+ * {@link lexicalRelevance} (query + goal + needs, no constraint terms). Cross-lingual pairs
+ * (dev-plan M3a applied to S4): the aligned score of align.ts over the needs, with the Latin / identifier terms of the
+ * query, goal and entity / must_term values joined in (so Chinese needs inherit the English terms of
+ * the query) and the Han terms of a Latin item no longer dominating the denominator.
+ */
+export declare function gateRelevance(ctx: RelevanceContext, item: GateItem): {
+    relevance: number;
+    aligned: boolean;
+};
 export interface GateOptions {
     /** Relevance drop threshold; defaults to the r1-calibrated {@link DEFAULT_RELEVANCE_THRESHOLD}. */
     relevanceThreshold?: number;
@@ -102,3 +123,19 @@ export declare function gateItem(task: Pick<TaskSpec, 'goal' | 'query' | 'needs'
 /** Annotate candidates with `checks` and `gate`. Returns new objects; dropped candidates stay in the list (see {@link keptCandidates}). */
 export declare function gateCandidates(task: Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>, candidates: readonly Candidate[], options?: GateOptions): Candidate[];
 export declare function keptCandidates(candidates: readonly Candidate[]): Candidate[];
+/** Candidates the gate must keep when it would otherwise leave fewer (default). */
+export declare const DEFAULT_MIN_KEEP = 3;
+export interface FloorResult {
+    /** Survivors of the gate (fused order), then the floor's low-confidence additions (fused order). */
+    kept: Candidate[];
+    /** How many candidates the floor added back. */
+    added: number;
+}
+/**
+ * Floor for S4 (dev-plan §3.1, real-host run: a cross-lingual task had all 20 candidates dropped). `candidates`
+ * are gated and in fused order, best first. When fewer than `minKeep` survive and more exist, the best-fused
+ * ones dropped on RELEVANCE ALONE are kept up to `minKeep`, with `gate.lowConfidence = true` (and `keep` true, so
+ * every later stage treats them as kept). A candidate with a definite hard-constraint violation (`reason: 'constraint'`)
+ * is never brought back.
+ */
+export declare function applyFloor(candidates: readonly Candidate[], minKeep?: number): FloorResult;

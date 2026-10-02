@@ -96,8 +96,15 @@ export interface PipelineOptions {
     blocks?: SplitOptions;
     /** Retrieval rounds per task; 1 = no follow-up round (default 2). */
     maxRounds?: number;
-    /** Search requests per task over all rounds, round 1 included (default 4); a follow-up round only runs while some are left. */
+    /**
+     * Search queries per task over all rounds, round 1 included (default 4). One query = one provider call: the broader
+     * fallback retries of a provider (GitHub keyword relaxation) count once together. While a follow-up round is allowed
+     * (`maxRounds` > 1), round 1 runs at most `maxQueries - 1` of the planned providers (the last ones in plan order wait
+     * for round 2) so that one query is left for it; explicit `engines` are never trimmed.
+     */
     maxQueries?: number;
+    /** The S4 gate keeps at least this many candidates (best-fused, flagged low-confidence) when it would leave fewer (default 3; 0 = no floor). */
+    minKeep?: number;
     /** Pages the follow-up round reads at most (default 2, never more than `fetchTopK`). */
     refineFetchTopK?: number;
     /** A follow-up round needs at least this long before the deadline (default 15 s). */
