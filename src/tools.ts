@@ -77,7 +77,7 @@ const EVIDENCE_OUTPUT_PROPERTIES = {
   stats: {
     type: 'object', additionalProperties: false,
     properties: {
-      candidates: { type: 'number' }, kept: { type: 'number' }, fetched: { type: 'number' }, blocksScored: { type: 'number' }, excerptChars: { type: 'number' }, scorer: { type: 'string' },
+      candidates: { type: 'number' }, kept: { type: 'number' }, fetched: { type: 'number' }, blocksScored: { type: 'number' }, excerptChars: { type: 'number' }, scorer: { type: 'string' }, rounds: { type: 'number' }, queries: { type: 'number' },
       jev: { type: 'object', additionalProperties: false, properties: { requests: { type: 'number' }, questions: { type: 'number' }, inputTokens: { type: 'number' }, outputTokens: { type: 'number' }, mode: { type: 'string' }, rubric: { type: 'string' }, rubricOverridden: { type: 'boolean' } } },
     },
   },

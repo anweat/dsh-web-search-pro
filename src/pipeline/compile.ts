@@ -21,7 +21,7 @@
 
 import { domainOf } from './gate.ts'
 import { LATIN_STOP } from './lexical.ts'
-import type { Constraint, TaskSpec } from './types.ts'
+import type { Constraint, Need, TaskSpec } from './types.ts'
 
 export interface CompiledExaOptions {
   includeDomains?: string[]
@@ -181,4 +181,42 @@ export function compileQuery(task: TaskLike, providerId: string, now: Date = new
 
 export function compileQueries(task: TaskLike, providerIds: readonly string[], now: Date = new Date()): CompiledQuery[] {
   return providerIds.map(id => compileQuery(task, id, now))
+}
+
+// ── follow-up (gap) queries ─────────────────────────────────────────────────
+
+/** Identifier-like tokens (`node:sqlite`, `DatabaseSync`, `busy_timeout`, `v22.5`): the entities of a query worth repeating in a follow-up. */
+export function keyTokens(text: string): string[] {
+  const out: string[] = []
+  for (const token of text.match(/[A-Za-z0-9][A-Za-z0-9_.:/#+-]*[A-Za-z0-9+#]/g) ?? []) {
+    const structured = /[:._/#-]/.test(token) || /\d/.test(token) || /[a-z][A-Z]/.test(token)
+    if (token.length >= 3 && structured && !/^[\d.]+$/.test(token) && !/^https?:/i.test(token) && !out.some(t => t.toLowerCase() === token.toLowerCase())) out.push(token)
+  }
+  return out
+}
+
+/** Longest follow-up query (characters); search engines gain nothing from more. */
+export const GAP_QUERY_MAX_CHARS = 200
+/** Entities appended to the need text. */
+const GAP_QUERY_EXTRAS = 3
+
+/**
+ * Query for a follow-up round targeted at one unsupported need: the need text plus the task's key entities
+ * (entity / must_term / version constraints, then identifier-like tokens of the original query) that the
+ * need does not already mention. Provider-specific shaping (site: operators, Exa options, GitHub keywords)
+ * is left to {@link compileQuery} over a task whose `query` is this text.
+ */
+export function gapQueryText(task: Pick<TaskSpec, 'query' | 'constraints'>, need: Pick<Need, 'text'>): string {
+  const lower = need.text.toLowerCase()
+  const extras: string[] = []
+  const candidates = [
+    ...task.constraints.filter(c => (c.kind === 'entity' || c.kind === 'must_term' || c.kind === 'version') && c.value.trim()).map(c => c.value.trim()),
+    ...keyTokens(task.query),
+  ]
+  for (const value of candidates) {
+    if (extras.length >= GAP_QUERY_EXTRAS) break
+    if (lower.includes(value.toLowerCase()) || extras.some(e => e.toLowerCase() === value.toLowerCase())) continue
+    extras.push(value)
+  }
+  return [need.text.trim(), ...extras].join(' ').slice(0, GAP_QUERY_MAX_CHARS).trim()
 }

@@ -90,6 +90,8 @@ dsh plugin --profile web add @anweat/dsh-browser@0.1.17 dsh-web-search-pro@0.1.1
 
 传 `task`（一句话目标）或 `profile`（`docs_code` / `news_fact` / `academic` / `experience` / `compare` / `general`）时，`web_search_pro` 不返回结果列表，而是按 profile 选择来源（docs_code：ddg/bing/github；academic：arxiv/pubmed/ddg；experience：ddg/bing/v2ex；news_fact：ddg/bing；compare：ddg/bing/github；general：配置的 `engines`；显式 `engines` 优先），读取前 4 个保留候选的页面，分块并按每个需求评分，在字符预算（默认 6000，`budget` 可调）内挑出摘录，并列出未被满足的需求（`gaps`）。可选参数：`needs`（`;` 分隔或 JSON 数组）、`constraints`（JSON 数组 `{kind,value,strength}`；`strength` 缺省为 soft，`hard` 只在确定违反时才丢弃候选）。输出新增 `resultId`、`evidence`、`coveredNeeds`、`gaps`、`partial` 等可选字段，原有 `sources` 仍在；超过总时限（`timeoutMs` + 30 秒）时返回 `partial: true` 的已有结果。`web_history` 传 `action=expand` 和 `evidenceId` 可读回摘录所在块及其前后块（至多 4000 字符）。不传 `task` / `profile` 时行为和输出与以前完全相同。
 
+**有界第二轮（S8）**：第一轮之后若有关键需求（`critical`）没有被满足（`gaps` 里原因不是 `budget`），且轮数、查询数、时间都还有余量，管线最多再补搜一轮：以“需求文本 + 任务里的关键实体（entity / must_term / version 约束与 query 里的标识符）”为查询，按各 provider 编译（站点约束等照常下推），优先用第一轮没用过的 provider，其次复用已回答的；只读取新候选里最好的至多 2 页，只对缺口需求评分，再与第一轮结果合并（按 URL 去重）重新挑选。单任务查询总数（每次 provider 调用都计，GitHub 的放宽重试也算，第一轮不受限）不超过 `evidence.maxQueries`（默认 4），轮数不超过 `evidence.maxRounds`（默认 2，设 1 即关闭）；剩余时间不足 15 秒或预算已用完时跳过并在 `notes` 说明。证据包 `stats.rounds` / `stats.queries` 给出实际轮数与查询数。
+
 块评分默认用本地词法规则。可选的博查 Jev 评分（付费，需环境变量或凭据引用 `BOCHA_JEV_API_KEY`）由 `evidence` 配置控制：`jevMode: off`（默认，不调用）、`shadow`（规则决定，Jev 评分只记录到存储 `evidence_runs.pack_json` 供对照）、`control`（且 `scorer: jev` 时由 Jev 决定；任何 Jev 失败都回退到规则并在 `notes` 里说明）、`hybrid`（规则评分全部块，Jev 只重评需求语言与块语言不一致的 (需求, 块) 对；`hybridBorderline: true` 时再加规则评分为 1 的边界对；Jev 失败保留规则评分；与 `scorer` 无关）；`maxJevQuestions`（默认 64）限制每次搜索发送的 (需求, 块) 问题数。规则评分本身对中文需求与英文块做了跨语言对齐（query / 需求 / 约束里的英文词和标识符并入匹配词），默认即生效。发给 Jev 的只有一句话目标、需求文字和页面块文本。
 
 #### Jev 提示词（rubric）：可配置、有版本 / Judge prompts: configurable and versioned
@@ -188,6 +190,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
        jevMode: off # off | shadow | control | hybrid
        hybridBorderline: false # 仅 hybrid：同时重评规则边界对
        maxJevQuestions: 64
+       maxRounds: 2 # 证据包补搜轮数上限；1 = 关闭第二轮
+       maxQueries: 4 # 单任务搜索请求总数（含第一轮）
        # rubrics: ...   # 可选：覆盖 Jev 提示词，见下文“Jev 提示词（rubric）”
      ttlSeconds: 3600
      searchMaxResults: 8

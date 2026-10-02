@@ -90,6 +90,8 @@ export class EvidenceService {
       ...request.engines?.length ? { engines: request.engines } : {},
       sourcesCount: request.count,
       maxScoreQuestions: cfg.evidence.maxJevQuestions,
+      maxRounds: cfg.evidence.maxRounds,
+      maxQueries: cfg.evidence.maxQueries,
     }
     const result = await runPipeline(spec, deps, options)
     result.pack.notes.unshift(...specNotes, ...scorerNotes)
