@@ -159,7 +159,41 @@ export interface EvidenceItem {
 
 export type GapReason = 'no_candidates' | 'no_page_content' | 'weak_support' | 'budget'
 
-export interface Gap { needId: string; text: string; critical: boolean; reason: GapReason; bestGrade?: number }
+export interface Gap {
+  needId: string
+  text: string
+  critical: boolean
+  reason: GapReason
+  bestGrade?: number
+  /** `weak`: the rule coverage claimed this need, the coverage judge (dev-plan M9) found the excerpts insufficient. */
+  band?: 'weak'
+}
+
+/** Verdict band of the coverage judge, from its probability and the thresholds calibrated for that provider and rubric. */
+export type CoverageBand = 'covered' | 'uncertain' | 'weak'
+
+/** What the coverage judge did in one run (the raw probabilities stay here, never in the model-facing text). */
+export interface CoverageStats {
+  mode: 'shadow' | 'control'
+  provider?: string
+  protocol?: string
+  model?: string
+  /** `id@version#hash` of the rubric. */
+  rubric: string
+  thresholds: { weak: number; covered: number }
+  /** Needs the judge was asked about (claimed covered by the rules). */
+  asked: number
+  weak: number
+  uncertain: number
+  requests: number
+  inputTokens: number
+  outputTokens: number
+  estimated?: boolean
+  /** Needs that got no verdict (the rule coverage stands for them). */
+  unanswered?: number
+  /** Raw probability that the excerpts suffice, and its band. */
+  verdicts: { needId: string; prob: number; band: CoverageBand }[]
+}
 
 export interface PackStats {
   candidates: number
@@ -174,6 +208,8 @@ export interface PackStats {
   rounds?: number
   /** Search queries made over all rounds: one per provider call (broader fallback retries of one provider, e.g. GitHub keywords, count once). */
   queries?: number
+  /** Coverage judge of this run (dev-plan M9); absent while `evidence.coverage.mode` is off. */
+  coverage?: CoverageStats
   /** Jev usage of this run (control or shadow). */
   jev?: { requests: number; questions: number; inputTokens: number; outputTokens: number; mode: 'control' | 'shadow' | 'hybrid'; /** `id@version#hash` of the judge rubric. */ rubric?: string; /** The rubric is a user override of the built-in. */ rubricOverridden?: boolean; /** Model judge behind the grades (dev-plan M5): provider id, protocol, model and the calibration version. */ provider?: string; protocol?: string; model?: string; calibration?: string; /** Some input tokens are the plugin's estimate (the service reported none). */ estimated?: boolean }
 }
@@ -189,6 +225,8 @@ export interface EvidencePack {
   /** Need ids with a selected block of grade >= 2. */
   coveredNeeds: string[]
   gaps: Gap[]
+  /** Covered needs the coverage judge was unsure about (control mode): still covered, with a caution marker. */
+  uncertainNeeds?: string[]
   /** Fused kept candidates, best first (unshaped; the tool exit applies `shapeSources`). */
   sources: { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: true }[]
   engine: string

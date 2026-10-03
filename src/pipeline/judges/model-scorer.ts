@@ -1,7 +1,9 @@
 /**
- * Base of the model-backed scorers (one subclass per protocol). It owns what is
+ * Base of the model-backed judges (one subclass per protocol). It owns what is
  * the same whatever the protocol: the transport (retries, cap, metering), the
  * provider record that results carry, and the calibration of raw scores.
+ * `ModelClientBase` is that shared part; `ModelScorerBase` adds the S6 scorer
+ * contract, and other judges (the M9 coverage judge) build on the client alone.
  * @module web-search-pro/pipeline/judges/model-scorer
  */
 
@@ -36,11 +38,10 @@ export interface ModelScorerOptions {
   capError?: ((cap: number) => Error) | undefined
 }
 
-export abstract class ModelScorerBase implements Scorer {
+export abstract class ModelClientBase {
   readonly id: string
   readonly model: string
   readonly provider: ProviderRecord | undefined
-  abstract readonly rubricRef: RubricRef | undefined
   protected readonly label: string
   protected readonly http: JudgeHttp
   protected readonly calibration: Calibration | undefined
@@ -117,7 +118,10 @@ export abstract class ModelScorerBase implements Scorer {
     if (counts.total && d.failed / counts.total > 0.5) throw new JudgeError(this.label + ' answered only ' + (counts.total - d.failed) + ' of ' + counts.total + ' questions' + (d.notes[0] ? ' (' + d.notes[0] + ')' : ''))
     return d.notes
   }
+}
 
+export abstract class ModelScorerBase extends ModelClientBase implements Scorer {
+  abstract readonly rubricRef: RubricRef | undefined
   abstract score(task: ScoreTask, jobs: readonly ScoreJob[], ctx?: ScoreContext): Promise<ScoreOutcome>
 }
 

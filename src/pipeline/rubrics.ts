@@ -44,7 +44,7 @@ export interface RubricDef {
   description: string
   /** Template; `{candidate}` is bound per item. */
   instructions: string
-  /** score: template of the shared state (billed again inside every question). */
+  /** score / noul: template of the shared state (billed again inside every question). */
   state?: string
   /** score: ordered level descriptions, lowest first (index = grade). */
   criteria?: readonly string[]
@@ -108,6 +108,14 @@ const BUILTIN: readonly RubricDef[] = [
     instructions: '候选材料是否满足下面这条约束？只判断这一条约束，不判断其他方面。\n约束：{constraint}\n候选：{candidate}',
     maxStateChars: 200, maxCandidateChars: 1200,
     allowed: ['task', 'constraint', 'candidate'], required: ['constraint', 'candidate'],
+  },
+  {
+    id: 'cover.sufficient', version: 'v1', lang: 'zh', kind: 'noul',
+    description: '(需求, 证据视图) 对：这些摘录本身是否足以回答需求（M9 覆盖判定）。',
+    instructions: '下面的证据摘录本身是否已经明确给出了该需求的答案？只提到相同主题、相关名词或相邻内容不算。如果需求问的是某事物是否存在、是否被支持，摘录中明确说“有”或明确说“没有”都算足够。\n需求：{need}\n证据摘录：{candidate}',
+    state: '搜索任务：{task}',
+    maxStateChars: 200, maxCandidateChars: 2400,
+    allowed: ['task', 'need', 'candidate'], required: ['need', 'candidate'],
   },
 ]
 

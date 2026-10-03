@@ -9,6 +9,7 @@
 
 import { BUILTIN_RUBRIC_IDS, builtinRubric, type ResolvedRubric } from '../rubrics.ts'
 import { calibrationProblems } from './calibration.ts'
+import { SystemOneCoverageJudge } from './coverage.ts'
 import { LLM_PATH, LlmScorer } from './protocols/llm.ts'
 import { RERANK_PATH, RerankScorer } from './protocols/rerank.ts'
 import { SYSTEMONE_PATH, SystemOneScorer } from './protocols/systemone.ts'
@@ -224,4 +225,22 @@ export function createModelScorer(p: ProviderConfig, deps: ScorerDeps = {}): Mod
     case 'llm':
       return new LlmScorer({ ...common, rubric, ...pick(p.limits, 'maxQuestionsPerRequest', 'requestTokenBudget', 'blockChars', 'maxNeedChars', 'maxStateChars') })
   }
+}
+
+/**
+ * The coverage judge (dev-plan M9) of a provider: one `noul` question per need, so only the `systemone` protocol
+ * can serve it. Throws for any other protocol and for a provider that needs a key it was not given.
+ */
+export function createCoverageJudge(p: ProviderConfig, deps: ScorerDeps = {}): SystemOneCoverageJudge {
+  if (p.protocol !== 'systemone') throw new Error('provider ' + p.id + ' speaks ' + p.protocol + ': the coverage judge needs the systemone protocol (noul questions)')
+  if (p.keyRef && !deps.apiKey) throw new Error('provider ' + p.id + ' needs ' + p.keyRef + ' (credentials ref or environment)')
+  return new SystemOneCoverageJudge({
+    id: p.recordedId ?? p.id, label: p.label ?? p.id, model: p.model, url: endpointOf(p),
+    apiKey: p.keyRef ? deps.apiKey : undefined, extraBody: p.extraBody,
+    provider: { id: p.id, protocol: p.protocol },
+    fetchImpl: deps.fetchImpl, sleep: deps.sleep, meter: deps.meter, cache: deps.cache,
+    requestCap: deps.requestCap ?? p.limits?.requestCap,
+    rubric: deps.rubric, tokenModel: p.tokenModel ?? 'expanded',
+    ...pick(p.limits, 'maxRetries', 'timeoutMs', 'maxQuestionsPerRequest', 'requestTokenBudget', 'blockChars', 'maxNeedChars', 'maxStateChars', 'maxBodyBytes'),
+  })
 }

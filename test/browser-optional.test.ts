@@ -326,7 +326,7 @@ test('(d) sources.status shows the active judge rubric versions, whether overrid
   try {
     const status = await plain.run('sources.status', {})
     assert.deepEqual(status.evidence.scorer, 'rule')
-    assert.deepEqual(status.evidence.rubrics.map((r: any) => [r.id, r.version, r.overridden]), [['score.support', 'v1', false], ['gate.relevance', 'v1', false], ['gate.constraint', 'v1', false]])
+    assert.deepEqual(status.evidence.rubrics.map((r: any) => [r.id, r.version, r.overridden]), [['score.support', 'v1', false], ['gate.relevance', 'v1', false], ['gate.constraint', 'v1', false], ['cover.sufficient', 'v1', false]])
     assert.equal(status.evidence.diagnostics, undefined)
     const schema = findAction('sources.status')!.output
     assert.equal(schema.properties.evidence!.required, undefined, 'optional, closed schema extended only')
@@ -340,7 +340,7 @@ test('(d) sources.status shows the active judge rubric versions, whether overrid
   } } })
   try {
     const status = await tuned.run('sources.status', {})
-    assert.deepEqual(status.evidence.rubrics.map((r: any) => [r.id, r.version, r.overridden]), [['score.support', 'v2', true], ['gate.relevance', 'v1', false], ['gate.constraint', 'v1', false]])
+    assert.deepEqual(status.evidence.rubrics.map((r: any) => [r.id, r.version, r.overridden]), [['score.support', 'v2', true], ['gate.relevance', 'v1', false], ['gate.constraint', 'v1', false], ['cover.sufficient', 'v1', false]])
     assert.equal(status.evidence.diagnostics.length, 2)
     assert.match(status.evidence.diagnostics.join('|'), /gate\.relevance: override ignored, built-in v1 used: unknown variable \{nope\}/)
     assert.match(status.evidence.diagnostics.join('|'), /nope\.rubric: override ignored: unknown rubric id/)

@@ -44,7 +44,7 @@ test('defaults reproduce the pre-rubric request bodies byte for byte', async () 
 })
 
 test('built-in registry: ids, versions, variables whitelist, and a stable key', () => {
-  assert.deepEqual(BUILTIN_RUBRIC_IDS, ['score.support', 'gate.relevance', 'gate.constraint'])
+  assert.deepEqual(BUILTIN_RUBRIC_IDS, ['score.support', 'gate.relevance', 'gate.constraint', 'cover.sufficient'])
   for (const id of BUILTIN_RUBRIC_IDS) {
     const r = builtinRubric(id)
     assert.equal(r.version, 'v1')
@@ -152,7 +152,7 @@ test('resolveAllRubrics: reports unknown ids, keeps the valid overrides, and abs
   assert.deepEqual(none.diagnostics, [])
   assert.ok(none.rubrics.every(r => !r.overridden))
   const mixed = resolveAllRubrics({ 'score.support': { version: 'v2', instructions: '{need}|{candidate}' }, 'gate.constraint': { version: 'v2', instructions: '{nope}' }, 'unknown.rubric': { version: 'v1' } })
-  assert.deepEqual(mixed.rubrics.map(r => r.version), ['v2', 'v1', 'v1'])
+  assert.deepEqual(mixed.rubrics.map(r => r.version), ['v2', 'v1', 'v1', 'v1'])
   assert.equal(mixed.diagnostics.length, 4, 'gate.constraint: unknown variable, missing {constraint}, missing {candidate}; plus the unknown id')
 })
 

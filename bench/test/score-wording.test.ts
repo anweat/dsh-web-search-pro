@@ -17,7 +17,7 @@ test('the runtime Jev scorer uses the wording of rubric score.support.v1 and the
 
 test('the built-in rubric registry (src/pipeline/rubrics.ts) is the wording of bench/rubrics/*.v1.json', () => {
   const bench = loadRubrics()
-  for (const id of ['score.support', 'gate.relevance', 'gate.constraint']) {
+  for (const id of ['score.support', 'gate.relevance', 'gate.constraint', 'cover.sufficient']) {
     const built = builtinRubric(id)
     const file = bench.get(id + '.v1')!
     assert.equal(built.version, 'v1')
