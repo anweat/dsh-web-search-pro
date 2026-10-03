@@ -1,0 +1,17 @@
+{
+  "_comment": "NOT a live capture: constructed from the Brave Web Search API reference (https://api-dashboard.search.brave.com/api-reference/web/search/get): web.results[] of title/url/description/page_age/language/extra_snippets, query.original / more_results_available. No key was available, so there is no recorded response.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "type": "search",
+    "query": { "original": "rust async runtime comparison", "more_results_available": true },
+    "web": {
+      "type": "search",
+      "results": [
+        { "title": "Comparing Tokio and <strong>async-std</strong>", "url": "https://blog.example.test/tokio-vs-async-std", "description": "A <strong>runtime</strong> comparison &amp; benchmark of the two.", "page_age": "2026-05-04T10:15:00", "language": "en", "family_friendly": true, "extra_snippets": ["more text"] },
+        { "title": "Smol runtime", "url": "https://github.com/smol-rs/smol", "description": "A small and fast async runtime.", "language": "en" },
+        { "title": "No url here", "description": "dropped" }
+      ]
+    }
+  }
+}

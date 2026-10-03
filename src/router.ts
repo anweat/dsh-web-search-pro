@@ -18,6 +18,7 @@ import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
 import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
 import { SEMANTICSCHOLAR_KEY_ENV } from './providers/semanticscholar.ts'
 import { ANYSEARCH_KEY_ENV } from './providers/anysearch.ts'
+import { KEYED_SOURCE_ENVS } from './providers/keyed.ts'
 import { resolveBudget, UsageLedger } from './pipeline/ledger.ts'
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
@@ -285,7 +286,9 @@ export class SearchRouter {
     const openalexApiKey = await this.resolveKey(OPENALEX_KEY_ENV)
     const semanticScholarApiKey = await this.resolveKey(SEMANTICSCHOLAR_KEY_ENV)
     const anysearchApiKey = await this.resolveKey(ANYSEARCH_KEY_ENV)
+    const keyed = await this.keyedSources(cfg, (ref, literal) => this.resolveKey(ref, literal))
     return {
+      ...keyed,
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
       ...anysearchApiKey ? { anysearchApiKey } : {},
@@ -322,7 +325,9 @@ export class SearchRouter {
     const openalexApiKey = process.env[OPENALEX_KEY_ENV]
     const semanticScholarApiKey = process.env[SEMANTICSCHOLAR_KEY_ENV]
     const anysearchApiKey = process.env[ANYSEARCH_KEY_ENV]
+    const keyed = this.keyedSourcesSync(cfg)
     return {
+      ...keyed,
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
       ...anysearchApiKey ? { anysearchApiKey } : {},
@@ -345,6 +350,37 @@ export class SearchRouter {
       ...cfg.customPlatforms !== undefined ? { customPlatforms: cfg.customPlatforms } : {},
       skipSeam,
     }
+  }
+
+  /**
+   * Keys and base URLs of the keyed search sources (dev-plan M7c): per source the config literal, then the credentials ref /
+   * environment variable (`keyedSources.<id>.apiKeyEnv`, else the documented default names in order).
+   */
+  private async keyedSources(cfg: ResolvedConfig, resolve: (ref: string, literal?: string) => Promise<string | undefined>): Promise<Pick<EngineDeps, 'sourceKeys' | 'sourceBaseUrls'>> {
+    const sourceKeys: Record<string, string> = {}
+    const sourceBaseUrls: Record<string, string> = {}
+    for (const [id, defaults] of Object.entries(KEYED_SOURCE_ENVS)) {
+      const own = cfg.keyedSources?.[id]
+      const names = [...new Set([own?.apiKeyEnv, ...defaults].filter((n): n is string => !!n))]
+      let key = own?.apiKey || undefined
+      for (const name of names) { if (key) break; key = await resolve(name) }
+      if (key) sourceKeys[id] = key
+      if (own?.baseUrl) sourceBaseUrls[id] = own.baseUrl
+    }
+    return { ...Object.keys(sourceKeys).length ? { sourceKeys } : {}, ...Object.keys(sourceBaseUrls).length ? { sourceBaseUrls } : {} }
+  }
+
+  private keyedSourcesSync(cfg: ResolvedConfig): Pick<EngineDeps, 'sourceKeys' | 'sourceBaseUrls'> {
+    const sourceKeys: Record<string, string> = {}
+    const sourceBaseUrls: Record<string, string> = {}
+    for (const [id, defaults] of Object.entries(KEYED_SOURCE_ENVS)) {
+      const own = cfg.keyedSources?.[id]
+      const names = [...new Set([own?.apiKeyEnv, ...defaults].filter((n): n is string => !!n))]
+      const key = own?.apiKey || names.map(n => process.env[n]).find(Boolean)
+      if (key) sourceKeys[id] = key
+      if (own?.baseUrl) sourceBaseUrls[id] = own.baseUrl
+    }
+    return { ...Object.keys(sourceKeys).length ? { sourceKeys } : {}, ...Object.keys(sourceBaseUrls).length ? { sourceBaseUrls } : {} }
   }
 
   /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */

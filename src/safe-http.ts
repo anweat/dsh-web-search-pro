@@ -114,6 +114,6 @@ export async function readBoundedBody(response: Response, maxBytes: number): Pro
 
 export function stripSensitiveHeadersForRedirect(headers: Record<string, string>, from: URL, to: URL): Record<string, string> {
   if (from.origin === to.origin) return { ...headers }
-  const sensitive = new Set(['authorization', 'proxy-authorization', 'cookie', 'x-api-key'])
+  const sensitive = new Set(['authorization', 'proxy-authorization', 'cookie', 'x-api-key', 'x-subscription-token', 'x-appbuilder-authorization'])
   return Object.fromEntries(Object.entries(headers).filter(([name]) => !sensitive.has(name.toLowerCase())))
 }

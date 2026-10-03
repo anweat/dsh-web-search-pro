@@ -17,6 +17,7 @@ import { openAlexEngine, openAlexUrl, parseOpenAlex, reconstructAbstract, openAl
 import { semanticScholarEngine, semanticScholarUrl, parseSemanticScholar, semanticScholarAdapter } from '../src/providers/semanticscholar.ts'
 import { anySearchEngine, anySearchBody, parseAnySearch, anySearchBlock, anySearchAdapter, ANYSEARCH_URL } from '../src/providers/anysearch.ts'
 import { searxngEngine, searxngBase, searxngUrl, parseSearxng, searxngAdapter } from '../src/providers/searxng.ts'
+import { KEYED_SOURCE_IDS } from '../src/providers/keyed.ts'
 import { compileSince } from '../src/pipeline/compile.ts'
 import { planSources } from '../src/pipeline/plan.ts'
 import type { Constraint } from '../src/pipeline/types.ts'
@@ -451,7 +452,7 @@ test('descriptors: own source families, languages, profiles and priorities; supp
 
 test('S1 plans: the vertical sources serve academic / experience, never displace the web engines, and wikipedia / stackoverflow stay second-round supplements', () => {
   // Exa is reachable only through the keyless MCP fallback here: not promoted
-  const ready = (id?: string) => ({ state: 'ready' as const, credential: id === 'exa' ? 'missing' as const : 'not_required' as const })
+  const ready = (id?: string) => ({ state: 'ready' as const, credential: id === 'exa' || KEYED_SOURCE_IDS.includes(id ?? '') ? 'missing' as const : 'not_required' as const })
   const descriptors = defaultProviderRegistry.list({ operation: 'search' }).map(a => a.descriptor)
   const task = (goal: string, query: string, profile: any) => ({ goal, query, profile, needs: [{ id: 'n1', text: goal, critical: true }], constraints: [], budget: {} })
   const plan = (t: ReturnType<typeof task>, over: object = {}) => planSources(t, { configured: ['ddg', 'bing', 'exa', 'seam', 'jina'], status: ready, descriptors, ...over })

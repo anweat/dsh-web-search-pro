@@ -12,6 +12,9 @@
  *  - bocha: include / exclude (domain lists) for HARD site / exclude_site, and `freshness` as an
  *    inclusive `start..today` date range for a HARD time_window whose lower bound is understood
  *    (an exact translation, so it is reported as native);
+ *  - keyed sources (dev-plan M7c): Tavily / Linkup / Baidu Qianfan / Zhipu take domain lists (`options.sites`, capped at what
+ *    each documents) and a date lower bound (`options.since`); Brave / Serper (Google) take `site:` / `-site:` / `-term`
+ *    operators in the query; whatever a source does not document stays for local verification;
  *  - github*: the natural-language query returns nothing on repository search
  *    (E1: 0 of 20), so it is replaced by a short keyword query;
  *  - everything else: the plain query.
@@ -40,12 +43,18 @@ export interface CompiledBochaOptions {
   exclude?: string[]
 }
 
+/** Domain lists compiled from hard site / exclude_site constraints, for the keyed sources that take them as request fields. */
+export interface CompiledSites {
+  include?: string[]
+  exclude?: string[]
+}
+
 export interface CompiledQuery {
   providerId: string
   /** Text to send to the provider. */
   query: string
   /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some; the anonymous APIs take `since` / `lang`). */
-  options?: { exa?: CompiledExaOptions; bocha?: CompiledBochaOptions; since?: string; lang?: 'zh' | 'en' }
+  options?: { exa?: CompiledExaOptions; bocha?: CompiledBochaOptions; since?: string; lang?: 'zh' | 'en'; sites?: CompiledSites }
   /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
   fallbacks?: string[]
   /** Ids of constraints the provider enforces natively. */
@@ -151,6 +160,67 @@ export function compileSince(task: TaskLike, providerId: string, now: Date, opts
   if (opts.lang) {
     const lang = detectLang(task.goal + ' ' + task.query)
     if (lang !== 'none') options.lang = lang === 'zh' ? 'zh' : 'en'
+  }
+  return { ...finish(task, providerId, task.query, native), ...Object.keys(options).length ? { options } : {} }
+}
+
+// ── keyed sources (dev-plan M7c) ────────────────────────────────────────────
+
+/** What a keyed source documents it can enforce: domain list sizes (absent = no such field) and a date lower bound. */
+export interface KeyedCaps {
+  /** Most `include` domains the request takes. */
+  include?: number
+  /** Most `exclude` domains the request takes. */
+  exclude?: number
+  /** A hard time_window with an understood lower bound becomes `options.since` and counts as native. */
+  since?: boolean
+  /** `site:` / `-site:` / `-term` operators in the query text (Google-style engines) instead of request fields. */
+  operators?: boolean
+}
+
+/** Hard time_window constraints with their lower bound (ISO, in the past), strictest first. */
+export function hardWindows(task: TaskLike, now: Date): { c: Constraint; start: string }[] {
+  return hard(task, 'time_window')
+    .map(c => ({ c, start: parseTimeWindow(c.value, now) }))
+    .filter((x): x is { c: Constraint; start: string } => x.start !== undefined && x.start < now.toISOString())
+    .sort((a, b) => (a.start < b.start ? 1 : -1))
+}
+
+/**
+ * Compilation for the keyed sources: HARD site / exclude_site constraints become domain lists (only as many as the source
+ * documents; the rest stays local), a HARD time_window becomes `options.since` (the strictest lower bound), operator-style
+ * sources get `site:` / `-site:` / `-term` in the query. Soft constraints are never pushed down.
+ */
+export function compileKeyed(task: TaskLike, providerId: string, now: Date, caps: KeyedCaps): CompiledQuery {
+  if (caps.operators) {
+    const base = compileOperators(task, providerId)
+    const win = caps.since ? hardWindows(task, now) : []
+    if (!win.length) return base
+    const native = [...base.native, ...win.map(x => x.c.id)]
+    return { ...finish(task, providerId, base.query, native), options: { since: win[0]!.start } }
+  }
+  const native: string[] = []
+  const sites: CompiledSites = {}
+  const pick = (kind: 'site' | 'exclude_site', max: number | undefined): string[] => {
+    if (!max) return []
+    const domains: string[] = []
+    for (const c of hard(task, kind)) {
+      const d = domainOf(c.value)
+      if (!d) continue
+      if (!domains.includes(d)) { if (domains.length >= max) continue; domains.push(d) }
+      native.push(c.id)
+    }
+    return domains
+  }
+  const include = pick('site', caps.include)
+  const exclude = pick('exclude_site', caps.exclude)
+  if (include.length) sites.include = include
+  if (exclude.length) sites.exclude = exclude
+  const options: NonNullable<CompiledQuery['options']> = {}
+  if (Object.keys(sites).length) options.sites = sites
+  if (caps.since) {
+    const win = hardWindows(task, now)
+    if (win.length) { options.since = win[0]!.start; native.push(...win.map(x => x.c.id)) }
   }
   return { ...finish(task, providerId, task.query, native), ...Object.keys(options).length ? { options } : {} }
 }

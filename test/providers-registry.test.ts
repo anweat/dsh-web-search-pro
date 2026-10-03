@@ -6,6 +6,7 @@ import path from 'node:path'
 import { ProviderRegistry, createBuiltinRegistry, defaultProviderRegistry, routeIdOf, SEARCH_ENGINE_IDS, type ProviderAdapter } from '../src/providers/index.ts'
 import { EngineError, type Engine } from '../src/engines.ts'
 import { planSources, taskLanguage, PROFILE_PROVIDERS, type ProviderStatus } from '../src/pipeline/plan.ts'
+import { KEYED_SOURCE_IDS } from '../src/providers/keyed.ts'
 import { runPipeline, type PipelineDeps, type ProviderCall, type ProviderOutcome } from '../src/pipeline/run.ts'
 import { SearchRouter } from '../src/router.ts'
 import { resolveConfig } from '../src/config.ts'
@@ -21,7 +22,8 @@ const ZH = { goal: '了解国内大模型备案的最新要求', query: '大模�
 const CONFIGURED = ['ddg', 'bing', 'exa', 'seam', 'jina']
 const ids = (plan: ReturnType<typeof planSources>): string[] => plan.providers.map(p => p.id)
 const descriptors = (r: ProviderRegistry = defaultProviderRegistry) => r.list({ operation: 'search' }).map(a => a.descriptor)
-const ready = (): ProviderStatus => ({ state: 'ready', credential: 'configured' })
+/** Everything is ready except the keyed sources (dev-plan M7c), which have no key in these plan tests (the promotion with a key is in keyed-promotion.test.ts). */
+const ready = (id?: string): ProviderStatus => id !== undefined && KEYED_SOURCE_IDS.includes(id) ? { state: 'unavailable', credential: 'missing', reason: 'no key' } : { state: 'ready', credential: 'configured' }
 
 function dummy(id: string, over: Partial<ProviderAdapter['descriptor']> = {}, engine?: Partial<Engine>): ProviderAdapter {
   const descriptor = {
@@ -39,7 +41,7 @@ function dummy(id: string, over: Partial<ProviderAdapter['descriptor']> = {}, en
 
 test('registry: built-ins carry namespaced ids with the legacy short ids as aliases; both spellings resolve to one route id', () => {
   const r = createBuiltinRegistry()
-  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng'])
+  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper'])
   assert.deepEqual([...SEARCH_ENGINE_IDS], r.searchIds())
   assert.equal(r.resolve('builtin:ddg'), r.resolve('ddg'))
   assert.equal(r.routeId('builtin:bocha'), 'bocha')
@@ -58,7 +60,7 @@ test('registry: built-ins carry namespaced ids with the legacy short ids as alia
 test('registry: validation accepts aliases and full ids, and an unknown id gets a clear error listing the available ones', () => {
   const r = createBuiltinRegistry()
   assert.deepEqual(r.validate(['builtin:ddg', 'bocha', 'ddg']), ['ddg', 'bocha'])
-  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, bocha, wikipedia, hackernews, stackexchange, openalex, semanticscholar, anysearch, searxng\)/)
+  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, bocha, wikipedia, hackernews, stackexchange, openalex, semanticscholar, anysearch, searxng, tavily, brave, linkup, serper\)/)
   assert.throws(() => r.validate(['  ']), /unknown engine/)
 })
 
@@ -69,7 +71,7 @@ test('registry: a duplicate id or a taken alias throws; register returns an unre
   assert.throws(() => r.register(dummy('vendor:x', { aliases: ['same', 'same'] })), /duplicate alias|already used/)
   assert.throws(() => r.register(dummy('Bad Id')), /invalid provider id/)
   assert.throws(() => r.register(dummy('vendor:y', { aliases: ['a b'] })), /invalid provider alias/)
-  assert.equal(r.searchIds().length, 19, 'failed registrations left nothing behind')
+  assert.equal(r.searchIds().length, 23, 'failed registrations left nothing behind')
 
   const before = r.revision
   const off = r.register(dummy('vendor:acme'))
@@ -164,15 +166,15 @@ test('plan: Chinese tasks prefer Bocha, English tasks prefer Exa, ddg stays the 
   assert.deepEqual(by('academic', ZH as never), PROFILE_PROVIDERS.academic.slice(0, 4))
 
   // not ready / no key / switched off / explicit engines: the tables as before
-  const status = (id: string): ProviderStatus => id === 'bocha' ? { state: 'unavailable', reason: 'no key' } : ready()
+  const status = (id: string): ProviderStatus => id === 'bocha' ? { state: 'unavailable', reason: 'no key' } : ready(id)
   assert.deepEqual(ids(plan({ ...ZH, profile: 'general' }, { status })), ['ddg', 'bing', 'exa', 'seam'])
-  const mcporterOnly = (id: string): ProviderStatus => id === 'exa' ? { state: 'ready', credential: 'missing' } : ready()
+  const mcporterOnly = (id: string): ProviderStatus => id === 'exa' ? { state: 'ready', credential: 'missing' } : ready(id)
   assert.deepEqual(ids(plan({ ...EN, profile: 'general' }, { status: mcporterOnly })), ['ddg', 'bing', 'exa', 'seam'], 'exa through the MCP fallback is not promoted')
   assert.deepEqual(ids(plan({ ...EN, profile: 'general' }, { autoProviders: false })), ['ddg', 'bing', 'exa', 'seam'])
   assert.deepEqual(ids(plan({ ...EN, profile: 'general' }, { engines: ['bing'] })), ['bing'])
   assert.deepEqual(ids(plan({ ...EN, profile: 'general' }, { descriptors: undefined })), ['ddg', 'bing', 'exa', 'seam'])
   // a cooling-down or unavailable fallback takes no slot: the next ready engine fills it
-  const ddgDown = (id: string): ProviderStatus => id === 'ddg' ? { state: 'cooldown', reason: 'HTTP 429' } : ready()
+  const ddgDown = (id: string): ProviderStatus => id === 'ddg' ? { state: 'cooldown', reason: 'HTTP 429' } : ready(id)
   assert.deepEqual(ids(plan({ ...ZH, profile: 'general' }, { status: ddgDown })), ['bocha', 'bing'])
   assert.deepEqual(ids(plan({ ...ZH, profile: 'general' }, { webFallbacks: 2 })), ['bocha', 'ddg', 'bing'])
 })
@@ -191,13 +193,13 @@ test('plan: a hard filter the promoted provider does not enforce natively is rep
 
 test('plan: a dummy English provider registered by descriptor + adapter alone is chosen for an English task, not a Chinese one, and respects readiness', () => {
   const registry = createBuiltinRegistry()
-  const off = registry.register(dummy('vendor:tavily', { priority: 5 }))
+  const off = registry.register(dummy('vendor:nova', { priority: 5 }))
   const plan = (task: Partial<TaskSpec>, over: object = {}) => planSources(spec({ profile: 'general', ...task }), { configured: CONFIGURED, status: ready, descriptors: descriptors(registry), ...over })
-  assert.deepEqual(ids(plan(EN)), ['tavily', 'exa', 'ddg'], 'priority orders the promoted providers: the dummy (5) before exa (10)')
+  assert.deepEqual(ids(plan(EN)), ['nova', 'exa', 'ddg'], 'priority orders the promoted providers: the dummy (5) before exa (10)')
   assert.deepEqual(ids(plan(ZH)), ['bocha', 'ddg'], 'a Chinese task is untouched by an English-only provider')
-  assert.deepEqual(ids(plan(EN, { status: (id: string) => id === 'tavily' ? { state: 'unavailable' as const } : ready() })), ['exa', 'ddg'])
+  assert.deepEqual(ids(plan(EN, { status: (id: string) => id === 'nova' ? { state: 'unavailable' as const } : ready(id) })), ['exa', 'ddg'])
   assert.deepEqual(ids(plan({ ...EN, profile: 'academic' })), PROFILE_PROVIDERS.academic.slice(0, 4), 'its taskProfiles do not include academic')
-  assert.equal(ids(plan({ ...EN, profile: 'news_fact' }))[0], 'tavily')
+  assert.equal(ids(plan({ ...EN, profile: 'news_fact' }))[0], 'nova')
   assert.equal(ids(plan({ ...EN, profile: 'docs_code' }))[0], 'exa', 'the dummy does not serve docs_code')
   // the adapter's own compile hook is used when the caller wires the registry's compiler
   const custom = registry.register({ ...dummy('vendor:fancy', { priority: 1 }), compile: (t, now) => ({ providerId: 'fancy', query: t.query + ' (fancy)', native: [], local: t.constraints.map(c => c.id) }) })
@@ -211,10 +213,10 @@ test('plan: a dummy English provider registered by descriptor + adapter alone is
 
 test('pipeline: S1 searches the promoted provider first, and the follow-up round can use the held fallbacks', async () => {
   const registry = createBuiltinRegistry()
-  registry.register(dummy('vendor:tavily'))
+  registry.register(dummy('vendor:nova'))
   const calls: ProviderCall[] = []
   const deps: PipelineDeps = {
-    providerStatus: async idsList => new Map(idsList.map(id => [id, { state: 'ready' as const, credential: 'configured' as const }])),
+    providerStatus: async idsList => new Map(idsList.map(id => [id, ready(id)])),
     searchProvider: async (call): Promise<ProviderOutcome> => { calls.push(call); return { state: 'ok', sources: [{ url: 'https://a.test/' + call.id, title: call.id, snippet: 'postgres logical replication slot lag explained' }] } },
     fetchPage: async () => undefined,
     scorers: {},
@@ -223,9 +225,9 @@ test('pipeline: S1 searches the promoted provider first, and the follow-up round
     fusion: { k: 60, freshnessBoost: 0, freshnessDays: 30, authorityBoost: 0, authorityDomains: [] },
   }
   const { pack } = await runPipeline(spec({ ...EN, profile: 'general' }), deps, { maxRounds: 1 })
-  assert.deepEqual(calls.map(c => c.id).sort(), ['ddg', 'exa', 'tavily'])
-  assert.deepEqual(pack.enginesTried.slice(0, 1), ['tavily'])
-  assert.match(pack.notes.join('\n'), /language en: preferred tavily, exa/)
+  assert.deepEqual(calls.map(c => c.id).sort(), ['ddg', 'exa', 'nova'])
+  assert.deepEqual(pack.enginesTried.slice(0, 1), ['nova'])
+  assert.match(pack.notes.join('\n'), /language en: preferred nova, exa/)
 })
 
 // ── router: registry-driven backends, aliases, report ────────────────────────

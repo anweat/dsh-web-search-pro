@@ -135,6 +135,12 @@ export interface Config {
   searxngUrl?: string
   /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
   openalexMailto?: string
+  /**
+   * Keyed search sources by route id (`tavily`, `brave`, `linkup`, `serper`, `metaso`, `zhipu`, `baidu-qianfan`): the key literal,
+   * the credentials ref / environment variable name (default e.g. TAVILY_API_KEY), and an optional endpoint base override.
+   * A source without a key is `credential: missing` and not executable.
+   */
+  keyedSources?: Record<string, { apiKey?: string; apiKeyEnv?: string; baseUrl?: string }>
   /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
   githubToken?: string
   /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
@@ -203,6 +209,11 @@ export const Config = z.object({
   bochaSummary: z.boolean().default(true).volatile(),
   searxngUrl: z.string().volatile(),
   openalexMailto: z.string().volatile(),
+  keyedSources: z.dict(z.object({
+    apiKey: z.string().role('secret'),
+    apiKeyEnv: z.string(),
+    baseUrl: z.string(),
+  })).volatile(),
   githubToken: z.string().role('secret').volatile(),
   githubTokenEnv: z.string().default('GITHUB_TOKEN').volatile(),
   enableCliBackends: z.boolean().default(true).volatile(),
@@ -290,6 +301,7 @@ export interface ResolvedConfig extends Config {
   bochaSummary: boolean
   searxngUrl?: string
   openalexMailto?: string
+  keyedSources?: Config['keyedSources']
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
   evidence: EvidenceConfig
 }
@@ -346,6 +358,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     bochaSummary: vOr(config.bochaSummary, true) as boolean,
     searxngUrl: config.searxngUrl !== undefined ? v(config.searxngUrl) : undefined,
     openalexMailto: config.openalexMailto !== undefined ? v(config.openalexMailto) : undefined,
+    keyedSources: config.keyedSources !== undefined ? v(config.keyedSources) : undefined,
     githubToken: config.githubToken !== undefined ? v(config.githubToken) : undefined,
     githubTokenEnv: vOr(config.githubTokenEnv, 'GITHUB_TOKEN') as string,
     enableCliBackends: vOr(config.enableCliBackends, true) as boolean,

@@ -42,6 +42,8 @@ export interface ProviderRequest {
   body?: string
   userAgent?: string
   timeoutMs?: number
+  /** `error` = a redirect is a failure (keyed APIs: never forward a key to another origin). Default follows with re-checks. */
+  redirect?: 'follow' | 'error'
 }
 
 /** Messages of errors thrown by the SSRF checks (util / safe-http): deterministic, so not worth a cooldown. */
@@ -56,6 +58,7 @@ export async function requestProvider(label: string, url: string, req: ProviderR
       maxBytes: MAX_BODY_BYTES,
       allowProxyFakeIp: req.deps.allowProxyFakeIp,
       ...req.method ? { method: req.method } : {},
+      ...req.redirect ? { redirect: req.redirect } : {},
       ...req.body !== undefined ? { body: req.body } : {},
       ...req.deps.fetchImpl ? { fetchImpl: req.deps.fetchImpl } : {},
       ...req.deps.lookup ? { lookup: req.deps.lookup } : {},

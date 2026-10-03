@@ -18,6 +18,10 @@ import { openAlexAdapter } from './openalex.ts'
 import { semanticScholarAdapter } from './semanticscholar.ts'
 import { anySearchAdapter } from './anysearch.ts'
 import { searxngAdapter } from './searxng.ts'
+import { tavilyAdapter } from './tavily.ts'
+import { braveAdapter } from './brave.ts'
+import { linkupAdapter } from './linkup.ts'
+import { serperAdapter } from './serper.ts'
 import { ProviderRegistry, type CostDescriptor, type ProbeEnv, type ProviderAdapter, type ProviderDescriptor, type Readiness, type Requirement } from './registry.ts'
 
 const WEB_PROFILES = ['general', 'news_fact', 'experience', 'compare', 'docs_code'] as const
@@ -132,6 +136,11 @@ export function builtinAdapters(): ProviderAdapter[] {
     semanticScholarAdapter,
     anySearchAdapter,
     searxngAdapter,
+    // Keyed sources (dev-plan M7c): reserved interfaces, executable only once a key is configured; never called live.
+    tavilyAdapter,
+    braveAdapter,
+    linkupAdapter,
+    serperAdapter,
   ]
 }
 

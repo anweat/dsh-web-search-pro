@@ -1,0 +1,12 @@
+{
+  "_comment": "NOT a live capture: constructed from the Linkup /search reference (https://docs.linkup.so/pages/documentation/endpoints/search/reference): outputType searchResults -> results[] of type text (name/url/content/favicon) or type image (name/url). No key was available, so there is no recorded response.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "results": [
+      { "type": "text", "name": "Linkup documentation", "url": "https://docs.linkup.so/", "content": "Linkup connects your AI application to the web.", "favicon": "https://docs.linkup.so/favicon.ico" },
+      { "type": "image", "name": "Architecture diagram", "url": "https://docs.linkup.so/img/arch.png" },
+      { "type": "text", "name": "Search endpoint", "url": "https://docs.linkup.so/pages/documentation/endpoints/search/reference", "content": "The /search endpoint allows you to retrieve web content.", "favicon": "" }
+    ]
+  }
+}

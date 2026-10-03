@@ -35,6 +35,8 @@ export interface EngineSearchOptions {
   bocha?: { freshness?: string; include?: string[]; exclude?: string[] }
   /** Lower bound of the publication date (ISO 8601), compiled from a hard time_window; the engine maps it to its native filter. */
   since?: string
+  /** Domain lists compiled from hard site / exclude_site constraints (keyed sources that take them as request fields). */
+  sites?: { include?: string[]; exclude?: string[] }
   /** Task language (`zh` / `en`) for engines with per-language editions or zones (Wikipedia, AnySearch); absent = detect from the query. */
   lang?: 'zh' | 'en'
   browser?: { authProfile?: string; rulePack?: string }
@@ -69,6 +71,10 @@ export interface EngineDeps {
   fetchImpl?: typeof fetch
   /** Test seam: replaces the DNS lookup of the SSRF check. */
   lookup?: (hostname: string) => Promise<{ address: string; family?: number }[]>
+  /** API keys of the keyed sources by route id (`tavily`, `brave`, ...): config literal -> credentials ref -> environment (router). */
+  sourceKeys?: Readonly<Record<string, string>>
+  /** Base URL overrides of the keyed sources by route id (settings `keyedSources.<id>.baseUrl`). */
+  sourceBaseUrls?: Readonly<Record<string, string>>
   /** Self-hosted SearXNG instance (settings `searxngUrl`); no default public instance exists. */
   searxngUrl?: string
   /** Contact address appended to the User-Agent of OpenAlex requests (settings `openalexMailto`). */
