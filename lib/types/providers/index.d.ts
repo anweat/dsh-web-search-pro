@@ -13,3 +13,5 @@ export { createBuiltinRegistry, builtinAdapters } from './builtin.ts';
 export declare const defaultProviderRegistry: ProviderRegistry;
 /** Route ids of the BUILT-IN search providers (a snapshot of the default registry at load; tool validation reads the live registry). */
 export declare const SEARCH_ENGINE_IDS: readonly string[];
+/** Route ids of the BUILT-IN platforms (a snapshot like {@link SEARCH_ENGINE_IDS}; `customPlatforms` keys are added to the live registry). */
+export declare const PLATFORM_IDS: readonly string[];

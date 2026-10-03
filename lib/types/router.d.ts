@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
-import { type Engine, type EngineDeps, type EngineSearchOptions } from './engines.ts';
+import { type EngineSearchOptions } from './engines.ts';
 import { type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
 import { LruCache } from './memory-cache.ts';
 import type { BrowserService } from './browser-service.ts';
@@ -30,6 +30,20 @@ export interface RouterSearchOptions {
     skipSeam?: boolean;
     /** Native Exa search controls; ignored by other engines. */
     exa?: EngineSearchOptions['exa'];
+    /**
+     * Search ONE platform provider (`search.run platform=`): the same registry-backed run as a web engine, with the
+     * platform's own cache key, history kind `platform` and an unavailable provider reported as an error. `engines`,
+     * `multi` and `exa` are ignored; `query` may be empty for a feed. `authProfile` / `rulePack` fall back to `browserBindings`.
+     */
+    platform?: PlatformRequest;
+}
+export interface PlatformRequest {
+    /** Platform id (route id, alias or full provider id, or a `customPlatforms` key). */
+    id: string;
+    /** `rss` only: the feed URL (a feed URL in `query` is accepted too). */
+    url?: string;
+    authProfile?: string;
+    rulePack?: string;
 }
 export interface RouterSearchResult {
     content?: string;
@@ -54,6 +68,12 @@ export interface ProviderReport {
     route: string;
     aliases: string[];
     label: string;
+    /** `web` engine or `platform` (a site / community, `search.run platform=<route>`). */
+    kind: 'web' | 'platform';
+    /** Platform: the site domains it covers (a hard `site` constraint on one selects it). */
+    domains?: string[];
+    /** The dsh-browser method it runs through; absent = it does not need the browser. */
+    needsBrowser?: string;
     operations: string[];
     taskProfiles: string[];
     languages: string[];
@@ -83,12 +103,13 @@ export declare class SearchRouter {
     readonly registry: ProviderRegistry;
     /** In-flight de-duplication of identical non-fresh requests (C3). */
     private readonly searchFlights;
-    private readonly platformFlights;
     private readonly getBrowser;
     private readonly backends;
     /** Backend ids this router created from the registry (a stub a test installed under another id is never touched). */
     private readonly owned;
     private syncedRevision;
+    /** Custom platforms (settings `customPlatforms`) this router registered: key -> spec signature + unregister. A key the registry refused stays here with its problem so it is not retried on every call. */
+    private readonly custom;
     /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
     private readonly readiness;
     /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -96,7 +117,21 @@ export declare class SearchRouter {
     constructor(ctx: Context, config: ResolvedConfig, store: Store, dynamic?: () => ResolvedConfig, browser?: BrowserService | BrowserGetter, memory?: LruCache<RouterSearchResult>, registry?: ProviderRegistry);
     /** Mirror the registry into the backend registry: new providers appear, unregistered ones stop being scheduled. */
     private syncBackends;
+    /**
+     * Keep the registry's custom platform providers equal to the settings: new keys register, edited ones are replaced,
+     * removed ones unregister (the revision bump then makes {@link syncBackends} drop their backends). A key that clashes
+     * with a provider already registered is not registered (a user platform never replaces a built-in source); see {@link customPlatformProblems}.
+     */
+    private syncCustomPlatforms;
+    /** Custom platforms the registry could not take (key clash, bad key), for `sources.status`. */
+    customPlatformProblems(): string[];
+    /** Unregister what this router put into the registry (plugin unload). */
+    dispose(): void;
     private backendFor;
+    /** `browserBindings[id]` fills the auth profile / rule pack a call did not name itself (the call wins). */
+    private withBindings;
+    /** Bindings that apply to these providers, for cache keys: a rebound auth profile must not replay older results. */
+    private bindingsOf;
     private probeEnv;
     /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
     private canonicalIds;
@@ -143,22 +178,28 @@ export declare class SearchRouter {
     providerReport(cliAvailability?: ReadonlyMap<string, boolean>): Promise<ProviderReport[]>;
     /** Run a full search with caching + persistence. */
     search(opts: RouterSearchOptions): Promise<RouterSearchResult>;
+    /**
+     * Normalise a platform request: the provider's route id; `rss` takes a feed URL from `query` when no `url` is given
+     * (the old tool contract); the call's auth profile / rule pack, else the platform's `browserBindings`.
+     */
+    resolvePlatform(request: PlatformRequest, rawQuery: string): {
+        id: string;
+        query: string;
+        url?: string;
+        authProfile?: string;
+        rulePack?: string;
+    };
     private runSearch;
     /**
      * No engine failed at runtime: each returned ENGINE_EMPTY or was skipped
      * (unavailable / cooldown). Zero sources plus an explanation (never cached).
      */
     private emptyResult;
-    /** Platform search (search.run with platform) with the same cache+persist flow. */
-    platformSearch(platform: string, query: string, url: string | undefined, count: number, opts: {
-        signal?: AbortSignal;
-        fresh?: boolean;
-        authProfile?: string;
-        rulePack?: string;
-    }): Promise<RouterSearchResult>;
-    /** Platform engine list; a seam so tests can inject fakes without network. */
-    protected platformEngineList(platform: string, feedUrl: string | undefined, deps: EngineDeps): Engine[];
-    private runPlatformSearch;
+    /**
+     * A platform provider that did not answer. Empty (it ran and found nothing) is a result with the provider's own hint
+     * (login, selectors); anything else is the error `platform <id> unavailable (tried: ...): <reason>`.
+     */
+    private platformFailure;
     /**
      * ctx.web provider adapter: route the seam request through this router.
      * Returns a WebSearchResult-shaped value for the built-in web_search tool.

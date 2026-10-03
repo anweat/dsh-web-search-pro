@@ -16,6 +16,21 @@ import type { ProviderRegistry } from '../providers/registry.ts';
 export interface EvidenceRequest extends TaskInput {
     /** Explicit engine ids (tool `engines`). */
     engines?: string[] | undefined;
+    /**
+     * One platform provider as the explicit source set of S1 / S2 (`search.run platform=` with `task`): it wins over the
+     * profile's table, and `url` / `authProfile` / `rulePack` go to its calls (`browserBindings` fill the rest). S3-S8 run as usual.
+     */
+    platform?: {
+        id: string;
+        url?: string | undefined;
+        authProfile?: string | undefined;
+        rulePack?: string | undefined;
+    } | undefined;
+    /**
+     * An explicit platform source that cannot run (missing browser / login / CLI / token, cooling down) is an error naming
+     * what is missing. With `allowFallback` the profile's web engines are searched instead and the pack says so.
+     */
+    allowFallback?: boolean | undefined;
     /** `sources` entries to return. */
     count: number;
     signal?: AbortSignal | undefined;

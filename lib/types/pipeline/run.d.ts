@@ -24,11 +24,19 @@ import { type ProviderDescriptor } from '../providers/registry.ts';
 import { type ScoreJob, type Scorer } from './score.ts';
 import { type SelectOptions } from './select.ts';
 import type { Block, EvidencePack, Need, ScoredBlock, TaskSpec } from './types.ts';
+/** Per-call provider options of the caller (not of the query): the platform's feed URL and browser auth profile / rule pack. */
+export interface CallOptions {
+    url?: string;
+    browser?: {
+        authProfile?: string;
+        rulePack?: string;
+    };
+}
 export interface ProviderCall {
     id: string;
     query: string;
     count: number;
-    options?: CompiledQuery['options'];
+    options?: CompiledQuery['options'] & CallOptions;
     signal: AbortSignal;
 }
 export type ProviderOutcome = {
@@ -88,6 +96,8 @@ export interface PipelineOptions {
     engines?: readonly string[];
     /** Results requested per provider (default 10). */
     perProviderCount?: number;
+    /** Options added to every call of a provider, by provider id (the platform's `url`, `authProfile`, `rulePack`). */
+    providerOptions?: Readonly<Record<string, CallOptions>>;
     /** Kept candidates whose pages are read (default `task.budget.fetchTopK`, else 4). */
     fetchTopK?: number;
     fetchConcurrency?: number;

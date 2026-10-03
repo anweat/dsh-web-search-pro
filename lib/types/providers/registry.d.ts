@@ -13,10 +13,13 @@
  * @module web-search-pro/providers/registry
  */
 import type { Engine, EngineDeps } from '../engines.ts';
+import type { BrowserMethod } from '../browser-access.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { CompiledQuery } from '../pipeline/compile.ts';
 import type { TaskSpec } from '../pipeline/types.ts';
 export type Operation = 'search';
+/** `web`: a general search engine; `platform`: one site or community (addressable as `search.run platform=<route id>`). */
+export type ProviderKind = 'web' | 'platform';
 /** A thing a provider needs before it can run. `env` lists credential / environment names, tried in order. */
 export interface Requirement {
     kind: 'key' | 'cli' | 'browser' | 'service';
@@ -68,6 +71,12 @@ export interface ProviderDescriptor {
     costModel: CostDescriptor;
     /** Order among providers promoted for a language (lower first, default 100). */
     priority?: number;
+    /** Default `web`. A `platform` provider is never added to a plan on its own, only by an explicit source choice or a hard `site` constraint naming one of its `domains`. */
+    kind?: ProviderKind;
+    /** Site domains a `platform` provider covers (`zhihu.com`): a hard `site` constraint on one of them selects it. */
+    domains?: readonly string[];
+    /** Method of the optional dsh-browser service the provider needs to run; absent = it does not need the browser. */
+    needsBrowser?: BrowserMethod;
     /** Only a recorded live check (version, date, result) sets `live`; absent / false = not verified against the real service. */
     verification?: {
         live: boolean;
@@ -125,6 +134,8 @@ export declare class ProviderRegistry {
     }): ProviderAdapter[];
     /** Route ids of every provider that can search, registration order. */
     searchIds(): string[];
+    /** Route ids of the providers of kind `platform` (`search.run platform=`), registration order. */
+    platformIds(): string[];
     /** Normalise a list of ids (aliases, full ids) to route ids, dropping repeats; unknown ids are returned apart. */
     normalize(ids: readonly string[]): {
         ids: string[];

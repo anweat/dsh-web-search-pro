@@ -14,6 +14,8 @@ export interface SearchOutcome {
     /** Provider-generated answer/summary text, when any. */
     content?: string;
     sources: WebSearchSource[];
+    /** Id of the concrete backend that answered (a platform provider with a fallback chain names the leg that ran). */
+    via?: string;
 }
 export interface Engine {
     id: string;
@@ -45,6 +47,8 @@ export interface EngineSearchOptions {
         authProfile?: string;
         rulePack?: string;
     };
+    /** Feed URL of the `rss` platform (it has no fixed endpoint). */
+    url?: string;
 }
 export declare class EngineError extends Error {
     readonly code: string;
@@ -149,8 +153,3 @@ export declare function pubmedEngine(allowProxyFakeIp?: boolean): Engine;
 export declare function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps: EngineDeps): Engine;
 export declare function playwrightPlatformEngine(platform: string, deps: EngineDeps): Engine;
 export declare function rssEngine(url: string, allowProxyFakeIp?: boolean): Engine;
-/** Build the ordered engine list for a platform search. */
-export declare function platformEngines(platform: string, deps: EngineDeps): Engine[];
-export declare const PLATFORM_IDS: readonly ["github", "github-code", "github-issues", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss", "zhihu", "weibo", "douban", "tieba", "douyin", "kuaishou", "arxiv", "pubmed"];
-/** Whether search.run platform= may route this built-in or configured custom id. */
-export declare function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean;
