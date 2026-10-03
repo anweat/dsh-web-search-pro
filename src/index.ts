@@ -83,6 +83,7 @@ export function apply(ctx: Context, config: Config): void {
 
   // 4. Services.
   const router = new SearchRouter(ctx, resolved, store, dynamic, getBrowser)
+  ctx.effect(() => () => router.dispose())
   const fetchSvc = new FetchService(store, dynamic, getBrowser)
 
   // 5. Tools: `web_index` + `web_call` (or one tool per action with toolSurface=flat). The bundled

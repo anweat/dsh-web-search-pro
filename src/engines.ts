@@ -17,6 +17,8 @@ export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
   content?: string
   sources: WebSearchSource[]
+  /** Id of the concrete backend that answered (a platform provider with a fallback chain names the leg that ran). */
+  via?: string
 }
 
 export interface Engine {
@@ -40,6 +42,8 @@ export interface EngineSearchOptions {
   /** Task language (`zh` / `en`) for engines with per-language editions or zones (Wikipedia, AnySearch); absent = detect from the query. */
   lang?: 'zh' | 'en'
   browser?: { authProfile?: string; rulePack?: string }
+  /** Feed URL of the `rss` platform (it has no fixed endpoint). */
+  url?: string
 }
 
 export class EngineError extends Error {
@@ -404,7 +408,7 @@ export function githubEngine(deps: EngineDeps): Engine {
 export function githubCodeEngine(deps: EngineDeps): Engine {
   return {
     id: 'github-code', label: 'GitHub 代码',
-    available: () => true,
+    available: () => !!githubTokenOf(deps),
     async search(query, count, signal) {
       // Code search requires authentication — surface a clear hint when no token.
       if (!githubTokenOf(deps)) {

@@ -97,6 +97,9 @@ const providersOf = (over: Record<string, ProviderStatus> = {}): Map<string, Pro
   ddg: READY, bing: READY, github: READY, arxiv: READY, pubmed: READY, v2ex: READY, seam: READY,
   exa: { state: 'ready', credential: 'missing' }, jina: { state: 'unavailable', credential: 'missing', reason: 'Jina AI unavailable' },
   bocha: { state: 'unavailable', credential: 'missing', reason: 'no Bocha key' }, bilibili: { state: 'unavailable', reason: 'bili executable not found' }, youtube: { state: 'unavailable', reason: 'yt-dlp executable not found' },
+  // Platforms (dev-plan M8b): the registry probe reports the missing dsh-browser; with the browser present they are runnable.
+  ...Object.fromEntries(['xiaohongshu', 'reddit', 'instagram', 'facebook', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou'].map(id => [id, { state: 'unavailable', reason: 'platform ' + id + ' requires the optional dsh-browser plugin' } as ProviderStatus])),
+  twitter: { state: 'unavailable', reason: 'twitter command not found' }, rss: READY, 'github-code': { state: 'unavailable', credential: 'missing', reason: 'GitHub code search requires authentication' }, 'github-issues': READY,
   ...over,
 }))
 const ctx = (over: Partial<RecommendContext> = {}): RecommendContext => ({ catalog, providers: providersOf(), cli: new Map([['bili', false], ['yt-dlp', false], ['twitter', false]]), browser: false, hasEnv: () => false, hasConfig: () => false, ...over })
@@ -153,7 +156,7 @@ test('recommend: catalog-only and not-ready entries are never executable and say
   }
   // an unregistered adapter stays catalog-only even though the entry names a provider
   const gone = recommendSources({ ...EN, profile: 'experience' }, ctx({ providers: providersOf() })).picks
-  assert.ok(gone.every(p => p.status !== 'ready' || ['ddg', 'bing', 'v2ex', 'seam'].includes(p.id) || p.use.startsWith('web_search_pro engines=')))
+  assert.ok(gone.every(p => p.status !== 'ready' || ['ddg', 'bing', 'v2ex', 'seam', 'github-issues'].includes(p.id) || p.use.startsWith('web_search_pro engines=')))
   const missingAdapter = recommendSources({ platform: 'wikipedia' }, ctx({ providers: new Map() })).picks[0]!
   assert.equal(missingAdapter.executable, false, 'no registered adapter, no execution')
 })
@@ -209,10 +212,10 @@ test('recommend: platform hint narrows to that source; login-based and browser-b
   assert.equal(xhs.picks[0]!.status, 'needs_setup')
   assert.ok(xhs.picks[0]!.missing!.includes('dsh-browser plugin'))
   assert.equal(xhs.picks[0]!.use, 'search.run platform=xiaohongshu')
-  const withBrowser = recommendSources({ platform: 'xiaohongshu' }, ctx({ browser: true })).picks[0]!
+  const withBrowser = recommendSources({ platform: 'xiaohongshu' }, ctx({ browser: true, providers: providersOf({ xiaohongshu: READY }) })).picks[0]!
   assert.equal(withBrowser.status, 'limited', 'runnable, but the login cannot be checked')
   assert.equal(withBrowser.executable, true)
-  const tw = recommendSources({ platform: 'twitter' }, ctx({ cli: new Map([['twitter', true]]), hasEnv: n => n === 'TWITTER_AUTH_TOKEN' })).picks[0]!
+  const tw = recommendSources({ platform: 'twitter' }, ctx({ cli: new Map([['twitter', true]]), hasEnv: n => n === 'TWITTER_AUTH_TOKEN', providers: providersOf({ twitter: { state: 'unavailable', reason: 'TWITTER_CT0 is not set' } }) })).picks[0]!
   assert.deepEqual(tw.missing, ['credentials: set TWITTER_CT0'])
   const unknown = recommendSources({ ...EN, platform: 'nonesuch' }, ctx())
   assert.ok(unknown.picks.length > 0)

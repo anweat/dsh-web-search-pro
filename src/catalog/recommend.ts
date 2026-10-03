@@ -102,9 +102,11 @@ function assess(entry: CatalogEntry, ctx: RecommendContext): Assessed {
   if (entry.provider) {
     const st = ctx.providers.get(entry.provider)
     if (st) {
-      const use = 'search.run engines=' + entry.provider
+      const use = entry.platform ? 'search.run platform=' + entry.platform : 'search.run engines=' + entry.provider
       if (st.state === 'ready') {
         const missing = st.credential === 'missing' ? missingOf(entry, ctx).filter(m => m.startsWith('key')) : []
+        // A login session cannot be checked from here: runnable, but not confirmed.
+        if (!missing.length && entry.auth === 'login' && st.credential !== 'configured') missing.push('logged-in session (not checked)')
         return { entry, status: missing.length ? 'limited' : 'ready', missing, use }
       }
       const detail = st.state === 'cooldown' ? 'cooling down' + (st.reason ? ': ' + st.reason : '') : undefined

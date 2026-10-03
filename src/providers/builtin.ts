@@ -11,6 +11,7 @@ import {
 } from '../engines.ts'
 import type { ResolvedConfig } from '../config.ts'
 import { bochaAdapter } from './bocha.ts'
+import { platformAdapters } from './platforms.ts'
 import { wikipediaAdapter } from './wikipedia.ts'
 import { hackerNewsAdapter } from './hackernews.ts'
 import { stackExchangeAdapter } from './stackexchange.ts'
@@ -25,29 +26,10 @@ import { serperAdapter } from './serper.ts'
 import { metasoAdapter } from './metaso.ts'
 import { zhipuAdapter } from './zhipu.ts'
 import { baiduAdapter } from './baidu-qianfan.ts'
-import { ProviderRegistry, type CostDescriptor, type ProbeEnv, type ProviderAdapter, type ProviderDescriptor, type Readiness, type Requirement } from './registry.ts'
+import { descriptor } from './descriptor.ts'
+import { ProviderRegistry, type ProbeEnv, type ProviderAdapter, type ProviderDescriptor, type Readiness, type Requirement } from './registry.ts'
 
 const WEB_PROFILES = ['general', 'news_fact', 'experience', 'compare', 'docs_code'] as const
-const FREE: CostDescriptor = { kind: 'free' }
-
-function descriptor(d: Partial<ProviderDescriptor> & Pick<ProviderDescriptor, 'id' | 'label'>): ProviderDescriptor {
-  return {
-    aliases: [d.id.replace(/^builtin:/, '')],
-    adapterVersion: '1',
-    contractVersion: 1,
-    operations: ['search'],
-    taskProfiles: [],
-    languages: ['*'],
-    regions: ['global'],
-    resultKinds: ['web'],
-    requirements: [],
-    supportedFilters: [],
-    costModel: FREE,
-    verification: { live: true, note: 'shipped before the registry; exercised by the plugin since 0.1' },
-    ...d,
-  }
-}
-
 type Create = (deps: EngineDeps, config: ResolvedConfig) => Engine
 
 /** Default local probe: the engine's own cheap `available()` (no network), with the descriptor's dimensions filled in from `dims`. */
@@ -107,29 +89,31 @@ export function builtinAdapters(): ProviderAdapter[] {
     }), jinaSearchEngine, (env) => ({ installation: 'not_required', credential: (env.deps.jinaApiKey?.length ?? 0) > 0 ? 'configured' : 'missing' })),
 
     adapter(descriptor({
-      id: 'builtin:github', label: 'GitHub', taskProfiles: ['docs_code', 'compare'], resultKinds: ['code'], sourceFamily: 'github',
+      id: 'builtin:github', label: 'GitHub', kind: 'platform', domains: ['github.com'], taskProfiles: ['docs_code', 'compare'], resultKinds: ['code'], sourceFamily: 'github',
       requirements: [key('github-token', ['GITHUB_TOKEN', 'GH_TOKEN'], true, 'optional: raises the rate limit')],
     }), githubEngine, (env) => ({ installation: 'not_required', credential: (env.deps.githubToken?.length ?? 0) > 0 ? 'configured' : 'not_required' })),
 
     adapter(descriptor({
-      id: 'builtin:bilibili', label: 'Bilibili', taskProfiles: ['experience'], languages: ['zh'], regions: ['cn'], resultKinds: ['video'],
+      id: 'builtin:bilibili', label: 'Bilibili', kind: 'platform', domains: ['bilibili.com'], taskProfiles: ['experience'], languages: ['zh'], regions: ['cn'], resultKinds: ['video'],
       requirements: [{ kind: 'cli', id: 'bili' }],
     }), bilibiliEngine, (env, ok) => cliDims('bili', ok, env)),
 
-    adapter(descriptor({ id: 'builtin:v2ex', label: 'V2EX', taskProfiles: ['experience'], languages: ['zh'], regions: ['cn'], resultKinds: ['forum'] }),
+    adapter(descriptor({ id: 'builtin:v2ex', label: 'V2EX', kind: 'platform', domains: ['v2ex.com'], taskProfiles: ['experience'], languages: ['zh'], regions: ['cn'], resultKinds: ['forum'] }),
       (deps) => v2exEngine(deps.allowProxyFakeIp), noRequirements),
 
     adapter(descriptor({
-      id: 'builtin:youtube', label: 'YouTube', taskProfiles: ['experience'], resultKinds: ['video'],
+      id: 'builtin:youtube', label: 'YouTube', kind: 'platform', domains: ['youtube.com', 'youtu.be'], taskProfiles: ['experience'], resultKinds: ['video'],
       requirements: [{ kind: 'cli', id: 'yt-dlp' }],
     }), deps => youtubeEngine(deps), (env, ok) => cliDims('yt-dlp', ok, env)),
 
-    adapter(descriptor({ id: 'builtin:arxiv', label: 'arXiv', taskProfiles: ['academic'], languages: ['en'], resultKinds: ['paper'], sourceFamily: 'arxiv' }),
+    adapter(descriptor({ id: 'builtin:arxiv', label: 'arXiv', kind: 'platform', domains: ['arxiv.org'], taskProfiles: ['academic'], languages: ['en'], resultKinds: ['paper'], sourceFamily: 'arxiv' }),
       (deps) => arxivEngine(deps.allowProxyFakeIp), noRequirements),
 
-    adapter(descriptor({ id: 'builtin:pubmed', label: 'PubMed', taskProfiles: ['academic'], languages: ['en'], resultKinds: ['paper'], sourceFamily: 'pubmed' }),
+    adapter(descriptor({ id: 'builtin:pubmed', label: 'PubMed', kind: 'platform', domains: ['pubmed.ncbi.nlm.nih.gov'], taskProfiles: ['academic'], languages: ['en'], resultKinds: ['paper'], sourceFamily: 'pubmed' }),
       (deps) => pubmedEngine(deps.allowProxyFakeIp), noRequirements),
 
+    // Platforms (dev-plan M8b): site / community sources, searched explicitly (`platform=` or `engines`), never planned on their own.
+    ...platformAdapters,
     bochaAdapter,
     // Anonymous API sources (dev-plan M7b): vertical / supplementary, never promoted ahead of web search.
     wikipediaAdapter,

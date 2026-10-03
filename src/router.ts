@@ -13,6 +13,7 @@ import {
   platformEngines, rssEngine, customPlatformEngine, EngineError,
   type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
 } from './engines.ts'
+import { customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
 import { defaultProviderRegistry, routeIdOf, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
 import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
@@ -70,6 +71,8 @@ export interface ProviderReport {
   route: string
   aliases: string[]
   label: string
+  /** `web` engine or `platform` (a site / community, `search.run platform=<route>`). */
+  kind: 'web' | 'platform'
   operations: string[]
   taskProfiles: string[]
   languages: string[]
@@ -93,6 +96,8 @@ export class SearchRouter {
   /** Backend ids this router created from the registry (a stub a test installed under another id is never touched). */
   private readonly owned = new Set<string>()
   private syncedRevision = -1
+  /** Custom platforms (settings `customPlatforms`) this router registered: key -> spec signature + unregister. A key the registry refused stays here with its problem so it is not retried on every call. */
+  private readonly custom = new Map<string, { sig: string; off: () => void; problem?: string }>()
   /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
   private readonly readiness = new Map<string, Readiness>()
   /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -114,11 +119,41 @@ export class SearchRouter {
 
   /** Mirror the registry into the backend registry: new providers appear, unregistered ones stop being scheduled. */
   private syncBackends(): void {
+    this.syncCustomPlatforms()
     if (this.syncedRevision === this.registry.revision) return
     this.syncedRevision = this.registry.revision
     const wanted = new Map(this.registry.list({ operation: 'search' }).map(a => [routeIdOf(a.descriptor), a.descriptor] as const))
     for (const id of [...this.owned]) if (!wanted.has(id)) { this.backends.unregister(id); this.owned.delete(id) }
     for (const id of wanted.keys()) if (!this.backends.has(id)) { this.backends.register(this.backendFor(id)); this.owned.add(id) }
+  }
+
+  /**
+   * Keep the registry's custom platform providers equal to the settings: new keys register, edited ones are replaced,
+   * removed ones unregister (the revision bump then makes {@link syncBackends} drop their backends). A key that clashes
+   * with a provider already registered is not registered (a user platform never replaces a built-in source); see {@link customPlatformProblems}.
+   */
+  private syncCustomPlatforms(): void {
+    const specs = this.dynamic().customPlatforms ?? {}
+    const next = new Map(Object.entries(specs).map(([key, spec]) => [key, JSON.stringify(spec)] as const))
+    for (const [key, entry] of [...this.custom]) if (next.get(key) !== entry.sig) { entry.off(); this.custom.delete(key) }
+    for (const [key, sig] of next) {
+      if (this.custom.has(key)) continue
+      const problem = customKeyProblem(key)
+      if (problem) { this.custom.set(key, { sig, off: () => {}, problem }); continue }
+      try { this.custom.set(key, { sig, off: this.registry.register(customPlatformAdapter(key, specs[key]!)) }) } catch (error) { this.custom.set(key, { sig, off: () => {}, problem: 'custom platform "' + key + '" was not registered: ' + (error instanceof Error ? error.message : String(error)) }) }
+    }
+  }
+
+  /** Custom platforms the registry could not take (key clash, bad key), for `sources.status`. */
+  customPlatformProblems(): string[] {
+    this.syncCustomPlatforms()
+    return [...this.custom.values()].flatMap(entry => (entry.problem ? [entry.problem] : []))
+  }
+
+  /** Unregister what this router put into the registry (plugin unload). */
+  dispose(): void {
+    for (const entry of this.custom.values()) entry.off()
+    this.custom.clear()
   }
 
   private backendFor(id: string): Backend<SearchInput, SearchOutcome> {
@@ -436,7 +471,7 @@ export class SearchRouter {
       const credential = last?.code === 'ENGINE_AUTH' ? 'rejected' as const : local.credential
       const reason = !available ? (diag?.reason ?? local.reason) : undefined
       out.push({
-        id: d.id, route, aliases: [...d.aliases], label: d.label, operations: [...d.operations], taskProfiles: [...d.taskProfiles],
+        id: d.id, route, aliases: [...d.aliases], label: d.label, kind: d.kind ?? 'web', operations: [...d.operations], taskProfiles: [...d.taskProfiles],
         languages: [...d.languages], regions: [...d.regions], resultKinds: [...d.resultKinds],
         ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
         requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel },
