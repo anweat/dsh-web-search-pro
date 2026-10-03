@@ -85,11 +85,20 @@ export interface PlanOptions {
   autoProviders?: boolean
   /** Other web engines kept behind promoted providers, in table order (default 1). */
   webFallbacks?: number
+  /** Most providers promoted for the task language (default {@link DEFAULT_MAX_PROMOTED}); providers of one `sourceFamily` count once. */
+  maxPromoted?: number
   /** Per-provider compilation; defaults to the core compiler (adapters may supply their own). */
   compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery
 }
 
 export const DEFAULT_WEB_FALLBACKS = 1
+
+/**
+ * Most providers promoted ahead of the profile table for one task (dev-plan M7c). With the round-1 cap of three, two
+ * specialists leave one slot for a free fallback engine, so configuring every keyed source never crowds out the keyless ones.
+ * The surplus stays in `wanted` (second round).
+ */
+export const DEFAULT_MAX_PROMOTED = 2
 
 const PROMOTABLE_CREDENTIALS: readonly (CredentialState | undefined)[] = [undefined, 'configured', 'not_required']
 
@@ -153,13 +162,20 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
   let planList = [...base]
   const held: string[] = []
   const promoted: string[] = []
+  const surplus: string[] = []
   if (!explicit && language && options.autoProviders !== false && descriptors.size) {
     const candidates = [...descriptors.values()]
       .filter(d => d.operations.includes('search') && d.resultKinds.includes('web') && d.languages.includes(language) && d.taskProfiles.includes(profile))
       .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
+    const maxPromoted = Math.max(options.maxPromoted ?? DEFAULT_MAX_PROMOTED, 1)
+    const families = new Set<string>()
     for (const d of candidates) {
       const status = isReady(routeIdOf(d))
-      if (status && PROMOTABLE_CREDENTIALS.includes(status.credential)) promoted.push(routeIdOf(d))
+      if (!status || !PROMOTABLE_CREDENTIALS.includes(status.credential)) continue
+      // Two sources over one upstream index (Serper and another Google wrapper) are not two vantage points: the second waits for round 2.
+      if (promoted.length >= maxPromoted || (d.sourceFamily && families.has(d.sourceFamily))) { surplus.push(routeIdOf(d)); continue }
+      if (d.sourceFamily) families.add(d.sourceFamily)
+      promoted.push(routeIdOf(d))
     }
     if (promoted.length) {
       // Web engines that were not promoted (language-agnostic ones, or strong in another language) are the fallbacks; vertical sources stay.
@@ -174,6 +190,7 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
         return false
       })
       planList = [...promoted, ...rest]
+      if (surplus.length) notes.push('also ready for a second round: ' + surplus.join(', '))
       notes.push('language ' + language + ': preferred ' + promoted.join(', ') + (held.length ? '; fallback web engines limited to ' + rest.filter(id => generic(id) && isReady(id)).join(', ') + ' (held for a second round: ' + held.join(', ') + ')' : ''))
       // A hard filter a promoted provider cannot enforce is checked locally, never silently dropped.
       const hardKinds = [...new Set(task.constraints.filter(c => c.strength === 'hard').map(c => c.kind))]
@@ -218,5 +235,5 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
   if (!providers.length) notes.push('no usable provider for profile ' + profile + (explicit ? ' (explicit engines)' : ''))
   // Supplements (registered ones only) are second-round candidates behind everything the plan already wants.
   const supplements = !explicit && options.autoProviders !== false ? PROFILE_SUPPLEMENTS[profile].filter(id => descriptors.has(id)) : []
-  return { profile, profileInferred, providers, ...language ? { language } : {}, wanted: [...new Set([...planList, ...held, ...supplements])], skipped, notes }
+  return { profile, profileInferred, providers, ...language ? { language } : {}, wanted: [...new Set([...planList, ...surplus, ...held, ...supplements])], skipped, notes }
 }

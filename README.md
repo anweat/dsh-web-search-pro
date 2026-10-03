@@ -224,6 +224,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
      exaApiKeyEnv: EXA_API_KEY # 推荐：运行环境或凭据服务，不把密钥写入配置
      jinaApiKeyEnv: JINA_API_KEY
      bochaApiKeyEnv: BOCHA_SEARCH_API_KEY # 博查 Key 的凭据 / 环境变量名；缺省再试 BOCHA_JEV_API_KEY
+     # keyedSources: # 付费来源（可选，见“付费 / 需 Key 的来源”）：tavily / brave / linkup / serper / metaso / zhipu / baidu-qianfan
+     #   tavily: { apiKeyEnv: TAVILY_API_KEY }   # 或 apiKey（字面量，不推荐）/ baseUrl；没有 Key 的来源保持不可用
      engines: [ddg, bing, exa, seam, jina]
      parallelEngines: false
      evidence: # 证据包模式的块评分；默认完全不调用 Jev
@@ -246,7 +248,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
    ```
 
 3. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
-4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。设置面板暂未提供博查字段，用 settings.yaml / 凭据服务 / 环境变量配置。
+4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。设置面板暂未提供博查与 `keyedSources` 字段，用 settings.yaml / 凭据服务 / 环境变量配置。
 
 ## 外部依赖（按需）
 
@@ -300,6 +302,24 @@ Exa 优先使用原生 API 客户端：`web_search_pro` 可传 `exaType`、域�
 **来源目录**：`catalog/sources.v1.json`（随包发布，纯数据，不执行任何东西）列出已知来源——API、CLI（bili、yt-dlp、twitter、OpenCLI 各站命令及“没有 search 命令”的反例、wx-search-cli、OmniReach）、MCP 与需要 Browser 的平台——每条带认证、安装 / 配置说明、许可证、成本、`sourceFamily`、核验状态与反例。`web_backend_status action=recommend`（可带 `task` / `profile` / `query` / `language` / `platform`）按任务至多给出 3 个来源：已就绪的在前，其次是缺什么、怎么装；目录里没有适配器的条目永远不可执行。常驻提示只加了一句“不要遍历全部来源”。设置：`searxngUrl`、`openalexMailto`（settings.yaml，设置面板暂无字段）。
 
 **English**　Keyless official APIs: `wikipedia` (zh/en edition from the task language), `hackernews` (Algolia), `stackexchange` (anonymous quota 300/day/IP, `backoff` honoured), `openalex` (small keyless budget; optional free key; contact address in the User-Agent), `semanticscholar` (shared pool, often 429; optional key), `anysearch` (anonymous per-IP quota; a 402 may carry auto-generated credentials which the adapter discards, reporting only `quota_exhausted` and pausing for an hour) and `searxng` (only with your own `searxngUrl`, JSON format enabled; private addresses are allowed because the URL is your configuration). All use the SSRF-safe HTTP path (`allowProxyFakeIp` applies), a polite User-Agent and count requests in the usage ledger. They are vertical / supplementary: S1 never promotes them ahead of web search (academic: arxiv/openalex/pubmed; experience: language-ordered community sources; Wikipedia and Stack Overflow are second-round supplements). `catalog/sources.v1.json` is pure data about known sources (never executed); `web_backend_status action=recommend` returns at most 3 sources for a task, ready ones first, then what is missing and how to set it up; catalog-only entries are never executable.
+
+### 付费 / 需 Key 的来源（预留接口）/ Keyed sources (reserved interfaces)
+
+**中文**　七个需要 Key 的搜索 API 已有“描述符 + 适配器”，**配置 Key 之前不会执行**：没有 Key 时 `web_backend_status` 显示 `credential: missing`，`action=recommend` 把它们列为“缺什么 + 怎么配置”的建议（永远 `executable: false`）；配置后进入可执行候选。**全部未对真实服务调用过**（没有 Key），描述符标 `verification.live=false`、`web_backend_status` 显示 `[not verified live]`，响应样例（`test/fixtures/*-search.json`）都在文件头声明“由文档构造，非真实抓取”。Key 解析顺序：settings 的 `keyedSources.<id>.apiKey` → 凭据引用 → 环境变量；变量名可用 `keyedSources.<id>.apiKeyEnv` 改，`baseUrl` 可改端点。
+
+| 来源（id） | 语言 | 默认环境变量 | 官方文档 / 参考 | 原生过滤 | 说明与未采用 / 存疑字段 |
+|---|---|---|---|---|---|
+| Tavily（`tavily`） | en | `TAVILY_API_KEY` | docs.tavily.com 搜索 API 参考；MIT `crayonlu/dsh-web-search-tavily` | `include_domains`（≤300）/ `exclude_domains`（≤150）/ `start_date` | 不请求也不读 `answer`；432 / 433 为套餐上限（quota）；未用 `country` / `language` |
+| Brave（`brave`，family `brave`） | en | `BRAVE_API_KEY` | api-dashboard.search.brave.com 文档与 API 参考、限速指南 | 查询里的 `site:` / `-site:` / `-term`；`freshness` 日期区间 | 查询按较小的文档值截断（400 字符 / 50 词，API 参考写 600 / 75）；错误体格式文档未给出；限速头 `X-RateLimit-*` 的第二个值为 0 = 月额度用尽 |
+| Linkup（`linkup`） | en | `LINKUP_API_KEY` | docs.linkup.so `/search` 参考、错误页、限速页 | `includeDomains`（≤100）/ `excludeDomains` / `fromDate` | 只用 `outputType: searchResults`（排序后的 URL，从不用 `sourcedAnswer`）；429 同时表示额度不足和并发过高，按信息判断；402（x402 付款）一律不付款 |
+| Serper（`serper`，family `google`） | en | `SERPER_API_KEY` | **无公开 API 参考**：取自 MIT 参考代码（LangChain `GoogleSerperAPIWrapper`、`searchsuite`） | 查询里的 Google 运算符 | 只读 `organic`；`gl` / `hl` / `tbs` 未发送（取值未经确认）；与其他 Google 系来源不算独立印证 |
+| 秘塔（`metaso`） | zh | `METASO_API_KEY` | 官方页面是脚本渲染读不到；取自两个 MIT 参考（`TZHR-invest/dsh-plugins`、`HundunOnline/mcp-metaso`） | 无（全部本地核验） | 仅 `webpage` scope；`size` 取 ≤20（两个参考写 100 与 20）；reader 留待后续；不请求综合摘要 |
+| 智谱（`zhipu`） | zh | `ZHIPU_API_KEY` | docs.bigmodel.cn 搜索指南、API 参考、错误码页 | `search_domain_filter`（单个域名）/ `search_recency_filter`（仅整日 / 周 / 月 / 年窗口算原生） | 只读 `search_result`（不是 GLM 生成回答）；查询 ≤70 字符；按文档的业务错误码映射（1113 / 1308–1310 quota，1302 / 1701 限速） |
+| 百度千帆（`baidu-qianfan`，family `baidu`） | zh | `QIANFAN_API_KEY`，其次 `BAIDU_API_KEY` | ai.baidu.com AppBuilder「百度搜索」页；Qianfan v2 约定；MIT `searchsuite` | `search_filter.match.site`（≤20）/ `block_websites` / `range.page_time` | **官方页请求头自相矛盾**（表里同时列 `Authorization` 与 `X-Appbuilder-Authorization`，curl 只用后者）：两个头都发送同一个 Bearer 值，待真实调用确认；只读 `references`；查询按参考 SDK 截到 72 单位（汉字算 2） |
+
+错误映射与博查一致：401 / 403 / 402 不可重试、不进冷却，信息含余额 / 额度 / credit 的归 `ENGINE_QUOTA`；429 按 `Retry-After`（Brave 用限速头）冷却；空结果 `ENGINE_EMPTY`；请求不跟随重定向（Key 不会被转发到别的域）；报错和日志不含 Key。请求数记入用量账本（provider 为来源 id，token 不适用、金额未知）。S1：就绪且有 Key 的英文来源在英文任务里、中文来源在中文任务里提前，优先级低于 Exa（10）与博查（10）（秘塔 20、智谱 30、千帆 40；Tavily 20、Brave 30、Linkup 40、Serper 60）；一次至多提前 2 个，同一 `sourceFamily` 只算一个，其余留给第二轮，所以第一轮仍至多 3 个来源且留一个免费引擎。
+
+**English**　Seven keyed search APIs ship as descriptor + adapter pairs that are inactive until a key is configured: without one `web_backend_status` shows `credential: missing` and `action=recommend` lists them as setup steps (never executable). None was ever called live (no keys), every descriptor says `verification.live=false`, and the sample responses under `test/fixtures` state they are constructed from the docs, not captured. Key order: `keyedSources.<id>.apiKey` -> credentials ref -> environment (name via `keyedSources.<id>.apiKeyEnv`, endpoint via `baseUrl`). Defaults: `TAVILY_API_KEY`, `BRAVE_API_KEY`, `LINKUP_API_KEY`, `SERPER_API_KEY`, `METASO_API_KEY`, `ZHIPU_API_KEY`, `QIANFAN_API_KEY` (then `BAIDU_API_KEY`). Only ranked results are used (Tavily `answer`, Linkup `sourcedAnswer`, Zhipu `search_intent`, Baidu chat answers and Serper answer boxes are ignored). Serper has no public API reference (contract from MIT reference code) and is `sourceFamily: google`, so it is not independent corroboration of other Google-based sources. Metaso's docs page is script-rendered (contract from two agreeing MIT references; webpage scope only). Baidu Qianfan's page contradicts itself on the auth header, so both documented headers carry the same bearer value until a live call settles it. Errors follow Bocha: 401 / 403 / 402 are non-retryable with no cooldown (credit / quota wording is `ENGINE_QUOTA`), 429 cools down for `Retry-After`, redirects are refused, errors never contain the key. Ready keyed sources are promoted for their language below Exa / Bocha (at most two per task, one per index family) so round 1 stays at three providers with a free engine left.
 
 ## 开发
 

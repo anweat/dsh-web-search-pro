@@ -1,7 +1,7 @@
 {
  "$schema": "dsh-web-search-pro/source-catalog",
  "version": 1,
- "updated": "2026-10-02",
+ "updated": "2026-10-03",
  "description": "Known search sources, pure data. It never executes anything: only adapters registered in the provider registry can run; this file explains what is missing and how to set it up.",
  "entries": [
   {"id":"seam","label":"DeepSeek native search (ctx.web)","kind":"api","operations":["search"],"languages":["*"],"regions":["global"],"profiles":["general"],"resultKinds":["web"],"auth":"anonymous","requires":{"service":"ctx.web"},"provider":"seam","rank":60,"install":"Provided by the DSH host web capability; configure a web provider in the host.","license":"depends on the host provider","cost":"decided by the host provider behind ctx.web","verification":{"status":"verified","note":"shipped built-in"},"recommendedFor":["one general web query through whatever provider the host selected"],"notFor":["evidence of independence: the upstream index is unknown"]},
