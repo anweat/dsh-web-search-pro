@@ -4,6 +4,7 @@ import { registerHooks } from 'node:module'
 import { buildPromptText } from '../src/prompt.ts'
 import { resolveConfig } from '../src/config.ts'
 import { indexedToolDefinitions } from '../src/tool-defs.ts'
+import { LEGACY_TOOL_NAMES } from '../src/actions/legacy.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -61,4 +62,31 @@ test('condensed descriptions point at the registry and keep the rules the model 
   assert.match(defs.get('web_call').description, /INVALID_ARGS/)
   assert.equal(defs.get('web_call').parameters.action.required, true)
   assert.equal(defs.get('web_call').parameters.args.additionalProperties, true)
+})
+
+test('the prompt is one line naming the entry points and the skill; no old tool name or browser_* tool name is left', () => {
+  const text = buildPromptText(false)
+  assert.ok(text.length <= 250, 'prompt ' + text.length)
+  assert.match(text, /web_index/)
+  assert.match(text, /web_call/)
+  assert.match(text, /search\.run/)
+  assert.match(text, /skill dsh-web-search-pro/)
+  assert.doesNotMatch(text, /\n/)
+  const withBrowser = buildPromptText(true)
+  assert.ok(withBrowser.startsWith(text))
+  assert.match(withBrowser, /skill dsh-browser or browser_index/)
+  for (const prompt of [text, withBrowser]) {
+    assert.doesNotMatch(prompt, new RegExp('\\b(' + LEGACY_TOOL_NAMES.join('|') + ')\\b'), 'old tool names are gone from the prompt')
+    // The only browser tool name that may appear is the entry point.
+    assert.deepEqual([...prompt.matchAll(/\bbrowser_[a-z_]+/g)].map(match => match[0]).filter(name => name !== 'browser_index'), [])
+  }
+})
+
+test('total resident text of this plugin (prompt + tool names, descriptions and parameters) stays within 1200 characters', () => {
+  const plain = residentChars(false)
+  const withBrowser = residentChars(true)
+  assert.ok(plain.total <= 1_200, 'resident ' + JSON.stringify(plain))
+  assert.ok(withBrowser.total <= 1_200, 'resident with browser ' + JSON.stringify(withBrowser))
+  // Before M8a: prompt 612/1148 (without/with browser) + 11 tool descriptions 2391 + parameters 6193 + names 150 = 9346 / 9882.
+  assert.ok(plain.total * 5 < 9_346, 'at least five times smaller than the 11-tool surface')
 })

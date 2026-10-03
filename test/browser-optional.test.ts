@@ -229,7 +229,7 @@ test('(d) a browser removed after apply degrades to the no-browser behaviour wit
   }
 })
 
-test('system prompt omits browser_* guidance without a browser and includes it when present', () => {
+test('system prompt is one line, plus one line about dsh-browser only when it is present', () => {
   const h = boot()
   try {
     assert.equal(h.sections.length, 1)
@@ -238,26 +238,20 @@ test('system prompt omits browser_* guidance without a browser and includes it w
     assert.equal(typeof section.text, 'function', 'text is evaluated at assembly time')
     const without = section.text()
     assert.doesNotMatch(without, /browser_/)
-    assert.match(without, /web_search_pro/)
-    assert.match(without, /optional dsh-browser plugin/)
+    assert.match(without, /web_index/)
+    assert.match(without, /web_call/)
+    assert.match(without, /skill dsh-web-search-pro/)
+    assert.doesNotMatch(without, /dsh-browser/, 'no browser line without the service')
     h.holder.browser = fakeBrowser()
     const withBrowser = section.text()
-    assert.match(withBrowser, /browser_open/)
-    assert.match(withBrowser, /browser_opencli_catalog/)
-    assert.match(withBrowser, /web_snapshot/)
     assert.equal(withBrowser, buildPromptText(true))
+    assert.ok(withBrowser.startsWith(without))
+    assert.match(withBrowser, /dsh-browser available; for interactive browsing see skill dsh-browser or browser_index\./)
     h.holder.browser = undefined
     assert.equal(section.text(), without)
-    assert.ok(without.length <= 650, 'base section stays short: ' + without.length)
-    assert.ok(withBrowser.length <= 1200, 'browser section stays short: ' + withBrowser.length)
-    // The rules survive the condensing.
-    assert.match(without, /Cite URLs/)
-    assert.match(without, /web_deps action=check/)
-    assert.match(without, /evidence pack/)
-    assert.match(without, /offset/)
-    assert.match(withBrowser, /browser_status first/)
-    assert.match(withBrowser, /browser_script_validate before browser_userscript_run/)
-    assert.match(withBrowser, /AuthProfile/)
+    assert.ok(without.length <= 250, 'one short line: ' + without.length)
+    assert.ok(withBrowser.length - without.length <= 110, 'one short browser line: ' + (withBrowser.length - without.length))
+    assert.ok(!without.includes('\n') && !withBrowser.includes('\n'))
   } finally {
     h.cleanup()
   }
