@@ -31,6 +31,7 @@ import { SearchRouter } from './router.ts'
 import { FetchService } from './fetch.ts'
 import { registerTools } from './tools.ts'
 import { buildPromptText } from './prompt.ts'
+import { registerSkillWhenAvailable } from './skill.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
 import { automationModeOf, resolveWebCall, webPolicyDecision } from './actions/approval.ts'
 
@@ -82,8 +83,12 @@ export function apply(ctx: Context, config: Config): void {
   const router = new SearchRouter(ctx, resolved, store, dynamic, getBrowser)
   const fetchSvc = new FetchService(store, dynamic, getBrowser)
 
-  // 5. Tools: `web_index` + `web_call` (or one tool per action with toolSurface=flat).
-  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser })
+  // 5. Tools: `web_index` + `web_call` (or one tool per action with toolSurface=flat). The bundled
+  //    `dsh-web-search-pro` skill is registered only when the Host has a skill registry. It must not be
+  //    a declared `inject` (Cordis 4.0.4 would hang the plugin without it); without it the web_index
+  //    root carries a compact guide instead.
+  const skill = registerSkillWhenAvailable(ctx)
+  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser, skillAvailable: skill.isAvailable })
 
   //    Approval is decided per ACTION: web_call (and each flat tool) is resolved to its action first, so the user
   //    is asked about `cache.clear` or `sources.install bili`, not about a generic dispatcher. The old tools were

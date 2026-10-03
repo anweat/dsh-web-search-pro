@@ -1,0 +1,97 @@
+---
+name: dsh-web-search-pro
+description: Use for web research and reading pages with the web_index and web_call tools - evidence-pack search (search.run with task and profile), source recommendation, reading long pages with offset, expanding an excerpt, per-site extraction rules. 联网检索、查证资料、读取网页时使用（证据包搜索、来源推荐、长页续读、摘录展开）。
+---
+
+# dsh-web-search-pro
+
+Two tools. `web_index` shows what exists; `web_call` runs one action and returns `{ok, action, result | error{code,message,hint,schema?}}` (you read the result as text). Actions are named `group.action`. Do not guess other tool names.
+
+## 1. Search: evidence mode first
+
+Pass `task` (one sentence: your goal, not the chat) or `profile` and you get an evidence pack: only the passages that answer your needs, with `gaps` for needs nothing answered. Profiles: `docs_code`, `news_fact`, `academic`, `experience`, `compare`, `general` (inferred when omitted). Without `task`/`profile` you get a plain source list (navigation targets: fetch before answering).
+
+```json call
+{"action":"search.run","args":{"query":"node:sqlite busy timeout WAL","task":"configure busy timeout and WAL for node:sqlite","profile":"docs_code","needs":"how to set busy timeout; how to enable WAL"}}
+```
+
+```json call
+{"action":"search.run","args":{"query":"量子计算 最新进展 2026","task":"了解 2026 年量子计算的最新进展","profile":"news_fact","needs":"最新的纠错进展;主要厂商的路线图","constraints":"[{\"kind\":\"time_window\",\"value\":\"2026\",\"strength\":\"soft\"}]"}}
+```
+
+`needs` are `;`-separated sub-questions (default: the task). The query may be English while task and needs are Chinese; matching is cross-language.
+
+## 2. Read the pack before answering
+
+- Cite the evidence URLs. Every excerpt has an `evidenceId`.
+- **Coverage is heuristic.** A need listed in `gaps`, or an empty pack, does not mean the answer does not exist. Before saying "not found": expand or fetch, then try another source or phrasing (`gaps[].reason`: `no_candidates`, `no_page_content`, `weak_support`, `budget`).
+- `low relevance` entries are kept only to avoid an empty pack; do not lean on them.
+- A short excerpt: read it in context.
+
+```json call
+{"action":"history.expand","args":{"evidenceId":"e_1a2b3c"}}
+```
+
+- A promising source whose excerpt was cut or missing: fetch the page.
+
+```json call
+{"action":"read.fetch","args":{"url":"https://nodejs.org/api/sqlite.html"}}
+```
+
+A long page is capped; the reply gives `nextOffset`. Continue with `offset` (served from the stored snapshot, no re-download):
+
+```json call
+{"action":"read.fetch","args":{"url":"https://nodejs.org/api/sqlite.html","offset":20000}}
+```
+
+`shellPage` / `pageClass` (js_shell, login_wall, captcha) mean the text is not the content: follow the links the reply lists, or hand off to the browser (section 6). `read.contents` fetches up to 100 URLs through Exa (needs the Exa key); `read.snapshot` renders a page in the browser.
+
+## 3. Choose sources: 1 or 2, never all
+
+```json call
+{"action":"search.recommend","args":{"task":"find the official documentation for Rust async runtimes","profile":"docs_code"}}
+```
+
+returns at most 3 sources, ready ones first, with how to call each (`use`) and what is missing. Use one or two; add another only when the evidence is insufficient. Never fan out to every source or loop over all engines. Sources that need setup: tell the user what is missing (`references/sources.md`) instead of calling them.
+
+Name sources only when you have a reason:
+
+```json call
+{"action":"search.run","args":{"query":"transformer attention survey","task":"find survey papers on attention","profile":"academic","engines":"arxiv"}}
+```
+
+- `engines` takes ids from `search.recommend` / `sources.status` (aliases like `ddg` work; an unknown id lists the valid ones). Explicit engines are tried in order.
+- `platform` searches one platform (`github`, `v2ex`, `bilibili`, `rss` with `url`, Chinese communities such as `zhihu`) and does not combine with `task`/`profile`; Chinese communities and OpenCLI platforms need the dsh-browser plugin and a login.
+- `multi:true` (plain list only) queries every listed engine in parallel; avoid it.
+
+## 4. Constraints
+
+`constraints` is a JSON string array of `{kind,value,strength}`. Kinds: `must_term`, `exclude_term`, `entity`, `version`, `time_window`, `site`, `exclude_site`, `language`, `region`, `source_type`. `hard` drops candidates that clearly violate it; `soft` (default) only prefers. Use `hard` for what the answer is useless without (a version, an official site), `soft` for preferences. Where a source supports it the constraint is pushed down (site, date window); otherwise it is checked locally, and `verification` in the pack says which.
+
+```json call
+{"action":"search.run","args":{"query":"react 19 useActionState","task":"how useActionState works in React 19","profile":"docs_code","constraints":"[{\"kind\":\"site\",\"value\":\"react.dev\",\"strength\":\"hard\"},{\"kind\":\"version\",\"value\":\"19\",\"strength\":\"soft\"}]"}}
+```
+
+## 5. Budgets
+
+- `budget` (evidence mode): excerpt characters, default 6000, max 30000. Gaps caused by budget say so; raise it or expand.
+- `count`: max results (1-20). A page read is capped at 20000 characters by default; `maxChars` raises it per call.
+- Model scoring (when enabled) has a per-search and a daily token cap; `sources.status` shows usage (`references/judges.md`).
+- `cache.clear`, `history.delete`, `rules.upsert|remove|import` and `sources.install` change local state or the machine and ask the user first; run them only when asked. `sources.install` only when the user asks to install a missing CLI.
+
+## 6. Browser hand-off
+
+For pages that need interaction, login, or a rendered DOM, use the dsh-browser plugin: see its skill `dsh-browser` or call `browser_index`. `read.snapshot` and browser-based platforms work only when it is installed and ready (`sources.status` shows `browser`).
+
+## 7. When something fails
+
+| code | what to do |
+|---|---|
+| `INVALID_ARGS` | fix the arguments using the attached `schema` (an unknown engine or profile lists the valid ones) |
+| `UNKNOWN_ACTION` | take a name from `error.hint` or `web_index` |
+| `CAPABILITY_UNAVAILABLE` | not set up (browser missing, key missing): `sources.status`, `references/troubleshooting.md` |
+| `NOT_FOUND` | stale id: `history.list` |
+| `DEADLINE` | retry narrower, fewer engines |
+| `ACTION_FAILED` | read the message; empty or failed engines are listed in the result (`enginesTried`, `fallbackNote`) |
+
+Quota, fake-IP proxy errors and cooldowns: `references/troubleshooting.md`. Judge providers and rubrics (settings, not model-editable): `references/judges.md`. Keyed sources and the catalog: `references/sources.md`. Extraction rules for a site that reads badly: `rules.upsert` (then `read.fetch` with `fresh:true`).
