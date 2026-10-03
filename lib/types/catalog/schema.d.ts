@@ -14,7 +14,7 @@ export type SourceKind = typeof SOURCE_KINDS[number];
 export type SourceAuth = typeof SOURCE_AUTH[number];
 export type SourceOperation = typeof SOURCE_OPERATIONS[number];
 export interface CatalogRequires {
-    /** A command that must be on PATH (matches a `web_deps` id where this plugin probes it). */
+    /** A command that must be on PATH (matches a `sources.deps` id where this plugin probes it). */
     cli?: string;
     /** The optional dsh-browser plugin (OpenCLI bridge, Playwright, saved logins). */
     browser?: boolean;
@@ -49,9 +49,9 @@ export interface CatalogEntry {
     /** Environment variables / credentials refs of the key (or login session). Names this plugin reads, or plans to read once an adapter exists. */
     keyEnv?: string[];
     requires?: CatalogRequires;
-    /** Route id of the registry provider (`web_search_pro engines=<id>`) when this plugin implements the source. */
+    /** Route id of the registry provider (`search.run engines=<id>`) when this plugin implements the source. */
     provider?: string;
-    /** Platform id of `web_platform_search` when it implements the source. */
+    /** Platform id of `search.run platform=` when it implements the source. */
     platform?: string;
     /** How to call it when neither `provider` nor `platform` applies (e.g. through the dsh-browser OpenCLI tools). */
     invoke?: string;

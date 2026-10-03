@@ -152,5 +152,5 @@ export declare function rssEngine(url: string, allowProxyFakeIp?: boolean): Engi
 /** Build the ordered engine list for a platform search. */
 export declare function platformEngines(platform: string, deps: EngineDeps): Engine[];
 export declare const PLATFORM_IDS: readonly ["github", "github-code", "github-issues", "bilibili", "youtube", "v2ex", "xiaohongshu", "twitter", "reddit", "instagram", "facebook", "rss", "zhihu", "weibo", "douban", "tieba", "douyin", "kuaishou", "arxiv", "pubmed"];
-/** Whether web_platform_search may route this built-in or configured custom id. */
+/** Whether search.run platform= may route this built-in or configured custom id. */
 export declare function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean;

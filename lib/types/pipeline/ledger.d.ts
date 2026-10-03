@@ -66,7 +66,7 @@ export declare class UsageLedger {
     constructor(store: Store, caps: BudgetCaps, now?: () => number);
     /** Today's day key in the budget time zone. */
     day(): string;
-    /** A per-search budget (one `web_search_pro` evidence call, all its rounds). */
+    /** A per-search budget (one `search.run` evidence call, all its rounds). */
     forSearch(searchId?: string): SearchBudget;
     /**
      * Count requests of a metered NON-model provider (Bocha search): one settled row with `requests`, tokens 0 (n/a)

@@ -130,7 +130,7 @@ export interface PipelineResult {
     pagesRead: string[];
     /** Every block that got an S6 grade (the selection pool). */
     scored: ScoredBlock[];
-    /** Full text of every selected block (for storage and `web_history action=expand`). */
+    /** Full text of every selected block (for storage and `history.expand`). */
     evidenceBlocks: {
         evidenceId: string;
         url: string;

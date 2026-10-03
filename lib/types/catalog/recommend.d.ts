@@ -26,7 +26,7 @@ export interface RecommendContext {
     catalog: SourceCatalog;
     /** Registry readiness by provider ROUTE id; absent = no such adapter is registered. */
     providers: ReadonlyMap<string, ProviderStatus>;
-    /** Local CLI scan (`web_deps` ids); absent = not scanned. */
+    /** Local CLI scan (`sources.deps` ids); absent = not scanned. */
     cli?: ReadonlyMap<string, boolean>;
     /** The dsh-browser plugin is ready. */
     browser?: boolean;

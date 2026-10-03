@@ -24,7 +24,7 @@ export interface BrowserBinding {
     /** Named dsh-browser enhancement rule pack. */
     rulePack?: string;
 }
-/** Evidence-pipeline settings (web_search_pro with `task` / `profile`; dev-plan M2b). */
+/** Evidence-pipeline settings (search.run with `task` / `profile`; dev-plan M2b). */
 export interface EvidenceConfig {
     /**
      * Scorer for S6 decisions. `jev` only takes effect with `jevMode: 'control'`:
@@ -67,6 +67,10 @@ export interface EvidenceConfig {
     /** Model usage caps (input tokens) per search and per day, with per-provider overrides. Absent = 60k per search, 1M per day. */
     budget?: BudgetInput;
 }
+/** `indexed` registers web_index + web_call; `flat` registers one tool per action (comparison and debugging only). */
+export declare const TOOL_SURFACES: readonly ["indexed", "flat"];
+export type ToolSurface = typeof TOOL_SURFACES[number];
+export declare function resolveToolSurface(value: unknown): ToolSurface;
 export interface Config {
     /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
     dbPath?: string;
@@ -94,19 +98,21 @@ export interface Config {
     /** Default cap on returned sources per search. */
     searchMaxResults: number;
     /**
-     * Default output cap (characters) of one `web_fetch_pro` call. Longer pages are cut here and
+     * Default output cap (characters) of one `read.fetch` call. Longer pages are cut here and
      * continued with `offset`; the ctx.web fetch provider (which cannot be told a size) uses twice this.
      */
     fetchDefaultChars: number;
-    /** `web_exa_contents`: output cap per URL (characters). */
+    /** `read.contents`: output cap per URL (characters). */
     exaContentsPerUrlChars: number;
-    /** `web_exa_contents`: output cap over all URLs of one call (characters); shared fairly between them. */
+    /** `read.contents`: output cap over all URLs of one call (characters); shared fairly between them. */
     exaContentsTotalChars: number;
+    /** Tool surface: `indexed` (default) keeps only web_index / web_call in context; `flat` registers one tool per action. Applied at startup. */
+    toolSurface?: ToolSurface;
     /** Cooperative per-call timeout budget in ms. */
     timeoutMs: number;
     /** Trust Clash/TUN fake-IP DNS answers (198.18/15, fdfe:dcba:9876::/64, 2001:2::/48) while retaining all other SSRF checks. */
     allowProxyFakeIp: boolean;
-    /** Ordered engine list for web_search_pro. */
+    /** Ordered engine list for search.run. */
     engines: string[];
     /** Query all requested engines in parallel and merge. */
     parallelEngines: boolean;
@@ -167,9 +173,9 @@ export interface Config {
     browserBindings?: Record<string, BrowserBinding>;
     /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
     playwright: {
-        /** Gate the playwright fallback backend in web_fetch_pro. */
+        /** Gate the playwright fallback backend in read.fetch. */
         enabled: boolean;
-        /** Directory for web_snapshot artifacts; defaults to <dbDir>/snapshots. */
+        /** Directory for read.snapshot artifacts; defaults to <dbDir>/snapshots. */
         snapshotDir?: string;
     };
     /** Evidence pipeline (S6 scoring). */
@@ -178,6 +184,7 @@ export interface Config {
 }
 export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     dbPath: z<string, string, "volatile">;
+    toolSurface: z<string, string, "volatile-defined">;
     ttlSeconds: z<number, number, "volatile-defined">;
     memoryCacheEntries: z<number, number, "volatile-defined">;
     rrfConstant: z<number, number, "volatile-defined">;
@@ -563,6 +570,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
     dbPath: z<string, string, "volatile">;
+    toolSurface: z<string, string, "volatile-defined">;
     ttlSeconds: z<number, number, "volatile-defined">;
     memoryCacheEntries: z<number, number, "volatile-defined">;
     rrfConstant: z<number, number, "volatile-defined">;
@@ -949,6 +957,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
 }>>, "plain">;
 export interface ResolvedConfig extends Config {
     dbPath: string;
+    toolSurface: ToolSurface;
     exaApiKey?: string;
     exaApiKeyEnv: string;
     jinaApiKey?: string;

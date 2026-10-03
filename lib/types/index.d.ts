@@ -30,6 +30,7 @@ declare const _default: {
     inject: string[];
     Config: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
         dbPath: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        toolSurface: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         ttlSeconds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         memoryCacheEntries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         rrfConstant: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
@@ -415,6 +416,7 @@ declare const _default: {
         verbose: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
     }>>, Schemastery.ObjectT<NoInfer<{
         dbPath: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        toolSurface: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         ttlSeconds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         memoryCacheEntries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
         rrfConstant: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;

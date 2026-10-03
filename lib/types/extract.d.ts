@@ -4,7 +4,7 @@
  * node-html-parser parse, with generic readability fallbacks and a DOM→text
  * walker.
  * Built-in rules cover common Chinese/global sites; users can add persistent
- * rules through the web_rule tool (stored in SQLite).
+ * rules through the rules.* actions (stored in SQLite).
  * @module web-search-pro/extract
  */
 export interface ExtractRule {

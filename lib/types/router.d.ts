@@ -47,7 +47,7 @@ export interface RouterSearchResult {
     /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
     fallbackNote?: string;
 }
-/** One provider as `web_backend_status` reports it: the registry descriptor plus local readiness by dimension. */
+/** One provider as `sources.status` reports it: the registry descriptor plus local readiness by dimension. */
 export interface ProviderReport {
     id: string;
     /** Id used in tool output and history (the first alias, else `id`). */
@@ -135,7 +135,7 @@ export declare class SearchRouter {
     private buildSync;
     /**
      * Every registered search provider with its descriptor and LOCAL readiness by dimension (installation / credential /
-     * health), for `web_backend_status`. No network. Health is only `ready` after a real call succeeded in this process,
+     * health), for `sources.status`. No network. Health is only `ready` after a real call succeeded in this process,
      * `cooldown` / `error` after failures; a provider that merely passed its local probe is `unknown`, not verified.
      */
     providerReport(cliAvailability?: ReadonlyMap<string, boolean>): Promise<ProviderReport[]>;
@@ -147,7 +147,7 @@ export declare class SearchRouter {
      * (unavailable / cooldown). Zero sources plus an explanation (never cached).
      */
     private emptyResult;
-    /** Platform search (web_platform_search tool) with the same cache+persist flow. */
+    /** Platform search (search.run with platform) with the same cache+persist flow. */
     platformSearch(platform: string, query: string, url: string | undefined, count: number, opts: {
         signal?: AbortSignal;
         fresh?: boolean;

@@ -1,6 +1,16 @@
 /**
- * Tool definitions for web-search-pro: 8 model-facing tools over the router,
- * fetch service, store, and playwright manager.
+ * Model-facing tool surfaces for web-search-pro.
+ *
+ * Every capability is an action in the registry (`src/actions/`). This module
+ * only projects that registry into tools:
+ *
+ * - `indexed` (default): two small tools, `web_index` for progressive
+ *   disclosure and `web_call` to run an action. Constant, tiny context cost.
+ * - `flat`: one tool per action, named `web_<group>_<action>`. Every action
+ *   is described up front; for comparison and debugging only.
+ *
+ * Both surfaces dispatch through the same {@link runAction}, so validation,
+ * the result envelope and the error codes are identical.
  * @module web-search-pro/tools
  */
 import type { Context } from '@deepseek-ai/cordis';
@@ -9,7 +19,7 @@ import type { FetchService } from './fetch.ts';
 import type { Store } from './store.ts';
 import { type BrowserGetter } from './browser-access.ts';
 import type { BrowserService } from './browser-service.ts';
-import type { ResolvedConfig } from './config.ts';
+import type { ResolvedConfig, ToolSurface } from './config.ts';
 import { EvidenceService } from './pipeline/service.ts';
 export interface ToolDeps {
     ctx: Context;
@@ -23,27 +33,9 @@ export interface ToolDeps {
     browser?: BrowserService | BrowserGetter;
     /** Evidence pipeline (built lazily from the other deps when omitted; tests inject doubles). */
     evidence?: Pick<EvidenceService, 'search'>;
+    /** Overrides `config.toolSurface`. */
+    toolSurface?: ToolSurface;
+    /** Whether the `dsh-web-search-pro` skill is currently registered; read at call time. */
+    skillAvailable?: () => boolean;
 }
-export declare function formatSources(sources: {
-    url: string;
-    title?: string;
-    snippet?: string;
-    publishedAt?: string;
-}[]): string;
-/**
- * Per-item character limit so that `sum(min(length, limit)) <= total` and `limit <= perItem`:
- * short texts keep all they have and the room they leave over goes to the long ones.
- */
-export declare function fairShareLimit(lengths: readonly number[], perItem: number, total: number): number;
 export declare function registerTools(deps: ToolDeps): void;
-/**
- * Whether the twitter platform backend can really run: the `twitter` command works (probed by detectDeps)
- * AND the backend is enabled in settings AND its credentials are in the environment (same gates as the engine).
- */
-export declare function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: {
-    available: boolean;
-    diagnostic?: string;
-}): {
-    available: boolean;
-    note?: string;
-};
