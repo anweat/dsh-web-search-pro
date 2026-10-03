@@ -40,6 +40,10 @@ const EVIDENCE_STATUS_SCHEMA: OutputNode = {
     diagnostics: { type: 'array', items: { type: 'string' } },
     provider: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, protocol: { type: 'string' }, model: { type: 'string' }, usable: { type: 'boolean', required: true }, reason: { type: 'string' }, unverified: { type: 'boolean' }, calibration: { type: 'string' }, keyConfigured: { type: 'boolean' } } },
     providers: { type: 'array', items: { type: 'string' } },
+    coverage: { type: 'object', additionalProperties: false, properties: {
+      mode: { type: 'string', required: true }, provider: { type: 'string', required: true }, rubric: { type: 'string', required: true }, usable: { type: 'boolean', required: true }, reason: { type: 'string' },
+      thresholds: { type: 'object', additionalProperties: false, properties: { weak: { type: 'number' }, covered: { type: 'number' } } }, thresholdSource: { type: 'string' }, keyConfigured: { type: 'boolean' },
+    } },
     usage: { type: 'object', additionalProperties: false, properties: {
       day: { type: 'string', required: true }, timezone: { type: 'string' }, requests: { type: 'number', required: true }, inputTokens: { type: 'number', required: true }, outputTokens: { type: 'number', required: true },
       estimated: { type: 'boolean', required: true }, amountKnown: { type: 'boolean', required: true }, amount: { type: 'number' }, currency: { type: 'string' },
@@ -126,11 +130,11 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         browser: browserState(ctx.browser()),
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
         ...problems.length ? { notes: problems } : {},
-        evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.usage ? { usage: judge.usage } : {} },
+        evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.coverage ? { coverage: judge.coverage } : {}, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
       const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
         const r = p.readiness
@@ -149,6 +153,8 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         lines.push(...v.evidence.rubrics.map(r => '  rubric ' + r.id + '@' + r.version + ' #' + r.hash + (r.overridden ? ' (override)' : ' (built-in)')))
         const p = v.evidence.provider
         if (p) lines.push('  judge provider: ' + p.id + (p.protocol ? ' (' + p.protocol + ', ' + p.model + ')' : '') + (p.usable ? '' : ' [unusable: ' + p.reason + ']') + (p.unverified ? ' [preset not verified live]' : '') + (p.calibration ? ' calibration ' + p.calibration : '') + (p.keyConfigured === false ? ' [key not found]' : ''))
+        const c = v.evidence.coverage
+        if (c) lines.push('  coverage judge: mode=' + c.mode + ' (' + c.provider + ', ' + c.rubric + ')' + (c.usable ? '' : ' [not used: ' + c.reason + ']') + (c.thresholds ? ' thresholds weak<' + c.thresholds.weak + ' covered>=' + c.thresholds.covered + ' (' + c.thresholdSource + ')' : ''))
         const u = v.evidence.usage
         if (u) lines.push('  model usage ' + u.day + (u.timezone ? ' ' + u.timezone : '') + ': ' + u.requests + ' request(s), ' + u.inputTokens + ' input / ' + u.outputTokens + ' output tokens' + (u.estimated ? ' (partly estimated)' : '') + (u.amount !== undefined ? ', ' + u.amount.toFixed(4) + ' ' + (u.currency ?? '') : u.requests ? ', cost unknown' : '') + '; caps: ' + u.caps.perSearchInputTokens + '/search, ' + u.caps.dailyInputTokens + '/day input tokens')
         for (const b of u?.byProvider ?? []) if (b.protocol === 'search') lines.push('  search usage ' + b.provider + ': ' + b.requests + ' request(s) today (tokens n/a, price unknown)')

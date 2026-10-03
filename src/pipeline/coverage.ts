@@ -18,9 +18,10 @@
  * @module web-search-pro/pipeline/coverage
  */
 
-import type { SelectedBlock, Coverage } from './select.ts'
-import type { CoverageBand, Gap, Need } from './types.ts'
+import type { CoverageJudge } from './judges/coverage.ts'
 import type { ResolvedRubric } from './rubrics.ts'
+import type { Coverage, SelectedBlock } from './select.ts'
+import type { CoverageBand, Gap, Need } from './types.ts'
 
 export const COVERAGE_MODES = ['off', 'shadow', 'control'] as const
 export type CoverageMode = typeof COVERAGE_MODES[number]
@@ -35,6 +36,39 @@ export interface CoverageSettings {
   provider?: string | undefined
   /** Absent = the thresholds shipped for the provider + rubric pair, if any. */
   thresholds?: CoverageThresholds | undefined
+}
+
+/** The configured judge, ready to ask (built by the service from `evidence.coverage`). */
+export interface CoverageStage {
+  mode: 'shadow' | 'control'
+  judge: CoverageJudge
+  thresholds: CoverageThresholds
+}
+
+/** `evidence.coverage` validated: an invalid mode means off, an invalid provider is dropped; every problem is reported. */
+export function resolveCoverageSettings(raw: unknown): { settings: CoverageSettings; diagnostics: string[] } {
+  const off = { settings: { mode: 'off' as const }, diagnostics: [] as string[] }
+  if (raw === undefined || raw === null) return off
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { settings: { mode: 'off' }, diagnostics: ['evidence.coverage ignored: not an object'] }
+  const o = raw as Record<string, unknown>
+  const diagnostics: string[] = []
+  for (const k of Object.keys(o)) if (!['mode', 'provider', 'thresholds'].includes(k)) diagnostics.push('evidence.coverage: unknown field "' + k + '" ignored')
+  let mode: CoverageMode = 'off'
+  if (o.mode === undefined) mode = 'off'
+  else if (typeof o.mode === 'string' && (COVERAGE_MODES as readonly string[]).includes(o.mode)) mode = o.mode as CoverageMode
+  else diagnostics.push('evidence.coverage.mode "' + String(o.mode) + '" ignored (off is used): it must be one of ' + COVERAGE_MODES.join(', '))
+  let provider: string | undefined
+  if (o.provider !== undefined) {
+    if (typeof o.provider === 'string' && o.provider.trim()) provider = o.provider
+    else diagnostics.push('evidence.coverage.provider ignored: must be a provider id')
+  }
+  let thresholds: CoverageThresholds | undefined
+  if (o.thresholds !== undefined) {
+    const problems = thresholdsProblems(o.thresholds)
+    if (problems.length) diagnostics.push('evidence.coverage.thresholds ignored: ' + problems.join('; '))
+    else thresholds = { weak: (o.thresholds as CoverageThresholds).weak, covered: (o.thresholds as CoverageThresholds).covered }
+  }
+  return { settings: { mode, ...provider !== undefined ? { provider } : {}, ...thresholds ? { thresholds } : {} }, diagnostics }
 }
 
 export const COVERAGE_RUBRIC_ID = 'cover.sufficient'

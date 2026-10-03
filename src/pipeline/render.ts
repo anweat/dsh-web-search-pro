@@ -17,9 +17,10 @@ const hostOf = (url: string): string => { try { return new URL(url).hostname } c
 /** One line under the header (dev-plan M3b): "covered" is a lexical judgement, and a missing passage proves nothing. */
 export const COVERAGE_CAVEAT = 'Coverage is heuristic: no evidence here does not mean it does not exist; fetch/expand before concluding.'
 
-export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'>, sources: readonly RenderSource[], engineLine: string, expandLine = 'To read around an excerpt: history.expand evidenceId=<id>.'): string {
+export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'> & Partial<Pick<EvidencePack, 'uncertainNeeds'>>, sources: readonly RenderSource[], engineLine: string, expandLine = 'To read around an excerpt: history.expand evidenceId=<id>.'): string {
   const parts: string[] = []
   const covered = new Set(pack.coveredNeeds)
+  const unsure = new Set(pack.uncertainNeeds ?? [])
   parts.push('Evidence pack ' + pack.resultId + ' (' + pack.profile + (pack.partial ? ', PARTIAL: deadline reached' : '') + '): ' + pack.evidence.length + ' excerpt(s); needs covered ' + pack.coveredNeeds.length + '/' + pack.needs.length + '.\n' + COVERAGE_CAVEAT)
   if (pack.evidence.length) {
     parts.push(pack.evidence.map((e, i) => {
@@ -32,9 +33,9 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
   } else {
     parts.push('No evidence excerpt reached the required support level.')
   }
-  parts.push('Needs: ' + pack.needs.map(n => n.id + ' "' + n.text + '"' + (covered.has(n.id) ? ' ✓' : ' ✗')).join('; '))
+  parts.push('Needs: ' + pack.needs.map(n => n.id + ' "' + n.text + '"' + (covered.has(n.id) ? (unsure.has(n.id) ? ' ✓ (judge unsure)' : ' ✓') : ' ✗')).join('; '))
   if (pack.gaps.length) {
-    parts.push('Gaps: ' + pack.gaps.map(g => g.needId + ' ' + g.reason + (g.bestGrade !== undefined ? ' (best grade ' + g.bestGrade + ')' : '') + (g.critical ? '' : ' [optional]')).join('; ')
+    parts.push('Gaps: ' + pack.gaps.map(g => g.needId + ' ' + g.reason + (g.band ? ' (judge)' : g.bestGrade !== undefined ? ' (best grade ' + g.bestGrade + ')' : '') + (g.critical ? '' : ' [optional]')).join('; ')
       + '. Fetch a listed source with read.fetch, or search again with a different query.')
   }
   const shown = new Set(pack.evidence.map(e => e.url))

@@ -6,6 +6,7 @@
 import path from 'node:path'
 import os from 'node:os'
 import z from '@deepseek-ai/schemastery'
+import type { CoverageSettings } from './pipeline/coverage.ts'
 import type { JudgeSettings } from './pipeline/judges/providers.ts'
 import type { BudgetInput } from './pipeline/ledger.ts'
 import type { RubricOverride } from './pipeline/rubrics.ts'
@@ -70,6 +71,13 @@ export interface EvidenceConfig {
   judge?: JudgeSettings & { mode?: EvidenceConfig['jevMode'] }
   /** Model usage caps (input tokens) per search and per day, with per-provider overrides. Absent = 60k per search, 1M per day. */
   budget?: BudgetInput
+  /**
+   * S8 coverage judge (dev-plan M9): asks a model whether the selected excerpts state the answer for each need the rules claim
+   * covered. Absent / `off` = rule coverage only. `shadow` records verdicts in `stats.coverage` without changing the coverage;
+   * `control` turns weak verdicts into `weak_support` gaps. Never enabled by another mode (a ready hybrid scorer does not turn
+   * it on). Needs thresholds for the provider + rubric pair (`thresholds`, or the ones shipped for it).
+   */
+  coverage?: CoverageSettings
 }
 
 /**
@@ -316,6 +324,11 @@ export const Config = z.object({
         price: z.object({ inputPerMTokens: z.number(), outputPerMTokens: z.number(), currency: z.string() }),
       })),
     }).volatile(),
+    coverage: z.object({
+      mode: z.union(['off', 'shadow', 'control']),
+      provider: z.string(),
+      thresholds: z.object({ weak: z.number(), covered: z.number() }),
+    }).volatile(),
     budget: z.object({
       perSearchInputTokens: z.number(),
       dailyInputTokens: z.number(),
@@ -430,6 +443,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
       ...ev.rubrics !== undefined && v(ev.rubrics) ? { rubrics: v(ev.rubrics) as Record<string, RubricOverride> } : {},
       ...ev.judge !== undefined && v(ev.judge) ? { judge: v(ev.judge) as NonNullable<EvidenceConfig['judge']> } : {},
       ...ev.budget !== undefined && v(ev.budget) ? { budget: v(ev.budget) as NonNullable<EvidenceConfig['budget']> } : {},
+      ...ev.coverage !== undefined && v(ev.coverage) ? { coverage: v(ev.coverage) as NonNullable<EvidenceConfig['coverage']> } : {},
     },
     verbose: vOr(config.verbose, false) as boolean,
   }

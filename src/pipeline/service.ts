@@ -14,7 +14,8 @@ import type { Store } from '../store.ts'
 import { normQuery, shapeSources } from '../util.ts'
 import { buildTaskSpec, type TaskInput } from './task.ts'
 import { runPipeline, type PipelineDeps, type PipelineOptions, type PipelineResult } from './run.ts'
-import { createModelScorer, selectProvider } from './judges/providers.ts'
+import { COVERAGE_RUBRIC_ID, resolveCoverageSettings, resolveThresholds, type CoverageStage } from './coverage.ts'
+import { createCoverageJudge, createModelScorer, selectProvider } from './judges/providers.ts'
 import { resolveBudget, UsageLedger, type SearchBudget } from './ledger.ts'
 import { resolveRubric } from './rubrics.ts'
 import { HybridScorer, RuleScorer, type Scorer } from './score.ts'
@@ -62,6 +63,8 @@ export type EvidenceOutput = Omit<EvidencePack, 'sources'> & { sources: ReturnTy
 export const PAGE_MAX_CHARS = 60_000
 /** Route id of the ctx.web engine (see providers/builtin.ts). */
 const SEAM_ROUTE_ID = 'seam'
+/** HTTP attempts the coverage judge may make in one search (one request normally answers every need). */
+const COVERAGE_REQUEST_CAP = 4
 
 
 export class EvidenceService {
@@ -115,12 +118,44 @@ export class EvidenceService {
     return { control: rule }
   }
 
+  /**
+   * The S8 coverage judge (`evidence.coverage`, dev-plan M9), or `undefined` with the reason in `notes`: the rules keep the
+   * coverage. It is switched on only by its own setting, whatever the S6 scorer mode is, and needs a systemone provider, its
+   * key, and thresholds for that provider + rubric pair.
+   */
+  private async coverageStage(notes: string[], budget: SearchBudget): Promise<CoverageStage | undefined> {
+    const cfg = this.deps.dynamic().evidence
+    const { settings, diagnostics } = resolveCoverageSettings(cfg.coverage)
+    notes.push(...diagnostics)
+    if (settings.mode === 'off') return undefined
+    const skip = (why: string): undefined => { notes.push('coverage judge (' + settings.mode + ') not used, rule coverage kept: ' + why); return undefined }
+    const selection = selectProvider({ ...cfg.judge, ...settings.provider !== undefined ? { provider: settings.provider } : {} })
+    const provider = selection.provider
+    if (!provider) return skip(selection.unusable ?? 'no judge provider')
+    if (provider.protocol !== 'systemone') return skip('provider ' + provider.id + ' speaks ' + provider.protocol + ', the coverage judge needs the systemone protocol')
+    const resolved = resolveRubric(COVERAGE_RUBRIC_ID, cfg.rubrics)
+    notes.push(...resolved.diagnostics)
+    const fit = resolveThresholds(settings, provider.id, resolved.rubric)
+    if (!fit.thresholds) return skip(fit.reason ?? 'no thresholds')
+    const key = provider.keyRef ? await this.deps.router.resolveSecret(provider.keyRef) : undefined
+    if (provider.keyRef && !key) return skip((provider.label ?? provider.id) + ' needs ' + provider.keyRef + ' (credentials ref or environment)')
+    let judge
+    try {
+      judge = createCoverageJudge(provider, { apiKey: key, rubric: resolved.rubric, ...this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}, meter: budget.meterFor(provider), requestCap: COVERAGE_REQUEST_CAP })
+    } catch (error) {
+      return skip((provider.label ?? provider.id) + ' could not be set up: ' + (error instanceof Error ? error.message : String(error)))
+    }
+    return { mode: settings.mode, judge, thresholds: fit.thresholds }
+  }
+
   async search(request: EvidenceRequest): Promise<EvidenceOutput> {
     const { spec, notes: specNotes } = buildTaskSpec(request)
     const cfg = this.deps.dynamic()
     const scorerNotes: string[] = []
     const ledger = new UsageLedger(this.deps.store, resolveBudget(cfg.evidence.budget).caps, this.deps.now)
-    const scorers = await this.scorers(scorerNotes, ledger.forSearch())
+    const searchBudget = ledger.forSearch()
+    const scorers = await this.scorers(scorerNotes, searchBudget)
+    const coverage = await this.coverageStage(scorerNotes, searchBudget)
     const { router, fetch: fetchSvc } = this.deps
 
     // Registry-aware planning: aliases normalised to route ids, descriptors for language / profile promotion, adapter compilers.
@@ -141,6 +176,7 @@ export class EvidenceService {
         return { url: page.url, ...page.title ? { title: page.title } : {}, text: page.text, ...page.shellPage ? { shellPage: true } : {}, source: page.source }
       },
       scorers,
+      ...coverage ? { coverage } : {},
       configuredEngines: usable(cfg.engines),
       ...registry ? { descriptors: registry.list({ operation: 'search' }).map(a => a.descriptor), compiler } : {},
       autoProviders: cfg.evidence.autoProviders !== false,

@@ -25,8 +25,10 @@ import { applyFloor, DEFAULT_MIN_KEEP, gateCandidates } from './gate.ts'
 import { PROFILE_PROVIDERS, planSources, type ProviderStatus, type SourcePlan } from './plan.ts'
 import { routeIdOf, type ProviderDescriptor } from '../providers/registry.ts'
 import { capDiscussionGrades, RuleScorer, type ScoreJob, type ScoreOutcome, type ScoreUsage, type Scorer } from './score.ts'
-import { computeCoverage, selectEvidence, DEFAULT_SELECT_OPTIONS, type SelectOptions } from './select.ts'
-import type { Block, BlockGrade, Candidate, EvidenceItem, EvidencePack, Need, PageBlock, ScoredBlock, TaskSpec } from './types.ts'
+import { applyVerdicts, evidenceView, MAX_COVERAGE_QUESTIONS, verdictsOf, type CoverageStage, type CoverageVerdict, type JudgedCoverage } from './coverage.ts'
+import type { CoverageItem } from './judges/coverage.ts'
+import { computeCoverage, selectEvidence, DEFAULT_SELECT_OPTIONS, type Coverage, type SelectionResult, type SelectOptions } from './select.ts'
+import type { Block, BlockGrade, Candidate, CoverageStats, EvidenceItem, EvidencePack, Need, PageBlock, ScoredBlock, TaskSpec } from './types.ts'
 
 // ── dependencies ────────────────────────────────────────────────────────────
 
@@ -74,6 +76,8 @@ export interface PipelineDeps {
     /** Runs in parallel to the decision for later comparison; never changes the pack. */
     shadow?: Scorer
   }
+  /** S8 coverage judge (dev-plan M9): asks whether the selected excerpts state the answer for each need the rules claim covered. Omitted = rule coverage only. */
+  coverage?: CoverageStage
   configuredEngines: readonly string[]
   /** Registry descriptors of the search providers: S1 prefers providers strong in the task's language (plan.ts). Omitted = the profile tables only. */
   descriptors?: readonly ProviderDescriptor[]
@@ -502,9 +506,64 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     return { scored, selection, coverage }
   }
 
+  // S8 coverage judge (dev-plan M9): for the needs the rules claim covered, ask whether the evidence view (the selected
+  // excerpts mapped to the need) states the answer. A question is asked once per distinct view; a failure keeps the rule
+  // coverage of the needs it did not answer. `shadow` records only, `control` also applies the verdicts.
+  const covStage = deps.coverage
+  const covQuestion = new Map<string, string>()
+  const covProbs = new Map<string, number>()
+  const covUsage = { requests: 0, inputTokens: 0, outputTokens: 0, estimated: false }
+  /** Verdicts of the latest coverage (the needs the rules claim covered in the final selection). */
+  let covVerdicts: CoverageVerdict[] = []
+  let covAsked = 0
+  const judgeCoverage = async (cov: Coverage, selection: SelectionResult): Promise<JudgedCoverage> => {
+    const unchanged: JudgedCoverage = { covered: cov.covered, gaps: cov.gaps, uncertain: [] }
+    if (!covStage) return unchanged
+    const items: CoverageItem[] = []
+    for (const needId of cov.covered.slice(0, MAX_COVERAGE_QUESTIONS)) {
+      const evidence = evidenceView(needId, selection.selected)
+      const need = task.needs.find(n => n.id === needId)
+      if (!evidence || !need) continue
+      items.push({ needId, need: need.text, evidence })
+    }
+    const fresh = items.filter(i => covQuestion.get(i.needId) !== i.need + '\n' + i.evidence)
+    for (const i of fresh) covProbs.delete(i.needId)
+    if (fresh.length && ctx.stage.aborted) notes.push('coverage judge skipped after the deadline: rule coverage kept')
+    else if (fresh.length) {
+      try {
+        const out = await covStage.judge.judge(task, fresh, { signal: ctx.stage, ...deadlineAt !== undefined ? { deadline: deadlineAt } : {} })
+        covUsage.requests += out.usage.requests
+        covUsage.inputTokens += out.usage.inputTokens
+        covUsage.outputTokens += out.usage.outputTokens
+        if (out.usage.estimated) covUsage.estimated = true
+        for (const i of fresh) {
+          const prob = out.probs.get(i.needId)
+          if (prob === undefined) continue
+          covProbs.set(i.needId, prob)
+          covQuestion.set(i.needId, i.need + '\n' + i.evidence)
+        }
+        if (out.notes.length) notes.push(...out.notes.map(n => 'coverage judge: ' + n))
+      } catch (error) {
+        checkUser()
+        notes.push('coverage judge failed, rule coverage kept: ' + (error instanceof Error ? error.message : String(error)))
+      }
+    }
+    const verdicts = verdictsOf(new Map(items.filter(i => covProbs.has(i.needId)).map(i => [i.needId, covProbs.get(i.needId)!])), covStage.thresholds)
+    covVerdicts = verdicts
+    covAsked = items.length
+    return covStage.mode === 'control' ? applyVerdicts(task.needs, cov, verdicts) : unchanged
+  }
+
   // Round 1.
   await scoreRound(task.needs, await readPages(kept, topK), true)
   let { scored, selection, coverage } = finalize()
+  let uncertain: string[] = []
+  const judgeNow = async (): Promise<void> => {
+    const judged = await judgeCoverage(coverage, selection)
+    coverage = { covered: judged.covered, gaps: judged.gaps }
+    uncertain = judged.uncertain
+  }
+  await judgeNow()
 
   // Round 2 (S8): a critical need without support, budget left (rounds, queries, time): search once more for exactly
   // those needs, read the best new pages, score only the gap needs on them, and select again over the merged pool.
@@ -534,6 +593,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
         await scoreRound(targets, fresh, false)
         const before = coverage.covered.length
         ;({ scored, selection, coverage } = finalize())
+        await judgeNow()
         const gained = coverage.covered.length - before
         notes.push('second round: ' + outcome.queries + ' search(es) for ' + targets.map(n => n.id).join(',') + ' via ' + outcome.providers.join(',') + ' -> ' + (merged.length - known.size) + ' new candidate(s), ' + fresh.length + ' new page(s) read, ' + (gained > 0 ? gained + ' more need(s) covered' : 'no new need covered'))
       }
@@ -570,6 +630,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     evidence,
     coveredNeeds: coverage.covered,
     gaps: coverage.gaps,
+    ...uncertain.length ? { uncertainNeeds: uncertain } : {},
     sources: kept.slice(0, sourcesCount).map(c => ({ url: c.url, ...c.title ? { title: c.title } : {}, ...c.snippet ? { snippet: c.snippet } : {}, ...c.publishedAt ? { publishedAt: c.publishedAt } : {}, ...c.gate?.lowConfidence ? { lowConfidence: true as const } : {} })),
     engine: 'pipeline(' + (used.length ? used.join('+') : 'none') + ')',
     enginesTried: [...new Set([...ctx.plan.providers.map(p => p.id), ...extraEngines])],
@@ -579,10 +640,28 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     stats: {
       candidates: merged.length, kept: kept.length, ...floor.added ? { lowConfidence: floor.added } : {}, fetched: pages.size, blocksScored: scored.length,
       excerptChars: selection.usedChars, scorer: scorerUsed, ...jevUsage ? { jev: jevUsage } : {},
+      ...covStage ? { coverage: coverageStats(covStage, covVerdicts, covAsked, covUsage) } : {},
       rounds, queries: ctx.queryCount?.() ?? allOutputs.length,
     },
   }
   return { pack, task, pagesRead: [...pages.values()].map(p => p.candidate.canonicalUrl), scored, evidenceBlocks, ...shadow ? { shadow } : {} }
+}
+
+function coverageStats(stage: CoverageStage, verdicts: readonly CoverageVerdict[], asked: number, usage: { requests: number; inputTokens: number; outputTokens: number; estimated: boolean }): CoverageStats {
+  const { judge } = stage
+  return {
+    mode: stage.mode,
+    ...judge.provider ? { provider: judge.provider.id, protocol: judge.provider.protocol, model: judge.provider.model } : { model: judge.model },
+    rubric: judge.rubricRef.key,
+    thresholds: { ...stage.thresholds },
+    asked,
+    weak: verdicts.filter(v => v.band === 'weak').length,
+    uncertain: verdicts.filter(v => v.band === 'uncertain').length,
+    requests: usage.requests, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+    ...usage.estimated ? { estimated: true as const } : {},
+    ...asked > verdicts.length ? { unanswered: asked - verdicts.length } : {},
+    verdicts: verdicts.map(v => ({ ...v })),
+  }
 }
 
 /** Cap the number of (need, block) questions for a paid scorer: round-robin over the needs, keeping each need's pre-rank order. */
