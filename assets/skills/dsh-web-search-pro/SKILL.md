@@ -63,7 +63,7 @@ Name sources only when you have a reason:
 ```
 
 - `engines` takes ids from `search.recommend` / `sources.status` (aliases like `ddg` work; an unknown id lists the valid ones). Explicit engines are tried in order.
-- `platform` searches one platform (`github`, `v2ex`, `bilibili`, `rss` with `url`, Chinese communities such as `zhihu`) and does not combine with `task`/`profile`; Chinese communities and OpenCLI platforms need the dsh-browser plugin and a login.
+- `platform` searches one site (`github`, `v2ex`, `bilibili`, `rss` with `url`, `zhihu`, `xiaohongshu`, `twitter`, ...). With `task`/`profile` it is the evidence source (gate, page reads and scoring as usual). If it is unavailable the call fails with what is missing: tell the user, or pass `allowFallback:true` to search the web engines instead. Browser and login platforms need dsh-browser (`references/sources.md`).
 - `multi:true` (plain list only) queries every listed engine in parallel; avoid it.
 
 ## 4. Constraints

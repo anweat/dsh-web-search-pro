@@ -88,6 +88,16 @@ dsh plugin --profile web add @anweat/dsh-browser@0.1.17 dsh-web-search-pro@0.1.1
 | 有限泛爬取 | `crawl.crawl` | 匿名、默认同源；调用参数不能突破浏览器插件的页数/深度预算 |
 | OpenCLI 站点适配器或浏览器桥 | `opencli.status` → `opencli.catalog` → `opencli.run` | 先发现精确 adapter；仅 `unrestricted` 跳过通用 argv 审批 |
 
+### 平台来源
+
+每个平台（GitHub、GitHub 代码 / Issues、B站、YouTube、V2EX、arXiv、PubMed、小红书、Twitter / X、Reddit、Instagram、Facebook、RSS、知乎、微博、豆瓣、贴吧、抖音、快手，以及你的 `customPlatforms`）都是来源注册表里 `kind: platform` 的 provider：有描述符（语言、任务类型、站点域名、所需浏览器能力 / 登录 / CLI / Token）和适配器，与网页引擎走同一条路径（探测、冷却、并发合并、`shapeSources`、重试说明、历史）。Twitter 是**一个** provider，内部按原顺序依次尝试 OpenCLI 与 twitter-cli。`sources.status` 在同一张列表里按维度报告它们的就绪状态（浏览器安装、已绑定登录、设置开关）；目录条目用 `provider` 指向同名 id。
+
+- `search.run platform=zhihu query=…` 只搜这个平台，历史类型仍为 `platform`；`engines=zhihu` 在经典搜索里同样可用。`url`（RSS）、`authProfile`、`rulePack` 随 `platform` 传，`browserBindings` 补全后两者。
+- **证据模式**：`platform` 可与 `task` / `profile` / `needs` / `constraints` 同用——该平台成为 S1 / S2 的显式来源，之后门限、读取前几页（有 Browser 时自动升级）、评分、证据包照常。
+- **平台不可用**（缺浏览器 / 登录 / CLI / Token、被设置关闭、冷却中）时返回 `CAPABILITY_UNAVAILABLE`，写明缺什么，并附目录里的安装说明；**不会**悄悄改搜网页引擎。传 `allowFallback=true` 才改搜该 profile 的网页引擎，证据包的 `notes` 会写明。平台已运行但没有结果时返回空列表和平台自己的提示（多半是缺登录），不冷却。
+- **自动规划**：平台从不被自动选入第一轮；只有任务带硬 `site` 约束且命中某平台域名（如 `zhihu.com`）并且该平台就绪时，它才排第一，并保留一个网页引擎做回退（同一上游家族只取一个，其余留给第二轮）。平台没就绪就沿用网页计划并在 `notes` 说明。`search.recommend` 对 `experience` 类任务可以推荐已就绪的平台（仍至多 3 个）。
+- **自定义平台**随设置热更新：新增、修改、删除都会同步注册表；与已有 provider 同名的键不会覆盖内置来源，`sources.status` 的 `notes` 会列出被拒绝的键。
+
 先运行 `sources.status` 判断后端是否 ready（要不要用哪个来源，直接问 `search.recommend`）。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。所有引擎都返回空结果或不可用（没有运行时错误）时，`search.run` 返回空结果和说明，不再报错。
 
 ### 两种用法
@@ -223,7 +233,7 @@ evidence:
 
 | 组 | 动作 | 作用 |
 |---|---|---|
-| `search` | `run` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史；传 `task` / `profile` 得证据包；传 `platform` 搜单个平台（GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手，登录态走 Playwright；RSS 用 `url` 传 feed、`query` 可选过滤；平台来源将在 M8b 并入统一搜索与证据管线，目前不能与 `task`/`profile` 同用） |
+| `search` | `run` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史；传 `task` / `profile` 得证据包；传 `platform` 搜单个平台（GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手，登录态走 Playwright；RSS 用 `url` 传 feed、`query` 可选过滤；平台与网页引擎走同一条注册表执行路径，可与 `task`/`profile` 同用得到证据包，见“平台来源”） |
 | | `recommend` | 按任务推荐至多 3 个来源（已就绪优先，其余给出缺失条件），不发搜索请求 |
 | `read` | `fetch` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存与 `offset` 续读；`auto` 按质量升级：每次结果先判为 content / shell / js_shell / login_wall / captcha / error，只有 shell、js_shell、login_wall 且 dsh-browser 就绪时才升级到 Playwright（captcha 与错误页不会，短而有实质内容的事实页不算空壳），取质量最好的一次并在 `attempts` 里记录各后端结果；不会自动安装任何东西；显式 mode 不升级，只复用同后端缓存 |
 | | `contents` | 原生 Exa `/contents` 批量正文抓取（1-100 URL，需 Exa Key） |
