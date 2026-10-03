@@ -64,10 +64,18 @@ export interface PlanOptions {
     autoProviders?: boolean;
     /** Other web engines kept behind promoted providers, in table order (default 1). */
     webFallbacks?: number;
+    /** Most providers promoted for the task language (default {@link DEFAULT_MAX_PROMOTED}); providers of one `sourceFamily` count once. */
+    maxPromoted?: number;
     /** Per-provider compilation; defaults to the core compiler (adapters may supply their own). */
     compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery;
 }
 export declare const DEFAULT_WEB_FALLBACKS = 1;
+/**
+ * Most providers promoted ahead of the profile table for one task (dev-plan M7c). With the round-1 cap of three, two
+ * specialists leave one slot for a free fallback engine, so configuring every keyed source never crowds out the keyless ones.
+ * The surplus stays in `wanted` (second round).
+ */
+export declare const DEFAULT_MAX_PROMOTED = 2;
 /** `zh` / `en` from the task text (goal + query); undefined when there is no letter to tell. */
 export declare function taskLanguage(task: Pick<TaskSpec, 'goal' | 'query'>): 'zh' | 'en' | undefined;
 /** Keyword hit counts per profile (general has no keywords). */

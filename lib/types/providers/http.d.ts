@@ -34,6 +34,8 @@ export interface ProviderRequest {
     body?: string;
     userAgent?: string;
     timeoutMs?: number;
+    /** `error` = a redirect is a failure (keyed APIs: never forward a key to another origin). Default follows with re-checks. */
+    redirect?: 'follow' | 'error';
 }
 /** One request through the safe HTTP path; transport problems become coded EngineErrors, HTTP statuses are returned to the caller. */
 export declare function requestProvider(label: string, url: string, req: ProviderRequest): Promise<ProviderResponse>;

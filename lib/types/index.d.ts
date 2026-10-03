@@ -55,6 +55,15 @@ declare const _default: {
         bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        keyedSources: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            apiKey?: string | null | undefined;
+            apiKeyEnv?: string | null | undefined;
+            baseUrl?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            apiKey: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            baseUrl: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -431,6 +440,15 @@ declare const _default: {
         bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        keyedSources: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            apiKey?: string | null | undefined;
+            apiKeyEnv?: string | null | undefined;
+            baseUrl?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            apiKey: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            baseUrl: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;

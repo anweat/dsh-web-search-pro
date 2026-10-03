@@ -130,6 +130,16 @@ export interface Config {
     searxngUrl?: string;
     /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
     openalexMailto?: string;
+    /**
+     * Keyed search sources by route id (`tavily`, `brave`, `linkup`, `serper`, `metaso`, `zhipu`, `baidu-qianfan`): the key literal,
+     * the credentials ref / environment variable name (default e.g. TAVILY_API_KEY), and an optional endpoint base override.
+     * A source without a key is `credential: missing` and not executable.
+     */
+    keyedSources?: Record<string, {
+        apiKey?: string;
+        apiKeyEnv?: string;
+        baseUrl?: string;
+    }>;
     /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
     githubToken?: string;
     /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
@@ -193,6 +203,15 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     bochaSummary: z<boolean, boolean, "volatile-defined">;
     searxngUrl: z<string, string, "volatile">;
     openalexMailto: z<string, string, "volatile">;
+    keyedSources: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        apiKey?: string | null | undefined;
+        apiKeyEnv?: string | null | undefined;
+        baseUrl?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        apiKey: z<string, string, "plain">;
+        apiKeyEnv: z<string, string, "plain">;
+        baseUrl: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
@@ -569,6 +588,15 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     bochaSummary: z<boolean, boolean, "volatile-defined">;
     searxngUrl: z<string, string, "volatile">;
     openalexMailto: z<string, string, "volatile">;
+    keyedSources: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        apiKey?: string | null | undefined;
+        apiKeyEnv?: string | null | undefined;
+        baseUrl?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        apiKey: z<string, string, "plain">;
+        apiKeyEnv: z<string, string, "plain">;
+        baseUrl: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
@@ -932,6 +960,7 @@ export interface ResolvedConfig extends Config {
     bochaSummary: boolean;
     searxngUrl?: string;
     openalexMailto?: string;
+    keyedSources?: Config['keyedSources'];
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
     evidence: EvidenceConfig;
 }

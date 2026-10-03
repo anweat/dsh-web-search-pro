@@ -121,6 +121,12 @@ export declare class SearchRouter {
     private deps;
     /** Sync key check for available() (no credential resolution — env/literal only). */
     private depsSync;
+    /**
+     * Keys and base URLs of the keyed search sources (dev-plan M7c): per source the config literal, then the credentials ref /
+     * environment variable (`keyedSources.<id>.apiKeyEnv`, else the documented default names in order).
+     */
+    private keyedSources;
+    private keyedSourcesSync;
     /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
     private usageRecorder;
     /** Whether any configured engine is currently usable. */

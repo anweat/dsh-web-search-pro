@@ -12,6 +12,9 @@
  *  - bocha: include / exclude (domain lists) for HARD site / exclude_site, and `freshness` as an
  *    inclusive `start..today` date range for a HARD time_window whose lower bound is understood
  *    (an exact translation, so it is reported as native);
+ *  - keyed sources (dev-plan M7c): Tavily / Linkup / Baidu Qianfan / Zhipu take domain lists (`options.sites`, capped at what
+ *    each documents) and a date lower bound (`options.since`); Brave / Serper (Google) take `site:` / `-site:` / `-term`
+ *    operators in the query; whatever a source does not document stays for local verification;
  *  - github*: the natural-language query returns nothing on repository search
  *    (E1: 0 of 20), so it is replaced by a short keyword query;
  *  - everything else: the plain query.
@@ -21,7 +24,7 @@
  * so a provider silently ignoring an operator costs nothing but precision.
  * @module web-search-pro/pipeline/compile
  */
-import type { Need, TaskSpec } from './types.ts';
+import type { Constraint, Need, TaskSpec } from './types.ts';
 export interface CompiledExaOptions {
     includeDomains?: string[];
     excludeDomains?: string[];
@@ -30,6 +33,11 @@ export interface CompiledExaOptions {
 export interface CompiledBochaOptions {
     /** `YYYY-MM-DD..YYYY-MM-DD` (inclusive), Bocha's date-range form of `freshness`. */
     freshness?: string;
+    include?: string[];
+    exclude?: string[];
+}
+/** Domain lists compiled from hard site / exclude_site constraints, for the keyed sources that take them as request fields. */
+export interface CompiledSites {
     include?: string[];
     exclude?: string[];
 }
@@ -43,6 +51,7 @@ export interface CompiledQuery {
         bocha?: CompiledBochaOptions;
         since?: string;
         lang?: 'zh' | 'en';
+        sites?: CompiledSites;
     };
     /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
     fallbacks?: string[];
@@ -72,6 +81,28 @@ export declare function compileSince(task: TaskLike, providerId: string, now: Da
     lang?: boolean; /** The source filters by whole years: only a bound at a year start is an exact translation. */
     yearOnly?: boolean;
 }): CompiledQuery;
+/** What a keyed source documents it can enforce: domain list sizes (absent = no such field) and a date lower bound. */
+export interface KeyedCaps {
+    /** Most `include` domains the request takes. */
+    include?: number;
+    /** Most `exclude` domains the request takes. */
+    exclude?: number;
+    /** A hard time_window with an understood lower bound becomes `options.since` and counts as native. */
+    since?: boolean;
+    /** `site:` / `-site:` / `-term` operators in the query text (Google-style engines) instead of request fields. */
+    operators?: boolean;
+}
+/** Hard time_window constraints with their lower bound (ISO, in the past), strictest first. */
+export declare function hardWindows(task: TaskLike, now: Date): {
+    c: Constraint;
+    start: string;
+}[];
+/**
+ * Compilation for the keyed sources: HARD site / exclude_site constraints become domain lists (only as many as the source
+ * documents; the rest stays local), a HARD time_window becomes `options.since` (the strictest lower bound), operator-style
+ * sources get `site:` / `-site:` / `-term` in the query. Soft constraints are never pushed down.
+ */
+export declare function compileKeyed(task: TaskLike, providerId: string, now: Date, caps: KeyedCaps): CompiledQuery;
 export declare const GITHUB_MAX_TERMS = 5;
 /**
  * Short keyword query for repository search: entities, then must_terms, then a
