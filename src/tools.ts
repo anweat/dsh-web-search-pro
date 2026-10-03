@@ -23,6 +23,7 @@ import { browserState, toBrowserGetter, type BrowserGetter } from './browser-acc
 import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig, ToolSurface } from './config.ts'
 import { EvidenceService } from './pipeline/service.ts'
+import type { ProviderState } from './provider.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
 import { renderIndex, type IndexEnvironment } from './actions/index-view.ts'
 import { renderEnvelope, runAction } from './actions/run.ts'
@@ -45,6 +46,8 @@ export interface ToolDeps {
   evidence?: Pick<EvidenceService, 'search'>
   /** Overrides `config.toolSurface`. */
   toolSurface?: ToolSurface
+  /** State of the ctx.web provider route, for `sources.status`. */
+  providerState?: () => ProviderState
   /** Whether the `dsh-web-search-pro` skill is currently registered; read at call time. */
   skillAvailable?: () => boolean
 }
@@ -82,6 +85,7 @@ export function registerTools(deps: ToolDeps): void {
   let evidenceService = deps.evidence
   const services: ActionServices = {
     config, dynamic, store, router, fetch: fetchSvc, browser: getBrowser,
+    ...deps.providerState ? { providerState: deps.providerState } : {},
     evidence: () => (evidenceService ??= new EvidenceService({ router, fetch: fetchSvc, store, dynamic })),
     /** Default characters one text exit may return (config `fetchDefaultChars`). */
     outputCap: () => dynamic().fetchDefaultChars ?? DEFAULT_FETCH_CHARS,

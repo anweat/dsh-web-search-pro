@@ -9,7 +9,7 @@ import { loadCatalog } from '../catalog/load.ts'
 import { recommendSources, renderRecommendation, type Recommendation } from '../catalog/recommend.ts'
 import { detectDeps } from '../deps.ts'
 import { browserState } from '../browser-access.ts'
-import { renderEvidencePack } from '../pipeline/render.ts'
+import { renderEvidenceOutput } from '../pipeline/render.ts'
 import { PROFILES, type Profile } from '../pipeline/types.ts'
 import type { EvidenceOutput } from '../pipeline/service.ts'
 import { ActionArgError, type ActionDef, type OutputNode } from './types.ts'
@@ -173,7 +173,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       const tried = v.enginesTried ?? []
       const pack = value as unknown as Partial<EvidenceOutput>
       if (pack.resultId !== undefined && pack.evidence && pack.needs && pack.coveredNeeds && pack.gaps && pack.verification) {
-        return renderEvidencePack({ resultId: pack.resultId, profile: pack.profile ?? 'general', needs: pack.needs, evidence: pack.evidence, coveredNeeds: pack.coveredNeeds, gaps: pack.gaps, partial: pack.partial === true, notes: pack.notes ?? [], verification: pack.verification }, v.sources, 'Engine: ' + v.engine + (tried.length ? '; tried: ' + tried.join(', ') : ''))
+        return renderEvidenceOutput({ resultId: pack.resultId, profile: pack.profile ?? 'general', needs: pack.needs, evidence: pack.evidence, coveredNeeds: pack.coveredNeeds, gaps: pack.gaps, partial: pack.partial === true, notes: pack.notes ?? [], verification: pack.verification, sources: v.sources, engine: v.engine, enginesTried: tried })
       }
       const parts: string[] = []
       if (v.content) parts.push(v.content)

@@ -238,13 +238,13 @@ export class SearchRouter {
    * Run ONE engine through the registry (probe, cooldown, quality gate,
    * attempts) for the evidence pipeline. Not cached or persisted: the pipeline
    * persists its fused result once. Cancellation is rethrown; every other
-   * outcome is a value.
+   * outcome is a value. `skipSeam` keeps the ctx.web engine out (the caller IS the ctx.web provider: no recursion).
    */
-  async runProvider(call: ProviderCall): Promise<ProviderOutcome> {
+  async runProvider(call: ProviderCall, opts: { skipSeam?: boolean } = {}): Promise<ProviderOutcome> {
     this.syncBackends()
     try {
       const selected = await this.backends.runSelected(
-        { query: call.query, count: call.count, signal: call.signal, skipSeam: false, ...call.options ? { options: call.options } : {} },
+        { query: call.query, count: call.count, signal: call.signal, skipSeam: opts.skipSeam ?? false, ...call.options ? { options: call.options } : {} },
         { preferred: this.canonicalIds([call.id]), signal: call.signal },
       )
       const sources = selected.value.sources

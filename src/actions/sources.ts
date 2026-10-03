@@ -9,6 +9,7 @@ import { detectDeps, installDep } from '../deps.ts'
 import { judgeStatus, type JudgeStatus } from '../pipeline/judge-status.ts'
 import { resolveAllRubrics } from '../pipeline/rubrics.ts'
 import type { ProviderReport } from '../router.ts'
+import { renderProviderState, type ProviderState } from '../provider.ts'
 import type { ResolvedConfig } from '../config.ts'
 import { ActionArgError, type ActionDef, type OutputNode } from './types.ts'
 
@@ -46,6 +47,14 @@ const EVIDENCE_STATUS_SCHEMA: OutputNode = {
       byProvider: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { provider: { type: 'string', required: true }, protocol: { type: 'string' }, requests: { type: 'number', required: true }, inputTokens: { type: 'number', required: true }, outputTokens: { type: 'number', required: true }, estimated: { type: 'boolean', required: true } } } },
     } },
   },
+}
+
+const SELECTION_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, properties: { pinned: { type: 'string' }, via: { type: 'string', required: true }, state: { type: 'string', required: true } } }
+
+/** The ctx.web provider route: registered by this plugin, and whether the Host is pinned to it (M8c). */
+const WEB_ROUTE_SCHEMA: OutputNode = {
+  type: 'object', additionalProperties: false,
+  properties: { id: { type: 'string', required: true }, registered: { type: 'boolean', required: true }, evidence: { type: 'string', required: true }, search: SELECTION_SCHEMA, fetch: SELECTION_SCHEMA },
 }
 
 const DEP_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, usedBy: { type: 'string', required: true }, available: { type: 'boolean', required: true }, optional: { type: 'boolean' }, path: { type: 'string' }, source: { type: 'string' }, requiredVersion: { type: 'string' }, version: { type: 'string' }, diagnostic: { type: 'string' }, installs: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { installer: { type: 'string', required: true }, command: { type: 'string', required: true } } } } } }
@@ -89,6 +98,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         providers: { type: 'array', items: PROVIDER_REPORT_SCHEMA },
         cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' } } } },
         browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
+        webRoute: WEB_ROUTE_SCHEMA,
         evidence: EVIDENCE_STATUS_SCHEMA,
       },
     },
@@ -111,11 +121,12 @@ export const SOURCES_ACTIONS: ActionDef[] = [
           return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
         }),
         browser: browserState(ctx.browser()),
+        ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
         evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
       const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
         const r = p.readiness
@@ -124,6 +135,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       }
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
       if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
+      if (v.webRoute) lines.push(...renderProviderState(v.webRoute))
       if (v.evidence) {
         // The effective judge mode, not the legacy `scorer` flag (which reads "rule" even while hybrid mode is on).
         lines.push(v.evidence.mode !== undefined

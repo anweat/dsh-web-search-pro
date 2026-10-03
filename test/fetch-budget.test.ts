@@ -256,7 +256,9 @@ test('ctx.web fetch provider caps the body at twice fetchDefaultChars and report
   try {
     const result = await h.providers.fetch.fetch({ url: 'https://big.test/page' })
     assert.equal(result.truncated, true)
-    assert.ok(result.body.content.length <= 40_000 + 60, 'body ' + result.body.content.length)
+    // The page text keeps its cap (+ the truncation marker); a short continue hint follows it.
+    assert.match(result.body.content, /\[Continue with web_call read\.fetch url=https:\/\/big\.test\/page offset=\d+\]$/)
+    assert.ok(result.body.content.length <= 40_000 + 60 + 120, 'body ' + result.body.content.length)
     assert.ok(result.body.content.length > 30_000)
   } finally { h.cleanup(); restore() }
 
@@ -273,7 +275,7 @@ test('ctx.web fetch provider caps the body at twice fetchDefaultChars and report
   try {
     const result = await cut.providers.fetch.fetch({ url: 'https://cut.test/page' })
     assert.equal(result.truncated, true)
-    assert.ok(result.body.content.length <= 2_000 + 60)
+    assert.ok(result.body.content.length <= 2_000 + 60 + 120)
   } finally { cut.cleanup(); restoreCut() }
 })
 

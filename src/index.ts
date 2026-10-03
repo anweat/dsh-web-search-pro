@@ -30,6 +30,8 @@ import type { BrowserGetter } from './browser-access.ts'
 import { SearchRouter } from './router.ts'
 import { FetchService } from './fetch.ts'
 import { registerTools } from './tools.ts'
+import { createFetchProvider, createSearchProvider, readProviderState, type ProviderState } from './provider.ts'
+import { EvidenceService } from './pipeline/service.ts'
 import { buildPromptText } from './prompt.ts'
 import { registerSkillWhenAvailable } from './skill.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
@@ -88,7 +90,10 @@ export function apply(ctx: Context, config: Config): void {
   //    a declared `inject` (Cordis 4.0.4 would hang the plugin without it); without it the web_index
   //    root carries a compact guide instead.
   const skill = registerSkillWhenAvailable(ctx)
-  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser, skillAvailable: skill.isAvailable })
+  //    One evidence service serves search.run and the ctx.web provider (it keeps no per-call state).
+  const evidence = new EvidenceService({ router, fetch: fetchSvc, store, dynamic })
+  const providerState = (): ProviderState => readProviderState({ web: ctx.get('web'), registered: providerRegistered, id: dynamic().providerId, evidence: dynamic().provider.evidence })
+  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser, evidence, providerState, skillAvailable: skill.isAvailable })
 
   //    Approval is decided per ACTION: web_call (and each flat tool) is resolved to its action first, so the user
   //    is asked about `cache.clear` or `sources.install bili`, not about a generic dispatcher. The old tools were
@@ -104,38 +109,17 @@ export function apply(ctx: Context, config: Config): void {
     return webPolicyDecision(call.action, call.args, await automationModeOf(getBrowser()))
   })
 
-  // 5. Optional ctx.web provider registration: the built-in web_search /
-  //    web_fetch tools route through this plugin when configured via
-  //    DSH_WEB_SEARCH_PROVIDER=web-search-pro (or the web row's
-  //    searchProvider). Registration is idempotent per fiber (effect-scoped).
+  // 5. Optional ctx.web provider registration (opt-in: `registerProvider`). The Host picks a provider only when the `web`
+  //    entry pins its id (`searchProvider` / `fetchProvider`, or DSH_WEB_SEARCH_PROVIDER / DSH_WEB_FETCH_PROVIDER), or when it
+  //    is the only usable one; two usable providers without a pin make every built-in web_search fail (WEB_PROVIDER_AMBIGUOUS),
+  //    which is why registering is never the default. Once selected, the built-in web_search returns this plugin's evidence
+  //    pack (`provider.evidence`) and web_fetch its budgeted pages. Registration is effect-scoped per fiber.
   const web = ctx.get('web')
+  let providerRegistered = false
   if (web && resolved.registerProvider) {
-    web.registerSearchProvider({
-      id: resolved.providerId,
-      available: () => router.anyEngineAvailable(),
-      search: (request, signal) => router.searchAsProvider(request, signal),
-    })
-    web.registerFetchProvider({
-      id: resolved.providerId,
-      available: () => true,
-      fetch: async (request, signal) => {
-        // WebFetchRequest carries no size, so the cap is fixed: twice the read.fetch default
-        // (`truncated` then tells the host the body was cut).
-        const out = await fetchSvc.fetchPage(request.url, {
-          mode: 'auto',
-          signal,
-          maxChars: (dynamic().fetchDefaultChars ?? 20_000) * 2,
-          fresh: false,
-          persist: true,
-        })
-        return {
-          url: out.url,
-          statusCode: out.statusCode ?? 200,
-          body: { kind: 'text', content: out.text },
-          truncated: out.truncated ?? false,
-        }
-      },
-    })
+    web.registerSearchProvider(createSearchProvider({ router, evidence: () => evidence, dynamic, id: () => dynamic().providerId, surface: resolved.toolSurface }))
+    web.registerFetchProvider(createFetchProvider({ fetch: fetchSvc, dynamic, id: () => dynamic().providerId, surface: resolved.toolSurface }))
+    providerRegistered = true
   }
 
   // 6. System prompt guidance; the text thunk runs at assembly time so the

@@ -28,10 +28,14 @@ export interface EvidenceRequest extends TaskInput {
   /** `sources` entries to return. */
   count: number
   signal?: AbortSignal | undefined
+  /** Overall deadline in ms (default: `timeoutMs` + 30 s). The ctx.web provider route passes a shorter one. */
+  deadlineMs?: number | undefined
+  /** The caller is the ctx.web provider: keep the ctx.web engine out of the run (it would call back into this plugin). */
+  skipSeam?: boolean | undefined
 }
 
 export interface EvidenceServiceDeps {
-  router: Pick<SearchRouter, 'providerStatuses' | 'runProvider' | 'resolveSecret'> & { registry?: ProviderRegistry }
+  router: Pick<SearchRouter, 'providerStatuses' | 'resolveSecret'> & { runProvider: SearchRouter['runProvider'] } & { registry?: ProviderRegistry }
   fetch: Pick<FetchService, 'fetchPage'>
   store: Store
   dynamic: () => ResolvedConfig
@@ -45,6 +49,9 @@ export interface EvidenceServiceDeps {
 export type EvidenceOutput = Omit<EvidencePack, 'sources'> & { sources: ReturnType<typeof shapeSources>; fromCache: false }
 
 export const PAGE_MAX_CHARS = 60_000
+/** Route id of the ctx.web engine (see providers/builtin.ts). */
+const SEAM_ROUTE_ID = 'seam'
+
 
 export class EvidenceService {
   constructor(private readonly deps: EvidenceServiceDeps) {}
@@ -110,23 +117,28 @@ export class EvidenceService {
     const normalize = (ids: readonly string[]): string[] => (registry ? [...new Set(ids.map(id => registry.routeId(id) ?? id))] : [...ids])
     const compiler: PipelineDeps['compiler'] = (task, id, now) => registry?.resolve(id)?.compile?.(task, now) ?? compileQuery(task, id, now)
 
+    // Inside the ctx.web provider the ctx.web engine must not run (it would call this plugin again): it is taken out of the
+    // configured list before planning, and a call that still reaches it is answered `skipped` without touching ctx.web.
+    const skipSeam = request.skipSeam === true
+    const isSeam = (id: string): boolean => (registry ? registry.routeId(id) ?? id : id) === SEAM_ROUTE_ID
+    const usable = (ids: readonly string[]): string[] => normalize(ids).filter(id => !(skipSeam && isSeam(id)))
     const deps: PipelineDeps = {
       providerStatus: ids => router.providerStatuses(ids),
-      searchProvider: call => router.runProvider(call),
+      searchProvider: async call => skipSeam && isSeam(call.id) ? { state: 'skipped', reason: 'ctx.web engine is not used inside the ctx.web provider' } : router.runProvider(call, { skipSeam }),
       fetchPage: async (url, signal) => {
         const page = await fetchSvc.fetchPage(url, { mode: 'auto', signal, maxChars: PAGE_MAX_CHARS, fresh: false, persist: true })
         return { url: page.url, ...page.title ? { title: page.title } : {}, text: page.text, ...page.shellPage ? { shellPage: true } : {}, source: page.source }
       },
       scorers,
-      configuredEngines: normalize(cfg.engines),
+      configuredEngines: usable(cfg.engines),
       ...registry ? { descriptors: registry.list({ operation: 'search' }).map(a => a.descriptor), compiler } : {},
       autoProviders: cfg.evidence.autoProviders !== false,
       fusion: { k: cfg.rrfConstant, freshnessBoost: cfg.freshnessBoost, freshnessDays: cfg.freshnessDays, authorityBoost: cfg.authorityBoost, authorityDomains: cfg.authorityDomains },
     }
     const options: PipelineOptions = {
       signal: request.signal,
-      deadlineMs: cfg.timeoutMs + 30_000,
-      ...request.engines?.length ? { engines: normalize(request.engines) } : {},
+      deadlineMs: request.deadlineMs ?? cfg.timeoutMs + 30_000,
+      ...request.engines?.length ? { engines: usable(request.engines) } : {},
       sourcesCount: request.count,
       maxScoreQuestions: cfg.evidence.maxJevQuestions,
       maxRounds: cfg.evidence.maxRounds,

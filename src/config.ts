@@ -72,6 +72,25 @@ export interface EvidenceConfig {
   budget?: BudgetInput
 }
 
+/**
+ * Settings of the ctx.web provider route (dev-plan M8c): what the Host's built-in `web_search` returns when this plugin is the selected provider.
+ * `evidence: 'auto'` runs the evidence pipeline for every provider search and returns the pack as `content` (plain sources when it fails);
+ * `off` keeps the plain source list.
+ */
+export interface ProviderSettings {
+  evidence: 'auto' | 'off'
+  /** Deadline of the evidence run inside one provider search, in ms (the pipeline returns a partial pack when it is reached). */
+  deadlineMs: number
+}
+
+export const PROVIDER_EVIDENCE_MODES = ['auto', 'off'] as const
+
+export function resolveProviderEvidence(value: unknown): ProviderSettings['evidence'] {
+  const mode = value ?? 'auto'
+  if (typeof mode !== 'string' || !(PROVIDER_EVIDENCE_MODES as readonly string[]).includes(mode)) throw new Error('provider.evidence must be one of: ' + PROVIDER_EVIDENCE_MODES.join(', '))
+  return mode as ProviderSettings['evidence']
+}
+
 /** `indexed` registers web_index + web_call; `flat` registers one tool per action (comparison and debugging only). */
 export const TOOL_SURFACES = ['indexed', 'flat'] as const
 export type ToolSurface = typeof TOOL_SURFACES[number]
@@ -167,6 +186,8 @@ export interface Config {
   providerId: string
   /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
   registerProvider: boolean
+  /** ctx.web provider route: evidence pack inside the built-in web_search (only when this plugin is the selected provider). */
+  provider?: Partial<ProviderSettings>
   /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
   platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
   /** User-defined custom platform search: url template + selectors + optional cookie. */
@@ -234,6 +255,10 @@ export const Config = z.object({
   agentReachEnabled: z.boolean().default(true).volatile(),
   providerId: z.string().default('web-search-pro').volatile(),
   registerProvider: z.boolean().default(false).volatile(),
+  provider: z.object({
+    evidence: z.string().default('auto').volatile(),
+    deadlineMs: z.number().default(25_000).volatile(),
+  }),
   platformRules: z.dict(z.object({
     item: z.string(),
     title: z.string(),
@@ -318,6 +343,7 @@ export interface ResolvedConfig extends Config {
   keyedSources?: Config['keyedSources']
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
   evidence: EvidenceConfig
+  provider: ProviderSettings
 }
 
 /** Read a possibly-volatile config field (schemastery `Volatile<T>` wraps live fields). */
@@ -344,6 +370,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const pw: Partial<Config['playwright']> = config.playwright ?? {}
   const snapshotDir = vOr(pw.snapshotDir, path.join(path.dirname(dbPath), 'snapshots'))
   const ev: Partial<EvidenceConfig> = config.evidence ?? {}
+  const pv: Partial<ProviderSettings> = config.provider ?? {}
   return {
     ...config,
     dbPath,
@@ -381,6 +408,10 @@ export function resolveConfig(config: Config): ResolvedConfig {
     agentReachEnabled: vOr(config.agentReachEnabled, true) as boolean,
     providerId: vOr(config.providerId, 'web-search-pro') as string,
     registerProvider: vOr(config.registerProvider, false) as boolean,
+    provider: {
+      evidence: resolveProviderEvidence(vOr(pv.evidence as unknown, 'auto')),
+      deadlineMs: Math.max(100, vOr(pv.deadlineMs, 25_000) as number),
+    },
     platformRules: config.platformRules !== undefined ? v(config.platformRules) : undefined,
     customPlatforms: config.customPlatforms !== undefined ? v(config.customPlatforms) : undefined,
     browserBindings: config.browserBindings !== undefined ? v(config.browserBindings) : undefined,
