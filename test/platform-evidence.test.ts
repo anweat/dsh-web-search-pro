@@ -9,7 +9,7 @@ import { createBuiltinRegistry } from '../src/providers/index.ts'
 import { SearchRouter } from '../src/router.ts'
 import { Store } from '../src/store.ts'
 import { SourceUnavailableError } from '../src/providers/unavailable.ts'
-import { callEnvelope } from './call-helper.ts'
+import { callEnvelope, renderResult } from './call-helper.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -165,5 +165,39 @@ test('rss in evidence mode: a feed URL in query is the feed, the task text becom
     const [query, options] = JSON.parse(seen[0]!)
     assert.equal(query, TASK.task)
     assert.equal(options.url, 'https://f.test/feed.xml')
+  } finally { h.cleanup() }
+})
+
+test('sources.status lists platforms in the one provider list with browser and login readiness; custom platforms and their problems show too', async () => {
+  const h = harness({ browser: false, extra: { browserBindings: { zhihu: { authProfile: 'bound' } }, customPlatforms: { forum: { name: 'Forum', url: 'https://forum.test/s?q={query}', item: '.i', title: '.t', link: 'a' }, github: { name: 'Mine', url: 'https://x.test/?q={query}', item: '.i', title: '.t', link: 'a' } } } })
+  try {
+    const env = await callEnvelope(h.definitions, 'search.run', { platform: 'forum', query: 'x' }) // registers the custom platform through the router sync
+    assert.equal(env.error.code, 'CAPABILITY_UNAVAILABLE')
+    const status = (await callEnvelope(h.definitions, 'sources.status', {})).result
+    const byRoute = new Map<string, any>(status.providers.map((p: any) => [p.route, p]))
+    const zhihu = byRoute.get('zhihu')
+    assert.equal(zhihu.kind, 'platform')
+    assert.deepEqual(zhihu.domains, ['zhihu.com'])
+    assert.equal(zhihu.needsBrowser, 'searchResults')
+    assert.equal(zhihu.readiness.available, false)
+    assert.equal(zhihu.readiness.installation, 'missing')
+    assert.equal(zhihu.readiness.credential, 'configured', 'the binding counts as a configured login')
+    assert.equal(zhihu.readiness.diagnosticCode, 'browser_missing')
+    assert.match(zhihu.readiness.reason, /dsh-browser/)
+    assert.equal(byRoute.get('ddg').kind, 'web')
+    assert.equal(byRoute.get('forum').kind, 'platform')
+    assert.equal(byRoute.get('forum').id, 'custom:forum')
+    assert.ok(status.engines.some((e: any) => e.id === 'zhihu' && e.available === false), 'the engines list is the same registry')
+    assert.ok(status.notes.some((n: string) => /custom platform "github" was not registered/.test(n)))
+    const text = renderResult('sources.status', status)
+    assert.match(text, /platform zhihu \(platform:zhihu\): installation=missing credential=configured/)
+    assert.match(text, /provider ddg \(builtin:ddg\)/)
+    assert.match(text, /⚠ custom platform "github" was not registered/)
+    // With the browser the platform becomes ready and still says the login is unverified.
+    h.holder.browser = { render: async () => ({}), snapshot: async () => ({}), searchResults: async () => [], opencli: async () => ({ code: 0, stdout: '', stderr: '' }), close: async () => {} }
+    const ready = (await callEnvelope(h.definitions, 'sources.status', {})).result.providers.find((p: any) => p.route === 'zhihu')
+    assert.equal(ready.readiness.available, true)
+    assert.equal(ready.readiness.installation, 'detected')
+    assert.equal(ready.readiness.diagnosticCode, 'login_unverified')
   } finally { h.cleanup() }
 })

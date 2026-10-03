@@ -89,6 +89,10 @@ export interface ProviderReport {
   label: string
   /** `web` engine or `platform` (a site / community, `search.run platform=<route>`). */
   kind: 'web' | 'platform'
+  /** Platform: the site domains it covers (a hard `site` constraint on one selects it). */
+  domains?: string[]
+  /** The dsh-browser method it runs through; absent = it does not need the browser. */
+  needsBrowser?: string
   operations: string[]
   taskProfiles: string[]
   languages: string[]
@@ -505,7 +509,7 @@ export class SearchRouter {
       const credential = last?.code === 'ENGINE_AUTH' ? 'rejected' as const : local.credential
       const reason = !available ? (diag?.reason ?? local.reason) : undefined
       out.push({
-        id: d.id, route, aliases: [...d.aliases], label: d.label, kind: d.kind ?? 'web', operations: [...d.operations], taskProfiles: [...d.taskProfiles],
+        id: d.id, route, aliases: [...d.aliases], label: d.label, kind: d.kind ?? 'web', ...d.domains?.length ? { domains: [...d.domains] } : {}, ...d.needsBrowser ? { needsBrowser: d.needsBrowser } : {}, operations: [...d.operations], taskProfiles: [...d.taskProfiles],
         languages: [...d.languages], regions: [...d.regions], resultKinds: [...d.resultKinds],
         ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
         requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel },

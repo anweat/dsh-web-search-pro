@@ -17,7 +17,7 @@ import { ActionArgError, type ActionDef, type OutputNode } from './types.ts'
 const PROVIDER_REPORT_SCHEMA: OutputNode = {
   type: 'object', additionalProperties: false,
   properties: {
-    id: { type: 'string', required: true }, route: { type: 'string' }, aliases: { type: 'array', items: { type: 'string' } }, label: { type: 'string', required: true }, kind: { type: 'string' },
+    id: { type: 'string', required: true }, route: { type: 'string' }, aliases: { type: 'array', items: { type: 'string' } }, label: { type: 'string', required: true }, kind: { type: 'string' }, domains: { type: 'array', items: { type: 'string' } }, needsBrowser: { type: 'string' },
     operations: { type: 'array', items: { type: 'string' } }, taskProfiles: { type: 'array', items: { type: 'string' } }, languages: { type: 'array', items: { type: 'string' } },
     regions: { type: 'array', items: { type: 'string' } }, resultKinds: { type: 'array', items: { type: 'string' } }, sourceFamily: { type: 'string' },
     requirements: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, id: { type: 'string', required: true }, env: { type: 'array', items: { type: 'string' } }, optional: { type: 'boolean' }, note: { type: 'string' } } } },
@@ -99,6 +99,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' } } } },
         browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
         webRoute: WEB_ROUTE_SCHEMA,
+        notes: { type: 'array', items: { type: 'string' } },
         evidence: EVIDENCE_STATUS_SCHEMA,
       },
     },
@@ -113,6 +114,8 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       const ev = cfg.evidence
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
       const judge = await judgeStatus(ev, store, { hasSecret: typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function' ? async ref => !!(await router.resolveSecret(ref)) : undefined })
+      // Custom platforms the registry could not take (a key that clashes with a built-in source, a bad key).
+      const problems = typeof (router as { customPlatformProblems?: unknown }).customPlatformProblems === 'function' ? router.customPlatformProblems() : []
       return {
         engines: await router.backendDiagnostics(availability),
         ...typeof (router as { providerReport?: unknown }).providerReport === 'function' ? { providers: await router.providerReport(availability) } : {},
@@ -122,17 +125,19 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         }),
         browser: browserState(ctx.browser()),
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
+        ...problems.length ? { notes: problems } : {},
         evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; usage?: JudgeStatus['usage'] } }
       const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health].filter(Boolean).join(' ')
-        lines.push('  provider ' + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
+        lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
       }
+      lines.push(...(v.notes ?? []).map(n => '  ⚠ ' + n))
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
       if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
       if (v.webRoute) lines.push(...renderProviderState(v.webRoute))
