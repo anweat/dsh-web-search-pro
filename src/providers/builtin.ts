@@ -22,6 +22,9 @@ import { tavilyAdapter } from './tavily.ts'
 import { braveAdapter } from './brave.ts'
 import { linkupAdapter } from './linkup.ts'
 import { serperAdapter } from './serper.ts'
+import { metasoAdapter } from './metaso.ts'
+import { zhipuAdapter } from './zhipu.ts'
+import { baiduAdapter } from './baidu-qianfan.ts'
 import { ProviderRegistry, type CostDescriptor, type ProbeEnv, type ProviderAdapter, type ProviderDescriptor, type Readiness, type Requirement } from './registry.ts'
 
 const WEB_PROFILES = ['general', 'news_fact', 'experience', 'compare', 'docs_code'] as const
@@ -141,6 +144,9 @@ export function builtinAdapters(): ProviderAdapter[] {
     braveAdapter,
     linkupAdapter,
     serperAdapter,
+    metasoAdapter,
+    zhipuAdapter,
+    baiduAdapter,
   ]
 }
 

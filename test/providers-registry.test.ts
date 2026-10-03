@@ -41,7 +41,7 @@ function dummy(id: string, over: Partial<ProviderAdapter['descriptor']> = {}, en
 
 test('registry: built-ins carry namespaced ids with the legacy short ids as aliases; both spellings resolve to one route id', () => {
   const r = createBuiltinRegistry()
-  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper'])
+  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan'])
   assert.deepEqual([...SEARCH_ENGINE_IDS], r.searchIds())
   assert.equal(r.resolve('builtin:ddg'), r.resolve('ddg'))
   assert.equal(r.routeId('builtin:bocha'), 'bocha')
@@ -60,7 +60,7 @@ test('registry: built-ins carry namespaced ids with the legacy short ids as alia
 test('registry: validation accepts aliases and full ids, and an unknown id gets a clear error listing the available ones', () => {
   const r = createBuiltinRegistry()
   assert.deepEqual(r.validate(['builtin:ddg', 'bocha', 'ddg']), ['ddg', 'bocha'])
-  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, bocha, wikipedia, hackernews, stackexchange, openalex, semanticscholar, anysearch, searxng, tavily, brave, linkup, serper\)/)
+  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, bocha, wikipedia, hackernews, stackexchange, openalex, semanticscholar, anysearch, searxng, tavily, brave, linkup, serper, metaso, zhipu, baidu-qianfan\)/)
   assert.throws(() => r.validate(['  ']), /unknown engine/)
 })
 
@@ -71,7 +71,7 @@ test('registry: a duplicate id or a taken alias throws; register returns an unre
   assert.throws(() => r.register(dummy('vendor:x', { aliases: ['same', 'same'] })), /duplicate alias|already used/)
   assert.throws(() => r.register(dummy('Bad Id')), /invalid provider id/)
   assert.throws(() => r.register(dummy('vendor:y', { aliases: ['a b'] })), /invalid provider alias/)
-  assert.equal(r.searchIds().length, 23, 'failed registrations left nothing behind')
+  assert.equal(r.searchIds().length, 26, 'failed registrations left nothing behind')
 
   const before = r.revision
   const off = r.register(dummy('vendor:acme'))

@@ -1,0 +1,16 @@
+{
+  "_comment": "NOT a live capture: constructed from the two MIT references that call Metaso (TZHR-invest/dsh-plugins dsh-web-search-metaso, HundunOnline/mcp-metaso): scope webpage -> webpages[] of title/link/snippet(/summary)/date or displayDate. The official docs page is script-rendered and no key was available.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "credits": 0,
+    "searchParameters": { "q": "大模型备案", "scope": "webpage", "size": 10 },
+    "total": 3,
+    "webpages": [
+      { "title": "生成式人工智能服务备案指南", "link": "https://www.cac.gov.cn/example/beian-guide", "score": "high", "snippet": "介绍生成式人工智能服务上线前的备案材料和流程。", "position": 1, "date": "2026年03月18日" },
+      { "title": "大模型备案常见问题", "link": "https://zhuanlan.example.test/p/1", "snippet": "备案周期、材料清单与常见退回原因。", "position": 2, "displayDate": "2026-05-02" },
+      { "title": "重复链接", "link": "https://zhuanlan.example.test/p/1", "snippet": "dropped: the same link again", "position": 3 },
+      { "title": "没有链接", "snippet": "dropped: no link", "position": 4 }
+    ]
+  }
+}
