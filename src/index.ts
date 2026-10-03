@@ -31,6 +31,8 @@ import { SearchRouter } from './router.ts'
 import { FetchService } from './fetch.ts'
 import { registerTools } from './tools.ts'
 import { buildPromptText } from './prompt.ts'
+import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
+import { automationModeOf, resolveWebCall, webPolicyDecision } from './actions/approval.ts'
 
 export const name = 'web-search-pro'
 // `browser` (dsh-browser) is deliberately NOT injected: Cordis 4.0.4 treats every
@@ -44,11 +46,6 @@ export { ExaClient } from './exa-client.ts'
 export type { ExaSearchRequest, ExaSearchType, ExaResult } from './exa-client.ts'
 export { BackendRegistry } from './backend-registry.ts'
 export type { Backend, BackendDiagnostic, BackendProbe } from './backend-registry.ts'
-
-const TOOL_NAMES = [
-  'web_search_pro', 'web_exa_contents', 'web_fetch_pro', 'web_platform_search', 'web_snapshot',
-  'web_history', 'web_cache_clear', 'web_rule', 'web_search_stats', 'web_backend_status', 'web_deps',
-]
 
 export function apply(ctx: Context, config: Config): void {
   const resolved: ResolvedConfig = resolveConfig(config)
@@ -85,8 +82,22 @@ export function apply(ctx: Context, config: Config): void {
   const router = new SearchRouter(ctx, resolved, store, dynamic, getBrowser)
   const fetchSvc = new FetchService(store, dynamic, getBrowser)
 
-  // 5. Tools.
+  // 5. Tools: `web_index` + `web_call` (or one tool per action with toolSurface=flat).
   registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser })
+
+  //    Approval is decided per ACTION: web_call (and each flat tool) is resolved to its action first, so the user
+  //    is asked about `cache.clear` or `sources.install bili`, not about a generic dispatcher. The old tools were
+  //    gated by name from dsh-browser's hook; that hook cannot see inside web_call, so the rules live here and
+  //    read dsh-browser's automationMode when the service is present (see actions/approval.ts).
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    const downstream = await next()
+    if (downstream.kind !== 'allow') return downstream
+    const call = resolveWebCall(exec.name, exec.arguments)
+    if (call?.kind !== 'action') return downstream
+    const action = findAction(call.action)
+    if (!action || action.approval === 'none') return downstream
+    return webPolicyDecision(call.action, call.args, await automationModeOf(getBrowser()))
+  })
 
   // 5. Optional ctx.web provider registration: the built-in web_search /
   //    web_fetch tools route through this plugin when configured via
@@ -103,7 +114,7 @@ export function apply(ctx: Context, config: Config): void {
       id: resolved.providerId,
       available: () => true,
       fetch: async (request, signal) => {
-        // WebFetchRequest carries no size, so the cap is fixed: twice the web_fetch_pro default
+        // WebFetchRequest carries no size, so the cap is fixed: twice the read.fetch default
         // (`truncated` then tells the host the body was cut).
         const out = await fetchSvc.fetchPage(request.url, {
           mode: 'auto',
@@ -138,7 +149,8 @@ export function apply(ctx: Context, config: Config): void {
         ts: new Date().toISOString(),
         plugin: name,
         dbPath,
-        tools: TOOL_NAMES,
+        toolSurface: resolved.toolSurface,
+        tools: resolved.toolSurface === 'flat' ? ACTIONS.map(flatToolName) : ['web_index', 'web_call'],
         provider: resolved.registerProvider ? resolved.providerId : undefined,
         engines: resolved.engines,
         browser: getBrowser() ? 'present' : 'absent',

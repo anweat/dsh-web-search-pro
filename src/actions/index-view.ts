@@ -7,7 +7,7 @@
  * @module web-search-pro/actions/index-view
  */
 
-import { ACTIONS, CALL_TOOL, GROUP_SUMMARIES, INDEX_TOOL, actionsInGroup, findAction, isActionGroup } from './registry.ts'
+import { ACTIONS, CALL_TOOL, GROUP_SUMMARIES, INDEX_TOOL, actionsInGroup, findAction, isActionGroup, similarActions } from './registry.ts'
 import { ACTION_GROUPS, type ActionDef, type ApprovalClass } from './types.ts'
 import { compactParams, describeParams } from './schema.ts'
 import { isLegacyToolName, legacyLine, mapLegacyCall } from './legacy.ts'
@@ -106,8 +106,8 @@ export function renderAction(name: string, env: IndexEnvironment): string {
       return `${name} is an old tool name (gone). It is now ${mapped.action}: ${INDEX_TOOL}({action:"${mapped.action}"}). Old names: ${legacyLine()}.`
     }
     if (isActionGroup(name)) return renderGroup(name, env)
-    const hits = searchActions(name, env).slice(0, 5)
-    return `Unknown action "${name}".${hits.length ? ' Similar: ' + hits.map(hit => hit.name).join(', ') + '.' : ''} ${INDEX_TOOL}() lists the groups.`
+    const hits = [...new Set([...searchActions(name, env).map(hit => hit.name), ...similarActions(name)])].slice(0, 5)
+    return `Unknown action "${name}".${hits.length ? ' Similar: ' + hits.join(', ') + '.' : ''} ${INDEX_TOOL}() lists the groups.`
   }
   const reason = action.unavailable?.(env)
   const note = approvalNote(action)

@@ -35,7 +35,7 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
   parts.push('Needs: ' + pack.needs.map(n => n.id + ' "' + n.text + '"' + (covered.has(n.id) ? ' ✓' : ' ✗')).join('; '))
   if (pack.gaps.length) {
     parts.push('Gaps: ' + pack.gaps.map(g => g.needId + ' ' + g.reason + (g.bestGrade !== undefined ? ' (best grade ' + g.bestGrade + ')' : '') + (g.critical ? '' : ' [optional]')).join('; ')
-      + '. Fetch a listed source with web_fetch_pro, or search again with a different query.')
+      + '. Fetch a listed source with read.fetch, or search again with a different query.')
   }
   const shown = new Set(pack.evidence.map(e => e.url))
   const others = sources.filter(s => !shown.has(s.url))
@@ -43,6 +43,6 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
   const v = pack.verification
   if (v.native.length || v.local.length) parts.push('Constraints — enforced by the search provider: ' + (v.native.join(', ') || 'none') + '; checked locally only: ' + (v.local.join(', ') || 'none') + '.')
   parts.push(engineLine + (pack.notes.length ? '\nNotes: ' + pack.notes.join(' | ') : ''))
-  if (pack.evidence.length) parts.push('To read around an excerpt: web_history action=expand evidenceId=<id>.')
+  if (pack.evidence.length) parts.push('To read around an excerpt: history.expand evidenceId=<id>.')
   return parts.join('\n\n')
 }

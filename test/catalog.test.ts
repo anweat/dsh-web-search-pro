@@ -8,6 +8,9 @@ import { recommendSources, renderRecommendation, MAX_RECOMMENDATIONS, RECOMMEND_
 import { defaultProviderRegistry } from '../src/providers/index.ts'
 import { PLATFORM_IDS } from '../src/engines.ts'
 import type { ProviderStatus } from '../src/pipeline/plan.ts'
+import { findAction } from '../src/actions/registry.ts'
+import { checkOutput } from '../src/actions/schema.ts'
+import { callAction, callEnvelope, renderResult } from './call-helper.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -205,7 +208,7 @@ test('recommend: platform hint narrows to that source; login-based and browser-b
   assert.deepEqual(xhs.picks.map(p => p.id), ['xiaohongshu'])
   assert.equal(xhs.picks[0]!.status, 'needs_setup')
   assert.ok(xhs.picks[0]!.missing!.includes('dsh-browser plugin'))
-  assert.equal(xhs.picks[0]!.use, 'web_platform_search platform=xiaohongshu')
+  assert.equal(xhs.picks[0]!.use, 'search.run platform=xiaohongshu')
   const withBrowser = recommendSources({ platform: 'xiaohongshu' }, ctx({ browser: true })).picks[0]!
   assert.equal(withBrowser.status, 'limited', 'runnable, but the login cannot be checked')
   assert.equal(withBrowser.executable, true)
@@ -226,7 +229,7 @@ test('recommend: nothing fitting yields a note, and a result renders as short te
   assert.match(none.notes.join(' '), /no catalog source fits/)
   const text = renderRecommendation(recommendSources({ ...ZH, profile: 'news_fact' }, ctx()))
   assert.match(text, /^Recommended sources for profile news_fact, language zh:/)
-  assert.match(text, /use: web_search_pro engines=ddg/)
+  assert.match(text, /use: search.run engines=ddg/)
   assert.match(text, /missing: key: set BOCHA_SEARCH_API_KEY/)
   assert.ok(text.endsWith(RECOMMEND_INSTRUCTION))
   assert.ok(text.length < 2200, 'recommendation text stays small: ' + text.length)
@@ -234,7 +237,7 @@ test('recommend: nothing fitting yields a note, and a result renders as short te
 
 // ── the tool action ──────────────────────────────────────────────────────────
 
-test('web_backend_status action=recommend returns the recommendation from registry readiness; unknown actions and profiles are rejected', async () => {
+test('search.recommend returns the recommendation from registry readiness; unknown profiles and languages are rejected', async () => {
   const config = resolveConfig({ dbPath: '/tmp/unused.db' } as never)
   const defs = new Map<string, any>()
   const router = {
@@ -242,20 +245,18 @@ test('web_backend_status action=recommend returns the recommendation from regist
     resolveSecret: async (name: string) => (name === 'BOCHA_SEARCH_API_KEY' ? 'k' : undefined),
   }
   registerTools({ ctx: { tools: { register: (d: any) => defs.set(d.name, d) } } as any, config, dynamic: () => config, store: {} as any, router: router as any, fetch: {} as any })
-  const tool = defs.get('web_backend_status')
-  assert.ok(tool.parameters.action && tool.parameters.task && tool.parameters.profile && tool.parameters.query, 'recommend inputs are documented parameters')
-  const out = await tool.execute({ action: 'recommend', task: ZH.task, query: ZH.query, profile: 'news_fact' }, {})
-  assert.ok(out.recommend.picks.length <= 3)
-  assert.equal(out.recommend.language, 'zh')
+  const action = findAction('search.recommend')!
+  assert.ok(action.params.task && action.params.profile && action.params.query && action.params.language && action.params.platform, 'recommend inputs are documented parameters')
+  const out = await callAction(defs, 'search.recommend', { task: ZH.task, query: ZH.query, profile: 'news_fact' })
+  assert.ok(out.picks.length <= 3)
+  assert.equal(out.language, 'zh')
   // the key resolves through the credentials / environment resolver: bocha is then looked at as configured (but its probe still decides)
-  const rendered = tool.output.render({ action: 'recommend' }, out)[0].text
-  assert.match(rendered, /Recommended sources for profile news_fact/)
-  assert.deepEqual(out.engines, [], 'recommend mode carries no engine diagnostics')
-  await assert.rejects(() => tool.execute({ action: 'nope' }, {}), /action must be status or recommend/)
-  await assert.rejects(() => tool.execute({ action: 'recommend', profile: 'weird' }, {}), /profile must be one of/)
-  await assert.rejects(() => tool.execute({ action: 'recommend', language: 'fr' }, {}), /language must be zh or en/)
-  const props = tool.output.schema.properties
-  assert.equal(props.recommend.additionalProperties, false, 'the output schema stays closed')
-  assert.equal(props.recommend.properties.picks.items.additionalProperties, false)
-  assert.ok(!props.recommend.required, 'recommend is an optional output field')
+  assert.match(renderResult('search.recommend', out), /Recommended sources for profile news_fact/)
+  assert.equal(out.engines, undefined, 'recommend carries no engine diagnostics')
+  assert.deepEqual(checkOutput(action.output, out), [], 'the result fits its closed output schema')
+  await assert.rejects(() => callAction(defs, 'search.recommend', { profile: 'weird' }), /profile must be one of/)
+  await assert.rejects(() => callAction(defs, 'search.recommend', { language: 'fr' }), /language must be zh or en/)
+  const bad = await callEnvelope(defs, 'search.recommend', { profile: 'weird' })
+  assert.equal(bad.error.code, 'INVALID_ARGS')
+  assert.match(bad.error.schema, /^search\.recommend\(/)
 })

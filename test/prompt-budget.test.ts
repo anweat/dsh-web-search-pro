@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { buildPromptText } from '../src/prompt.ts'
 import { resolveConfig } from '../src/config.ts'
+import { indexedToolDefinitions } from '../src/tool-defs.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -14,46 +15,50 @@ registerHooks({
 })
 const { registerTools } = await import('../src/tools.ts')
 
-function definitions(): Map<string, any> {
-  const config = resolveConfig({ dbPath: '/tmp/unused.db' } as never)
+function definitions(toolSurface?: 'indexed' | 'flat'): Map<string, any> {
+  const config = resolveConfig({ dbPath: '/tmp/unused.db', ...toolSurface ? { toolSurface } : {} } as never)
   const defs = new Map<string, any>()
   registerTools({ ctx: { tools: { register: (d: any) => defs.set(d.name, d) } } as any, config, dynamic: () => config, store: {} as any, router: {} as any, fetch: {} as any })
   return defs
 }
 
-test('always-on text stays condensed: prompt base <= 650, web_search_pro description <= 450, every description short', () => {
-  assert.ok(buildPromptText(false).length <= 650, 'base ' + buildPromptText(false).length)
-  assert.ok(buildPromptText(true).length <= 1200, 'with browser ' + buildPromptText(true).length)
+/** What the Host sends the model for this plugin on every turn: prompt section, tool names, descriptions, parameter schemas. */
+export function residentChars(hasBrowser: boolean): { prompt: number; names: number; descriptions: number; parameters: number; total: number } {
+  const defs = [...definitions().values()]
+  const prompt = buildPromptText(hasBrowser).length
+  const names = defs.reduce((n, d) => n + d.name.length, 0)
+  const descriptions = defs.reduce((n, d) => n + d.description.length, 0)
+  const parameters = defs.reduce((n, d) => n + JSON.stringify(d.parameters).length, 0)
+  return { prompt, names, descriptions, parameters, total: prompt + names + descriptions + parameters }
+}
+
+test('the indexed surface registers exactly web_index and web_call, with short descriptions', () => {
   const defs = definitions()
-  assert.equal(defs.size, 11)
-  assert.ok(defs.get('web_search_pro').description.length <= 450, 'web_search_pro ' + defs.get('web_search_pro').description.length)
-  for (const [name, def] of defs) assert.ok(def.description.length <= 450, name + ' description ' + def.description.length)
-  const total = [...defs.values()].reduce((n, d) => n + d.description.length, 0)
-  assert.ok(total <= 2400, 'descriptions total ' + total)
+  assert.deepEqual([...defs.keys()].sort(), ['web_call', 'web_index'])
+  for (const [name, def] of defs) assert.ok(def.description.length <= 200, name + ' description ' + def.description.length)
+  // The registered tools are exactly the definitions the budget is measured from.
+  for (const published of indexedToolDefinitions()) {
+    const def = defs.get(published.name)
+    assert.equal(def.description, published.description)
+    assert.deepEqual(def.parameters, published.parameters)
+  }
 })
 
-test('condensed descriptions keep the rules the model needs', () => {
+test('the indexed surface keeps the tools\' resident text small: descriptions + parameters under 900 chars', () => {
+  const defs = [...definitions().values()]
+  const descriptions = defs.reduce((n, d) => n + d.description.length, 0)
+  const parameters = defs.reduce((n, d) => n + JSON.stringify(d.parameters).length, 0)
+  assert.ok(descriptions <= 400, 'descriptions ' + descriptions)
+  assert.ok(parameters <= 600, 'parameters ' + parameters)
+  assert.ok(descriptions + parameters <= 900, 'tools ' + (descriptions + parameters))
+})
+
+test('condensed descriptions point at the registry and keep the rules the model needs', () => {
   const defs = definitions()
-  const d = (name: string): string => defs.get(name).description
-  // Evidence mode is discoverable from the tool description alone.
-  assert.match(d('web_search_pro'), /task/)
-  assert.match(d('web_search_pro'), /profile \(docs_code, news_fact, academic, experience, compare, general\)/)
-  assert.match(d('web_search_pro'), /evidence pack/)
-  assert.match(d('web_fetch_pro'), /offset/)
-  assert.match(d('web_fetch_pro'), /20000 chars/)
-  assert.match(d('web_exa_contents'), /8000 chars per URL and 30000/)
-  assert.match(d('web_platform_search'), /optional dsh-browser plugin/)
-  assert.match(d('web_snapshot'), /optional dsh-browser plugin/)
-  assert.match(d('web_deps'), /only when the user asks/)
-  assert.match(d('web_deps'), /twitter/)
-  assert.match(d('web_backend_status'), /Makes no search requests/)
-  assert.match(d('web_backend_status'), /action=recommend/)
-  assert.match(buildPromptText(false), /never query every source/)
-  assert.match(buildPromptText(false), /action=recommend/)
-  // Parameters that carry rules keep them.
-  const params = (name: string, key: string): string => defs.get(name).parameters[key].description
-  assert.match(params('web_search_pro', 'constraints'), /hard \(drop violators\) or soft/)
-  assert.match(params('web_platform_search', 'platform'), /github, github-code/)
-  assert.match(params('web_history', 'action'), /expand/)
-  assert.match(params('web_fetch_pro', 'offset'), /nextOffset/)
+  assert.match(defs.get('web_index').description, /group/)
+  assert.match(defs.get('web_index').description, /action/)
+  assert.match(defs.get('web_call').description, /search\.run/)
+  assert.match(defs.get('web_call').description, /INVALID_ARGS/)
+  assert.equal(defs.get('web_call').parameters.action.required, true)
+  assert.equal(defs.get('web_call').parameters.args.additionalProperties, true)
 })

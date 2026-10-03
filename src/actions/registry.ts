@@ -53,3 +53,20 @@ const BY_FLAT_NAME = new Map(ACTIONS.map(action => [flatToolName(action), action
 export function findActionByFlatTool(toolName: string): ActionDef | undefined {
   return BY_FLAT_NAME.get(toolName)
 }
+
+/** The nearest action names for an unknown one: same group, same verb, or sharing a word. */
+export function similarActions(name: string, limit = 5): string[] {
+  const text = name.toLowerCase()
+  const parts = text.split(/[^a-z0-9]+/).filter(Boolean)
+  const scored = ACTIONS.map(action => {
+    const [group, verb] = action.name.split('.') as [string, string]
+    let score = 0
+    if (text === action.name) score += 10
+    if (parts.includes(group)) score += 3
+    if (parts.includes(verb)) score += 3
+    if (text.includes(verb) || verb.includes(text)) score += 2
+    if (text.includes(group)) score += 1
+    return { name: action.name, score }
+  }).filter(entry => entry.score > 0)
+  return scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, limit).map(entry => entry.name)
+}

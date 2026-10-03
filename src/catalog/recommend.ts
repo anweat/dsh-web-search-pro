@@ -31,7 +31,7 @@ export interface RecommendContext {
   catalog: SourceCatalog
   /** Registry readiness by provider ROUTE id; absent = no such adapter is registered. */
   providers: ReadonlyMap<string, ProviderStatus>
-  /** Local CLI scan (`web_deps` ids); absent = not scanned. */
+  /** Local CLI scan (`sources.deps` ids); absent = not scanned. */
   cli?: ReadonlyMap<string, boolean>
   /** The dsh-browser plugin is ready. */
   browser?: boolean
@@ -102,7 +102,7 @@ function assess(entry: CatalogEntry, ctx: RecommendContext): Assessed {
   if (entry.provider) {
     const st = ctx.providers.get(entry.provider)
     if (st) {
-      const use = 'web_search_pro engines=' + entry.provider
+      const use = 'search.run engines=' + entry.provider
       if (st.state === 'ready') {
         const missing = st.credential === 'missing' ? missingOf(entry, ctx).filter(m => m.startsWith('key')) : []
         return { entry, status: missing.length ? 'limited' : 'ready', missing, use }
@@ -116,7 +116,7 @@ function assess(entry: CatalogEntry, ctx: RecommendContext): Assessed {
     return { entry, status: 'catalog_only', missing: ['adapter not registered in this plugin', ...missingOf(entry, ctx)], use: 'no adapter registered' }
   }
   if (entry.platform) {
-    const use = 'web_platform_search platform=' + entry.platform
+    const use = 'search.run platform=' + entry.platform
     const missing = missingOf(entry, ctx)
     if (missing.length) return { entry, status: 'needs_setup', missing, use }
     // Login sessions cannot be checked from here: runnable, but not confirmed.
@@ -196,7 +196,7 @@ export function recommendSources(input: RecommendInput, ctx: RecommendContext): 
   take(true)
   take(false)
   if (!picks.length) notes.push('no catalog source fits profile ' + profile + (language ? '/' + language : ''))
-  else if (!picks.some(p => p.status === 'ready' || p.status === 'limited')) notes.push('nothing suitable is ready: set up one of the sources above or use web_search_pro without engines')
+  else if (!picks.some(p => p.status === 'ready' || p.status === 'limited')) notes.push('nothing suitable is ready: set up one of the sources above or use search.run without engines')
   return { profile, profileInferred, ...language ? { language } : {}, picks: picks.map(toSuggestion), instruction: RECOMMEND_INSTRUCTION, notes }
 }
 

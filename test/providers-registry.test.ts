@@ -12,6 +12,9 @@ import { SearchRouter } from '../src/router.ts'
 import { resolveConfig } from '../src/config.ts'
 import { Store } from '../src/store.ts'
 import { registerTools } from '../src/tools.ts'
+import { findAction } from '../src/actions/registry.ts'
+import { checkOutput } from '../src/actions/schema.ts'
+import { callAction, renderResult } from './call-helper.ts'
 import type { Profile, TaskSpec } from '../src/pipeline/types.ts'
 
 const spec = (over: Partial<TaskSpec> = {}): TaskSpec => ({
@@ -289,9 +292,9 @@ test('router: an adapter that fails with a coded error shows health error / cool
   } finally { h.cleanup() }
 })
 
-// ── web_backend_status ───────────────────────────────────────────────────────
+// ── sources.status ───────────────────────────────────────────────────────
 
-test('web_backend_status: lists registry providers with readiness dimensions (optional fields) and shows the EFFECTIVE judge mode', async () => {
+test('sources.status: lists registry providers with readiness dimensions (optional fields) and shows the EFFECTIVE judge mode', async () => {
   const saved = { s: process.env.BOCHA_SEARCH_API_KEY, j: process.env.BOCHA_JEV_API_KEY }
   delete process.env.BOCHA_SEARCH_API_KEY
   process.env.BOCHA_JEV_API_KEY = 'jev-secret-value'
@@ -300,8 +303,9 @@ test('web_backend_status: lists registry providers with readiness dimensions (op
   const definitions = new Map<string, any>()
   try {
     registerTools({ ctx: { tools: { register: (d: any) => definitions.set(d.name, d) } } as any, config: h.config, dynamic: () => h.config, store: h.store, router: h.router, fetch: {} as any, browser: {} as any })
-    const def = definitions.get('web_backend_status')
-    const out = await def.execute({}, { signal: undefined })
+    const def = findAction('sources.status')!
+    const out = await callAction(definitions, 'sources.status')
+    assert.deepEqual(checkOutput(def.output, out), [], 'the result fits its closed output schema')
     const bocha = out.providers.find((p: any) => p.id === 'builtin:bocha')
     assert.deepEqual([bocha.route, bocha.aliases, bocha.languages, bocha.unverified, bocha.sourceFamily], ['bocha', ['bocha'], ['zh'], true, undefined])
     assert.deepEqual(bocha.requirements[0].env, ['BOCHA_SEARCH_API_KEY', 'BOCHA_JEV_API_KEY'])
@@ -314,13 +318,13 @@ test('web_backend_status: lists registry providers with readiness dimensions (op
     assert.ok(!JSON.stringify(out).includes('jev-secret-value'), 'no key value anywhere')
 
     // closed schema: every key of every provider is declared
-    const schema = def.output.schema.properties.providers.items
+    const schema = def.output.properties.providers!.items as any
     for (const p of out.providers) {
       for (const key of Object.keys(p)) assert.ok(key in schema.properties, key)
       for (const key of Object.keys(p.readiness)) assert.ok(key in schema.properties.readiness.properties, key)
       for (const q of p.requirements) for (const key of Object.keys(q)) assert.ok(key in schema.properties.requirements.items.properties, key)
     }
-    const text = def.output.render({}, out)[0].text as string
+    const text = renderResult('sources.status', out)
     assert.match(text, /provider bocha \(builtin:bocha\): installation=not_required credential=configured health=unknown · zh · general\/news_fact\/experience\/compare\/docs_code · \[not verified live\]/)
     assert.match(text, /provider exa \(builtin:exa\): installation=\w+ credential=missing/)
     // the evidence section shows the effective mode, not "scorer rule"
@@ -335,7 +339,7 @@ test('web_backend_status: lists registry providers with readiness dimensions (op
   }
 })
 
-test('web_backend_status: judge mode display covers off / shadow / control with and without scorer=jev, and a missing key falls back to rule', async () => {
+test('sources.status: judge mode display covers off / shadow / control with and without scorer=jev, and a missing key falls back to rule', async () => {
   const { configuredDecider, judgeStatus } = await import('../src/pipeline/judge-status.ts')
   const cfg = (evidence: object) => resolveConfig({ evidence } as never).evidence
   assert.deepEqual(configuredDecider(cfg({})), { mode: 'off', decides: 'rule' })

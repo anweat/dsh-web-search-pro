@@ -98,7 +98,7 @@ export class UsageLedger {
   /** Today's day key in the budget time zone. */
   day(): string { return dayKey(this.now(), this.caps.timezone) }
 
-  /** A per-search budget (one `web_search_pro` evidence call, all its rounds). */
+  /** A per-search budget (one `search.run` evidence call, all its rounds). */
   forSearch(searchId: string = 's_' + crypto.randomUUID().slice(0, 8)): SearchBudget { return new SearchBudget(this, searchId) }
 
   /**

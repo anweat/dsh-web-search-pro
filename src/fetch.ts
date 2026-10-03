@@ -306,7 +306,7 @@ export class FetchService {
         if (opts.mode === 'playwright') throw new Error('playwright backend is disabled in config')
       } else {
         const browser = this.getBrowser()
-        const gap = browserGap(browser, 'render', 'web_fetch_pro mode=playwright')
+        const gap = browserGap(browser, 'render', 'read.fetch mode=playwright')
         if (!gap) await attempt('playwright', () => this.fetchPlaywright(browser!, normalized, opts, maxChars, rules))
         else if (opts.mode === 'playwright') throw new BrowserUnavailableError(gap)
         else {

@@ -174,7 +174,7 @@ test('recommend: with a key the keyed source is ready and executable (still mark
   const r = recommendSources({ ...EN, profile: 'general' }, ctx(['tavily']))
   const tavily = r.picks.find(p => p.id === 'tavily')!
   assert.deepEqual([tavily.status, tavily.executable, tavily.verified], ['ready', true, false])
-  assert.equal(tavily.use, 'web_search_pro engines=tavily')
+  assert.equal(tavily.use, 'search.run engines=tavily')
   assert.equal(r.picks[0]!.id, 'tavily', 'a ready web engine leads')
   const serper = recommendSources({ platform: 'serper' }, ctx(['serper'])).picks[0]!
   assert.equal(serper.sourceFamily, 'google')

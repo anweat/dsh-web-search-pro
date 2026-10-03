@@ -31,7 +31,7 @@ export function toBrowserGetter(source: BrowserService | BrowserGetter | undefin
 export function browserGap(browser: BrowserService | undefined, method: BrowserMethod, feature: string): string | undefined {
   if (!browser) {
     return feature + ' requires the optional dsh-browser plugin, which is not installed or not enabled. '
-      + 'Install/enable @anweat/dsh-browser (the host may need a restart to load it); all other web-search-pro tools work without it.'
+      + 'Install/enable @anweat/dsh-browser (the host may need a restart to load it); all other web-search-pro actions work without it.'
   }
   if (typeof browser[method] !== 'function') {
     return feature + ' requires a newer dsh-browser (service has no ' + method + '()). Update @anweat/dsh-browser.'
@@ -48,7 +48,7 @@ export function requireBrowser(browser: BrowserService | undefined, method: Brow
 
 /** Browser service state for diagnostics. */
 export function browserState(browser: BrowserService | undefined): { available: boolean; state: 'ready' | 'incomplete' | 'missing'; reason?: string } {
-  if (!browser) return { available: false, state: 'missing', reason: 'dsh-browser is not installed or not enabled; web_snapshot and browser-only platforms are unavailable' }
+  if (!browser) return { available: false, state: 'missing', reason: 'dsh-browser is not installed or not enabled; read.snapshot and browser-only platforms are unavailable' }
   const absent = (['render', 'snapshot', 'searchResults', 'opencli'] as const).filter(m => typeof browser[m] !== 'function')
   if (absent.length) return { available: true, state: 'incomplete', reason: 'dsh-browser lacks ' + absent.join(', ') + '; update @anweat/dsh-browser' }
   return { available: true, state: 'ready' }

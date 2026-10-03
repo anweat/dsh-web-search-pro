@@ -8,6 +8,8 @@ import { resolveConfig } from '../src/config.ts'
 import { judgeStatus } from '../src/pipeline/judge-status.ts'
 import { DEFAULT_PROVIDER_ID, endpointOf, PRESETS, providerProblems, resolveProviders, selectProvider, unusableReason } from '../src/pipeline/judges/providers.ts'
 import { Store } from '../src/store.ts'
+import { findAction } from '../src/actions/registry.ts'
+import { callAction, renderResult } from './call-helper.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -152,7 +154,7 @@ test('judgeStatus: provider usability, key presence, today\'s usage and caps; no
   } finally { store.close(); fs.rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('web_backend_status: the evidence section gains optional provider / providers / usage fields in the closed schema, and renders them', async () => {
+test('sources.status: the evidence section gains optional provider / providers / usage fields in the closed schema, and renders them', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-judge-status-tool-'))
   const store = new Store(path.join(dir, 'store.db'))
   const definitions = new Map<string, any>()
@@ -162,20 +164,20 @@ test('web_backend_status: the evidence section gains optional provider / provide
       ctx: { tools: { register: (d: any) => definitions.set(d.name, d) } } as any, config, dynamic: () => config, store,
       router: { backendDiagnostics: async () => [], resolveSecret: async (ref: string) => (ref === 'BOCHA_JEV_API_KEY' ? 'sk-hidden' : undefined) } as any, fetch: {} as any, browser: {} as any,
     })
-    const def = definitions.get('web_backend_status')
-    const out = await def.execute({}, { signal: undefined })
+    const def = findAction('sources.status')!
+    const out = await callAction(definitions, 'sources.status')
     const ev = out.evidence
     assert.deepEqual(ev.provider, { id: 'bocha-jev', protocol: 'systemone', model: 'bocha-jev-v1', usable: true, keyConfigured: true })
     assert.equal(ev.usage.caps.dailyInputTokens, 5000)
     assert.equal(ev.usage.inputTokens, 0)
     assert.ok(!JSON.stringify(out).includes('sk-hidden'))
     // every returned key is declared by the closed schema
-    const schema = def.output.schema.properties.evidence
+    const schema = def.output.properties.evidence as any
     for (const key of Object.keys(ev)) assert.ok(key in schema.properties, key)
     for (const key of Object.keys(ev.usage)) assert.ok(key in schema.properties.usage.properties, key)
     for (const key of Object.keys(ev.provider)) assert.ok(key in schema.properties.provider.properties, key)
     assert.equal(schema.properties.provider.required, undefined)
-    const text = def.output.render({}, out)[0].text as string
+    const text = renderResult('sources.status', out)
     assert.match(text, /judge provider: bocha-jev \(systemone, bocha-jev-v1\)/)
     assert.match(text, /model usage \d{4}-\d{2}-\d{2}: 0 request\(s\), 0 input \/ 0 output tokens; caps: 60000\/search, 5000\/day input tokens/)
     assert.ok(!text.includes('sk-hidden'))

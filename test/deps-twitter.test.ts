@@ -7,6 +7,7 @@ import { registerHooks } from 'node:module'
 import { detectDeps, evaluateTwitterCli, DEP_IDS } from '../src/deps.ts'
 import { agentReachEngine, EngineError } from '../src/engines.ts'
 import { resolveConfig } from '../src/config.ts'
+import { callAction, renderResult } from './call-helper.ts'
 
 // dsh-tools is a host peer; tool definitions are identity in this isolated run.
 registerHooks({
@@ -17,7 +18,8 @@ registerHooks({
     return nextResolve(specifier, context)
   },
 })
-const { registerTools, twitterGate } = await import('../src/tools.ts')
+const { registerTools } = await import('../src/tools.ts')
+const { twitterGate } = await import('../src/actions/sources.ts')
 
 const posix = process.platform !== 'win32'
 
@@ -106,7 +108,7 @@ function statusTool() {
   return { definitions, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) }
 }
 
-test('web_backend_status and web_deps reflect whether the twitter command can really run', { skip: !posix }, async () => {
+test('sources.status and sources.deps reflect whether the twitter command can really run', { skip: !posix }, async () => {
   const h = statusTool()
   const saved = { a: process.env.TWITTER_AUTH_TOKEN, b: process.env.TWITTER_CT0 }
   try {
@@ -114,26 +116,26 @@ test('web_backend_status and web_deps reflect whether the twitter command can re
     process.env.TWITTER_CT0 = 'c'
     // Only Agent-Reach installed: both tools say twitter is unavailable.
     await withCommands({ 'agent-reach': 'echo ok' }, async () => {
-      const status = await h.definitions.get('web_backend_status').execute({}, { signal: undefined })
+      const status = await callAction(h.definitions, 'sources.status')
       const tw = status.cli.find((c: any) => c.id === 'twitter')
       assert.equal(tw.available, false)
       assert.match(tw.note, /install twitter-cli/)
       assert.equal(status.cli.find((c: any) => c.id === 'agent-reach').available, true)
-      const deps = await h.definitions.get('web_deps').execute({}, { signal: undefined })
+      const deps = await callAction(h.definitions, 'sources.deps')
       assert.equal(deps.backends.find((b: any) => b.id === 'twitter').available, false)
     })
     // `twitter` works and credentials are set: available everywhere.
     await withCommands({ twitter: TWITTER_OK }, async () => {
-      const status = await h.definitions.get('web_backend_status').execute({}, { signal: undefined })
+      const status = await callAction(h.definitions, 'sources.status')
       assert.equal(status.cli.find((c: any) => c.id === 'twitter').available, true)
-      assert.match(h.definitions.get('web_backend_status').output.render({}, status)[0].text, /✅ cli:twitter — .*twitter/)
+      assert.match(renderResult('sources.status', status), /✅ cli:twitter — .*twitter/)
       // agent-reach is only an optional helper: its absence is not a gap in the check summary.
-      const deps = await h.definitions.get('web_deps').execute({}, { signal: undefined })
+      const deps = await callAction(h.definitions, 'sources.deps')
       const ar = deps.backends.find((b: any) => b.id === 'agent-reach')
       assert.equal(ar.optional, true)
       // Credentials missing: the command is there but the backend cannot run.
       delete process.env.TWITTER_CT0
-      const noEnv = await h.definitions.get('web_backend_status').execute({}, { signal: undefined })
+      const noEnv = await callAction(h.definitions, 'sources.status')
       const tw = noEnv.cli.find((c: any) => c.id === 'twitter')
       assert.equal(tw.available, false)
       assert.match(tw.note, /TWITTER_CT0/)
@@ -144,13 +146,13 @@ test('web_backend_status and web_deps reflect whether the twitter command can re
   }
 })
 
-test('web_deps installs twitter-cli through a package manager entry, never agent-reach for twitter', async () => {
+test('sources.install installs twitter-cli through a package manager entry, never agent-reach for twitter', async () => {
   const h = statusTool()
   try {
-    const deps = await h.definitions.get('web_deps').execute({}, { signal: undefined })
+    const deps = await callAction(h.definitions, 'sources.deps')
     const tw = deps.backends.find((b: any) => b.id === 'twitter')
     assert.deepEqual(tw.installs.map((i: any) => i.installer), ['uv', 'pipx', 'pip'])
-    await assert.rejects(h.definitions.get('web_deps').execute({ action: 'install', backend: 'twitter', installer: 'npm' }, { signal: undefined }), /unknown installer npm for twitter/)
+    await assert.rejects(callAction(h.definitions, 'sources.install', { backend: 'twitter', installer: 'npm' }), /unknown installer npm for twitter/)
   } finally { h.cleanup() }
 })
 

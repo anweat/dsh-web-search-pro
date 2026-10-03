@@ -634,7 +634,7 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
       async search(query, count, signal) {
         const res = await runCli('twitter', ['search', query, '-n', String(Math.min(count, 10))], { timeoutMs: 45_000, signal })
         // Spawn failure (no `twitter` on PATH) comes back as exit -1 with no output: say what is missing.
-        if (res.code === -1 && !res.timedOut && !res.stderr.trim() && !res.stdout.trim()) throw new EngineError('the twitter command could not be started: install twitter-cli (web_deps action=install backend=twitter); Agent-Reach alone does not provide it', 'ENGINE_UNAVAILABLE', false)
+        if (res.code === -1 && !res.timedOut && !res.stderr.trim() && !res.stdout.trim()) throw new EngineError('the twitter command could not be started: install twitter-cli (sources.install backend=twitter); Agent-Reach alone does not provide it', 'ENGINE_UNAVAILABLE', false)
         if (res.code !== 0) throw new EngineError('twitter search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
         const sources: WebSearchSource[] = []
         for (const line of res.stdout.split(/\r?\n/)) {
@@ -829,7 +829,7 @@ export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
 
 export const PLATFORM_IDS = ['github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed'] as const
 
-/** Whether web_platform_search may route this built-in or configured custom id. */
+/** Whether search.run platform= may route this built-in or configured custom id. */
 export function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean {
   return PLATFORM_IDS.includes(platform as typeof PLATFORM_IDS[number])
     || Object.hasOwn(customPlatforms ?? {}, platform)

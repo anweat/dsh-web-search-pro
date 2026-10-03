@@ -2,7 +2,7 @@
  * External dependency detection and install for the CLI/platform backends.
  * Most backends shell out to tools installed outside DSH (bili, yt-dlp,
  * twitter, and mcporter). This module reports which are present and how to
- * install them; the web_deps tool exposes it to the model. Each entry probes
+ * install them; the sources.deps / sources.install actions expose it to the model. Each entry probes
  * the command the backend actually executes (the twitter backend runs
  * `twitter`, so finding `agent-reach` on PATH says nothing about it).
  *

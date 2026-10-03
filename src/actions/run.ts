@@ -9,7 +9,7 @@
  */
 
 import type { ActionContext, ActionEnvelope, ActionErrorBody, ActionServices } from './types.ts'
-import { ACTIONS, CALL_TOOL, INDEX_TOOL, findAction } from './registry.ts'
+import { CALL_TOOL, INDEX_TOOL, findAction, similarActions } from './registry.ts'
 import { compactSchema, validateArgs } from './schema.ts'
 import { DeadlineError, abortedByDeadline, hintFor, mapError } from './errors.ts'
 import { isLegacyToolName, mapLegacyCall } from './legacy.ts'
@@ -82,23 +82,6 @@ function withDeadline<T>(run: (signal: AbortSignal) => Promise<T>, timeoutMs: nu
     clearTimeout(timer)
     parent.removeEventListener('abort', onAbort)
   })
-}
-
-/** The nearest action names for an unknown one: same group, same verb, or sharing a word. */
-export function similarActions(name: string, limit = 5): string[] {
-  const text = name.toLowerCase()
-  const parts = text.split(/[^a-z0-9]+/).filter(Boolean)
-  const scored = ACTIONS.map(action => {
-    const [group, verb] = action.name.split('.') as [string, string]
-    let score = 0
-    if (text === action.name) score += 10
-    if (parts.includes(group)) score += 3
-    if (parts.includes(verb)) score += 3
-    if (text.includes(verb) || verb.includes(text)) score += 2
-    if (text.includes(group)) score += 1
-    return { name: action.name, score }
-  }).filter(entry => entry.score > 0)
-  return scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, limit).map(entry => entry.name)
 }
 
 /** The reply to a `web_call` whose action is not in the registry. */

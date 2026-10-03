@@ -30,7 +30,7 @@ export function replayHistory(store: Store, id: string): HistoryReplay {
   return { record, page }
 }
 
-// ── evidence expansion (web_history action=expand) ──────────────────────────
+// ── evidence expansion (history.expand) ──────────────────────────
 
 /** Output cap of one expansion. */
 export const EXPAND_MAX_CHARS = 4000

@@ -7,6 +7,8 @@ import { registerHooks } from 'node:module'
 import { resolveConfig } from '../src/config.ts'
 import { Store } from '../src/store.ts'
 import type { ProviderCall, ProviderOutcome } from '../src/pipeline/run.ts'
+import { findAction } from '../src/actions/registry.ts'
+import { callAction, callEnvelope, renderResult } from './call-helper.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -16,6 +18,8 @@ registerHooks({
 })
 const { registerTools } = await import('../src/tools.ts')
 const { EvidenceService } = await import('../src/pipeline/service.ts')
+
+const RUN_SCHEMA = findAction('search.run')!.output as Schema
 
 interface Schema { type?: string; additionalProperties?: boolean; properties?: Record<string, Schema & { required?: boolean }>; items?: Schema & { required?: boolean } }
 
@@ -54,7 +58,7 @@ function harness(overrides: Record<string, unknown> = {}) {
 
 // ── regression: without evidence parameters nothing changes ─────────────────
 
-test('web_search_pro without task/profile: same router call, same output, same rendering, old schema fields intact', async () => {
+test('search.run without task/profile: same router call, same output, same rendering, old schema fields intact', async () => {
   const h = harness()
   const received: unknown[] = []
   const routerResult = { content: 'C', sources: [{ url: 'https://a.test/', title: 'A', snippet: 'snip', publishedAt: '2026-01-01' }, { url: 'https://b.test/x' }], engine: 'ddg', enginesTried: ['ddg', 'bing'], fromCache: true, fallbackNote: 'fallback; x', availableCount: 9 }
@@ -64,31 +68,31 @@ test('web_search_pro without task/profile: same router call, same output, same r
       router: { search: async (options: unknown) => { received.push(options); return routerResult } } as any, fetch: {} as any, browser: {} as any,
       evidence: { search: async () => { throw new Error('the evidence pipeline must not run') } },
     })
-    const def = h.definitions.get('web_search_pro')
-    const out = await def.execute({ query: 'q', engines: 'ddg,bing', count: 3, fresh: true, includeDomains: 'a.test' }, { signal: undefined })
-    assert.deepEqual(received[0], {
-      query: 'q', engines: ['ddg', 'bing'], count: 3, fresh: true, multi: false, signal: undefined, exa: { includeDomains: ['a.test'] },
+    const out = await callAction(h.definitions, 'search.run', { query: 'q', engines: 'ddg,bing', count: 3, fresh: true, includeDomains: 'a.test' })
+    const { signal, ...routed } = received[0] as { signal: unknown }
+    assert.ok(signal instanceof AbortSignal, 'the call signal is forwarded')
+    assert.deepEqual(routed, {
+      query: 'q', engines: ['ddg', 'bing'], count: 3, fresh: true, multi: false, exa: { includeDomains: ['a.test'] },
     })
     assert.deepEqual(out, {
       content: 'C', sources: routerResult.sources, engine: 'ddg', enginesTried: ['ddg', 'bing'], fromCache: true, fallbackNote: 'fallback; x',
     })
     assert.deepEqual(Object.keys(out), ['content', 'sources', 'engine', 'enginesTried', 'fromCache', 'fallbackNote'])
-    assert.equal(def.output.render({}, out)[0].text, 'C\n\n- [A](https://a.test/) — snip (2026-01-01)\n- [b.test](https://b.test/x)\n\nEngine: ddg (cached) (fallback; x); tried: ddg, bing\n\nThese are navigation targets — several lack snippets. Fetch the most relevant 1-2 before answering.')
-    assertFits(out, def.output.schema)
+    assert.equal(renderResult('search.run', out), 'C\n\n- [A](https://a.test/) — snip (2026-01-01)\n- [b.test](https://b.test/x)\n\nEngine: ddg (cached) (fallback; x); tried: ddg, bing\n\nThese are navigation targets — several lack snippets. Fetch the most relevant 1-2 (read.fetch) before answering.')
+    assertFits(out, RUN_SCHEMA)
   } finally { h.cleanup() }
 })
 
-test('web_search_pro: an empty classic result renders the retry hint unchanged', async () => {
+test('search.run: an empty classic result renders the retry hint unchanged', async () => {
   const h = harness()
   try {
     registerTools({
       ctx: { tools: { register: (d: any) => h.definitions.set(d.name, d) } } as any, config: h.config, dynamic: () => h.config, store: h.store,
       router: { search: async () => ({ sources: [], engine: 'none', enginesTried: ['ddg'], fromCache: false }) } as any, fetch: {} as any, browser: {} as any,
     })
-    const def = h.definitions.get('web_search_pro')
-    const out = await def.execute({ query: 'q' }, { signal: undefined })
+    const out = await callAction(h.definitions, 'search.run', { query: 'q' })
     assert.deepEqual(out, { sources: [], engine: 'none', enginesTried: ['ddg'], fromCache: false })
-    assert.equal(def.output.render({}, out)[0].text, 'No results found.\n\nEngine: none\n\nNo usable results for this query. Retry with a different phrasing, a site: filter, or the "api documentation" / "<host> API" form.')
+    assert.equal(renderResult('search.run', out), 'No results found.\n\nEngine: none\n\nNo usable results for this query. Retry with a different phrasing, a site: filter, or the "api documentation" / "<host> API" form.')
   } finally { h.cleanup() }
 })
 
@@ -121,15 +125,16 @@ function evidenceHarness(over: { evidence?: Record<string, unknown>; jev?: (init
     ctx: { tools: { register: (d: any) => h.definitions.set(d.name, d) } } as any, config: h.config, dynamic: () => h.config, store: h.store,
     router: {} as any, fetch: {} as any, browser: {} as any, evidence: service,
   })
-  return { ...h, calls, jevCalls, def: h.definitions.get('web_search_pro'), history: h.definitions.get('web_history') }
+  const call = (action: string, args: Record<string, unknown> = {}): Promise<any> => callAction(h.definitions, action, args)
+  return { ...h, calls, jevCalls, call, run: (args: Record<string, unknown>) => call('search.run', args) }
 }
 
-test('web_search_pro with task/profile returns an evidence pack that fits the closed schema and renders compactly', async () => {
+test('search.run with task/profile returns an evidence pack that fits the closed schema and renders compactly', async () => {
   const h = evidenceHarness()
   try {
     const args = { query: 'node:sqlite busy timeout WAL', task: 'Configure busy timeout and WAL for node:sqlite', profile: 'docs_code', needs: 'how to set busy timeout in node:sqlite; enable WAL journal mode in node:sqlite', count: 5 }
-    const out = await h.def.execute(args, { signal: undefined })
-    assertFits(out, h.def.output.schema)
+    const out = await h.run(args)
+    assertFits(out, RUN_SCHEMA)
     assert.match(out.resultId, /^r_[0-9a-f]{10}$/)
     assert.equal(out.profile, 'docs_code')
     assert.equal(out.fromCache, false)
@@ -143,38 +148,38 @@ test('web_search_pro with task/profile returns an evidence pack that fits the cl
     const ev = out.evidence.find((e: { excerpt: string }) => e.excerpt.includes('PRAGMA busy_timeout'))
     assert.equal(ev.title, 'Busy docs')
     assert.equal(ev.heading, 'Busy timeout')
-    const text = h.def.output.render(args, out)[0].text as string
+    const text = renderResult('search.run', out, args)
     assert.match(text, /^Evidence pack r_[0-9a-f]{10} \(docs_code\): \d+ excerpt\(s\); needs covered 2\/2\./)
     assert.ok(text.includes(ev.evidenceId) && text.includes('PRAGMA busy_timeout = 5000'))
     assert.match(text, /Needs: n1 "how to set busy timeout in node:sqlite" ✓; n2 "enable WAL journal mode in node:sqlite" ✓/)
-    assert.match(text, /web_history action=expand evidenceId=<id>/)
+    assert.match(text, /history\.expand evidenceId=<id>/)
     assert.ok(!text.includes('bake bread'))
     assert.ok(text.length < 2500, 'compact: ' + text.length)
     assert.ok(h.calls.every(c => c.count === 10))
   } finally { h.cleanup() }
 })
 
-test('web_search_pro evidence mode: profile alone works, bad input is rejected, ignored options are noted', async () => {
+test('search.run evidence mode: profile alone works, bad input is rejected, ignored options are noted', async () => {
   const h = evidenceHarness()
   try {
-    const out = await h.def.execute({ query: 'node:sqlite busy timeout', profile: 'general', fresh: true, multi: true, exaType: 'fast', constraints: '[{"kind":"site","value":"docs.test","strength":"hard"}]', budget: 1000 }, { signal: undefined })
-    assertFits(out, h.def.output.schema)
+    const out = await h.run({ query: 'node:sqlite busy timeout', profile: 'general', fresh: true, multi: true, exaType: 'fast', constraints: '[{"kind":"site","value":"docs.test","strength":"hard"}]', budget: 1000 })
+    assertFits(out, RUN_SCHEMA)
     assert.equal(out.profile, 'general')
     assert.match(out.notes.join(' | '), /ignored in evidence mode: fresh, multi, exa options/)
     assert.deepEqual(out.verification.local.length + out.verification.native.length, 1)
     assert.ok(out.stats.excerptChars <= 1000)
-    await assert.rejects(h.def.execute({ query: 'q', profile: 'nonsense' }, { signal: undefined }), /profile must be one of/)
-    await assert.rejects(h.def.execute({ query: 'q', task: 't', constraints: '{bad' }, { signal: undefined }), /constraints is not valid JSON/)
-    await assert.rejects(h.def.execute({ query: 'q', task: 't', engines: 'nope' }, { signal: undefined }), /unknown engine: nope/)
-    const explicit = await h.def.execute({ query: 'node:sqlite busy timeout', task: 't', engines: 'arxiv' }, { signal: undefined })
+    await assert.rejects(h.run({ query: 'q', profile: 'nonsense' }), /profile must be one of/)
+    await assert.rejects(h.run({ query: 'q', task: 't', constraints: '{bad' }), /constraints is not valid JSON/)
+    await assert.rejects(h.run({ query: 'q', task: 't', engines: 'nope' }), /unknown engine: nope/)
+    const explicit = await h.run({ query: 'node:sqlite busy timeout', task: 't', engines: 'arxiv' })
     assert.deepEqual(explicit.enginesTried, ['arxiv'])
   } finally { h.cleanup() }
 })
 
-test('web_search_pro evidence mode persists the run and web_history expands an evidence id with its neighbours', async () => {
+test('search.run evidence mode persists the run and history.expand expands an evidence id with its neighbours', async () => {
   const h = evidenceHarness()
   try {
-    const out = await h.def.execute({ query: 'node:sqlite busy timeout WAL', task: 'sqlite config', profile: 'docs_code', needs: 'busy timeout;WAL mode' }, { signal: undefined })
+    const out = await h.run({ query: 'node:sqlite busy timeout WAL', task: 'sqlite config', profile: 'docs_code', needs: 'busy timeout;WAL mode' })
     const run = h.store.evidenceRun(out.resultId)!
     assert.ok(run)
     assert.equal(JSON.parse(run.packJson).resultId, out.resultId)
@@ -183,26 +188,26 @@ test('web_search_pro evidence mode persists the run and web_history expands an e
     assert.equal(queryRecord.kind, 'search')
     assert.equal(queryRecord.engine, 'pipeline')
     assert.ok(h.store.resultsForQuery(queryRecord.id).length > 0, 'history replay shows the fused sources')
-    const listed = await h.history.execute({ engine: 'pipeline' }, { signal: undefined })
+    const listed = await h.call('history.list', { engine: 'pipeline' })
     assert.equal(listed.records[0].id, queryRecord.id)
 
     // A stored page lets expansion show the neighbours.
     const ev = out.evidence.find((e: { excerpt: string }) => e.excerpt.includes('PRAGMA busy_timeout'))
     h.store.savePage({ url: ev.url, title: 't', text: BUSY, source: 'http' })
-    const expanded = await h.history.execute({ action: 'expand', evidenceId: ev.evidenceId }, { signal: undefined })
-    assertFits(expanded, h.history.output.schema)
-    assert.deepEqual(expanded.records, [])
+    const expanded = await h.call('history.expand', { evidenceId: ev.evidenceId })
+    assertFits(expanded, findAction('history.expand')!.output as Schema)
     assert.equal(expanded.expanded.evidenceId, ev.evidenceId)
     assert.equal(expanded.expanded.title, 'Busy docs')
     const match = expanded.expanded.blocks.find((b: { position: string }) => b.position === 'match')
     assert.ok(match.text.includes('PRAGMA busy_timeout = 5000'))
-    const rendered = h.history.output.render({}, expanded)[0].text as string
+    const rendered = renderResult('history.expand', expanded)
     assert.match(rendered, />>> matched block/)
-    await assert.rejects(h.history.execute({ action: 'expand' }, { signal: undefined }), /evidenceId is required/)
-    await assert.rejects(h.history.execute({ action: 'expand', evidenceId: 'e_missing' }, { signal: undefined }), /evidence id not found/)
-    await assert.rejects(h.history.execute({ action: 'explode' }, { signal: undefined }), /action must be expand/)
+    await assert.rejects(h.call('history.expand', {}), /evidenceId: required/)
+    await assert.rejects(h.call('history.expand', { evidenceId: 'e_missing' }), /evidence id not found/)
+    assert.equal((await callEnvelope(h.definitions, 'history.expand', { evidenceId: 'e_missing' })).error.code, 'NOT_FOUND')
+    await assert.rejects(h.call('history.expand', { action: 'explode' }), /action: unknown argument/)
     // Clearing the history query removes its evidence too.
-    await h.definitions.get('web_cache_clear').execute({ queryId: queryRecord.id }, { signal: undefined })
+    await h.call('history.delete', { id: queryRecord.id })
     assert.equal(h.store.evidenceRun(out.resultId), undefined)
     assert.equal(h.store.evidenceBlock(ev.evidenceId), undefined)
   } finally { h.cleanup() }
@@ -214,7 +219,7 @@ test('evidence scorer config: off ignores Jev (and says so), missing key falls b
   // off (default) with scorer=jev
   const off = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'off' }, secret: 'sk-secret' })
   try {
-    const out = await off.def.execute({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' }, { signal: undefined })
+    const out = await off.run({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' })
     assert.equal(off.jevCalls.length, 0)
     assert.equal(out.stats.scorer, 'rule')
     assert.match(out.notes.join(' | '), /evidence\.scorer=jev ignored: evidence\.jevMode is off/)
@@ -223,7 +228,7 @@ test('evidence scorer config: off ignores Jev (and says so), missing key falls b
   // shadow without a key
   const noKey = evidenceHarness({ evidence: { jevMode: 'shadow' }, secret: undefined })
   try {
-    const out = await noKey.def.execute({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' }, { signal: undefined })
+    const out = await noKey.run({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' })
     assert.equal(noKey.jevCalls.length, 0)
     assert.match(out.notes.join(' | '), /BOCHA_JEV_API_KEY.*rule scorer used/)
   } finally { noKey.cleanup() }
@@ -231,7 +236,7 @@ test('evidence scorer config: off ignores Jev (and says so), missing key falls b
   // shadow with a key: the rule pack decides, Jev scores are stored
   const shadow = evidenceHarness({ evidence: { jevMode: 'shadow' }, secret: 'sk-secret' })
   try {
-    const out = await shadow.def.execute({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code', needs: 'busy timeout;WAL mode' }, { signal: undefined })
+    const out = await shadow.run({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code', needs: 'busy timeout;WAL mode' })
     assert.equal(out.stats.scorer, 'rule')
     assert.equal(out.stats.jev.mode, 'shadow')
     assert.ok(shadow.jevCalls.length >= 1)
@@ -241,18 +246,18 @@ test('evidence scorer config: off ignores Jev (and says so), missing key falls b
     assert.ok(stored.shadow.rows.length > 0 && stored.shadow.rows.every((r: { shadow: number }) => r.shadow === 2.9))
     assert.ok(!shadow.store.evidenceRun(out.resultId)!.packJson.includes('sk-secret'), 'the key is never persisted')
     assert.ok(!JSON.stringify(out).includes('sk-secret'))
-    assertFits(out, shadow.def.output.schema)
+    assertFits(out, RUN_SCHEMA)
   } finally { shadow.cleanup() }
 
   // control + scorer=jev: Jev decides
   const control = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'control', maxJevQuestions: 6 }, secret: 'sk-secret' })
   try {
-    const out = await control.def.execute({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code', needs: 'busy timeout;WAL mode' }, { signal: undefined })
+    const out = await control.run({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code', needs: 'busy timeout;WAL mode' })
     assert.equal(out.stats.scorer, 'jev')
     assert.equal(out.stats.jev.mode, 'control')
     assert.ok(out.stats.jev.questions <= 6, 'maxJevQuestions caps the questions')
     assert.ok(out.evidence.every((e: { grade: number }) => e.grade === 2.9))
-    assertFits(out, control.def.output.schema)
+    assertFits(out, RUN_SCHEMA)
     const blocks = control.store.evidenceBlock(out.evidence[0].evidenceId)!
     assert.equal(blocks.scorer, 'jev')
   } finally { control.cleanup() }
@@ -260,7 +265,7 @@ test('evidence scorer config: off ignores Jev (and says so), missing key falls b
   // control + scorer=rule: explained fallback
   const half = evidenceHarness({ evidence: { scorer: 'rule', jevMode: 'control' }, secret: 'sk-secret' })
   try {
-    const out = await half.def.execute({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' }, { signal: undefined })
+    const out = await half.run({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' })
     assert.equal(half.jevCalls.length, 0)
     assert.match(out.notes.join(' | '), /jevMode=control needs evidence\.scorer=jev/)
   } finally { half.cleanup() }
@@ -270,7 +275,7 @@ test('evidence.jevMode=hybrid: the rule scorer decides, only Chinese-need / Engl
   const args = { query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code', needs: '如何设置 busy timeout;如何开启 WAL 模式' }
   const hybrid = evidenceHarness({ evidence: { jevMode: 'hybrid', maxJevQuestions: 3 }, secret: 'sk-secret' })
   try {
-    const out = await hybrid.def.execute(args, { signal: undefined })
+    const out = await hybrid.run(args)
     assert.equal(out.stats.scorer, 'hybrid')
     assert.equal(out.stats.jev.mode, 'hybrid')
     assert.ok(out.stats.jev.questions >= 1 && out.stats.jev.questions <= 3, 'maxJevQuestions caps the pairs the hybrid scorer sends: ' + out.stats.jev.questions)
@@ -279,13 +284,13 @@ test('evidence.jevMode=hybrid: the rule scorer decides, only Chinese-need / Engl
     assert.ok(sent.every(q => /需求：如何/.test(q.instructions)), 'only mismatching pairs were asked')
     assert.equal(hybrid.jevCalls[0]!.headers.authorization, 'Bearer sk-secret')
     assert.ok(!JSON.stringify(out).includes('sk-secret'))
-    assertFits(out, hybrid.def.output.schema)
+    assertFits(out, RUN_SCHEMA)
     assert.equal(hybrid.store.evidenceBlock(out.evidence[0].evidenceId)!.scorer, 'hybrid')
   } finally { hybrid.cleanup() }
 
   const noKey = evidenceHarness({ evidence: { jevMode: 'hybrid' }, secret: undefined })
   try {
-    const out = await noKey.def.execute(args, { signal: undefined })
+    const out = await noKey.run(args)
     assert.equal(noKey.jevCalls.length, 0)
     assert.equal(out.stats.scorer, 'rule')
     assert.match(out.notes.join(' | '), /BOCHA_JEV_API_KEY.*rule scorer used/)
@@ -293,7 +298,7 @@ test('evidence.jevMode=hybrid: the rule scorer decides, only Chinese-need / Engl
 
   const down = evidenceHarness({ evidence: { jevMode: 'hybrid', hybridBorderline: true }, secret: 'sk-secret', jev: () => new Response('{"detail":"nope"}', { status: 500 }) })
   try {
-    const out = await down.def.execute(args, { signal: undefined })
+    const out = await down.run(args)
     assert.ok(out.evidence.length > 0, 'the search still answers with the rule grades')
     assert.match(out.notes.join(' | '), /kept the rule grades/)
     assert.ok(!JSON.stringify(out).includes('sk-secret'))
@@ -303,7 +308,7 @@ test('evidence.jevMode=hybrid: the rule scorer decides, only Chinese-need / Engl
 test('a Jev outage never fails the search: rule fallback with a diagnostic note', async () => {
   const h = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'control' }, secret: 'sk-secret', jev: () => new Response('{"detail":"nope"}', { status: 401 }) })
   try {
-    const out = await h.def.execute({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' }, { signal: undefined })
+    const out = await h.run({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' })
     assert.equal(out.stats.scorer, 'rule')
     assert.match(out.notes.join(' | '), /scorer jev failed, used the rule scorer: Jev HTTP 401/)
     assert.ok(!JSON.stringify(out).includes('sk-secret'))
@@ -315,7 +320,7 @@ test('the startup purge of legacy search rows keeps pipeline history queries', a
   const { SEARCH_CACHE_VERSION } = await import('../src/cache-key.ts')
   const h = evidenceHarness()
   try {
-    const out = await h.def.execute({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' }, { signal: undefined })
+    const out = await h.run({ query: 'node:sqlite busy timeout', task: 't', profile: 'docs_code' })
     const purged = h.store.cleanupLegacySearchCache('search:v' + SEARCH_CACHE_VERSION + ':')
     assert.equal(purged.queries, 0)
     assert.ok(h.store.evidenceRun(out.resultId))
@@ -330,8 +335,8 @@ test('evidence.rubrics: the active rubric id+version is recorded in stats, shado
 
   const control = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'control', rubrics }, secret: 'sk-secret' })
   try {
-    const out = await control.def.execute(args, { signal: undefined })
-    assertFits(out, control.def.output.schema)
+    const out = await control.run(args)
+    assertFits(out, RUN_SCHEMA)
     assert.match(out.stats.jev.rubric, /^score\.support@v2#[0-9a-f]{12}$/)
     assert.equal(out.stats.jev.rubricOverridden, true)
     assert.ok(control.jevCalls.every(c => Object.values(c.body.questions as Record<string, { instructions: string }>).every(q => q.instructions.startsWith('文本块是否直接给出答案？'))))
@@ -340,7 +345,7 @@ test('evidence.rubrics: the active rubric id+version is recorded in stats, shado
 
   const shadow = evidenceHarness({ evidence: { jevMode: 'shadow', rubrics }, secret: 'sk-secret' })
   try {
-    const out = await shadow.def.execute(args, { signal: undefined })
+    const out = await shadow.run(args)
     const stored = JSON.parse(shadow.store.evidenceRun(out.resultId)!.packJson)
     assert.equal(stored.shadow.rubric, out.stats.jev.rubric)
     assert.match(stored.shadow.rubric, /^score\.support@v2#/)
@@ -349,7 +354,7 @@ test('evidence.rubrics: the active rubric id+version is recorded in stats, shado
 
   const bad = evidenceHarness({ evidence: { scorer: 'jev', jevMode: 'control', rubrics: { 'score.support': { version: 'v2', instructions: '{need} {candidate} {oops}' } } }, secret: 'sk-secret' })
   try {
-    const out = await bad.def.execute(args, { signal: undefined })
+    const out = await bad.run(args)
     assert.match(out.notes.join(' | '), /score\.support: override ignored, built-in v1 used: unknown variable \{oops\}/)
     assert.match(out.stats.jev.rubric, /^score\.support@v1#/)
     assert.equal(out.stats.jev.rubricOverridden, false)
@@ -358,7 +363,7 @@ test('evidence.rubrics: the active rubric id+version is recorded in stats, shado
 
   const rule = evidenceHarness({ evidence: { rubrics }, secret: 'sk-secret' })
   try {
-    const out = await rule.def.execute(args, { signal: undefined })
+    const out = await rule.run(args)
     assert.equal(out.stats.jev, undefined, 'Jev off: no rubric involved')
     assert.deepEqual(out.notes.filter((n: string) => /rubric/.test(n)), [])
   } finally { rule.cleanup() }

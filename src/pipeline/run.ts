@@ -176,7 +176,7 @@ export interface PipelineResult {
   pagesRead: string[]
   /** Every block that got an S6 grade (the selection pool). */
   scored: ScoredBlock[]
-  /** Full text of every selected block (for storage and `web_history action=expand`). */
+  /** Full text of every selected block (for storage and `history.expand`). */
   evidenceBlocks: { evidenceId: string; url: string; blockId: string; heading?: string; text: string; hash: string; grade: number; scorer: string; rubric?: string; judge?: string }[]
   /** Shadow scorer output for later comparison (Jev mode `shadow`). */
   shadow?: { scorer: string; model: string; rubric?: string; judge?: string; rows: { needId: string; blockId: string; shadow: number; control: number }[] }

@@ -9,6 +9,9 @@ import { FETCH_HARD_MAX_CHARS, FETCH_STORE_CHARS, FetchService, sliceFetchResult
 import { resolveConfig } from '../src/config.ts'
 import { Store } from '../src/store.ts'
 import { capText } from '../src/util.ts'
+import { findAction } from '../src/actions/registry.ts'
+import { fairShareLimit } from '../src/actions/format.ts'
+import { callAction, renderResult } from './call-helper.ts'
 
 // dsh-tools is a host peer; tool definitions are identity in this isolated run.
 registerHooks({
@@ -19,7 +22,7 @@ registerHooks({
     return nextResolve(specifier, context)
   },
 })
-const { registerTools, fairShareLimit } = await import('../src/tools.ts')
+const { registerTools } = await import('../src/tools.ts')
 const plugin = await import('../src/index.ts')
 
 /** A page whose every 100-character line carries its own offset, so a slice proves where it came from. */
@@ -150,7 +153,7 @@ test('fetchPage: different windows of one page share a single in-flight read', a
   } finally { h.cleanup() }
 })
 
-// ---- web_exa_contents ----
+// ---- read.contents ----
 
 test('fairShareLimit: short texts keep everything and the room they leave goes to the long ones', () => {
   assert.equal(fairShareLimit([100, 200], 8_000, 30_000), 8_000)
@@ -170,14 +173,14 @@ function exaHarness(rows: { url: string; title?: string; text?: string }[], over
     config: h.config, dynamic: () => h.config, store: h.store,
     router: { exaContents: async () => rows } as any, fetch: {} as any, browser: {} as any,
   })
-  return { h, tool: definitions.get('web_exa_contents') }
+  return { h, tool: { execute: (args: Record<string, unknown>) => callAction(definitions, 'read.contents', args) } }
 }
 
-test('web_exa_contents caps each URL at 8k and all URLs at 30k, flags what was cut, and stays schema-compatible', async () => {
+test('read.contents caps each URL at 8k and all URLs at 30k, flags what was cut, and stays schema-compatible', async () => {
   const rows = Array.from({ length: 6 }, (_, i) => ({ url: 'https://ex.test/' + i, title: 'T' + i, text: ('word' + i + ' ').repeat(10_000) }))
   const { h, tool } = exaHarness([...rows, { url: 'https://ex.test/short', text: 'tiny' }])
   try {
-    const out = await tool.execute({ urls: rows.map(r => r.url) }, { signal: undefined })
+    const out = await tool.execute({ urls: rows.map(r => r.url) })
     const long = out.results.slice(0, 6)
     const chars = out.results.reduce((n: number, r: any) => n + (r.text ?? '').replace(/\n\n\(Content truncated.*$/s, '').length, 0)
     assert.ok(chars <= 30_000, 'total cap holds: ' + chars)
@@ -185,15 +188,15 @@ test('web_exa_contents caps each URL at 8k and all URLs at 30k, flags what was c
     assert.equal(out.results[6].text, 'tiny', 'short text untouched')
     assert.equal(out.results[6].truncated, undefined)
     assert.match(out.note, /6 of 7 text\(s\) cut to 4\d{3} chars/)
-    assert.deepEqual(Object.keys(out.results[0]).filter(k => !Object.hasOwn(tool.output.schema.properties.results.items.properties, k)), [])
-    assert.match(tool.output.render({}, out)[0].text, /web_fetch_pro url=<url> offset=/)
+    assert.deepEqual(Object.keys(out.results[0]).filter(k => !Object.hasOwn(findAction('read.contents')!.output.properties.results!.items!.properties!, k)), [])
+    assert.match(renderResult('read.contents', out), /read\.fetch url=<url> offset=/)
   } finally { h.cleanup() }
 })
 
-test('web_exa_contents per-URL cap applies alone when the total allows it, and both are configurable', async () => {
+test('read.contents per-URL cap applies alone when the total allows it, and both are configurable', async () => {
   const { h, tool } = exaHarness([{ url: 'https://ex.test/a', text: 'a'.repeat(20_000) }, { url: 'https://ex.test/b', text: 'b'.repeat(500) }])
   try {
-    const out = await tool.execute({ urls: ['https://ex.test/a', 'https://ex.test/b'] }, { signal: undefined })
+    const out = await tool.execute({ urls: ['https://ex.test/a', 'https://ex.test/b'] })
     assert.equal(out.results[0].truncated, true)
     assert.equal(out.results[0].text.startsWith('a'.repeat(8_000)), true)
     assert.equal(out.results[0].text.startsWith('a'.repeat(8_001)), false)
@@ -201,13 +204,13 @@ test('web_exa_contents per-URL cap applies alone when the total allows it, and b
   } finally { h.cleanup() }
   const custom = exaHarness([{ url: 'https://ex.test/a', text: 'a'.repeat(20_000) }], { exaContentsPerUrlChars: 12_000, exaContentsTotalChars: 12_000 })
   try {
-    const out = await custom.tool.execute({ urls: ['https://ex.test/a'] }, { signal: undefined })
+    const out = await custom.tool.execute({ urls: ['https://ex.test/a'] })
     assert.equal(out.results[0].text.startsWith('a'.repeat(12_000)), true)
     assert.equal(out.results[0].text.startsWith('a'.repeat(12_001)), false)
   } finally { custom.h.cleanup() }
   const none = exaHarness([{ url: 'https://ex.test/a', text: 'short' }])
   try {
-    const out = await none.tool.execute({ urls: ['https://ex.test/a'] }, { signal: undefined })
+    const out = await none.tool.execute({ urls: ['https://ex.test/a'] })
     assert.equal(out.note, undefined)
     assert.deepEqual(out.results, [{ url: 'https://ex.test/a', text: 'short' }])
   } finally { none.h.cleanup() }
@@ -232,6 +235,8 @@ function bootProvider(extra: Record<string, unknown> = {}) {
     logger: () => ({ info() {}, warn() {}, error() {} }),
     tools: { register() {} },
     systemPrompt: { section() {} },
+    on: () => () => {},
+    inject: () => {},
   }
   plugin.apply(ctx, config)
   return { providers, cleanup: () => { for (const d of disposers) d(); fs.rmSync(dir, { recursive: true, force: true }) } }
@@ -272,9 +277,9 @@ test('ctx.web fetch provider caps the body at twice fetchDefaultChars and report
   } finally { cut.cleanup(); restoreCut() }
 })
 
-// ---- the other text exits: web_snapshot and history replay ----
+// ---- the other text exits: read.snapshot and history replay ----
 
-test('web_snapshot and history page replay return at most fetchDefaultChars; the full text stays stored', async () => {
+test('read.snapshot and history page replay return at most fetchDefaultChars; the full text stays stored', async () => {
   const h = harness()
   const definitions = new Map<string, any>()
   const long = 'z'.repeat(50_000)
@@ -285,13 +290,13 @@ test('web_snapshot and history page replay return at most fetchDefaultChars; the
       router: {} as any, fetch: {} as any,
       browser: { snapshot: async () => ({ title: 'Snap', text: long, htmlPath: path.join(h.dir, 'p.html') }) } as any,
     })
-    const snap = await definitions.get('web_snapshot').execute({ url: 'https://ex.test/snap', screenshot: false }, { signal: undefined })
+    const snap = await callAction(definitions, 'read.snapshot', { url: 'https://ex.test/snap', screenshot: false })
     assert.ok(snap.text.length <= 20_000 + 60 && snap.text.length > 19_000)
     assert.match(snap.text, /Content truncated at 20000 characters/)
     const stored = h.store.getPage('https://ex.test/snap', 60)
     assert.equal(stored?.text?.length, 50_000)
     const queryId = h.store.listQueries({ kind: 'snapshot', limit: 1 })[0]!.id
-    const replay = await definitions.get('web_history').execute({ replay: queryId }, { signal: undefined })
+    const replay = await callAction(definitions, 'history.replay', { id: queryId })
     assert.ok(replay.replayedPage.text.length <= 20_000 + 60)
     assert.match(replay.replayedPage.text, /Content truncated at 20000 characters/)
   } finally { h.cleanup() }
