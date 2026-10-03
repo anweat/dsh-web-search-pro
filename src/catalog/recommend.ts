@@ -129,6 +129,10 @@ function assess(entry: CatalogEntry, ctx: RecommendContext): Assessed {
 
 const TIER: Record<SuggestionStatus, number> = { ready: 0, limited: 1, needs_setup: 2, catalog_only: 3 }
 const isWeb = (e: CatalogEntry): boolean => !!e.resultKinds?.includes('web')
+/** Result kinds whose content belongs to a language community (the planner orders such a source in another language last, too). */
+const LANGUAGE_BOUND_KINDS: readonly string[] = ['forum', 'qa', 'video', 'social']
+const languageMismatch = (e: CatalogEntry, language: 'zh' | 'en' | undefined): boolean =>
+  !!language && !!e.resultKinds?.length && e.resultKinds.every(k => LANGUAGE_BOUND_KINDS.includes(k)) && !e.languages.includes('*') && !e.languages.includes(language)
 
 /** Higher = better fit; only compares entries of the same readiness tier. */
 function score(e: CatalogEntry, profile: Profile, language: 'zh' | 'en' | undefined): number {
@@ -174,7 +178,7 @@ export function recommendSources(input: RecommendInput, ctx: RecommendContext): 
     // A general web engine in the wrong language is noise; a paper / code index in another language still works.
     .filter(e => hinted || !language || !isWeb(e) || e.languages.includes(language) || e.languages.includes('*'))
     .map(e => assess(e, ctx))
-    .sort((a, b) => TIER[a.status] - TIER[b.status] || score(b.entry, profile, language) - score(a.entry, profile, language) || a.entry.id.localeCompare(b.entry.id))
+    .sort((a, b) => Number(languageMismatch(a.entry, language)) - Number(languageMismatch(b.entry, language)) || TIER[a.status] - TIER[b.status] || score(b.entry, profile, language) - score(a.entry, profile, language) || a.entry.id.localeCompare(b.entry.id))
 
   // A general web engine that can run now leads (reference and vertical sources supplement it, they do not replace it) —
   // except for academic tasks, where the paper indexes are the primary sources.

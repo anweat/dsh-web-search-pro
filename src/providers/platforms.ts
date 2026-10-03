@@ -152,7 +152,7 @@ export const platformAdapters: readonly ProviderAdapter[] = [
   opencliPlatform('facebook', 'Facebook', { domains: ['facebook.com'] }),
 
   platform(descriptor({
-    id: 'platform:rss', aliases: ['rss'], label: 'RSS', kind: 'platform', taskProfiles: ['news_fact'], resultKinds: ['web'], regions: ['global'],
+    id: 'platform:rss', aliases: ['rss'], label: 'RSS', kind: 'platform', taskProfiles: ['news_fact'], resultKinds: ['feed'], regions: ['global'],
     requirements: [{ kind: 'service', id: 'feed-url', note: 'pass the feed as url=' }],
     verification: { live: true, note: 'shipped before the registry; exercised by the plugin since 0.1' },
   }), deps => ({

@@ -8,6 +8,7 @@
 
 import { compileQuery, type CompiledQuery } from './compile.ts'
 import { detectLang } from './align.ts'
+import { domainOf, hostMatches } from './gate.ts'
 import { routeIdOf, type CredentialState, type ProviderDescriptor } from '../providers/registry.ts'
 import type { Profile, TaskSpec } from './types.ts'
 
@@ -165,7 +166,7 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
   const surplus: string[] = []
   if (!explicit && language && options.autoProviders !== false && descriptors.size) {
     const candidates = [...descriptors.values()]
-      .filter(d => d.operations.includes('search') && d.resultKinds.includes('web') && d.languages.includes(language) && d.taskProfiles.includes(profile))
+      .filter(d => d.kind !== 'platform' && d.operations.includes('search') && d.resultKinds.includes('web') && d.languages.includes(language) && d.taskProfiles.includes(profile))
       .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
     const maxPromoted = Math.max(options.maxPromoted ?? DEFAULT_MAX_PROMOTED, 1)
     const families = new Set<string>()
@@ -212,6 +213,37 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
     if (demoted.length) {
       planList = [...planList.filter(id => !wrongLanguage(id)), ...demoted]
       notes.push('language ' + language + ': ' + demoted.join(', ') + ' ordered last (community source in another language)')
+    }
+  }
+
+  // Platforms are never planned on their own: round 1 draws from the profile table (whose vertical sources are curated), the
+  // promoted web specialists and the configured list. The one exception is a task that names a site: a HARD `site`
+  // constraint on a platform's domain (zhihu.com) puts that platform first when it is ready, with ONE web engine kept as the fallback.
+  if (!explicit && descriptors.size) {
+    const sitePlatforms: string[] = []
+    const siblings: string[] = []
+    const families = new Set<string>()
+    const hosts: string[] = []
+    for (const c of task.constraints) {
+      if (c.kind !== 'site' || c.strength !== 'hard') continue
+      const host = domainOf(c.value)
+      if (!host) continue
+      for (const d of descriptors.values()) {
+        const id = routeIdOf(d)
+        if (d.kind !== 'platform' || !d.domains?.some(domain => hostMatches(host, domain)) || sitePlatforms.includes(id) || siblings.includes(id)) continue
+        const status = options.status ? options.status(id) : { state: 'ready' as const }
+        // One entry per upstream family (github, github-code and github-issues are one site): the others wait for round 2.
+        if (isReady(id) && d.sourceFamily && families.has(d.sourceFamily)) { siblings.push(id); continue }
+        if (isReady(id)) { sitePlatforms.push(id); hosts.push(host); if (d.sourceFamily) families.add(d.sourceFamily) }
+        else notes.push('site ' + host + ' names platform ' + id + ' but it is not ready' + (status && status.state !== 'ready' ? ' (' + status.state + (status.reason ? ': ' + status.reason : '') + ')' : ' (unknown provider)') + ': web engines used')
+      }
+    }
+    if (sitePlatforms.length) {
+      const web = planList.find(id => !sitePlatforms.includes(id) && !!descriptors.get(id)?.resultKinds.includes('web') && !!isReady(id))
+      const rest = [...planList.filter(id => !sitePlatforms.includes(id) && id !== web), ...siblings.filter(id => !planList.includes(id))]
+      planList = [...sitePlatforms, ...web ? [web] : []]
+      for (const id of rest) if (!held.includes(id)) held.push(id)
+      notes.push('site ' + [...new Set(hosts)].join(', ') + ': platform ' + sitePlatforms.join(', ') + ' first' + (web ? ', ' + web + ' kept as the web fallback' : ', no web fallback is ready') + (rest.length ? '; held for a second round: ' + rest.join(', ') : ''))
     }
   }
 
