@@ -249,7 +249,7 @@ test('system prompt is one line, plus one line about dsh-browser only when it is
     assert.match(withBrowser, /dsh-browser available; for interactive browsing see skill dsh-browser or browser_index\./)
     h.holder.browser = undefined
     assert.equal(section.text(), without)
-    assert.ok(without.length <= 250, 'one short line: ' + without.length)
+    assert.ok(without.length <= 300, 'one short line: ' + without.length)
     assert.ok(withBrowser.length - without.length <= 110, 'one short browser line: ' + (withBrowser.length - without.length))
     assert.ok(!without.includes('\n') && !withBrowser.includes('\n'))
   } finally {

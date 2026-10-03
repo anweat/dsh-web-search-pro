@@ -5,7 +5,7 @@
  * @module web-search-pro/prompt
  */
 
-const BASE = 'Web research: web_index lists actions, web_call runs them (search.run with task/profile returns an evidence pack; read.fetch reads a page); see skill dsh-web-search-pro. Cite URLs as markdown links.'
+const BASE = 'Web research: prefer web_call search.run (task, profile) over web_search + web_fetch: it returns filtered evidence in far less context. read.fetch reads a page (offset continues). web_index lists actions; see skill dsh-web-search-pro. Cite URLs as markdown links.'
 
 const WITH_BROWSER = ' dsh-browser available; for interactive browsing see skill dsh-browser or browser_index.'
 

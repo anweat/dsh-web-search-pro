@@ -66,7 +66,7 @@ test('condensed descriptions point at the registry and keep the rules the model 
 
 test('the prompt is one line naming the entry points and the skill; no old tool name or browser_* tool name is left', () => {
   const text = buildPromptText(false)
-  assert.ok(text.length <= 250, 'prompt ' + text.length)
+  assert.ok(text.length <= 300, 'prompt ' + text.length)
   assert.match(text, /web_index/)
   assert.match(text, /web_call/)
   assert.match(text, /search\.run/)
@@ -80,6 +80,16 @@ test('the prompt is one line naming the entry points and the skill; no old tool 
     // The only browser tool name that may appear is the entry point.
     assert.deepEqual([...prompt.matchAll(/\bbrowser_[a-z_]+/g)].map(match => match[0]).filter(name => name !== 'browser_index'), [])
   }
+})
+
+test('the prompt says plainly that search.run is preferred over web_search + web_fetch, and that read.fetch reads pages with offset (M8c)', () => {
+  const text = buildPromptText(false)
+  assert.match(text, /prefer web_call search\.run .*over web_search \+ web_fetch/)
+  assert.match(text, /filtered evidence/)
+  assert.match(text, /far less context/)
+  assert.match(text, /read\.fetch reads a page \(offset continues\)/)
+  // Factual, and no claim over other skills.
+  assert.doesNotMatch(text, /\b(must|only|always|never)\b/i)
 })
 
 test('total resident text of this plugin (prompt + tool names, descriptions and parameters) stays within 1200 characters', () => {

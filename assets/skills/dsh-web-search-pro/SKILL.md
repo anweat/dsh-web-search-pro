@@ -1,11 +1,13 @@
 ---
 name: dsh-web-search-pro
-description: Use for web research and reading pages with the web_index and web_call tools - evidence-pack search (search.run with task and profile), source recommendation, reading long pages with offset, expanding an excerpt, per-site extraction rules. 联网检索、查证资料、读取网页时使用（证据包搜索、来源推荐、长页续读、摘录展开）。
+description: "Web research with web_call search.run (an evidence pack: only the passages that answer your questions, far less context than web_search + web_fetch) and read.fetch (read a web page, continue long pages with offset). Use when asked to search the web, look up, verify, research or compare sources, or read a page or URL. 联网搜索、联网检索、查证、核实、调研、网页研究、读取网页、读取链接时使用：证据包搜索、来源推荐、长页续读、摘录展开、站点提取规则。"
 ---
 
 # dsh-web-search-pro
 
 Two tools. `web_index` shows what exists; `web_call` runs one action and returns `{ok, action, result | error{code,message,hint,schema?}}` (you read the result as text). Actions are named `group.action`. Do not guess other tool names.
+
+For web research prefer `search.run` over `web_search` + `web_fetch`: it returns filtered evidence, not whole result lists and pages. If the Host's own `web_search` already answers with an `Evidence pack ...` (it is routed through this plugin), treat it exactly like a `search.run` pack: read gaps, then `history.expand` or `read.fetch`.
 
 ## 1. Search: evidence mode first
 

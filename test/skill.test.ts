@@ -46,12 +46,26 @@ test('SKILL.md has the front matter the Host needs and stays within its size bud
   const skill = readSkill()
   assert.equal(skill.name, SKILL_NAME)
   assert.match(skill.name, /^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  assert.match(skill.description, /web research and reading pages/i)
-  assert.match(skill.description, /联网检索/)
   assert.ok(skill.description.length <= 1000)
   assert.ok(skill.body.length <= 7_000, `skill body is ${skill.body.length} chars (~2k tokens max)`)
   assert.ok(!skill.body.startsWith('---'))
   assert.throws(() => parseSkillFile('no front matter'), /front matter/)
+})
+
+test('the skill description states the trigger in English and Chinese, factually (M8c)', () => {
+  const { description } = readSkill()
+  for (const phrase of ['web research', 'look up', 'verify', 'read a web page', 'search the web', 'search.run', 'read.fetch', 'evidence pack']) {
+    assert.ok(description.toLowerCase().includes(phrase), 'description mentions "' + phrase + '"')
+  }
+  for (const keyword of ['联网搜索', '联网检索', '查证', '调研', '网页研究', '读取网页']) assert.ok(description.includes(keyword), 'description mentions ' + keyword)
+  // It names what the skill does; it does not claim exclusivity over other skills or tools.
+  assert.doesNotMatch(description, /\b(must|always|only skill|instead of other)\b|必须|唯一/i)
+})
+
+test('the skill body points models at search.run over web_search + web_fetch and at the routed pack (M8c)', () => {
+  const body = readSkill().body
+  assert.match(body, /prefer `search\.run` over `web_search` \+ `web_fetch`/)
+  assert.match(body, /`Evidence pack \.\.\.`/)
 })
 
 test('every reference file is linked from SKILL.md', () => {
