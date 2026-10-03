@@ -19,9 +19,15 @@ export interface EvidenceRequest extends TaskInput {
     /** `sources` entries to return. */
     count: number;
     signal?: AbortSignal | undefined;
+    /** Overall deadline in ms (default: `timeoutMs` + 30 s). The ctx.web provider route passes a shorter one. */
+    deadlineMs?: number | undefined;
+    /** The caller is the ctx.web provider: keep the ctx.web engine out of the run (it would call back into this plugin). */
+    skipSeam?: boolean | undefined;
 }
 export interface EvidenceServiceDeps {
-    router: Pick<SearchRouter, 'providerStatuses' | 'runProvider' | 'resolveSecret'> & {
+    router: Pick<SearchRouter, 'providerStatuses' | 'resolveSecret'> & {
+        runProvider: SearchRouter['runProvider'];
+    } & {
         registry?: ProviderRegistry;
     };
     fetch: Pick<FetchService, 'fetchPage'>;

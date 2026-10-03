@@ -67,6 +67,18 @@ export interface EvidenceConfig {
     /** Model usage caps (input tokens) per search and per day, with per-provider overrides. Absent = 60k per search, 1M per day. */
     budget?: BudgetInput;
 }
+/**
+ * Settings of the ctx.web provider route (dev-plan M8c): what the Host's built-in `web_search` returns when this plugin is the selected provider.
+ * `evidence: 'auto'` runs the evidence pipeline for every provider search and returns the pack as `content` (plain sources when it fails);
+ * `off` keeps the plain source list.
+ */
+export interface ProviderSettings {
+    evidence: 'auto' | 'off';
+    /** Deadline of the evidence run inside one provider search, in ms (the pipeline returns a partial pack when it is reached). */
+    deadlineMs: number;
+}
+export declare const PROVIDER_EVIDENCE_MODES: readonly ["auto", "off"];
+export declare function resolveProviderEvidence(value: unknown): ProviderSettings['evidence'];
 /** `indexed` registers web_index + web_call; `flat` registers one tool per action (comparison and debugging only). */
 export declare const TOOL_SURFACES: readonly ["indexed", "flat"];
 export type ToolSurface = typeof TOOL_SURFACES[number];
@@ -160,6 +172,8 @@ export interface Config {
     providerId: string;
     /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
     registerProvider: boolean;
+    /** ctx.web provider route: evidence pack inside the built-in web_search (only when this plugin is the selected provider). */
+    provider?: Partial<ProviderSettings>;
     /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
     platformRules?: Record<string, {
         item: string;
@@ -226,6 +240,13 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     agentReachEnabled: z<boolean, boolean, "volatile-defined">;
     providerId: z<string, string, "volatile-defined">;
     registerProvider: z<boolean, boolean, "volatile-defined">;
+    provider: z<Schemastery.ObjectS<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, "plain">;
     platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
         item?: string | null | undefined;
         title?: string | null | undefined;
@@ -612,6 +633,13 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     agentReachEnabled: z<boolean, boolean, "volatile-defined">;
     providerId: z<string, string, "volatile-defined">;
     registerProvider: z<boolean, boolean, "volatile-defined">;
+    provider: z<Schemastery.ObjectS<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, "plain">;
     platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
         item?: string | null | undefined;
         title?: string | null | undefined;
@@ -972,6 +1000,7 @@ export interface ResolvedConfig extends Config {
     keyedSources?: Config['keyedSources'];
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
     evidence: EvidenceConfig;
+    provider: ProviderSettings;
 }
 /** Default database path under the harness home. */
 export declare function defaultDbPath(): string;

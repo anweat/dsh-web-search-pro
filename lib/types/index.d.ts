@@ -72,6 +72,13 @@ declare const _default: {
         agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         providerId: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         registerProvider: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        provider: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, "plain">;
         platformRules: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             item?: string | null | undefined;
             title?: string | null | undefined;
@@ -458,6 +465,13 @@ declare const _default: {
         agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         providerId: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         registerProvider: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        provider: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, "plain">;
         platformRules: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             item?: string | null | undefined;
             title?: string | null | undefined;

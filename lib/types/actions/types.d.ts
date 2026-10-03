@@ -15,6 +15,7 @@ import type { FetchService } from '../fetch.ts';
 import type { Store } from '../store.ts';
 import type { EvidenceService } from '../pipeline/service.ts';
 import type { BrowserGetter } from '../browser-access.ts';
+import type { ProviderState } from '../provider.ts';
 export declare const ACTION_GROUPS: readonly ["search", "read", "history", "sources", "rules", "cache"];
 export type ActionGroup = typeof ACTION_GROUPS[number];
 /**
@@ -69,6 +70,8 @@ export interface ActionServices {
     browser: BrowserGetter;
     /** Evidence pipeline (built lazily from the other services). */
     evidence: () => Pick<EvidenceService, 'search'>;
+    /** State of the ctx.web provider route (registered? selected by the Host?); absent when the host does not report it. */
+    providerState?: () => ProviderState;
     /** Default characters one text exit may return (config `fetchDefaultChars`). */
     outputCap: () => number;
 }

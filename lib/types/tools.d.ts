@@ -21,6 +21,7 @@ import { type BrowserGetter } from './browser-access.ts';
 import type { BrowserService } from './browser-service.ts';
 import type { ResolvedConfig, ToolSurface } from './config.ts';
 import { EvidenceService } from './pipeline/service.ts';
+import type { ProviderState } from './provider.ts';
 export interface ToolDeps {
     ctx: Context;
     config: ResolvedConfig;
@@ -35,6 +36,8 @@ export interface ToolDeps {
     evidence?: Pick<EvidenceService, 'search'>;
     /** Overrides `config.toolSurface`. */
     toolSurface?: ToolSurface;
+    /** State of the ctx.web provider route, for `sources.status`. */
+    providerState?: () => ProviderState;
     /** Whether the `dsh-web-search-pro` skill is currently registered; read at call time. */
     skillAvailable?: () => boolean;
 }

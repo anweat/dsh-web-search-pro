@@ -113,9 +113,11 @@ export declare class SearchRouter {
      * Run ONE engine through the registry (probe, cooldown, quality gate,
      * attempts) for the evidence pipeline. Not cached or persisted: the pipeline
      * persists its fused result once. Cancellation is rethrown; every other
-     * outcome is a value.
+     * outcome is a value. `skipSeam` keeps the ctx.web engine out (the caller IS the ctx.web provider: no recursion).
      */
-    runProvider(call: ProviderCall): Promise<ProviderOutcome>;
+    runProvider(call: ProviderCall, opts?: {
+        skipSeam?: boolean;
+    }): Promise<ProviderOutcome>;
     /** Resolve a key through credentials first, then process env. */
     private resolveKey;
     private deps;
