@@ -72,6 +72,16 @@ export interface EvidenceConfig {
   budget?: BudgetInput
 }
 
+/** `indexed` registers web_index + web_call; `flat` registers one tool per action (comparison and debugging only). */
+export const TOOL_SURFACES = ['indexed', 'flat'] as const
+export type ToolSurface = typeof TOOL_SURFACES[number]
+
+export function resolveToolSurface(value: unknown): ToolSurface {
+  const surface = value ?? 'indexed'
+  if (typeof surface !== 'string' || !TOOL_SURFACES.includes(surface as ToolSurface)) throw new Error('toolSurface must be one of: ' + TOOL_SURFACES.join(', '))
+  return surface as ToolSurface
+}
+
 export interface Config {
   /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
   dbPath?: string
@@ -107,6 +117,8 @@ export interface Config {
   exaContentsPerUrlChars: number
   /** `web_exa_contents`: output cap over all URLs of one call (characters); shared fairly between them. */
   exaContentsTotalChars: number
+  /** Tool surface: `indexed` (default) keeps only web_index / web_call in context; `flat` registers one tool per action. Applied at startup. */
+  toolSurface?: ToolSurface
   /** Cooperative per-call timeout budget in ms. */
   timeoutMs: number
   /** Trust Clash/TUN fake-IP DNS answers (198.18/15, fdfe:dcba:9876::/64, 2001:2::/48) while retaining all other SSRF checks. */
@@ -184,6 +196,7 @@ import type { Volatile } from '@deepseek-ai/cosmokit'
 void ({} as Volatile<unknown>)
 export const Config = z.object({
   dbPath: z.string().volatile(),
+  toolSurface: z.string().default('indexed').volatile(),
   ttlSeconds: z.number().default(3600).volatile(),
   memoryCacheEntries: z.number().default(128).volatile(),
   rrfConstant: z.number().default(60).volatile(),
@@ -290,6 +303,7 @@ export const Config = z.object({
 
 export interface ResolvedConfig extends Config {
   dbPath: string
+  toolSurface: ToolSurface
   exaApiKey?: string
   exaApiKeyEnv: string
   jinaApiKey?: string
@@ -333,6 +347,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
   return {
     ...config,
     dbPath,
+    toolSurface: resolveToolSurface(vOr(config.toolSurface as unknown, 'indexed')),
     ttlSeconds: vOr(config.ttlSeconds, 3600) as number,
     memoryCacheEntries: vOr(config.memoryCacheEntries, 128) as number,
     rrfConstant: vOr(config.rrfConstant, 60) as number,
