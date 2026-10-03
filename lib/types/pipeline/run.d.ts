@@ -42,8 +42,11 @@ export interface ProviderCall {
 export type ProviderOutcome = {
     state: 'ok';
     sources: readonly ProviderSource[];
-} | {
+}
+/** `detail` carries the provider's own explanation of an empty answer (e.g. a login hint), when it gave one. */
+ | {
     state: 'empty';
+    detail?: string;
 } | {
     state: 'skipped';
     reason: string;
