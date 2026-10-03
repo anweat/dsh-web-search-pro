@@ -82,7 +82,8 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       startPublishedDate: { type: 'string', description: 'Exa only: ISO published-date lower bound.' },
       endPublishedDate: { type: 'string', description: 'Exa only: ISO published-date upper bound.' },
       category: { type: 'string', description: 'Exa only: search category.' },
-      platform: { type: 'string', description: 'Search one platform instead (' + PLATFORM_IDS.join(', ') + ', or a customPlatforms key). Chinese communities and OpenCLI platforms need dsh-browser and a login. Not combinable with task/profile.' },
+      platform: { type: 'string', description: 'Search one platform instead (' + PLATFORM_IDS.join(', ') + ', or a customPlatforms key). Chinese communities and OpenCLI platforms need dsh-browser and a login. With task/profile the platform is the evidence source; if it is unavailable that is an error (allowFallback=true searches the web engines instead).' },
+      allowFallback: { type: 'boolean', description: 'Evidence mode with an explicit platform: if it is unavailable (no browser, login, CLI or token) search the web engines instead of failing; the pack says so.' },
       url: { type: 'string', description: 'platform=rss only: the feed URL.' },
       authProfile: { type: 'string', description: 'platform only: domain-scoped dsh-browser auth profile.' },
       rulePack: { type: 'string', description: 'platform only: domain-scoped dsh-browser rule pack.' },
@@ -110,38 +111,48 @@ export const SEARCH_ACTIONS: ActionDef[] = [
     ],
     async execute(args, ctx) {
       const cfg = ctx.dynamic()
-      if (args.platform) {
-        const evidenceArgs = EVIDENCE_FIELDS.filter(key => args[key] !== undefined)
-        if (evidenceArgs.length) throw new ActionArgError('platform cannot be combined with ' + evidenceArgs.join(', ') + ': evidence mode does not search platforms yet', 'Call search.run with platform only, or without platform for an evidence pack.')
-        const registry = ctx.router.registry ?? defaultProviderRegistry
-        const provider = registry.resolve(args.platform)
-        if (provider?.descriptor.kind !== 'platform') throw new ActionArgError('unsupported platform: ' + args.platform, 'See sources.status or search.recommend for platform ids: ' + registry.platformIds().join(', '))
-        if (args.engines) throw new ActionArgError('platform cannot be combined with engines', 'platform already names the source; use one of them.')
-        const result = await ctx.router.search({
-          query: args.query ?? '', count: args.count ?? 8, fresh: args.fresh ?? false, multi: false, signal: ctx.signal,
-          platform: { id: args.platform, ...args.url ? { url: args.url } : {}, ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {} },
-        })
-        return { platform: args.platform, sources: result.sources, engine: result.engine, ...result.enginesTried ? { enginesTried: result.enginesTried } : {}, fromCache: result.fromCache, ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {} }
-      }
-      for (const key of ['url', 'authProfile', 'rulePack'] as const) if (args[key] !== undefined) throw new ActionArgError(key + ' only applies together with platform')
-      if (!args.query) throw new ActionArgError('query is required', 'Pass query, or platform=rss with url.')
-      // Ids come from the provider registry: aliases and namespaced ids (ddg, builtin:ddg) are accepted, unknown ones list what exists.
-      const engines = args.engines ? (ctx.router.registry ?? defaultProviderRegistry).validate(args.engines.split(',').map((s: string) => s.trim()).filter(Boolean)) : undefined
-      if (args.task || args.profile) {
+      const registry = ctx.router.registry ?? defaultProviderRegistry
+      const evidenceFields = EVIDENCE_FIELDS.filter(key => args[key] !== undefined)
+      // Evidence mode: task or profile (any evidence field once a platform is named).
+      const evidenceMode = Boolean(args.task || args.profile || (args.platform && evidenceFields.length))
+      const runEvidence = async (query: string, extra: { engines?: string[]; platform?: { id: string; url?: string; authProfile?: string; rulePack?: string } }) => {
         const out = await ctx.evidence().search({
-          query: args.query,
+          query,
           ...args.task ? { task: args.task } : {},
           ...args.profile ? { profile: args.profile } : {},
           ...args.needs ? { needs: args.needs } : {},
           ...args.constraints ? { constraints: args.constraints } : {},
           ...args.budget !== undefined ? { budget: args.budget } : {},
-          ...engines ? { engines } : {},
+          ...extra.engines ? { engines: extra.engines } : {},
+          ...extra.platform ? { platform: extra.platform } : {},
+          ...args.allowFallback !== undefined ? { allowFallback: args.allowFallback } : {},
           count: Math.min(Math.max(args.count ?? cfg.searchMaxResults, 1), 20),
           signal: ctx.signal,
         })
         const ignored = [args.fresh !== undefined && 'fresh', args.multi !== undefined && 'multi', EXA_FIELDS.some(key => args[key]) && 'exa options'].filter(Boolean)
         return { ...out, ...ignored.length ? { notes: [...out.notes, 'ignored in evidence mode: ' + ignored.join(', ')] } : {} }
       }
+      if (args.allowFallback !== undefined && !evidenceMode) throw new ActionArgError('allowFallback only applies in evidence mode', 'Pass task or profile with it: it lets an unavailable platform fall back to the web engines.')
+      if (args.platform) {
+        const provider = registry.resolve(args.platform)
+        if (provider?.descriptor.kind !== 'platform') throw new ActionArgError('unsupported platform: ' + args.platform, 'See sources.status or search.recommend for platform ids: ' + registry.platformIds().join(', '))
+        if (args.engines) throw new ActionArgError('platform cannot be combined with engines', 'platform already names the source; use one of them.')
+        const request = { id: args.platform, ...args.url ? { url: args.url } : {}, ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {} }
+        if (evidenceMode) {
+          // The platform is the explicit source set; the pipeline gates, reads the top pages and scores as for any other source.
+          const resolved = ctx.router.resolvePlatform(request, args.query ?? '')
+          const query = resolved.query || args.task || ''
+          if (!query) throw new ActionArgError('query is required', 'Pass query or task.')
+          return runEvidence(query, { platform: { id: resolved.id, ...resolved.url ? { url: resolved.url } : {}, ...resolved.authProfile ? { authProfile: resolved.authProfile } : {}, ...resolved.rulePack ? { rulePack: resolved.rulePack } : {} } })
+        }
+        const result = await ctx.router.search({ query: args.query ?? '', count: args.count ?? 8, fresh: args.fresh ?? false, multi: false, signal: ctx.signal, platform: request })
+        return { platform: args.platform, sources: result.sources, engine: result.engine, ...result.enginesTried ? { enginesTried: result.enginesTried } : {}, fromCache: result.fromCache, ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {} }
+      }
+      for (const key of ['url', 'authProfile', 'rulePack'] as const) if (args[key] !== undefined) throw new ActionArgError(key + ' only applies together with platform')
+      if (!args.query) throw new ActionArgError('query is required', 'Pass query, or platform=rss with url.')
+      // Ids come from the provider registry: aliases and namespaced ids (ddg, builtin:ddg) are accepted, unknown ones list what exists.
+      const engines = args.engines ? registry.validate(args.engines.split(',').map((s: string) => s.trim()).filter(Boolean)) : undefined
+      if (args.task || args.profile) return runEvidence(args.query, { ...engines ? { engines } : {} })
       const hasExa = EXA_FIELDS.some(key => args[key])
       const result = await ctx.router.search({
         query: args.query,

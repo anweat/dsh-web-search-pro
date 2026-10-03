@@ -21,10 +21,21 @@ import { HybridScorer, RuleScorer, type Scorer } from './score.ts'
 import type { EvidencePack } from './types.ts'
 import { compileQuery } from './compile.ts'
 import type { ProviderRegistry } from '../providers/registry.ts'
+import { SourceUnavailableError } from '../providers/unavailable.ts'
 
 export interface EvidenceRequest extends TaskInput {
   /** Explicit engine ids (tool `engines`). */
   engines?: string[] | undefined
+  /**
+   * One platform provider as the explicit source set of S1 / S2 (`search.run platform=` with `task`): it wins over the
+   * profile's table, and `url` / `authProfile` / `rulePack` go to its calls (`browserBindings` fill the rest). S3-S8 run as usual.
+   */
+  platform?: { id: string; url?: string | undefined; authProfile?: string | undefined; rulePack?: string | undefined } | undefined
+  /**
+   * An explicit platform source that cannot run (missing browser / login / CLI / token, cooling down) is an error naming
+   * what is missing. With `allowFallback` the profile's web engines are searched instead and the pack says so.
+   */
+  allowFallback?: boolean | undefined
   /** `sources` entries to return. */
   count: number
   signal?: AbortSignal | undefined
@@ -135,17 +146,38 @@ export class EvidenceService {
       autoProviders: cfg.evidence.autoProviders !== false,
       fusion: { k: cfg.rrfConstant, freshnessBoost: cfg.freshnessBoost, freshnessDays: cfg.freshnessDays, authorityBoost: cfg.authorityBoost, authorityDomains: cfg.authorityDomains },
     }
+    // Explicit platform sources: the named platform, or `engines` that are all platforms. None of them runnable = report it.
+    const platformNotes: string[] = []
+    let explicit: string[] | undefined = request.platform ? usable([request.platform.id]) : request.engines?.length ? usable(request.engines) : undefined
+    if (explicit?.length && registry && explicit.every(id => registry.resolve(id)?.descriptor.kind === 'platform')) {
+      const statuses = await router.providerStatuses(explicit)
+      const reasons = explicit.filter(id => statuses.get(id)?.state !== 'ready').map(id => {
+        const status = statuses.get(id)
+        return status ? (status.state === 'cooldown' ? 'cooling down' : 'unavailable') + (status.reason ? ': ' + status.reason : '') : 'not registered'
+      })
+      if (reasons.length === explicit.length) {
+        const message = 'platform ' + explicit.join(', ') + ' unavailable: ' + reasons.join('; ')
+        if (!request.allowFallback) throw new SourceUnavailableError(message, explicit[0]!, reasons)
+        platformNotes.push(message + ' (allowFallback: the profile\'s web engines were searched instead)')
+        explicit = undefined
+      }
+    }
+    const platformId = request.platform ? usable([request.platform.id])[0] : undefined
+    const callOptions = request.platform && platformId !== undefined
+      ? { ...request.platform.url ? { url: request.platform.url } : {}, ...request.platform.authProfile || request.platform.rulePack ? { browser: { ...request.platform.authProfile ? { authProfile: request.platform.authProfile } : {}, ...request.platform.rulePack ? { rulePack: request.platform.rulePack } : {} } } : {} }
+      : undefined
     const options: PipelineOptions = {
       signal: request.signal,
       deadlineMs: request.deadlineMs ?? cfg.timeoutMs + 30_000,
-      ...request.engines?.length ? { engines: usable(request.engines) } : {},
+      ...explicit?.length ? { engines: explicit } : {},
+      ...callOptions && Object.keys(callOptions).length && platformId !== undefined && explicit?.length ? { providerOptions: { [platformId]: callOptions } } : {},
       sourcesCount: request.count,
       maxScoreQuestions: cfg.evidence.maxJevQuestions,
       maxRounds: cfg.evidence.maxRounds,
       maxQueries: cfg.evidence.maxQueries,
     }
     const result = await runPipeline(spec, deps, options)
-    result.pack.notes.unshift(...specNotes, ...scorerNotes)
+    result.pack.notes.unshift(...specNotes, ...scorerNotes, ...platformNotes)
     this.persist(result, request)
     const { sources, ...rest } = result.pack
     return { ...rest, sources: shapeSources(sources, request.count), fromCache: false }

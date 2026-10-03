@@ -324,7 +324,7 @@ test('local actions return results that fit their closed output schemas (store l
 
 // ── search.run modes ─────────────────────────────────────────────────────────
 
-test('search.run: platform goes through router.search with a platform request (fresh forwarded, count default 8) and refuses evidence arguments', async () => {
+test('search.run: platform goes through router.search with a platform request (fresh forwarded, count default 8); engines and platform exclude each other', async () => {
   const seen: any[] = []
   const h = harness({ router: { search: async (opts: any) => { seen.push(opts); return { sources: [{ url: 'https://x.test/1', title: 'X' }], engine: 'github', fromCache: false } } } })
   try {
@@ -334,7 +334,7 @@ test('search.run: platform goes through router.search with a platform request (f
     assert.deepEqual({ query: seen[0].query, count: seen[0].count, fresh: seen[0].fresh, multi: seen[0].multi, platform: seen[0].platform }, { query: 'dsh', count: 8, fresh: true, multi: false, platform: { id: 'github', authProfile: 'p' } })
     const text = h.definitions.get(CALL_TOOL).output.render({}, { ok: true, action: 'search.run', result: out })[0].text
     assert.match(text, /^Platform: github \(via github\)\n\n- \[X\]\(https:\/\/x\.test\/1\)/)
-    await assert.rejects(callAction(h.definitions, 'search.run', { platform: 'github', query: 'q', task: 't' }), /platform cannot be combined with task/)
+    await assert.rejects(callAction(h.definitions, 'search.run', { platform: 'github', engines: 'ddg', query: 'q' }), /platform cannot be combined with engines/)
     await assert.rejects(callAction(h.definitions, 'search.run', { platform: 'not-a-platform', query: 'q' }), /unsupported platform: not-a-platform/)
     await assert.rejects(callAction(h.definitions, 'search.run', { query: 'q', url: 'https://f.test' }), /url only applies together with platform/)
     await assert.rejects(callAction(h.definitions, 'search.run', {}), /query is required/)

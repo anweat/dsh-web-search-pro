@@ -30,11 +30,14 @@ import type { Block, BlockGrade, Candidate, EvidenceItem, EvidencePack, Need, Pa
 
 // ── dependencies ────────────────────────────────────────────────────────────
 
+/** Per-call provider options of the caller (not of the query): the platform's feed URL and browser auth profile / rule pack. */
+export interface CallOptions { url?: string; browser?: { authProfile?: string; rulePack?: string } }
+
 export interface ProviderCall {
   id: string
   query: string
   count: number
-  options?: CompiledQuery['options']
+  options?: CompiledQuery['options'] & CallOptions
   signal: AbortSignal
 }
 
@@ -91,6 +94,8 @@ export interface PipelineOptions {
   engines?: readonly string[]
   /** Results requested per provider (default 10). */
   perProviderCount?: number
+  /** Options added to every call of a provider, by provider id (the platform's `url`, `authProfile`, `rulePack`). */
+  providerOptions?: Readonly<Record<string, CallOptions>>
   /** Kept candidates whose pages are read (default `task.budget.fetchTopK`, else 4). */
   fetchTopK?: number
   fetchConcurrency?: number
@@ -218,7 +223,8 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
     for (const query of [compiled.query, ...compiled.fallbacks ?? []]) {
       let outcome: ProviderOutcome
       try {
-        outcome = await search({ id, query, count: options.perProviderCount ?? 10, ...compiled.options ? { options: compiled.options } : {}, signal: stage })
+        const callOptions = { ...compiled.options, ...options.providerOptions?.[id] }
+        outcome = await search({ id, query, count: options.perProviderCount ?? 10, ...Object.keys(callOptions).length ? { options: callOptions } : {}, signal: stage })
       } catch (error) {
         if (options.signal?.aborted) throw error
         if (deadlineSignal.aborted) { cut = true; return undefined }

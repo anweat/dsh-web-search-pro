@@ -14,6 +14,7 @@ import {
   type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
 } from './engines.ts'
 import { customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
+import { SourceUnavailableError } from './providers/unavailable.ts'
 import { defaultProviderRegistry, routeIdOf, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
 import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
@@ -530,7 +531,7 @@ export class SearchRouter {
   async search(opts: RouterSearchOptions): Promise<RouterSearchResult> {
     const cfg = this.dynamic()
     this.syncBackends()
-    const platform = opts.platform ? this.platformCall(opts.platform, opts.query) : undefined
+    const platform = opts.platform ? this.resolvePlatform(opts.platform, opts.query) : undefined
     const query = platform ? platform.query : opts.query.trim()
     if (!platform && !query) throw new Error('query must be a non-empty string')
     const ids = platform ? [platform.id] : this.canonicalIds(opts.engines && opts.engines.length ? opts.engines : cfg.engines)
@@ -552,7 +553,7 @@ export class SearchRouter {
    * Normalise a platform request: the provider's route id; `rss` takes a feed URL from `query` when no `url` is given
    * (the old tool contract); the call's auth profile / rule pack, else the platform's `browserBindings`.
    */
-  private platformCall(request: PlatformRequest, rawQuery: string): { id: string; query: string; url?: string; authProfile?: string; rulePack?: string } {
+  resolvePlatform(request: PlatformRequest, rawQuery: string): { id: string; query: string; url?: string; authProfile?: string; rulePack?: string } {
     const id = this.registry.routeId(request.id) ?? request.id
     const text = rawQuery.trim()
     const legacyFeed = id === 'rss' && !request.url && /^https?:\/\//i.test(text) ? text : undefined
@@ -736,7 +737,10 @@ export class SearchRouter {
       return { sources: [], engine: id, enginesTried: [id], fromCache: false, availableCount: 0, fallbackNote: 'no results: ' + (error.attempts[0]?.detail ?? id) }
     }
     const last = [...error.attempts].reverse().find(a => a.detail)
-    throw new Error('platform ' + id + ' unavailable (tried: ' + error.attempts.map(a => a.id).join(', ') + ')' + (last?.detail ? ': ' + last.detail : ''))
+    const message = 'platform ' + id + ' unavailable (tried: ' + error.attempts.map(a => a.id).join(', ') + ')' + (last?.detail ? ': ' + last.detail : '')
+    // Never ran (failed its local probe, cooling down): a structured "not available", with what is missing.
+    if (error.attempts.length && error.attempts.every(a => a.outcome === 'skipped')) throw new SourceUnavailableError(message, id, error.attempts.map(a => a.detail ?? 'unavailable'))
+    throw new Error(message)
   }
 
   /**
