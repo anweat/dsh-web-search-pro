@@ -324,16 +324,14 @@ test('local actions return results that fit their closed output schemas (store l
 
 // ── search.run modes ─────────────────────────────────────────────────────────
 
-test('search.run: platform delegates to the platform path (fresh forwarded, count default 8) and refuses evidence arguments', async () => {
+test('search.run: platform goes through router.search with a platform request (fresh forwarded, count default 8) and refuses evidence arguments', async () => {
   const seen: any[] = []
-  const h = harness({ router: { platformSearch: async (...args: any[]) => { seen.push(args); return { sources: [{ url: 'https://x.test/1', title: 'X' }], engine: 'github', fromCache: false } } } })
+  const h = harness({ router: { search: async (opts: any) => { seen.push(opts); return { sources: [{ url: 'https://x.test/1', title: 'X' }], engine: 'github', fromCache: false } } } })
   try {
     const out = await callAction(h.definitions, 'search.run', { platform: 'github', query: 'dsh', fresh: true, authProfile: 'p' })
     assert.deepEqual(out, { platform: 'github', sources: [{ url: 'https://x.test/1', title: 'X' }], engine: 'github', fromCache: false })
     assert.deepEqual(checkOutput(findAction('search.run')!.output, out), [])
-    assert.deepEqual(seen[0].slice(0, 4), ['github', 'dsh', undefined, 8])
-    assert.equal(seen[0][4].fresh, true)
-    assert.equal(seen[0][4].authProfile, 'p')
+    assert.deepEqual({ query: seen[0].query, count: seen[0].count, fresh: seen[0].fresh, multi: seen[0].multi, platform: seen[0].platform }, { query: 'dsh', count: 8, fresh: true, multi: false, platform: { id: 'github', authProfile: 'p' } })
     const text = h.definitions.get(CALL_TOOL).output.render({}, { ok: true, action: 'search.run', result: out })[0].text
     assert.match(text, /^Platform: github \(via github\)\n\n- \[X\]\(https:\/\/x\.test\/1\)/)
     await assert.rejects(callAction(h.definitions, 'search.run', { platform: 'github', query: 'q', task: 't' }), /platform cannot be combined with task/)

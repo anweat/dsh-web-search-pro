@@ -18,3 +18,6 @@ export const defaultProviderRegistry: ProviderRegistry = createBuiltinRegistry()
 
 /** Route ids of the BUILT-IN search providers (a snapshot of the default registry at load; tool validation reads the live registry). */
 export const SEARCH_ENGINE_IDS: readonly string[] = Object.freeze(defaultProviderRegistry.searchIds())
+
+/** Route ids of the BUILT-IN platforms (a snapshot like {@link SEARCH_ENGINE_IDS}; `customPlatforms` keys are added to the live registry). */
+export const PLATFORM_IDS: readonly string[] = Object.freeze(defaultProviderRegistry.platformIds())

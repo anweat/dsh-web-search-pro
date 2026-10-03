@@ -5,6 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { registerHooks } from 'node:module'
 import { resolveConfig } from '../src/config.ts'
+import { createBuiltinRegistry } from '../src/providers/index.ts'
+import { customPlatformAdapter } from '../src/providers/platforms.ts'
 import { Store } from '../src/store.ts'
 import { findAction } from '../src/actions/registry.ts'
 import { checkOutput } from '../src/actions/schema.ts'
@@ -45,11 +47,14 @@ test('search.run accepts configured custom platforms and forwards them to the ro
   }
   const h = toolHarness(customPlatforms)
   let routedPlatform = ''
+  // The router registers configured custom platforms as providers; the action asks that registry.
+  const registry = createBuiltinRegistry()
+  registry.register(customPlatformAdapter('forum', customPlatforms.forum))
   try {
     registerTools({
       ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
       config: h.config, dynamic: () => h.config, store: h.store,
-      router: { platformSearch: async (platform: string) => { routedPlatform = platform; return { sources: [], engine: 'custom-forum', fromCache: false } } } as any,
+      router: { registry, search: async (opts: any) => { routedPlatform = opts.platform.id; return { sources: [], engine: 'forum', enginesTried: ['forum'], fromCache: false } } } as any,
       fetch: {} as any, browser: {} as any,
     })
     const result = await callAction(h.definitions, 'search.run', { platform: 'forum', query: 'dsh' })
@@ -124,7 +129,7 @@ test('history.list accepts kind=all as an unfiltered query', async () => {
   }
 })
 
-test('search.run platform=rss accepts a feed URL in query', async () => {
+test('search.run platform=rss forwards a feed URL given in query unchanged (the router reads it as the feed)', async () => {
   const h = toolHarness()
   let routedQuery: string | undefined
   let routedUrl: string | undefined
@@ -132,17 +137,17 @@ test('search.run platform=rss accepts a feed URL in query', async () => {
     registerTools({
       ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
       config: h.config, dynamic: () => h.config, store: h.store,
-      router: { platformSearch: async (_platform: string, query: string, url: string | undefined) => {
-        routedQuery = query
-        routedUrl = url
+      router: { search: async (opts: any) => {
+        routedQuery = opts.query
+        routedUrl = opts.platform.url
         return { sources: [], engine: 'rss', fromCache: false }
       } } as any,
       fetch: {} as any, browser: {} as any,
     })
 
     await callAction(h.definitions, 'search.run', { platform: 'rss', query: 'https://example.com/feed.xml' })
-    assert.equal(routedUrl, 'https://example.com/feed.xml')
-    assert.equal(routedQuery, '')
+    assert.equal(routedUrl, undefined)
+    assert.equal(routedQuery, 'https://example.com/feed.xml')
   } finally {
     h.store.close()
     fs.rmSync(h.dir, { recursive: true, force: true })

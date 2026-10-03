@@ -253,7 +253,7 @@ test('router accepts a legacy RSS feed URL in query without treating it as a fil
     <rss><channel><item><title>Visible item</title><link>https://example.com/item</link></item></channel></rss>
   `, { status: 200 })) as typeof fetch
   try {
-    const result = await router.platformSearch('rss', 'https://feed.example/rss', undefined, 5, { fresh: true })
+    const result = await router.search({ query: 'https://feed.example/rss', count: 5, fresh: true, multi: false, signal: undefined, platform: { id: 'rss' } })
     assert.equal(result.sources[0]?.title, 'Visible item')
   } finally {
     dns.lookup = originalLookup

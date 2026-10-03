@@ -184,6 +184,11 @@ export class ProviderRegistry {
     return this.list({ operation: 'search' }).map(a => routeIdOf(a.descriptor))
   }
 
+  /** Route ids of the providers of kind `platform` (`search.run platform=`), registration order. */
+  platformIds(): string[] {
+    return this.list({ operation: 'search' }).filter(a => a.descriptor.kind === 'platform').map(a => routeIdOf(a.descriptor))
+  }
+
   /** Normalise a list of ids (aliases, full ids) to route ids, dropping repeats; unknown ids are returned apart. */
   normalize(ids: readonly string[]): { ids: string[]; unknown: string[] } {
     const out: string[] = []

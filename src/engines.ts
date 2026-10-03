@@ -803,38 +803,3 @@ export function rssEngine(url: string, allowProxyFakeIp = false): Engine {
     },
   }
 }
-
-/** Build the ordered engine list for a platform search. */
-export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
-  switch (platform) {
-    case 'github': return [githubEngine(deps)]
-    case 'github-code': return [githubCodeEngine(deps)]
-    case 'github-issues': return [githubIssuesEngine(deps)]
-    case 'bilibili': return [bilibiliEngine(deps)]
-    case 'youtube': return [youtubeEngine(deps)]
-    case 'v2ex': return [v2exEngine(deps.allowProxyFakeIp)]
-    case 'xiaohongshu': return [opencliEngine('xiaohongshu', deps)]
-    case 'twitter': return [opencliEngine('twitter', deps), agentReachEngine('twitter', deps)]
-    case 'reddit': return [opencliEngine('reddit', deps)]
-    case 'instagram': return [opencliEngine('instagram', deps)]
-    case 'facebook': return [opencliEngine('facebook', deps)]
-    // Chinese communities (MediaCrawler-style): Playwright drives the logged-in search page.
-    case 'arxiv': return [arxivEngine(deps.allowProxyFakeIp)]
-    case 'pubmed': return [pubmedEngine(deps.allowProxyFakeIp)]
-    case 'zhihu': return [playwrightPlatformEngine('zhihu', deps)]
-    case 'weibo': return [playwrightPlatformEngine('weibo', deps)]
-    case 'douban': return [playwrightPlatformEngine('douban', deps)]
-    case 'tieba': return [playwrightPlatformEngine('tieba', deps)]
-    case 'douyin': return [playwrightPlatformEngine('douyin', deps)]
-    case 'kuaishou': return [playwrightPlatformEngine('kuaishou', deps)]
-    default: return []
-  }
-}
-
-export const PLATFORM_IDS = ['github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed'] as const
-
-/** Whether search.run platform= may route this built-in or configured custom id. */
-export function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean {
-  return PLATFORM_IDS.includes(platform as typeof PLATFORM_IDS[number])
-    || Object.hasOwn(customPlatforms ?? {}, platform)
-}

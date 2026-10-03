@@ -150,7 +150,7 @@ test('platform cache replay preserves publishedAt metadata', async () => {
     const id = store.recordQuery({ kind: 'platform', query: 'deepseek', platform: 'arxiv', engine: 'arxiv', cacheKey: key, status: 'ok', detail: JSON.stringify({ requestedCount: 4 }) })
     store.recordResults(id, [{ url: 'https://arxiv.org/abs/2402.03300', title: 'DeepSeek', publishedAt: '2024-02-18T17:10:07Z' }], 'arxiv')
     const router = new SearchRouter({ get: () => undefined } as never, config as never, store)
-    const result = await router.platformSearch('arxiv', 'deepseek', undefined, 3, { fresh: false })
+    const result = await router.search({ query: 'deepseek', count: 3, fresh: false, multi: false, signal: undefined, platform: { id: 'arxiv' } })
     assert.equal(result.fromCache, true)
     assert.equal(result.sources[0]?.publishedAt, '2024-02-18T17:10:07Z')
   } finally {

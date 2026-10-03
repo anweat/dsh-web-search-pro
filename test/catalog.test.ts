@@ -6,7 +6,7 @@ import { validateCatalog, type CatalogEntry, type SourceCatalog } from '../src/c
 import { loadCatalog, parseCatalog, CATALOG_URL } from '../src/catalog/load.ts'
 import { recommendSources, renderRecommendation, MAX_RECOMMENDATIONS, RECOMMEND_INSTRUCTION, type RecommendContext } from '../src/catalog/recommend.ts'
 import { defaultProviderRegistry } from '../src/providers/index.ts'
-import { PLATFORM_IDS } from '../src/engines.ts'
+import { PLATFORM_IDS } from '../src/providers/index.ts'
 import type { ProviderStatus } from '../src/pipeline/plan.ts'
 import { findAction } from '../src/actions/registry.ts'
 import { checkOutput } from '../src/actions/schema.ts'

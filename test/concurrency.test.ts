@@ -354,11 +354,12 @@ test('C3: concurrent identical platform searches call the engine once', async ()
   const h = harness()
   const gate = deferred()
   let calls = 0
-  ;(h.router as any).platformEngineList = () => [{ id: 'fake-platform', label: 'Fake', available: () => true, search: async () => { calls++; await gate.promise; return { sources: sources(4) } } }]
+  h.engine('fake', async () => { calls++; await gate.promise; return { sources: sources(4) } })
+  const platformSearch = (count: number) => h.router.search({ query: 'q', count, fresh: false, multi: false, signal: undefined, platform: { id: 'fake' } })
   try {
-    const a = h.router.platformSearch('fake', 'q', undefined, 5, {})
-    const b = h.router.platformSearch('fake', 'q', undefined, 5, {})
-    const other = h.router.platformSearch('fake', 'q', undefined, 2, {})
+    const a = platformSearch(5)
+    const b = platformSearch(5)
+    const other = platformSearch(2)
     await tick()
     gate.resolve()
     const [ra, rb, rc] = await Promise.all([a, b, other])
@@ -576,12 +577,13 @@ test('C8: live, SQLite-cache and memory results share one shape (snippet cap, co
 test('C8: platform search caps snippets and slices to count on live and cached paths', async () => {
   const h = harness()
   const long = 'p'.repeat(700)
-  ;(h.router as any).platformEngineList = () => [{ id: 'fake', label: 'Fake', available: () => true, search: async () => ({ sources: sources(6, long) }) }]
+  h.engine('fake', async () => ({ sources: sources(6, long) }))
+  const platformSearch = (count: number) => h.router.search({ query: 'q', count, fresh: false, multi: false, signal: undefined, platform: { id: 'fake' } })
   try {
-    const live = await h.router.platformSearch('fake', 'q', undefined, 3, {})
+    const live = await platformSearch(3)
     assert.equal(live.sources.length, 3)
     assert.equal(live.sources[0]!.snippet, capText(long, 500))
-    const cached = await h.router.platformSearch('fake', 'q', undefined, 3, {})
+    const cached = await platformSearch(3)
     assert.equal(cached.fromCache, true)
     assert.deepEqual(cached.sources, live.sources)
   } finally { h.cleanup() }

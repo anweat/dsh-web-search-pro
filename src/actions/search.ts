@@ -3,8 +3,7 @@
  * @module web-search-pro/actions/search
  */
 
-import { PLATFORM_IDS, isPlatformSupported } from '../engines.ts'
-import { defaultProviderRegistry } from '../providers/index.ts'
+import { PLATFORM_IDS, defaultProviderRegistry } from '../providers/index.ts'
 import { loadCatalog } from '../catalog/load.ts'
 import { recommendSources, renderRecommendation, type Recommendation } from '../catalog/recommend.ts'
 import { detectDeps } from '../deps.ts'
@@ -114,13 +113,15 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       if (args.platform) {
         const evidenceArgs = EVIDENCE_FIELDS.filter(key => args[key] !== undefined)
         if (evidenceArgs.length) throw new ActionArgError('platform cannot be combined with ' + evidenceArgs.join(', ') + ': evidence mode does not search platforms yet', 'Call search.run with platform only, or without platform for an evidence pack.')
-        if (!isPlatformSupported(args.platform, cfg.customPlatforms)) throw new ActionArgError('unsupported platform: ' + args.platform, 'See sources.status or search.recommend for platform ids.')
-        const legacyRssUrl = args.platform === 'rss' && !args.url && /^https?:\/\//i.test(args.query?.trim() ?? '') ? args.query!.trim() : undefined
-        const result = await ctx.router.platformSearch(args.platform, legacyRssUrl ? '' : (args.query ?? ''), args.url ?? legacyRssUrl, args.count ?? 8, {
-          signal: ctx.signal, fresh: args.fresh ?? false,
-          ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {},
+        const registry = ctx.router.registry ?? defaultProviderRegistry
+        const provider = registry.resolve(args.platform)
+        if (provider?.descriptor.kind !== 'platform') throw new ActionArgError('unsupported platform: ' + args.platform, 'See sources.status or search.recommend for platform ids: ' + registry.platformIds().join(', '))
+        if (args.engines) throw new ActionArgError('platform cannot be combined with engines', 'platform already names the source; use one of them.')
+        const result = await ctx.router.search({
+          query: args.query ?? '', count: args.count ?? 8, fresh: args.fresh ?? false, multi: false, signal: ctx.signal,
+          platform: { id: args.platform, ...args.url ? { url: args.url } : {}, ...args.authProfile ? { authProfile: args.authProfile } : {}, ...args.rulePack ? { rulePack: args.rulePack } : {} },
         })
-        return { platform: args.platform, sources: result.sources, engine: result.engine, fromCache: result.fromCache }
+        return { platform: args.platform, sources: result.sources, engine: result.engine, ...result.enginesTried ? { enginesTried: result.enginesTried } : {}, fromCache: result.fromCache, ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {} }
       }
       for (const key of ['url', 'authProfile', 'rulePack'] as const) if (args[key] !== undefined) throw new ActionArgError(key + ' only applies together with platform')
       if (!args.query) throw new ActionArgError('query is required', 'Pass query, or platform=rss with url.')
@@ -169,7 +170,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
     },
     render(value) {
       const v = value as { content?: string; platform?: string; sources: SourceRow[]; engine: string; enginesTried?: string[]; fromCache: boolean; fallbackNote?: string }
-      if (v.platform !== undefined) return 'Platform: ' + v.platform + ' (via ' + v.engine + (v.fromCache ? ', cached' : '') + ')\n\n' + formatSources(v.sources)
+      if (v.platform !== undefined) return 'Platform: ' + v.platform + ' (via ' + v.engine + (v.fromCache ? ', cached' : '') + ')\n\n' + formatSources(v.sources) + (v.fallbackNote ? '\n\n' + v.fallbackNote : '')
       const tried = v.enginesTried ?? []
       const pack = value as unknown as Partial<EvidenceOutput>
       if (pack.resultId !== undefined && pack.evidence && pack.needs && pack.coveredNeeds && pack.gaps && pack.verification) {

@@ -10,7 +10,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { Store } from './store.ts'
 import type { ResolvedConfig } from './config.ts'
 import {
-  platformEngines, rssEngine, customPlatformEngine, EngineError,
+  EngineError,
   type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
 } from './engines.ts'
 import { customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
@@ -24,7 +24,7 @@ import { resolveBudget, UsageLedger } from './pipeline/ledger.ts'
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
-import { browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
+import { toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
 import { allAttemptsBenign, allAttemptsEmpty, BackendRegistry, NoBackendError, type Backend, type BackendAttempt, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
@@ -48,6 +48,21 @@ export interface RouterSearchOptions {
   skipSeam?: boolean
   /** Native Exa search controls; ignored by other engines. */
   exa?: EngineSearchOptions['exa']
+  /**
+   * Search ONE platform provider (`search.run platform=`): the same registry-backed run as a web engine, with the
+   * platform's own cache key, history kind `platform` and an unavailable provider reported as an error. `engines`,
+   * `multi` and `exa` are ignored; `query` may be empty for a feed. `authProfile` / `rulePack` fall back to `browserBindings`.
+   */
+  platform?: PlatformRequest
+}
+
+export interface PlatformRequest {
+  /** Platform id (route id, alias or full provider id, or a `customPlatforms` key). */
+  id: string
+  /** `rss` only: the feed URL (a feed URL in `query` is accepted too). */
+  url?: string
+  authProfile?: string
+  rulePack?: string
 }
 
 export interface RouterSearchResult {
@@ -90,7 +105,6 @@ export interface ProviderReport {
 export class SearchRouter {
   /** In-flight de-duplication of identical non-fresh requests (C3). */
   private readonly searchFlights = new SingleFlight<RouterSearchResult>()
-  private readonly platformFlights = new SingleFlight<RouterSearchResult>()
   private readonly getBrowser: BrowserGetter
   private readonly backends: BackendRegistry<SearchInput, SearchOutcome>
   /** Backend ids this router created from the registry (a stub a test installed under another id is never touched). */
@@ -174,9 +188,9 @@ export class SearchRouter {
         const engine = await this.build(id, input.skipSeam)
         if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
         try {
-          const outcome = await engine.search(input.query, input.count, input.signal, input.options)
+          const outcome = await engine.search(input.query, input.count, input.signal, this.withBindings(id, input.options))
           this.outcomes.set(id, { ok: true, at: new Date().toISOString() })
-          return outcome
+          return { ...outcome, via: outcome.via ?? engine.id }
         } catch (error) {
           const code = (error as { code?: unknown } | null)?.code
           // An empty answer is the service working; a cancelled call says nothing about it.
@@ -202,6 +216,25 @@ export class SearchRouter {
         return { ok: true, lowQuality: true, detail: 'snippets=' + withSnippet + '/' + sources.length }
       },
     }
+  }
+
+  /** `browserBindings[id]` fills the auth profile / rule pack a call did not name itself (the call wins). */
+  private withBindings(id: string, options: EngineSearchOptions | undefined): EngineSearchOptions | undefined {
+    const binding = this.dynamic().browserBindings?.[id]
+    if (!binding?.authProfile && !binding?.rulePack) return options
+    const browser = { ...binding.authProfile ? { authProfile: binding.authProfile } : {}, ...binding.rulePack ? { rulePack: binding.rulePack } : {}, ...options?.browser }
+    return { ...options, browser }
+  }
+
+  /** Bindings that apply to these providers, for cache keys: a rebound auth profile must not replay older results. */
+  private bindingsOf(ids: readonly string[]): Record<string, { authProfile?: string; rulePack?: string }> | undefined {
+    const all = this.dynamic().browserBindings ?? {}
+    const out: Record<string, { authProfile?: string; rulePack?: string }> = {}
+    for (const id of ids) {
+      const b = all[id]
+      if (b?.authProfile || b?.rulePack) out[id] = { ...b.authProfile ? { authProfile: b.authProfile } : {}, ...b.rulePack ? { rulePack: b.rulePack } : {} }
+    }
+    return Object.keys(out).length ? out : undefined
   }
 
   private async probeEnv(cli?: ReadonlyMap<string, boolean>): Promise<ProbeEnv> {
@@ -495,35 +528,55 @@ export class SearchRouter {
 
   /** Run a full search with caching + persistence. */
   async search(opts: RouterSearchOptions): Promise<RouterSearchResult> {
-    const query = opts.query.trim()
-    if (!query) throw new Error('query must be a non-empty string')
     const cfg = this.dynamic()
     this.syncBackends()
-    const ids = this.canonicalIds(opts.engines && opts.engines.length ? opts.engines : cfg.engines)
-    const nq = normQuery(query)
+    const platform = opts.platform ? this.platformCall(opts.platform, opts.query) : undefined
+    const query = platform ? platform.query : opts.query.trim()
+    if (!platform && !query) throw new Error('query must be a non-empty string')
+    const ids = platform ? [platform.id] : this.canonicalIds(opts.engines && opts.engines.length ? opts.engines : cfg.engines)
+    const nq = normQuery(platform ? query || platform.url || platform.id : query)
     const count = Math.min(Math.max(opts.count, 1), 20)
-    const multi = opts.multi && ids.length > 1
-    const cacheKey = createSearchCacheKey({ query, engines: ids, count, multi, ...opts.exa ? { exa: opts.exa as Record<string, unknown> } : {} })
+    const multi = !platform && opts.multi && ids.length > 1
+    const bindings = platform ? undefined : this.bindingsOf(ids)
+    const cacheKey = platform
+      ? createPlatformCacheKey({ platform: platform.id, query: query || platform.url || platform.id, ...platform.url ? { url: platform.url } : {}, count, ...platform.authProfile ? { authProfile: platform.authProfile } : {}, ...platform.rulePack ? { rulePack: platform.rulePack } : {} })
+      : createSearchCacheKey({ query, engines: ids, count, multi, ...opts.exa ? { exa: opts.exa as Record<string, unknown> } : {}, ...bindings ? { browser: bindings } : {} })
     const memoryKey = cacheKey + ':count=' + count
-    const run = (signal: AbortSignal | undefined): Promise<RouterSearchResult> => this.runSearch({ opts, query, nq, ids, count, multi, cacheKey, memoryKey }, signal)
+    const run = (signal: AbortSignal | undefined): Promise<RouterSearchResult> => this.runSearch({ opts, query, nq, ids, count, multi, cacheKey, memoryKey, ...platform ? { platform } : {} }, signal)
     if (opts.fresh) return run(opts.signal)
     // skipSeam changes which engines can run, so it must be part of the flight identity.
     return this.searchFlights.do(memoryKey + (opts.skipSeam ? ':skipSeam' : ''), run, opts.signal)
   }
 
+  /**
+   * Normalise a platform request: the provider's route id; `rss` takes a feed URL from `query` when no `url` is given
+   * (the old tool contract); the call's auth profile / rule pack, else the platform's `browserBindings`.
+   */
+  private platformCall(request: PlatformRequest, rawQuery: string): { id: string; query: string; url?: string; authProfile?: string; rulePack?: string } {
+    const id = this.registry.routeId(request.id) ?? request.id
+    const text = rawQuery.trim()
+    const legacyFeed = id === 'rss' && !request.url && /^https?:\/\//i.test(text) ? text : undefined
+    const url = request.url ?? legacyFeed
+    const binding = this.dynamic().browserBindings?.[id]
+    const authProfile = request.authProfile ?? binding?.authProfile
+    const rulePack = request.rulePack ?? binding?.rulePack
+    return { id, query: legacyFeed ? '' : text, ...url ? { url } : {}, ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} }
+  }
+
   private async runSearch(
-    p: { opts: RouterSearchOptions; query: string; nq: string; ids: string[]; count: number; multi: boolean; cacheKey: string; memoryKey: string },
+    p: { opts: RouterSearchOptions; query: string; nq: string; ids: string[]; count: number; multi: boolean; cacheKey: string; memoryKey: string; platform?: { id: string; url?: string; authProfile?: string; rulePack?: string } },
     signal: AbortSignal | undefined,
   ): Promise<RouterSearchResult> {
-    const { opts, query, nq, ids, count, multi, cacheKey, memoryKey } = p
+    const { opts, query, nq, ids, count, multi, cacheKey, memoryKey, platform } = p
+    const kind = platform ? 'platform' : 'search'
     const cfg = this.dynamic()
 
     // 1. In-process LRU cache, then SQLite.
     if (!opts.fresh) {
       const hot = this.memory.get(memoryKey, cfg.ttlSeconds * 1000)
       if (hot) return { ...hot, fromCache: true }
-      const cached = this.store.bestEffort('search cache read', () => {
-        const hit = this.store.getCachedQuery('search', cacheKey, cfg.ttlSeconds)
+      const cached = this.store.bestEffort(kind + ' cache read', () => {
+        const hit = this.store.getCachedQuery(kind, cacheKey, cfg.ttlSeconds)
         return hit ? { hit, rows: this.store.resultsForQuery(hit.id) } : undefined
       })
       if (cached?.rows.length) {
@@ -549,6 +602,7 @@ export class SearchRouter {
     const enginesTried: string[] = []
     let outcome: SearchOutcome | undefined
     let usedId: string | undefined
+    let viaId: string | undefined
     let fallbackNote: string | undefined
     let availableCount: number | undefined
     let persistExtras: string[] | undefined
@@ -591,15 +645,22 @@ export class SearchRouter {
       usedId = 'multi(' + ids.join('+') + ')'
     } else {
       try {
+        const options: EngineSearchOptions = {
+          ...opts.exa && !platform ? { exa: opts.exa } : {},
+          ...platform?.url ? { url: platform.url } : {},
+          ...platform && (platform.authProfile || platform.rulePack) ? { browser: { ...platform.authProfile ? { authProfile: platform.authProfile } : {}, ...platform.rulePack ? { rulePack: platform.rulePack } : {} } } : {},
+        }
         const selected = await this.backends.runSelected(
-          { query, count, signal, skipSeam: opts.skipSeam ?? false, ...opts.exa ? { options: { exa: opts.exa } } : {} },
+          // A platform without a query lists its latest items (a feed has no query at all).
+          { query: platform ? query || (platform.url ? '' : 'latest') : query, count, signal, skipSeam: opts.skipSeam ?? false, ...Object.keys(options).length ? { options } : {} },
           { preferred: ids, ...signal ? { signal } : {} },
         )
         outcome = selected.value
-        usedId = selected.id
+        usedId = platform ? platform.id : selected.id
+        viaId = selected.value.via ?? selected.id
         enginesTried.push(...ids.slice(0, Math.max(ids.indexOf(selected.id) + 1, 1)))
-        // P1-1: explain the fallback (e.g. ddg returned results but none had snippets).
-        const lowQualityAttempts = selected.attempts.filter(a => a.outcome === 'low-quality')
+        // P1-1: explain the fallback (e.g. ddg returned results but none had snippets). A single platform has nothing to fall back to.
+        const lowQualityAttempts = platform ? [] : selected.attempts.filter(a => a.outcome === 'low-quality')
         if (lowQualityAttempts.length) {
           const triedLine = selected.attempts
             .map(a => a.id + '(' + a.outcome + (a.detail ? ':' + a.detail : '') + ')')
@@ -609,8 +670,12 @@ export class SearchRouter {
       } catch (error) {
         if (signal?.aborted) throw error
         enginesTried.push(...ids)
-        // Every engine answered empty or was skipped (no runtime failure): report that, do not fail or cache it.
-        if (error instanceof NoBackendError && allAttemptsBenign(error.attempts)) return this.emptyResult(ids, 'none', error.attempts)
+        if (error instanceof NoBackendError) {
+          // A platform that is down is an error with its reason; one that answered with nothing is an empty result that says so.
+          if (platform) return this.platformFailure(platform.id, error)
+          // Every engine answered empty or was skipped (no runtime failure): report that, do not fail or cache it.
+          if (allAttemptsBenign(error.attempts)) return this.emptyResult(ids, 'none', error.attempts)
+        }
         throw error
       }
     }
@@ -621,13 +686,15 @@ export class SearchRouter {
     const finalOutcome = outcome
     const finalId = usedId
     this.store.bestEffort('recordSearch', () => this.store.recordSearch({
-      kind: 'search',
+      kind,
       query: nq,
-      engine: finalId,
+      ...platform ? { platform: platform.id } : {},
+      // History keeps naming the concrete backend that answered for a platform (`opencli-twitter`).
+      engine: platform ? viaId ?? finalId : finalId,
       status: 'ok',
       cacheKey,
       detail: JSON.stringify({ ...finalOutcome.content ? { content: finalOutcome.content } : {}, engine: finalId, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
-    }, persistExtras ? finalOutcome.sources.map((source, i) => ({ ...source, extra: persistExtras![i]! })) : finalOutcome.sources, finalId))
+    }, persistExtras ? finalOutcome.sources.map((source, i) => ({ ...source, extra: persistExtras![i]! })) : finalOutcome.sources, platform ? 'platform-' + platform.id : finalId))
 
     const result: RouterSearchResult = {
       ...outcome.content ? { content: outcome.content } : {},
@@ -660,105 +727,16 @@ export class SearchRouter {
     }
   }
 
-  /** Platform search (search.run with platform) with the same cache+persist flow. */
-  async platformSearch(
-    platform: string,
-    query: string,
-    url: string | undefined,
-    count: number,
-    opts: { signal?: AbortSignal; fresh?: boolean; authProfile?: string; rulePack?: string },
-  ): Promise<RouterSearchResult> {
-    const legacyRssUrl = platform === 'rss' && !url && /^https?:\/\//i.test(query.trim()) ? query.trim() : undefined
-    const feedUrl = url ?? legacyRssUrl
-    const effectiveQuery = legacyRssUrl ? '' : query
-    const boundedCount = Math.min(Math.max(count, 1), 20)
-    const binding = this.dynamic().browserBindings?.[platform]
-    const authProfile = opts.authProfile ?? binding?.authProfile
-    const rulePack = opts.rulePack ?? binding?.rulePack
-    const cacheKey = createPlatformCacheKey({ platform, query: effectiveQuery || feedUrl || platform, ...feedUrl ? { url: feedUrl } : {}, count: boundedCount, ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} })
-    const run = (signal: AbortSignal | undefined): Promise<RouterSearchResult> =>
-      this.runPlatformSearch({ platform, url: feedUrl, effectiveQuery, boundedCount, authProfile, rulePack, cacheKey, fresh: opts.fresh ?? false }, signal)
-    if (opts.fresh) return run(opts.signal)
-    // The cache key ignores count (smaller requests reuse larger ones); flights must not.
-    return this.platformFlights.do(cacheKey + ':count=' + boundedCount, run, opts.signal)
-  }
-
-  /** Platform engine list; a seam so tests can inject fakes without network. */
-  protected platformEngineList(platform: string, feedUrl: string | undefined, deps: EngineDeps): Engine[] {
-    const custom = this.dynamic().customPlatforms?.[platform]
-    return custom
-      ? [customPlatformEngine(platform, custom, deps)]
-      : (platform === 'rss' && feedUrl ? [rssEngine(feedUrl, deps.allowProxyFakeIp)] : platformEngines(platform, deps))
-  }
-
-  private async runPlatformSearch(
-    p: { platform: string; url: string | undefined; effectiveQuery: string; boundedCount: number; authProfile: string | undefined; rulePack: string | undefined; cacheKey: string; fresh: boolean },
-    signal: AbortSignal | undefined,
-  ): Promise<RouterSearchResult> {
-    const { platform, url: feedUrl, effectiveQuery, boundedCount, authProfile, rulePack, cacheKey } = p
-    const nq = normQuery(effectiveQuery || feedUrl || platform)
-    // Async deps (not depsSync): platform engines may need credentials-resolved
-    // keys (e.g. githubToken from the credentials service), which the sync path
-    // cannot reach. platformSearch is async, so awaiting is free.
-    const deps = await this.deps(true)
-    const engines = this.platformEngineList(platform, feedUrl, deps)
-    if (!engines.length) throw new Error('unsupported platform: ' + platform)
-
-    if (!p.fresh) {
-      const cached = this.store.bestEffort('platform cache read', () => {
-        const hit = this.store.getCachedQuery('platform', cacheKey, this.dynamic().ttlSeconds)
-        return hit ? { hit, rows: this.store.resultsForQuery(hit.id) } : undefined
-      })
-      if (cached) {
-        let detail: { requestedCount?: number } | undefined
-        if (cached.hit.detail) { try { detail = JSON.parse(cached.hit.detail) } catch { /* ignore */ } }
-        if (cached.rows.length && (detail?.requestedCount === undefined || detail.requestedCount >= boundedCount)) {
-          return {
-            sources: shapeSources(cached.rows.map(r => ({ url: r.url, title: r.title, snippet: r.snippet, publishedAt: r.published })), boundedCount),
-            engine: platform,
-            enginesTried: [platform],
-            fromCache: true,
-            availableCount: cached.rows.length,
-          }
-        }
-      }
+  /**
+   * A platform provider that did not answer. Empty (it ran and found nothing) is a result with the provider's own hint
+   * (login, selectors); anything else is the error `platform <id> unavailable (tried: ...): <reason>`.
+   */
+  private platformFailure(id: string, error: NoBackendError): RouterSearchResult {
+    if (allAttemptsEmpty(error.attempts)) {
+      return { sources: [], engine: id, enginesTried: [id], fromCache: false, availableCount: 0, fallbackNote: 'no results: ' + (error.attempts[0]?.detail ?? id) }
     }
-
-    const enginesTried: string[] = []
-    let outcome: SearchOutcome | undefined
-    let lastError: unknown
-    for (const engine of engines) {
-      enginesTried.push(engine.id)
-      if (!engine.available()) {
-        // Say why when the blocker is the optional dsh-browser service.
-        const gap = engine.needsBrowser ? browserGap(deps.browser, engine.needsBrowser, 'platform ' + platform) : undefined
-        if (gap) lastError = new Error(gap)
-        continue
-      }
-      try {
-        outcome = await engine.search(platform === 'rss' ? effectiveQuery : effectiveQuery || 'latest', boundedCount, signal, authProfile || rulePack ? { browser: { ...authProfile ? { authProfile } : {}, ...rulePack ? { rulePack } : {} } } : undefined)
-        break
-      } catch (error) {
-        if (signal?.aborted) throw error
-        lastError = error
-      }
-    }
-    if (!outcome) {
-      const reason = lastError instanceof Error && lastError.message ? ': ' + lastError.message : ''
-      throw new Error('platform ' + platform + ' unavailable (tried: ' + enginesTried.join(', ') + ')' + reason)
-    }
-
-    const found = outcome
-    this.store.bestEffort('recordSearch', () => this.store.recordSearch({
-      kind: 'platform',
-      query: nq,
-      platform,
-      engine: enginesTried.at(-1) ?? 'unknown',
-      status: 'ok',
-      cacheKey,
-      detail: JSON.stringify({ requestedCount: boundedCount }),
-    }, found.sources, 'platform-' + platform))
-    return { sources: shapeSources(found.sources, boundedCount), engine: platform, enginesTried, fromCache: false, availableCount: found.sources.length }
+    const last = [...error.attempts].reverse().find(a => a.detail)
+    throw new Error('platform ' + id + ' unavailable (tried: ' + error.attempts.map(a => a.id).join(', ') + ')' + (last?.detail ? ': ' + last.detail : ''))
   }
 
   /**
