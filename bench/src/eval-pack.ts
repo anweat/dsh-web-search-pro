@@ -10,13 +10,22 @@
  *   (c) the pipeline with the Jev scorer, answering from the r1 judge cache
  *       (bench/data/judge-cache/jev) whenever the question text matches,
  *   (d) hybrid: aligned rule scorer, Jev only for need/block language mismatches,
- *   (d') hybrid plus the rule-borderline pairs (grade 1).
+ *   (d') hybrid plus the rule-borderline pairs (grade 1),
+ *   (e) the S8 coverage judge (M9, `--coverage`) on top of (b') and (d'): see coverage-eval.ts.
  *
  *   node --experimental-transform-types bench/src/eval-pack.ts \
  *     [--task-set v1|v2] [--run-id ID] [--split all|calibration|test|heldout] [--tasks a,b] [--allow-jev N] [--no-jev] \
  *     [--budget 6000] [--max-items 10] [--min-grade 1] [--fetch-top-k 4] [--blocks-per-need N (default: adaptive 12..24)] [--sweep] \
  *     [--rubric-file bench/rubrics/variants/score.support.v2-example.json] \
- *     [--provider ID] [--providers-file providers.json]
+ *     [--provider ID] [--providers-file providers.json] \
+ *     [--coverage [--coverage-calibrate | --coverage-thresholds WEAK,COVERED]]
+ *
+ * `--coverage` asks the coverage judge (rubric cover.sufficient, one noul question per need the rules claim covered; shadow
+ * mode, so the verdict probabilities are recorded raw and read at any thresholds) on the (b') and (d') packs, answering from
+ * bench/data/judge-cache/<provider>-cover and spending the same `--allow-jev N` request allowance. `--coverage-calibrate`
+ * fits the thresholds on the v1 CALIBRATION split only (false weak <= 5% of the truly covered claims, then maximal precision)
+ * and applies them to every split; it is refused for `--task-set v2`, which only takes frozen thresholds
+ * (`--coverage-thresholds`, e.g. the ones the v1 report printed) and is never tuned on.
  *
  * `--provider` runs the model arms (c) / (d) / (d') with another provider of the plugin's registry (default bocha-jev;
  * presets bocha-jev, typesafe-jev, laya-local, jina-rerank, cohere-rerank, or entries of `--providers-file`, a JSON object
@@ -46,9 +55,10 @@ import { splitBlocks } from '../../src/pipeline/blocks.ts'
 import { mergeCandidates, type ProviderOutput } from '../../src/pipeline/candidates.ts'
 import { fuseCandidates, type FusionOptions } from '../../src/pipeline/fusion.ts'
 import { runEvidenceStages, type PageInput, type PipelineDeps, type PipelineOptions, type PipelineResult, type StageContext } from '../../src/pipeline/run.ts'
+import type { CoverageStage, CoverageThresholds } from '../../src/pipeline/coverage.ts'
 import { renderEvidencePack } from '../../src/pipeline/render.ts'
-import type { ResolvedRubric } from '../../src/pipeline/rubrics.ts'
-import { createModelScorer, PRESETS } from '../../src/pipeline/judges/providers.ts'
+import { builtinRubric, type ResolvedRubric } from '../../src/pipeline/rubrics.ts'
+import { createCoverageJudge, createModelScorer, PRESETS } from '../../src/pipeline/judges/providers.ts'
 import type { ModelScorerBase } from '../../src/pipeline/judges/model-scorer.ts'
 import type { ProviderConfig } from '../../src/pipeline/judges/types.ts'
 import { HybridScorer, RuleScorer, type JevCache, type JevProbe, type Scorer } from '../../src/pipeline/score.ts'
@@ -56,6 +66,7 @@ import { DEFAULT_SELECT_OPTIONS, type SelectOptions } from '../../src/pipeline/s
 import { canonicalizeUrl } from '../../src/pipeline/url.ts'
 import { listFlag, numberFlag, parseFlags } from './cli.ts'
 import { JUDGE_CACHE_ROOT, readLabel, readSnapshotFile, RUNS_DIR } from './data.ts'
+import { calibrateThresholds, renderCoverageSection, type CoverageArm, type CoverageNeed, type CoverageRun } from './coverage-eval.ts'
 import { cacheKey, JudgeCache } from './judges/cache.ts'
 import { judgeIdOf, loadProvidersFile, pickProvider } from './judges/provider.ts'
 import { loadRubricFile, loadRubrics, renderQuestion } from './judges/rubrics.ts'
@@ -276,6 +287,8 @@ export interface EvalOptions {
   rubricFile?: { bench: Rubric; resolved: ResolvedRubric }
   /** Model provider of the Jev arms (`--provider`); default: the hosted bocha-jev preset. */
   provider?: ProviderConfig
+  /** Run the coverage judge arms (`--coverage`, dev-plan M9). */
+  coverage?: boolean
 }
 
 /** `nothing`: no page gave a block, so there was nothing to score (the arm equals the rule arm). */
@@ -306,6 +319,8 @@ export interface TaskEval {
   jevRequests: number
   /** Jev use of each Jev-backed arm: questions asked, cache hits / misses, HTTP requests made now, requests an empty cache would need. */
   uses: Partial<Record<JevKind, JevUse>>
+  /** Coverage judge verdicts (raw probabilities per claimed need) on the (b') and (d') packs; absent without `--coverage`. */
+  coverage?: Partial<Record<CoverageArm, CoverageRun>>
 }
 
 export interface JevUse { status: JevStatus; questions: number; cacheHits: number; misses: number; requests: number; cold: number }
@@ -327,11 +342,11 @@ export function loadEvalTasks(only?: readonly string[], split: 'all' | Split = '
   return out
 }
 
-export function runStages(item: LoadedTask, opts: EvalOptions, scorer?: Scorer): Promise<PipelineResult> {
+export function runStages(item: LoadedTask, opts: EvalOptions, scorer?: Scorer, coverage?: CoverageStage): Promise<PipelineResult> {
   const spec = toTaskSpec(item.task)
   const outputs = providerOutputs(item.snapshot)
   const deps: PipelineDeps = {
-    fetchPage: pageFetcher(item.snapshot), scorers: scorer ? { control: scorer } : {}, configuredEngines: [],
+    fetchPage: pageFetcher(item.snapshot), scorers: scorer ? { control: scorer } : {}, ...coverage ? { coverage } : {}, configuredEngines: [],
     fusion: EVAL_FUSION, newId: () => 'r_eval',
   }
   const options: PipelineOptions = { fetchTopK: opts.fetchTopK, fetchConcurrency: 1, ...opts.blocksPerNeed > 0 ? { blocksPerNeed: opts.blocksPerNeed } : {}, select: opts.select, maxScoreQuestions: 64 }
@@ -374,6 +389,83 @@ async function coldRequests(item: LoadedTask, opts: EvalOptions, kind: JevKind):
   return scorer.requests
 }
 
+// ── coverage judge arms (dev-plan M9) ───────────────────────────────────────
+
+/** Shadow mode records raw probabilities; the bands are applied afterwards, so these placeholders never change a pack. */
+const SHADOW_THRESHOLDS: CoverageThresholds = { weak: 0, covered: 0 }
+
+/**
+ * The coverage judge's answer cache (bench/data/judge-cache/<provider>-cover): the key covers provider, model, rubric
+ * (cover.sufficient v1), the task state, the bound question (need + evidence view). The answer is the noul probability.
+ */
+export function coverJudgeCache(root = JUDGE_CACHE_ROOT, provider: ProviderConfig = DEFAULT_PROVIDER): JevCache & { misses: number; hits: number } {
+  const rubric = loadRubrics().get('cover.sufficient.v1')!
+  const judgeId = judgeIdOf(provider)
+  const cache = new JudgeCache(root, judgeId + '-cover')
+  const judge = { id: judgeId, model: provider.model }
+  const extra = JSON.stringify(provider.extraBody ?? {}) + '|' + (provider.limits?.blockChars ?? rubric.maxCandidateChars ?? 2400)
+  const keyOf = (probe: JevProbe): string => cacheKey(judge, probe.state, renderQuestion(rubric, { need: probe.need, ...probe.task !== undefined ? { task: probe.task } : {} }), { id: '', text: probe.candidate }, extra)
+  const adapter = {
+    misses: 0, hits: 0,
+    get(probe: JevProbe) {
+      const hit = cache.get(keyOf(probe))
+      if (hit && !hit.error && typeof hit.prob === 'number') { adapter.hits++; return { grade: hit.prob } }
+      adapter.misses++
+      return undefined
+    },
+    set(probe: JevProbe, answer: { grade: number }) {
+      cache.set(keyOf(probe), { judge: judgeId, model: provider.model, rubricId: rubric.id, rubricVersion: rubric.version, latencyMs: 0, prob: answer.grade, decision: answer.grade >= 0.5 ? 'true' : 'false', kind: 'noul' } as never)
+    },
+  }
+  return adapter
+}
+
+export const COVERAGE_ARMS: readonly CoverageArm[] = ['rule', 'hybridB']
+
+/** The S6 scorer of a coverage arm: (b') the aligned rule scorer, (d') hybrid + borderline over the offline score cache (never any request). */
+function coverageScorer(arm: CoverageArm, opts: EvalOptions): Scorer {
+  if (arm === 'rule') return new RuleScorer()
+  const provider = opts.provider ?? DEFAULT_PROVIDER
+  const scorer = createModelScorer(provider, { apiKey: 'offline', cache: r1JevCache(opts.jevRoot, opts.rubricFile?.bench, provider), requestCap: 0, fetchImpl: noNetwork, ...opts.rubricFile ? { rubric: opts.rubricFile.resolved } : {} })
+  return scorerFor('hybridB', scorer)
+}
+
+export interface CoverRun { result: PipelineResult; cache: ReturnType<typeof coverJudgeCache>; requests: number }
+
+/** One coverage arm of one task; `cap` HTTP requests may be spent (0 = cache only). `over.fetchImpl` is a test / cold-count seam, `over.cache: false` skips the answer cache. */
+export async function coverageArm(item: LoadedTask, opts: EvalOptions, cap: number, key: string | undefined, arm: CoverageArm, over: { fetchImpl?: typeof fetch; cache?: boolean } = {}): Promise<CoverRun> {
+  const provider = opts.provider ?? DEFAULT_PROVIDER
+  const cache = coverJudgeCache(opts.jevRoot, provider)
+  const judge = createCoverageJudge(provider, { apiKey: key || 'offline', ...over.cache === false ? {} : { cache }, requestCap: cap, rubric: builtinRubric('cover.sufficient'), ...over.fetchImpl ? { fetchImpl: over.fetchImpl } : cap > 0 ? {} : { fetchImpl: noNetwork } })
+  const result = await runStages(item, opts, coverageScorer(arm, opts), { mode: 'shadow', judge, thresholds: SHADOW_THRESHOLDS })
+  return { result, cache, requests: judge.requests }
+}
+
+/** HTTP requests the coverage arm would need with an EMPTY cache (a stub service answers every question; nothing is sent anywhere). */
+async function coverageCold(item: LoadedTask, opts: EvalOptions, arm: CoverageArm): Promise<number> {
+  let requests = 0
+  const stub = (async (_url: string, init: { body: string }) => {
+    requests++
+    const keys = Object.keys((JSON.parse(init.body) as { questions?: Record<string, unknown> }).questions ?? {})
+    return new Response(JSON.stringify({ answers: Object.fromEntries(keys.map(k => [k, { noul: 0.5 }])), usage: { input_tokens: 0, output_tokens: 0 } }), { status: 200 })
+  }) as unknown as typeof fetch
+  await coverageArm(item, opts, 1_000, undefined, arm, { fetchImpl: stub, cache: false })
+  return requests
+}
+
+/** A pack's needs as the coverage evaluation reads them: claimed, truly covered (gold block in the pack), with gold at all, and the judge's raw probability. */
+export function coverageRunOf(label: Label, pairs: readonly GoldPair[], result: PipelineResult, use: { requests: number; cold: number; cacheHits: number; misses: number }): CoverageRun {
+  const { pack } = result
+  const goldNeeds = new Set(pairs.map(p => p.needId))
+  const inPack = new Set(pack.evidence.map(e => e.blockId))
+  const hit = new Set(pairs.filter(p => inPack.has(p.blockId)).map(p => p.needId))
+  const claimed = new Set(pack.coveredNeeds)
+  const probs = new Map((pack.stats.coverage?.verdicts ?? []).map(v => [v.needId, v.prob]))
+  const needs: CoverageNeed[] = [...new Set(label.gold.map(g => g.needId))].map(needId => ({ needId, claimed: claimed.has(needId), hit: hit.has(needId), hasGold: goldNeeds.has(needId), ...probs.has(needId) ? { prob: probs.get(needId)! } : {} }))
+  const c = pack.stats.coverage
+  return { needs, asked: c?.asked ?? 0, answered: (c?.asked ?? 0) - (c?.unanswered ?? 0), ...use, inputTokens: c?.inputTokens ?? 0 }
+}
+
 /** Jev questions per task the cache cannot answer (dry run: no requests, tasks fall back to rule). */
 export async function jevMisses(items: readonly LoadedTask[], opts: EvalOptions, kind: JevKind = 'jev'): Promise<Map<string, number>> {
   const out = new Map<string, number>()
@@ -413,6 +505,26 @@ export async function evaluate(items: readonly LoadedTask[], opts: EvalOptions, 
       }
     }
   }
+  // Coverage judge arms: shadow verdicts on the (b') pack and, where the hybrid arm was answered, on the (d') pack.
+  const coverRuns = new Map<string, CoverageRun>()
+  if (opts.coverage) {
+    for (const arm of COVERAGE_ARMS) {
+      const hybridAnswered = (id: string): boolean => { const r = jevRuns.get('hybridB|' + id); return r !== undefined && statusOf(r.result) === 'answered' }
+      const eligible = items.filter(item => arm === 'rule' || hybridAnswered(item.task.id))
+      const misses = new Map<string, number>()
+      for (const item of eligible) misses.set(item.task.id, (await coverageArm(item, opts, 0, undefined, arm)).cache.misses)
+      const order = [...eligible].sort((a, b) => misses.get(a.task.id)! - misses.get(b.task.id)!)
+      for (const item of order) {
+        const r = await coverageArm(item, opts, misses.get(item.task.id) === 0 ? 0 : remaining, key, arm)
+        remaining -= r.requests
+        jevRequests += r.requests
+        const cold = await coverageCold(item, opts, arm)
+        coverRuns.set(arm + '|' + item.task.id, coverageRunOf(item.label, goldPairs(item.label), r.result, { requests: r.requests, cold, cacheHits: r.cache.hits, misses: r.cache.misses }))
+        const c = r.result.pack.stats.coverage
+        log('  coverage ' + arm + ' ' + item.task.id + ': asked ' + (c?.asked ?? 0) + ', answered ' + ((c?.asked ?? 0) - (c?.unanswered ?? 0)) + ' (cache hits ' + r.cache.hits + ', misses ' + misses.get(item.task.id) + ', requests ' + r.requests + ')')
+      }
+    }
+  }
   const tasks: TaskEval[] = []
   for (const item of items) {
     const pairs = goldPairs(item.label)
@@ -436,6 +548,7 @@ export async function evaluate(items: readonly LoadedTask[], opts: EvalOptions, 
       ...jev ? { jev } : {}, ...hybrid ? { hybrid } : {}, ...hybridB ? { hybridB } : {},
       jevStatus: !j ? 'off' : statusOf(j.result),
       jevCacheHits: j?.cache.hits ?? 0, jevMisses: j?.cache.misses ?? 0, jevRequests: j?.requests ?? 0, uses,
+      ...COVERAGE_ARMS.some(arm => coverRuns.has(arm + '|' + item.task.id)) ? { coverage: Object.fromEntries(COVERAGE_ARMS.filter(arm => coverRuns.has(arm + '|' + item.task.id)).map(arm => [arm, coverRuns.get(arm + '|' + item.task.id)!])) } : {},
     })
   }
   return { tasks, jevRequests }
@@ -537,6 +650,9 @@ export interface ReportInput {
   jevRequests: number
   jevRequestsTotal?: number
   generatedAt: string
+  /** Thresholds the coverage section reads the verdicts at (fitted on the v1 calibration split, or given for a frozen run), and a line saying where they came from. */
+  coverageThresholds?: CoverageThresholds
+  coverageNotes?: string[]
 }
 
 export function renderReport(r: ReportInput): string {
@@ -622,6 +738,7 @@ export function renderReport(r: ReportInput): string {
   out.push('- 离线时无快照页面的候选既不读取也不占读页名额，实际线上这些候选可能被读到（也可能读取失败）；快照页面来自 E1 采集的 top-4 页面，未必与融合排序的前 4 个一致，所以“金标页到达”受快照覆盖限制。')
   out.push('- 基线按整页送入计保留，这对基线有利；它的代价体现在字符数上。')
   out.push('- Jev 问题文本与 r1 只在候选页面集合相同的部分一致，其余块需要新请求或回退；匹配子集偏向缓存已覆盖的任务。', '')
+  if (all.some(t => t.coverage)) out.push(...renderCoverageSection(all, r.coverageThresholds, r.coverageNotes))
   return out.join('\n')
 }
 
@@ -631,7 +748,7 @@ export async function sweep(items: readonly LoadedTask[], base: EvalOptions, log
   const cal = items.filter(i => i.split === 'calibration')
   const rows: string[][] = []
   for (const minGrade of [1, 2]) for (const maxItems of [6, 8, 10, 12]) for (const charBudget of [4000, 6000]) for (const maxPerUrl of [2, 3]) {
-    const opts: EvalOptions = { ...base, jev: false, select: { ...base.select, minGrade, maxItems, charBudget, maxPerUrl } }
+    const opts: EvalOptions = { ...base, jev: false, coverage: false, select: { ...base.select, minGrade, maxItems, charBudget, maxPerUrl } }
     const { tasks } = await evaluate(cal, opts)
     const s = summarize(tasks, t => t.ruleAligned)
     rows.push([String(minGrade), String(maxItems), String(charBudget), String(maxPerUrl), pct(s.retention), pct(s.needCoverage), pct(s.claimPrecision), num(s.chars), num(s.items, 1)])
@@ -643,13 +760,16 @@ export async function sweep(items: readonly LoadedTask[], base: EvalOptions, log
 
 async function main(): Promise<number> {
   const flags = parseFlags(process.argv.slice(2), {
-    values: ['rubric-file', 'run-id', 'task-set', 'split', 'tasks', 'allow-jev', 'budget', 'max-items', 'min-grade', 'max-per-url', 'fetch-top-k', 'blocks-per-need', 'provider', 'providers-file'],
-    booleans: ['no-jev', 'sweep'],
+    values: ['rubric-file', 'run-id', 'task-set', 'split', 'tasks', 'allow-jev', 'budget', 'max-items', 'min-grade', 'max-per-url', 'fetch-top-k', 'blocks-per-need', 'provider', 'providers-file', 'coverage-thresholds'],
+    booleans: ['no-jev', 'sweep', 'coverage', 'coverage-calibrate'],
   })
   const split = typeof flags.split === 'string' ? flags.split : 'all'
   if (!['all', 'calibration', 'test', 'heldout'].includes(split)) throw new Error('--split must be all|calibration|test|heldout')
   const taskSet = parseTaskSet(flags['task-set'])
   if (taskSet === 'v2' && flags.sweep) throw new Error('--sweep is not allowed with --task-set v2: the held-out set is never used for tuning')
+  if (taskSet === 'v2' && flags['coverage-calibrate']) throw new Error('--coverage-calibrate is not allowed with --task-set v2: thresholds are fitted on the v1 calibration split and only applied (--coverage-thresholds) to the held-out set')
+  if (flags['coverage-calibrate'] && flags['coverage-thresholds'] !== undefined) throw new Error('--coverage-calibrate and --coverage-thresholds exclude each other')
+  if ((flags['coverage-calibrate'] || flags['coverage-thresholds'] !== undefined) && !flags.coverage) throw new Error('--coverage-calibrate / --coverage-thresholds need --coverage')
   const items = loadEvalTasks(listFlag(flags, 'tasks'), split as 'all' | Split, taskSet)
   if (!items.length) { console.log('no labeled tasks with snapshots found (bench/data is local-only)'); return 1 }
   const select: Partial<SelectOptions> = {
@@ -660,7 +780,7 @@ async function main(): Promise<number> {
   }
   const opts: EvalOptions = {
     select, fetchTopK: numberFlag(flags, 'fetch-top-k', 4), blocksPerNeed: numberFlag(flags, 'blocks-per-need', 0),
-    allowJev: numberFlag(flags, 'allow-jev', 0), jev: !flags['no-jev'],
+    allowJev: numberFlag(flags, 'allow-jev', 0), jev: !flags['no-jev'], coverage: flags.coverage === true,
     ...typeof flags['rubric-file'] === 'string' ? { rubricFile: loadRubricFile(path.resolve(flags['rubric-file'])) } : {},
     ...typeof flags.provider === 'string' || typeof flags['providers-file'] === 'string'
       ? { provider: pickProvider(typeof flags.provider === 'string' ? flags.provider : undefined, typeof flags['providers-file'] === 'string' ? loadProvidersFile(path.resolve(flags['providers-file'])) : undefined) }
@@ -676,7 +796,7 @@ async function main(): Promise<number> {
   fs.mkdirSync(dir, { recursive: true })
   const variants: { label: string; tasks: TaskEval[] }[] = []
   for (const [label, sel] of [['每 URL 2 块、至多 10 条（M2b 初版）', { maxPerUrl: 2, maxItems: 10 }], ['每 URL 3 块', { maxPerUrl: 3 }], ['默认（每 URL 4 块、至多 12 条）', {}]] as const) {
-    variants.push({ label, tasks: (await evaluate(items, { ...opts, jev: false, select: { ...select, ...sel } })).tasks })
+    variants.push({ label, tasks: (await evaluate(items, { ...opts, jev: false, coverage: false, select: { ...select, ...sel } })).tasks })
   }
   let previous = 0
   try {
@@ -684,11 +804,30 @@ async function main(): Promise<number> {
     previous = prev.jevRequestsTotal ?? prev.jevRequests ?? 0
   } catch { /* first invocation for this run id */ }
   const jevRequestsTotal = previous + jevRequests
-  const report = renderReport({ runId, tasks, variants, opts, jevRequests, jevRequestsTotal, generatedAt: new Date().toISOString() })
+  let coverageThresholds: CoverageThresholds | undefined
+  const coverageNotes: string[] = []
+  if (opts.coverage) {
+    if (typeof flags['coverage-thresholds'] === 'string') {
+      const [weak, covered] = flags['coverage-thresholds'].split(',').map(Number)
+      if (weak === undefined || covered === undefined || !Number.isFinite(weak) || !Number.isFinite(covered) || weak < 0 || covered > 1 || weak > covered) throw new Error('--coverage-thresholds must be WEAK,COVERED with 0 <= WEAK <= COVERED <= 1')
+      coverageThresholds = { weak, covered }
+      coverageNotes.push('阈值由命令行给出（冻结值，未在本集合上拟合）：weak=' + weak + '，covered=' + covered + '。')
+    } else if (flags['coverage-calibrate']) {
+      const calibration = tasks.filter(t => t.split === 'calibration' && t.coverage?.rule).map(t => t.coverage!.rule!)
+      const fit = calibrateThresholds(calibration)
+      if (!fit) console.log('no answered coverage verdict on the calibration split: nothing to calibrate (run with --allow-jev N to fill the cache)')
+      else {
+        coverageThresholds = fit.thresholds
+        coverageNotes.push('阈值在 v1 calibration 划分上拟合（(b′) 的 ' + fit.claimedAnswered + ' 个已回答的声称覆盖需求，其中真覆盖 ' + fit.truePositives + ' 个）：误降级 ≤ 5% 的前提下去掉最多的错误声称 → weak=' + fit.thresholds.weak + '；precision ≥ 85% 的最低概率 → covered=' + fit.thresholds.covered + '。test 划分与其余数据没有参与拟合。')
+      }
+    }
+  }
+  const report = renderReport({ runId, tasks, variants, opts, jevRequests, jevRequestsTotal, generatedAt: new Date().toISOString(), ...coverageThresholds ? { coverageThresholds } : {}, coverageNotes })
   fs.writeFileSync(path.join(dir, 'pack-report.md'), report + '\n')
-  fs.writeFileSync(path.join(dir, 'pack-report.json'), JSON.stringify({ runId, opts, jevRequests, jevRequestsTotal, tasks }, null, 1) + '\n')
+  fs.writeFileSync(path.join(dir, 'pack-report.json'), JSON.stringify({ runId, opts, jevRequests, jevRequestsTotal, tasks, ...coverageThresholds ? { coverageThresholds } : {} }, null, 1) + '\n')
   console.log('wrote ' + path.join(dir, 'pack-report.md') + ' (Jev requests used: ' + jevRequests + ')')
   console.log(report.split('\n').slice(report.split('\n').findIndex(l => l.startsWith('## 2.')), report.split('\n').findIndex(l => l.startsWith('## 4.'))).join('\n'))
+  if (opts.coverage) console.log(report.split('\n').slice(report.split('\n').findIndex(l => l.startsWith('## 10.'))).join('\n'))
   return 0
 }
 

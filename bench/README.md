@@ -88,6 +88,17 @@ BOCHA_JEV_API_KEY=... pnpm run bench:eval-pack -- --allow-jev 40   # 缓存缺�
 
 全程离线：快照里的引擎结果代替 S2，快照里的页面和块代替 S5。对比 (a) 基线（融合前 8 个候选加其页面全文）、(a′) 截到同等大小的基线、(b) 管线 + 规则评分、(c) 管线 + Jev 评分。`--allow-jev N` 缺省为 0：此时只读 `bench/data/judge-cache/jev`（问题文本与 r1 相同才命中，缓存键与 r1 判定器一致），有缓存缺口的任务回退到规则评分并排除在 Jev 对照之外；N > 0 时最多发 N 个请求，优先补缺口最少的任务。其余参数：`--split`、`--tasks`、`--budget`、`--max-items`、`--min-grade`、`--max-per-url`、`--fetch-top-k`、`--blocks-per-need`、`--no-jev`。
 
+## 覆盖判定评测（M9）
+
+```bash
+# 在 v1 calibration 划分上拟合阈值，并在 test 划分上报告（缓存缺口按 --allow-jev N 补请求）
+BOCHA_JEV_API_KEY=... pnpm run bench:eval-pack -- --coverage --coverage-calibrate --allow-jev 100 --run-id pack-m9-v1
+# v2 留出集：只接受冻结阈值（取自上面报告），不得拟合
+BOCHA_JEV_API_KEY=... pnpm run bench:eval-pack -- --task-set v2 --coverage --coverage-thresholds 0.4,0.8 --allow-jev 100 --run-id pack-m9-v2
+```
+
+`--coverage` 在 (b′) 与 (d′) 的证据包上，对规则声称覆盖的每个需求问一道 `cover.sufficient` noul 题（shadow 模式：包不变，只记录原始概率），回答缓存在 `data/judge-cache/<provider>-cover/`，请求额度与 Jev 评分共用 `--allow-jev N`。报告第 10 节在给定阈值下读同一批概率，按 全部 / 划分 / 语言 对比“规则覆盖”和“+ 覆盖判定”：声称覆盖正确率、声称覆盖召回、需求命中（包内含金标，由构造不变）、无金标需求标缺口、误降级（真覆盖被判弱）、去掉的错误声称。`--coverage-calibrate` 只用 calibration 划分拟合（误降级 ≤ 5% 前提下去掉最多错误声称；precision ≥ 85% 的最低概率作为 covered 阈值），`--task-set v2` 下被拒绝。判定只对规则已声称覆盖的需求提问，所以它只能降级，不会新增覆盖。
+
 ## 礼貌与成本规则
 
 - **完全顺序执行**，不并发；同主机两次请求间隔至少 1.5 秒，且从上一次请求**结束**时计时。特例：`api.github.com` 6.5 秒（匿名搜索限额 10 次/分钟）、`export.arxiv.org` 3.1 秒、`html.duckduckgo.com` 3 秒。

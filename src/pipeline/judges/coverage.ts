@@ -14,6 +14,7 @@
  */
 
 import { builtinRubric, refOf, renderTemplate, type ResolvedRubric, type RubricRef } from '../rubrics.ts'
+import { BudgetExceededError, JudgeError } from './errors.ts'
 import { ModelClientBase, type ModelScorerOptions } from './model-scorer.ts'
 import { decodeAnswer, encodeQuestion, encodeRequest, usageOfSystemOne } from './protocols/systemone.ts'
 import { cut, estimatePlainTokens, squash } from './tokens.ts'
@@ -146,11 +147,34 @@ export class SystemOneCoverageJudge extends ModelClientBase implements CoverageJ
     return { probs, usage, notes }
   }
 
-  /** Send one chunk; returns the number of unanswered questions. */
-  private async run(state: string, chunk: Question[], ctx: ScoreContext, usage: ScoreUsage, probs: Map<string, number>): Promise<number> {
+  /** Send one chunk; splits it when the service reports the token budget exceeded. Returns the number of unanswered questions. */
+  private async run(state: string, chunk: Question[], ctx: ScoreContext, usage: ScoreUsage, probs: Map<string, number>, depth = 0): Promise<number> {
     const body: Record<string, unknown> = {}
     chunk.forEach((q, i) => { body['q' + i] = encodeQuestion('noul', this.instructionsFor(q.probe.need, q.candidate, q.probe.task ?? '')) })
-    const result = await this.http.post(encodeRequest(this.model, state, body, this.extraBody), ctx, { estimatedInputTokens: chunk.reduce((n, q) => n + q.tokens, 0), usageOf: usageOfSystemOne })
+    let result
+    try {
+      result = await this.http.post(encodeRequest(this.model, state, body, this.extraBody), ctx, { estimatedInputTokens: chunk.reduce((n, q) => n + q.tokens, 0), usageOf: usageOfSystemOne })
+    } catch (error) {
+      if (error instanceof JudgeError && error.status === 422 && /token_budget_exceeded/.test(error.message) && depth < 6) {
+        if (chunk.length > 1) {
+          const mid = Math.ceil(chunk.length / 2)
+          let missing = 0
+          for (const half of [chunk.slice(0, mid), chunk.slice(mid)]) {
+            try {
+              missing += await this.run(state, half, ctx, usage, probs, depth + 1)
+            } catch (inner) {
+              if (ctx.signal?.aborted || (inner instanceof JudgeError && inner.fatal) || inner instanceof BudgetExceededError) throw inner
+              missing += half.length
+            }
+          }
+          return missing
+        }
+        // One question alone is too long: halve its evidence once.
+        const only = chunk[0]!
+        if (only.candidate.length > 400) return this.run(state, [{ ...only, candidate: cut(only.candidate, Math.floor(only.candidate.length / 2)) }], ctx, usage, probs, depth + 1)
+      }
+      throw error
+    }
     usage.inputTokens += result.inputTokens
     usage.outputTokens += result.outputTokens
     if (result.estimated) usage.estimated = true

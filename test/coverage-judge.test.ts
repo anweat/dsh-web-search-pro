@@ -202,3 +202,18 @@ test('verdicts: raw probabilities rounded, bands from the thresholds; weak ones 
   assert.deepEqual(mixed.gaps.map(g => [g.needId, g.reason]), [['n2', 'budget'], ['n3', 'weak_support']])
   assert.deepEqual(mixed.uncertain, [])
 })
+
+test('a 422 token_budget_exceeded splits the request in halves (and halves a single long evidence once) instead of losing the needs', async () => {
+  const bodies: number[] = []
+  const fetchImpl = (async (_url: string, init: { body: string }) => {
+    const body = JSON.parse(init.body)
+    const keys = Object.keys(body.questions)
+    bodies.push(keys.length)
+    if (keys.length > 1 || body.questions.q0.instructions.length > 1500) return new Response(JSON.stringify({ error: 'token_budget_exceeded' }), { status: 422 })
+    return new Response(JSON.stringify({ answers: { q0: { noul: 0.8 } }, usage: { input_tokens: 10, output_tokens: 0 } }), { status: 200 })
+  }) as unknown as typeof fetch
+  const judge = createCoverageJudge(JEV, { apiKey: 'k', fetchImpl, sleep: async () => {} })
+  const out = await judge.judge({ goal: GOAL }, [item('n1', '一', 'a'.repeat(2000)), item('n2', '二', 'short'), item('n3', '三', 'short too')])
+  assert.deepEqual([...out.probs.keys()].sort(), ['n1', 'n2', 'n3'])
+  assert.ok(bodies.length > 3)
+})
