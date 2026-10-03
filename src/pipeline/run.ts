@@ -43,7 +43,8 @@ export interface ProviderCall {
 
 export type ProviderOutcome =
   | { state: 'ok'; sources: readonly ProviderSource[] }
-  | { state: 'empty' }
+  /** `detail` carries the provider's own explanation of an empty answer (e.g. a login hint), when it gave one. */
+  | { state: 'empty'; detail?: string }
   | { state: 'skipped'; reason: string }
   | { state: 'error'; message: string }
 
@@ -216,6 +217,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   const failures: string[] = []
   let cut = false
   let queries = 0
+  const emptyDetails = new Map<string, string>()
   const searchOne = async (id: string, compiled: CompiledQuery, sink: string[], take: () => boolean): Promise<ProviderOutput | undefined> => {
     const search = deps.searchProvider!
     if (!take()) return undefined
@@ -231,8 +233,12 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
         sink.push(id + ': ' + (error instanceof Error ? error.message : String(error)))
         return undefined
       }
-      if (outcome.state === 'ok' && outcome.sources.length) return { providerId: id, query, sources: outcome.sources }
-      if (outcome.state === 'empty' || outcome.state === 'ok') continue // a broader fallback query may still answer
+      if (outcome.state === 'ok' && outcome.sources.length) { emptyDetails.delete(id); return { providerId: id, query, sources: outcome.sources } }
+      if (outcome.state === 'empty' || outcome.state === 'ok') {
+        // Keep the provider's reason (login hint, selector hint) so an empty pack says why.
+        if (outcome.state === 'empty' && outcome.detail) emptyDetails.set(id, outcome.detail)
+        continue // a broader fallback query may still answer
+      }
       if (outcome.state === 'error') sink.push(id + ': ' + outcome.message)
       else notes.push('provider ' + id + ' skipped: ' + outcome.reason)
       return undefined
@@ -256,6 +262,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   const planned = firstRound.map(p => p.id)
   outputs.sort((a, b) => planned.indexOf(a.providerId) - planned.indexOf(b.providerId))
   if (failures.length) notes.push('provider failures: ' + failures.join('; '))
+  for (const [id, detail] of emptyDetails) notes.push('provider ' + id + ' returned no results: ' + detail.slice(0, 300))
   if (!outputs.length && failures.length && !cut && !deadlineSignal.aborted) throw new Error('all providers failed: ' + failures.join('; '))
   if (cut) notes.push('deadline reached while searching')
 

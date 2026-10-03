@@ -241,3 +241,12 @@ test('gapQueryText: the need text plus the task entities it does not mention, ca
   assert.equal(gapQueryText({ query: 'plain words only', constraints: [] }, { text: 'what is it' }), 'what is it')
   assert.ok(gapQueryText(task, { text: 'x'.repeat(500) }).length <= 200)
 })
+
+test('an empty provider answer keeps its own explanation (login hint) in the pack notes; generic empties add nothing', async () => {
+  const hint = '知乎 未取到结果：该平台需要浏览器登录态。'
+  const h = harness({ search: call => (call.id === 'zhihu' ? { state: 'empty', detail: hint } : { state: 'empty' }) })
+  const res = await runPipeline(TASK, h.deps, { engines: ['zhihu', 'ddg'], maxRounds: 1 })
+  assert.equal(res.pack.evidence.length, 0)
+  assert.ok(res.pack.notes.some(n => n.startsWith('provider zhihu returned no results: ') && n.includes('登录态')), JSON.stringify(res.pack.notes))
+  assert.ok(!res.pack.notes.some(n => n.startsWith('provider ddg returned no results')))
+})
