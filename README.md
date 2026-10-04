@@ -8,30 +8,35 @@
 
 | 插件发布通道 | DSH 基线 | 兼容承诺 |
 |---|---|---|
-| `0.1.11` 及更早的维护版本 | `dsh-v0.1.1-rc.2` | 旧基线；不与新插件混装 |
-| `0.1.15` | `dsh-v0.1.7-rc.2` + Browser `0.1.15` | 精确锁定该宿主版本；组合安装、真实 Web profile 与设置持久化已验证 |
-| `0.1.17` | `dsh-v0.1.7-rc.2` ~ `dsh-v0.2.0-rc.2` + Browser `0.1.17` | peer 收口为「实测过的两条线」（上界 `<0.2.1-0`）；在 `0.2.0-rc.2` 上完成 typecheck、构建、85 项测试与 headless 真实调用验证；新增 peer 双解析模式检查 |
+| `0.1.11` 及更早的维护版本 | `dsh-v0.1.1-rc.2` | 旧基线；不再维护，不与新插件混装 |
+| `0.1.15` | `dsh-v0.1.7-rc.2` + Browser `0.1.15` | 精确锁定该宿主版本；**仍停留在 DSH 0.1.x 宿主或 dsh-browser 0.1.x 的用户请使用这一版**（后续不再更新） |
+| `0.1.17` | `dsh-v0.1.7-rc.2` ~ `dsh-v0.2.0-rc.2` + Browser `0.1.17` | 过渡版本，已不再演进；新功能不会回到这条线 |
+| `0.2.0-rc.1`（预发布） | **只支持 `dsh-v0.2.0-rc.2` 这一条线**（peer `>=0.2.0-rc.2 <0.2.1-0`）+ 可选 `@anweat/dsh-browser ^0.2.0` | 第一个 0.2.0 线版本，**破坏性变更**（见 [CHANGELOG.md](./CHANGELOG.md)）；700 项单元测试，`pnpm run test:peers` 两种解析模式检查，真实 Host（DSH 0.2.0-rc.2）验收 |
 
-`0.1.17` 把 DSH 运行时依赖从精确锁定改为范围声明（`^0.1.7-rc.2 || >=0.2.0-rc.1 <0.2.1-0`），
-因此同一份包可装在 `0.1.7-rc.2` 与 `0.2.0-rc.2` 两代宿主上（两代之间的 `defineTool`、凭据引用、
-配置表单与客户端槽位接口在本插件用到的范围内保持兼容）；客户端配置仍走 `configForms` 和插件 bundle 的专属配置槽位。
-范围只声明**实测过的两条线**，既不写成 `>=0.1.7-rc.2 <0.3.0`，也不写成一路放行到 0.3.0 的 `^0.2.0-rc.1`：
+**支持范围**：DSH `>=0.2.0-rc.2 <0.2.1-0`，可选配套浏览器插件 `@anweat/dsh-browser ^0.2.0`（即 0.2.x，不含 0.3）。
 
-- 宿主的组装期校验用的是 `semver.satisfies(host, range, { includePrerelease: true })`，所以「单范围能不能过宿主」不是关键。
-  真正决定装机成败的是 npm/pnpm 的**默认** semver：预发布版本只有在某个比较符自带同号（同 major.minor.patch）预发布时才被判为满足。
-  于是 `>=0.1.7-rc.2 <0.2.1-0` 这种写法过得了宿主校验，却会让 `dsh plugin add` 报 ERESOLVE（上界 tuple 是 0.2.1，接不住 0.2.0-rc.2）；
-  而 `>=0.2.0-rc.1` 这个比较符是**承重**的，必须保留。与 `@anweat/dsh-browser` 必须声明同一套 0.2.x 策略，
-  否则两者互为 peer 时会出现 ERESOLVE。
-- `0.1.5 → 0.1.7` 曾一次性打断所有按 `0.1.5-alpha.1` 构建的插件。所以 `^0.2.0-rc.1`（等于说整个 0.2.x 都兼容）
-  是对没测过版本的承诺；收口到 `<0.2.1-0` 后，若 0.2.1 真出现破坏，会在**组装期**直接报
-  `is incompatible with dsh 0.2.1` 并点名，而不是拖到用户机器上变成运行期怪错。
-- 范围只表示「测过哪些」，不等于承诺不破坏；真正的防线是每换一个 DSH 版本重跑一遍这套验证。
-  `pnpm run test:peers`（已并入 `pnpm verify`）用两种解析模式逐个断言受管 peer，并自带 `--selftest` 已知行为自校验。
+**不再支持 DSH 0.1.x 宿主线，也不再支持旧的 dsh-browser 0.1.x 线；仍在这两条线上的用户请停留在 dsh-web-search-pro 0.1.15。**
+
+- DSH 0.1.x 宿主：peer 范围不再包含它，`dsh plugin add` 会因 peer 不满足而拒绝，或在组装期点名报 `incompatible`。本插件已去掉为旧宿主保留的兼容分支。
+- 旧 dsh-browser 0.1.x：浏览器是可选依赖，本插件仍会**识别**它但不会驱动它。服务对象没有版本字段，所以以形状判定：不带任何 0.2 才有的方法（`observe` / `listTargets` / `sessionState`）即视为旧线。检测到旧线时：
+  - `read.snapshot`、`read.fetch mode=playwright`、浏览器平台与 OpenCLI 平台返回 `CAPABILITY_UNAVAILABLE`：`dsh-browser 0.1.x is not supported by web-search-pro 0.2+; upgrade to @anweat/dsh-browser ^0.2.0`；
+  - `read.fetch mode=auto` 不再尝试浏览器渲染，静默跳过（全部后端失败时，错误说明里会写明原因）；
+  - `sources.status` 显示 `browser: legacy (unsupported)`；系统提示不加浏览器那一行；旧服务上的 `automationMode` 不参与写操作审批（按没有 Browser 处理，`standard` 下询问）；
+  - 其他一切（网页搜索、证据管线、非浏览器平台、缓存、历史）照常工作。
+
+**peer 范围的写法**与 `@anweat/dsh-browser 0.2.0` 完全一致：每个 `@deepseek-ai/dsh-*` peer 都是 `>=0.2.0-rc.2 <0.2.1-0`。
+
+- 宿主的组装期校验用的是 `semver.satisfies(host, range, { includePrerelease: true })`；真正决定装机成败的是 npm/pnpm 的**默认** semver：预发布版本只有在某个比较符自带同号（同 major.minor.patch）预发布时才被判为满足。`>=0.2.0-rc.2` 这个比较符自带 `0.2.0` 的预发布，是**承重**的，必须保留；写成 `>=0.1.7-rc.2 <0.2.1-0` 这类下界在别的版本线的范围会过宿主校验、却让 `dsh plugin add` 报 ERESOLVE。与 `@anweat/dsh-browser` 必须声明同一套策略，否则两者互为 peer 时会出现 ERESOLVE。
+- 上界是 `<0.2.1-0` 而不是 `<0.2.1`：后者放行 `0.2.1-alpha.1` 这类 0.2.1 的预发布。收口后，若 0.2.1 真出现破坏，会在**组装期**直接报 `is incompatible with dsh 0.2.1` 并点名，而不是拖到用户机器上变成运行期怪错（`0.1.5 → 0.1.7` 曾一次性打断所有按 `0.1.5-alpha.1` 构建的插件）。
+- 范围只表示「测过哪些」，不等于承诺不破坏；真正的防线是每换一个 DSH 版本重跑一遍这套验证。`pnpm run test:peers`（已并入 `pnpm verify`）用两种解析模式逐个断言受管 peer：`0.2.0-rc.2` 必须通过，`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.1-alpha.1` 必须被拒绝；并自带 `--selftest` 已知行为自校验。
 
 ## 安装
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.1.17
+# 默认安装（面向 dsh-v0.2.0-rc.2 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
+dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.0-rc.1
+# 不需要浏览器能力时，只装本插件即可：
+dsh plugin --profile web add dsh-web-search-pro@0.2.0-rc.1
 # 或本地目录 / tarball：
 dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
@@ -40,24 +45,26 @@ dsh --profile web
 
 > 两个插件都必须是 profile 的直接依赖：DSH 只激活直接依赖的 bundle layer，且标准 profile 可能设置 `autoInstallPeers: false`。不要只安装 Web Search Pro 后依赖 peer 自动补齐。
 > pnpm 11 若拦截 Browser 的 OpenCLI 依赖安装脚本，会要求在 profile 的 `pnpm-workspace.yaml` 中明确决定 `allowBuilds: { '@jackwener/opencli': false }`（或在确实需要安装期下载 adapter 时自行审核后设为 `true`），再重试安装；隔离 profile 中禁用脚本后，已发布 Browser 的 OpenCLI 入口仍可运行。
-> 本版支持 `dsh-v0.1.7-rc.2` ~ `dsh-v0.2.0-rc.2` 与 Browser `0.1.17`，不能混用仍声明旧 DSH peer 的 Browser `0.1.15-alpha.2`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
+> 本版只支持 `dsh-v0.2.0-rc.2` 与 Browser `^0.2.0`，宿主或浏览器插件仍在 0.1.x 线上的，请安装 `dsh-web-search-pro@0.1.15`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
 > 里对齐版本后重装即可。
 
 ## 从旧版本升级
 
-升级 Web Search Pro 时应同时升级浏览器插件；两者都需要作为 profile 的直接依赖。
+先确认宿主是 `dsh-v0.2.0-rc.2`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.0`；两者都需要作为 profile 的直接依赖。
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.1.17
+dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.0-rc.1
 ```
 
-> **破坏性变更（工具面）**：旧的 `web_search_pro`、`web_fetch_pro` 等 11 个工具名不再注册，也没有兼容包装。旧会话里对它们的调用会失败；把调用改成对应动作即可，对照表见[旧工具到新动作](#旧工具到新动作)。模型在 `web_call` 里写旧工具名会得到新动作名和翻译后的参数，`web_index()` 根目录也列出同一张对照。已存储的数据（历史、页面、规则、证据、账本）与 `ctx.web` provider 不受影响。
+> **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级，停留在 `dsh-web-search-pro@0.1.15`。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回上面的 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。
+
+> **破坏性变更（工具面）**：旧的 `web_search_pro`、`web_fetch_pro` 等 11 个工具名不再注册，也没有兼容包装。旧会话里对它们的调用会失败；把调用改成对应动作即可，对照表见[旧工具到新动作](#旧工具到新动作)。模型在 `web_call` 里写旧工具名会得到新动作名和翻译后的参数，`web_index()` 根目录也列出同一张对照。已存储的数据（历史、页面、规则、证据、账本）与 `ctx.web` provider 不受影响。其他不兼容变化与新功能见 [CHANGELOG.md](./CHANGELOG.md)。
 
 升级完成后需要**完整停止并重新启动 Web profile**；仅刷新网页不会重新扫描插件的 `client.js`。随后依次检查：
 
 1. `browser_call({action:"runtime.status"})`：确认 OpenCLI、`playwright | patchright` 运行时、`automationMode` 与 `usagePolicy` 符合预期。
-2. `web_call({action:"sources.status"})`：确认搜索、CLI、Agent Reach 与浏览器后端是否 ready。
+2. `web_call({action:"sources.status"})`：确认搜索、CLI、Agent Reach 与浏览器后端是否 ready（浏览器应显示 `ready`，不是 `legacy (unsupported)`）。
 3. 打开 `插件 → 已安装` 中两个 bundle 各自的详情页，确认配置表单都已加载；浏览器表单负责自由度、运行时、OpenCLI 与调用缓冲。
 
 > `automationMode` 和防止过度调用的 `usagePolicy` 都属于 dsh-browser，升级不会自动改写现有配置。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile，并且仍受并发、突发、页数/深度和 429/503 退避保护。
@@ -309,7 +316,7 @@ evidence:
 
 ## 浏览器脚本与自动化分层
 
-`dsh-browser >= 0.1.8` 提供三类脚本入口：
+`@anweat/dsh-browser ^0.2.0` 提供三类脚本入口：
 
 1. **内置只读脚本**：`article-clean`、`links`、`jsonld`、`forms`，适合稳定抽取；先用 `script.catalog`（`browser_call`）查看。
 2. **Recipe**：最多 25 步的结构化 Playwright 操作，支持 wait/click/fill/type/press/select/check/hover/scroll/extract/assert/screenshot；交互步骤由自动化模式决定审批。
