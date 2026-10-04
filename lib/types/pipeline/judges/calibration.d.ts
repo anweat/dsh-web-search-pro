@@ -3,9 +3,9 @@
  * different models are never mixed without calibration).
  * @module web-search-pro/pipeline/judges/calibration
  */
+import { calibrationProblems } from './calibration-spec.ts';
 import type { Calibration } from './types.ts';
-/** Problems of a calibration definition; empty = valid. */
-export declare function calibrationProblems(c: unknown): string[];
+export { calibrationProblems };
 /** Raw score -> grade 0..3 (linear between points, constant outside). Assumes a valid calibration. */
 export declare function applyCalibration(c: Calibration, raw: number): number;
 /** `version#hash`: what results and cache keys record (a changed point changes the hash). */

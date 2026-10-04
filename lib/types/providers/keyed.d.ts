@@ -21,9 +21,7 @@ import type { CompiledQuery } from '../pipeline/compile.ts';
 import type { TaskSpec } from '../pipeline/types.ts';
 import { type ProviderResponse } from './http.ts';
 import type { ProviderAdapter, ProviderDescriptor } from './registry.ts';
-/** Default environment variable names of each keyed source's API key, first one preferred (route id -> names). */
-export declare const KEYED_SOURCE_ENVS: Readonly<Record<string, readonly string[]>>;
-export declare const KEYED_SOURCE_IDS: readonly string[];
+export { KEYED_SOURCE_ENVS, KEYED_SOURCE_IDS } from './keyed-meta.ts';
 export declare const KEYED_TIMEOUT_MS = 30000;
 export declare const SNIPPET_CHARS = 1000;
 /** Words that say "the account has no credit / quota / balance" (as opposed to "slow down"). */

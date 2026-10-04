@@ -17,51 +17,9 @@
  * Online models never rewrite rubrics: they only change through the settings.
  * @module web-search-pro/pipeline/rubrics
  */
-/** Variables a template may use; anything else rejects the rubric. */
-export declare const RUBRIC_VARIABLES: readonly ["task", "need", "constraint", "candidate"];
-export type RubricVariable = typeof RUBRIC_VARIABLES[number];
-export type RubricKind = 'noul' | 'score' | 'choice';
-export declare const RUBRIC_LIMITS: {
-    readonly versionPattern: RegExp;
-    readonly instructionsChars: 2000;
-    readonly criteriaMin: 2;
-    readonly criteriaMax: 10;
-    readonly criterionChars: 200;
-    readonly stateChars: readonly [20, 2000];
-    readonly candidateChars: readonly [100, 8000];
-};
-export interface RubricDef {
-    /** Stable id without the version, e.g. `score.support`. */
-    id: string;
-    version: string;
-    lang: 'zh';
-    kind: RubricKind;
-    description: string;
-    /** Template; `{candidate}` is bound per item. */
-    instructions: string;
-    /** score / noul: template of the shared state (billed again inside every question). */
-    state?: string;
-    /** score: ordered level descriptions, lowest first (index = grade). */
-    criteria?: readonly string[];
-    /** choice: label -> description. */
-    options?: Readonly<Record<string, string>>;
-    /** The task description inside the shared state / `{task}` is cut to this many characters. */
-    maxStateChars: number;
-    /** The candidate (heading + block) is cut to this many characters. */
-    maxCandidateChars: number;
-    /** Variables this rubric's template may use (a subset of the whitelist). */
-    allowed: readonly RubricVariable[];
-    /** Variables the template must contain. */
-    required: readonly RubricVariable[];
-}
-/** What a user may set per rubric. */
-export interface RubricOverride {
-    version: string;
-    instructions?: string;
-    criteria?: string[];
-    maxStateChars?: number;
-    maxCandidateChars?: number;
-}
+import { BUILTIN_RUBRIC_IDS, RUBRIC_LIMITS, RUBRIC_VARIABLES, overrideProblems, rubricProblems, variablesOf, type RubricDef, type RubricKind, type RubricOverride, type RubricVariable } from './rubrics-spec.ts';
+export { BUILTIN_RUBRIC_IDS, RUBRIC_LIMITS, RUBRIC_VARIABLES, overrideProblems, rubricProblems, variablesOf };
+export type { RubricDef, RubricKind, RubricOverride, RubricVariable };
 export interface ResolvedRubric extends RubricDef {
     /** The content differs from the built-in (new version or changed text). */
     overridden: boolean;
@@ -79,20 +37,10 @@ export interface RubricRef {
     key: string;
 }
 export declare const refOf: (r: ResolvedRubric) => RubricRef;
-export declare const BUILTIN_RUBRIC_IDS: readonly string[];
-export declare const variablesOf: (template: string) => string[];
 /** Fill the variables in ONE pass (inserted text is never rescanned); variables not in `vars` stay open. */
 export declare function renderTemplate(template: string, vars: Partial<Record<RubricVariable, string>>): string;
 /** The built-in rubric as shipped. */
 export declare function builtinRubric(id: string): ResolvedRubric;
-/** Problems of a candidate rubric content; empty = valid. `base` supplies the kind and the allowed variables. */
-export declare function rubricProblems(base: RubricDef, fields: {
-    version?: unknown;
-    instructions?: unknown;
-    criteria?: unknown;
-    maxStateChars?: unknown;
-    maxCandidateChars?: unknown;
-}): string[];
 /** Build a rubric from a built-in plus new content; throws nothing, returns the problems instead. */
 export declare function buildRubric(id: string, fields: {
     version: string;
