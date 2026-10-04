@@ -133,6 +133,7 @@ export const OPENALEX_DESCRIPTOR: ProviderDescriptor = {
   requirements: [{ kind: 'key', id: 'openalex-key', env: [OPENALEX_KEY_ENV], optional: true, note: 'optional: a free key raises the daily budget tenfold' }],
   supportedFilters: ['time_window'],
   costModel: { kind: 'free', unit: 'request', note: 'keyless budget is small (a search call costs $0.001 against it); a free key gives ten times more; requests counted in the usage ledger' },
+  costTier: 'anonymous',
   priority: 80,
   verification: { live: true, note: 'live 2026-10-02: 2 requests (plain and from_publication_date), fixture test/fixtures/openalex-works.json' },
 }

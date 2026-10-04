@@ -119,6 +119,7 @@ export const SEARXNG_DESCRIPTOR: ProviderDescriptor = {
   requirements: [{ kind: 'service', id: 'searxng-instance', note: 'set searxngUrl to a self-hosted instance with the json format enabled; no public instance is built in' }],
   supportedFilters: [],
   costModel: { kind: 'free', note: 'self-hosted' },
+  costTier: 'anonymous',
   priority: 90,
   verification: { live: false, note: 'contract from the SearXNG Search API documentation; needs a user-run instance, never run live' },
 }

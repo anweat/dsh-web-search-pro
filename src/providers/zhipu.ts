@@ -120,7 +120,8 @@ export const ZHIPU_DESCRIPTOR = keyedDescriptor({
   regions: ['cn'],
   supportedFilters: ['site', 'time_window'],
   priority: 30,
-  costNote: 'metered per request (search_std about 0.01 CNY per the vendor page); the plugin counts requests (provider zhipu), the price is unknown to it',
+  costTier: 'paid',
+  costNote: 'metered per request, no free allowance stated (search_std 0.01 CNY, search_pro 0.03 CNY per https://docs.bigmodel.cn/cn/guide/tools/web-search, read 2026-10-04); the plugin counts requests (provider zhipu), the price is unknown to it',
   verificationNote: 'contract from the official guide, API reference and error-code page; never called live (no key); raw search_result only',
 })
 

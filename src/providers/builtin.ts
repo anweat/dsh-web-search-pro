@@ -60,7 +60,7 @@ export function builtinAdapters(): ProviderAdapter[] {
     adapter(descriptor({
       id: 'builtin:seam', label: 'DeepSeek 原生搜索 (ctx.web)', taskProfiles: ['general'],
       requirements: [{ kind: 'service', id: 'ctx.web', note: 'the host web capability' }],
-      costModel: { kind: 'unknown', note: 'decided by the host provider behind ctx.web' },
+      costModel: { kind: 'unknown', note: 'decided by the host provider behind ctx.web' }, costTier: 'anonymous',
     }), seamEngine, (env, ok) => ({ installation: 'not_required', credential: 'not_required', ...!ok ? { diagnosticCode: 'service_missing' } : {} })),
 
     adapter(descriptor({
@@ -68,13 +68,15 @@ export function builtinAdapters(): ProviderAdapter[] {
       languages: ['en'], sourceFamily: 'exa', priority: 10,
       requirements: [key('exa-key', ['EXA_API_KEY']), { kind: 'cli', id: 'mcporter', optional: true, note: 'MCP fallback without a key (no advanced filters)' }],
       supportedFilters: ['site', 'exclude_site', 'time_window', 'category'],
-      costModel: { kind: 'metered', unit: 'request', note: 'Exa API plan' },
+      costModel: { kind: 'metered', unit: 'request', note: 'keyless MCP route (mcporter): anonymous, rate limited; API key route: $10 of free credits every month (https://exa.ai/pricing, read 2026-10-04)' },
+      costTier: 'anonymous',
     }), exaEngine, (env) => {
       const hasKey = (env.deps.exaApiKey?.length ?? 0) > 0
       const mcporter = env.cli?.get('mcporter')
+      // The route that would run decides the tier: the API key (free monthly credits) or the keyless MCP route through mcporter (anonymous).
       return hasKey
-        ? { installation: 'not_required', credential: 'configured' }
-        : { credential: 'missing', ...mcporter !== undefined ? { installation: mcporter ? 'detected' as const : 'missing' as const } : {}, ...mcporter === false && env.deps.enableCli ? { reason: 'mcporter executable not found', diagnosticCode: 'cli_missing' } : {} }
+        ? { installation: 'not_required', credential: 'configured', costTier: 'free-quota' }
+        : { credential: 'missing', costTier: 'anonymous', ...env.deps.enableCli && mcporter !== false ? { keyless: true } : {}, ...mcporter !== undefined ? { installation: mcporter ? 'detected' as const : 'missing' as const } : {}, ...mcporter === false && env.deps.enableCli ? { reason: 'mcporter executable not found', diagnosticCode: 'cli_missing' } : {} }
     }),
 
     adapter(descriptor({ id: 'builtin:ddg', label: 'DuckDuckGo', taskProfiles: [...WEB_PROFILES, 'academic'], supportedFilters: ['site', 'exclude_site', 'exclude_term'] }),
@@ -85,7 +87,7 @@ export function builtinAdapters(): ProviderAdapter[] {
 
     adapter(descriptor({
       id: 'builtin:jina', label: 'Jina AI', taskProfiles: ['general'],
-      requirements: [key('jina-key', ['JINA_API_KEY'])], costModel: { kind: 'unknown', note: 'Jina API plan' },
+      requirements: [key('jina-key', ['JINA_API_KEY'])], costModel: { kind: 'unknown', note: 'search needs a key; every new key comes with 10M free tokens, one time, a search costs at least 10,000 (https://jina.ai/reader/, read 2026-10-04)' }, costTier: 'free-quota',
     }), jinaSearchEngine, (env) => ({ installation: 'not_required', credential: (env.deps.jinaApiKey?.length ?? 0) > 0 ? 'configured' : 'missing' })),
 
     adapter(descriptor({

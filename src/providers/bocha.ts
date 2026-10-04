@@ -223,6 +223,7 @@ export const BOCHA_DESCRIPTOR: ProviderDescriptor = {
   requirements: [{ kind: 'key', id: 'bocha-key', env: [BOCHA_KEY_ENV, BOCHA_FALLBACK_KEY_ENV], note: 'a search key; the Jev key of the same account is the documented fallback' }],
   supportedFilters: ['site', 'exclude_site', 'time_window'],
   costModel: { kind: 'metered', unit: 'request', note: 'billed per request from a Bocha balance or package; the plugin counts requests (provider bocha-search), the price is unknown to it' },
+  costTier: 'paid',
   priority: 10,
   verification: { live: false, note: 'success response and include/exclude/date-range fields not yet recorded live: the only live call (2026-10-02, a Jev key) answered 403 no balance or package' },
 }

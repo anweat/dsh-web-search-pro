@@ -19,7 +19,7 @@ const PROVIDER_REPORT_SCHEMA: OutputNode = {
   properties: {
     id: { type: 'string', required: true }, route: { type: 'string' }, aliases: { type: 'array', items: { type: 'string' } }, label: { type: 'string', required: true }, kind: { type: 'string' }, domains: { type: 'array', items: { type: 'string' } }, needsBrowser: { type: 'string' },
     operations: { type: 'array', items: { type: 'string' } }, taskProfiles: { type: 'array', items: { type: 'string' } }, languages: { type: 'array', items: { type: 'string' } },
-    regions: { type: 'array', items: { type: 'string' } }, resultKinds: { type: 'array', items: { type: 'string' } }, sourceFamily: { type: 'string' },
+    regions: { type: 'array', items: { type: 'string' } }, resultKinds: { type: 'array', items: { type: 'string' } }, sourceFamily: { type: 'string' }, costTier: { type: 'string' },
     requirements: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, id: { type: 'string', required: true }, env: { type: 'array', items: { type: 'string' } }, optional: { type: 'boolean' }, note: { type: 'string' } } } },
     supportedFilters: { type: 'array', items: { type: 'string' } },
     costModel: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, unit: { type: 'string' }, note: { type: 'string' } } },
@@ -139,7 +139,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       for (const p of v.providers ?? []) {
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health].filter(Boolean).join(' ')
-        lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
+        lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
       }
       lines.push(...(v.notes ?? []).map(n => '  ⚠ ' + n))
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))

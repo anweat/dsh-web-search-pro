@@ -86,7 +86,7 @@ const BROWSER_REQ: Requirement = { kind: 'browser', id: 'dsh-browser', note: 'lo
 function opencliPlatform(id: string, label: string, over: Partial<ProviderDescriptor>): ProviderAdapter {
   return platform(descriptor({
     id: 'platform:' + id, aliases: [id], label, kind: 'platform', needsBrowser: 'opencli', taskProfiles: ['experience'], resultKinds: ['social'],
-    requirements: [BROWSER_REQ], costModel: { kind: 'free', note: 'uses your logged-in session' },
+    requirements: [BROWSER_REQ], costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
     verification: { live: false, note: 'needs a logged-in browser session; not verified live' },
     ...over,
   }), deps => opencliEngine(id, deps), browserDims(id, 'opencli', opencliSwitch))
@@ -95,7 +95,7 @@ function opencliPlatform(id: string, label: string, over: Partial<ProviderDescri
 function browserPlatform(id: string, label: string, over: Partial<ProviderDescriptor>): ProviderAdapter {
   return platform(descriptor({
     id: 'platform:' + id, aliases: [id], label, kind: 'platform', needsBrowser: 'searchResults', taskProfiles: ['experience'], languages: ['zh'], regions: ['cn'],
-    resultKinds: ['forum'], requirements: [BROWSER_REQ], costModel: { kind: 'free', note: 'reads the rendered search page in your logged-in browser' },
+    resultKinds: ['forum'], requirements: [BROWSER_REQ], costModel: { kind: 'free', note: 'reads the rendered search page in your logged-in browser' }, costTier: 'free-quota',
     verification: { live: false, note: 'best-effort page selectors, need a login state; not verified live' },
     ...over,
   }), deps => playwrightPlatformEngine(id, deps), browserDims(id, 'searchResults'))
@@ -109,7 +109,7 @@ const twitterTokensSet = (): boolean => !!process.env.TWITTER_AUTH_TOKEN && !!pr
 export const platformAdapters: readonly ProviderAdapter[] = [
   platform(descriptor({
     id: 'platform:github-code', aliases: ['github-code'], label: 'GitHub 代码', kind: 'platform', domains: ['github.com'], taskProfiles: ['docs_code'], resultKinds: ['code'], sourceFamily: 'github',
-    requirements: [GITHUB_TOKEN_REQ(false, 'code search requires an authenticated request')],
+    requirements: [GITHUB_TOKEN_REQ(false, 'code search requires an authenticated request')], costTier: 'free-quota',
   }), githubCodeEngine, (env, ok) => ({ installation: 'not_required', credential: (env.deps.githubToken?.length ?? 0) > 0 || ok ? 'configured' : 'missing', ...ok ? {} : { reason: 'GitHub code search requires authentication: set $GITHUB_TOKEN (or config githubToken)', diagnosticCode: 'key_missing' } })),
 
   platform(descriptor({
@@ -128,7 +128,7 @@ export const platformAdapters: readonly ProviderAdapter[] = [
       { kind: 'key', id: 'twitter-auth-token', env: ['TWITTER_AUTH_TOKEN'], optional: true, note: 'twitter-cli needs this and TWITTER_CT0' },
       { kind: 'key', id: 'twitter-ct0', env: ['TWITTER_CT0'], optional: true, note: 'twitter-cli needs this and TWITTER_AUTH_TOKEN' },
     ],
-    costModel: { kind: 'free', note: 'uses your logged-in session' },
+    costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
     verification: { live: false, note: 'needs a logged-in session or twitter-cli tokens; not verified live' },
   }), deps => chainEngine('twitter', 'Twitter / X', [opencliEngine('twitter', deps), agentReachEngine('twitter', deps)]), (env, available) => {
     const gap = browserGap(env.deps.browser, 'opencli', 'platform twitter')

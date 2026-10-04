@@ -141,6 +141,7 @@ export const STACKEXCHANGE_DESCRIPTOR: ProviderDescriptor = {
   requirements: [],
   supportedFilters: ['time_window'],
   costModel: { kind: 'free', note: 'anonymous API with a small daily quota per IP; requests counted in the usage ledger' },
+  costTier: 'anonymous',
   priority: 80,
   verification: { live: true, note: 'live 2026-10-02: 2 requests (plain and fromdate; quota_max 300 anonymous), fixture test/fixtures/stackexchange-search.json' },
 }

@@ -15,7 +15,7 @@ import {
 } from './engines.ts'
 import { customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
 import { SourceUnavailableError } from './providers/unavailable.ts'
-import { defaultProviderRegistry, routeIdOf, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
+import { defaultProviderRegistry, costTierOf, routeIdOf, type CostTier, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
 import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
 import { SEMANTICSCHOLAR_KEY_ENV } from './providers/semanticscholar.ts'
@@ -102,6 +102,8 @@ export interface ProviderReport {
   requirements: (Omit<ProviderDescriptor['requirements'][number], 'env'> & { env?: string[] })[]
   supportedFilters: string[]
   costModel: ProviderDescriptor['costModel']
+  /** What it costs the user: `anonymous`, `free-quota` or `paid`; for a provider with two routes (Exa) the tier of the route that would run now. */
+  costTier: CostTier
   /** Not verified against the live service (descriptor.verification). */
   unverified?: boolean
   readiness: Readiness & { lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
@@ -299,8 +301,12 @@ export class SearchRouter {
     for (const d of await this.backends.diagnosticsAsync()) {
       if (!wanted.has(d.id)) continue
       const reason = d.state === 'cooldown' ? d.lastError : d.reason
-      const credential = this.readiness.get(d.id)?.credential
-      byId.set(d.id, { state: d.state, ...reason ? { reason } : {}, ...credential ? { credential } : {} })
+      const local = this.readiness.get(d.id)
+      const adapter = this.registry.resolve(d.id)
+      byId.set(d.id, {
+        state: d.state, ...reason ? { reason } : {}, ...local?.credential ? { credential: local.credential } : {},
+        ...adapter ? { costTier: local?.costTier ?? costTierOf(adapter.descriptor) } : {}, ...local?.keyless ? { keyless: true } : {},
+      })
     }
     const out = new Map<string, ProviderStatus>()
     for (const [id, r] of route) { const status = byId.get(r); if (status) out.set(id, status) }
@@ -516,7 +522,7 @@ export class SearchRouter {
         id: d.id, route, aliases: [...d.aliases], label: d.label, kind: d.kind ?? 'web', ...d.domains?.length ? { domains: [...d.domains] } : {}, ...d.needsBrowser ? { needsBrowser: d.needsBrowser } : {}, operations: [...d.operations], taskProfiles: [...d.taskProfiles],
         languages: [...d.languages], regions: [...d.regions], resultKinds: [...d.resultKinds],
         ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
-        requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel },
+        requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel }, costTier: local.costTier ?? costTierOf(d),
         ...d.verification?.live ? {} : { unverified: true },
         readiness: {
           available,

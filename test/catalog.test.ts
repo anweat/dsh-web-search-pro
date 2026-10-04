@@ -177,7 +177,9 @@ test('recommend: Chinese and English tasks get different sources', () => {
   assert.equal(zh.language, 'zh')
   assert.equal(en.language, 'en')
   const ids = (r: typeof zh): string[] => r.picks.map(p => p.id)
-  assert.ok(ids(zh).includes('bocha'), 'zh: ' + ids(zh))
+  // Bocha is paid: offered as an upgrade only after the free sources, but a configured key makes it a ready pick.
+  assert.ok(!ids(zh).includes('bocha') || ids(zh).indexOf('bocha') === ids(zh).length - 1, 'a paid source comes last among sources to set up: ' + ids(zh))
+  assert.ok(ids(recommendSources({ ...ZH, profile: 'general' }, ctx({ providers: providersOf({ bocha: { state: 'ready', credential: 'configured' } }) }))).includes('bocha'), 'zh: a configured Bocha is picked')
   assert.ok(!ids(zh).includes('exa'), 'an English-only web engine is not suggested for a Chinese task')
   assert.ok(ids(en).includes('exa') || ids(en).includes('ddg'), 'en: ' + ids(en))
   assert.ok(!ids(en).includes('bocha'), 'a Chinese-only web engine is not suggested for an English task')

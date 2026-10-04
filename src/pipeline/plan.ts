@@ -9,7 +9,7 @@
 import { compileQuery, type CompiledQuery } from './compile.ts'
 import { detectLang } from './align.ts'
 import { domainOf, hostMatches } from './gate.ts'
-import { routeIdOf, type CredentialState, type ProviderDescriptor } from '../providers/registry.ts'
+import { costTierOf, routeIdOf, type CostTier, type CredentialState, type ProviderDescriptor } from '../providers/registry.ts'
 import type { Profile, TaskSpec } from './types.ts'
 
 /** Provider ids per profile (`general` uses the configured `engines`). */
@@ -48,6 +48,10 @@ export interface ProviderStatus {
   reason?: string
   /** Local credential dimension from the registry probe; `missing` keeps a provider out of automatic promotion (it still runs when asked for). */
   credential?: CredentialState
+  /** Tier of the route that would run now (Exa without a key: `anonymous`); absent = the descriptor's. */
+  costTier?: CostTier
+  /** The provider can run through a route that needs no credential (Exa over MCP): promotable although `credential` is `missing`. */
+  keyless?: boolean
 }
 
 export interface PlannedProvider { id: string; compiled: CompiledQuery }

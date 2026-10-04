@@ -12,10 +12,13 @@ export const CATALOG_VERSION = 1
 export const SOURCE_KINDS = ['api', 'cli', 'mcp', 'browser'] as const
 export const SOURCE_AUTH = ['anonymous', 'key', 'login'] as const
 export const SOURCE_OPERATIONS = ['search', 'read', 'fetch', 'transcript', 'comments', 'extract', 'answer', 'trending'] as const
+/** What using the source costs: no key (`anonymous`), a key / account / login with a free allowance (`free-quota`), billed per use (`paid`). Same words as the provider registry. */
+export const COST_TIERS = ['anonymous', 'free-quota', 'paid'] as const
 export const VERIFICATION_STATUSES = ['verified', 'unverified'] as const
 
 export type SourceKind = typeof SOURCE_KINDS[number]
 export type SourceAuth = typeof SOURCE_AUTH[number]
+export type CostTier = typeof COST_TIERS[number]
 export type SourceOperation = typeof SOURCE_OPERATIONS[number]
 
 export interface CatalogRequires {
@@ -53,6 +56,8 @@ export interface CatalogEntry {
   /** What it returns: web, code, paper, video, forum, qa, reference, social, listing, audio, files. */
   resultKinds?: string[]
   auth: SourceAuth
+  /** Cost tier of the route the plugin would run (Exa: its keyless MCP route); the `cost` note cites the pricing page behind a `free-quota` / `paid` verdict. */
+  costTier: CostTier
   /** Environment variables / credentials refs of the key (or login session). Names this plugin reads, or plans to read once an adapter exists. */
   keyEnv?: string[]
   requires?: CatalogRequires
@@ -86,7 +91,7 @@ export interface SourceCatalog {
   entries: CatalogEntry[]
 }
 
-const ENTRY_KEYS = new Set<string>(['id', 'label', 'kind', 'operations', 'languages', 'regions', 'profiles', 'resultKinds', 'auth', 'keyEnv', 'requires', 'provider', 'platform', 'invoke', 'rank', 'install', 'license', 'cost', 'sourceFamily', 'url', 'verification', 'recommendedFor', 'notFor'])
+const ENTRY_KEYS = new Set<string>(['id', 'label', 'kind', 'operations', 'languages', 'regions', 'profiles', 'resultKinds', 'auth', 'costTier', 'keyEnv', 'requires', 'provider', 'platform', 'invoke', 'rank', 'install', 'license', 'cost', 'sourceFamily', 'url', 'verification', 'recommendedFor', 'notFor'])
 const REQUIRES_KEYS = new Set<string>(['cli', 'browser', 'service', 'config'])
 const VERIFICATION_KEYS = new Set<string>(['status', 'date', 'version', 'note'])
 const TOP_KEYS = new Set<string>(['$schema', 'version', 'updated', 'description', 'entries'])
@@ -126,6 +131,7 @@ function checkEntry(entry: unknown, index: number, errors: string[]): void {
   if (!isString(entry.label, MAX.label)) errors.push(p('label') + ' must be a short string')
   if (!(SOURCE_KINDS as readonly unknown[]).includes(entry.kind)) errors.push(p('kind') + ' must be one of ' + SOURCE_KINDS.join('|'))
   if (!(SOURCE_AUTH as readonly unknown[]).includes(entry.auth)) errors.push(p('auth') + ' must be one of ' + SOURCE_AUTH.join('|'))
+  if (!(COST_TIERS as readonly unknown[]).includes(entry.costTier)) errors.push(p('costTier') + ' must be one of ' + COST_TIERS.join('|'))
   stringList(entry.operations, p('operations'), errors, { allowed: new Set(SOURCE_OPERATIONS), min: 1 })
   stringList(entry.languages, p('languages'), errors, { allowed: LANGUAGES, min: 1 })
   stringList(entry.regions, p('regions'), errors, { min: 1 })

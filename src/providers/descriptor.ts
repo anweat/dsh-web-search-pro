@@ -20,6 +20,7 @@ export function descriptor(d: Partial<ProviderDescriptor> & Pick<ProviderDescrip
     requirements: [],
     supportedFilters: [],
     costModel: FREE,
+    costTier: 'anonymous',
     verification: { live: true, note: 'shipped before the registry; exercised by the plugin since 0.1' },
     ...d,
   }

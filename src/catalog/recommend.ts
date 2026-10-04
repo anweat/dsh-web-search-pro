@@ -9,7 +9,7 @@
 
 import { inferProfile, taskLanguage, type ProviderStatus } from '../pipeline/plan.ts'
 import { PROFILES, type Profile } from '../pipeline/types.ts'
-import type { CatalogEntry, SourceCatalog } from './schema.ts'
+import type { CatalogEntry, CostTier, SourceCatalog } from './schema.ts'
 
 /** Most suggestions one call returns. */
 export const MAX_RECOMMENDATIONS = 3
@@ -48,6 +48,8 @@ export interface Suggestion {
   id: string
   label: string
   kind: CatalogEntry['kind']
+  /** `anonymous` / `free-quota` / `paid` (the route that would run: Exa without a key is `anonymous`). */
+  costTier: CostTier
   status: SuggestionStatus
   /** True only for `ready` and `limited`: something this plugin can run right now. */
   executable: boolean
@@ -75,6 +77,7 @@ export interface Recommendation {
 
 interface Assessed {
   entry: CatalogEntry
+  costTier: CostTier
   status: SuggestionStatus
   missing: string[]
   use: string
@@ -99,12 +102,17 @@ function missingOf(entry: CatalogEntry, ctx: RecommendContext): string[] {
 }
 
 function assess(entry: CatalogEntry, ctx: RecommendContext): Assessed {
+  const a = assessReadiness(entry, ctx)
+  return { ...a, costTier: ctx.providers.get(entry.provider ?? '')?.costTier ?? entry.costTier }
+}
+
+function assessReadiness(entry: CatalogEntry, ctx: RecommendContext): Omit<Assessed, 'costTier'> {
   if (entry.provider) {
     const st = ctx.providers.get(entry.provider)
     if (st) {
       const use = entry.platform ? 'search.run platform=' + entry.platform : 'search.run engines=' + entry.provider
       if (st.state === 'ready') {
-        const missing = st.credential === 'missing' ? missingOf(entry, ctx).filter(m => m.startsWith('key')) : []
+        const missing = st.credential === 'missing' && !st.keyless ? missingOf(entry, ctx).filter(m => m.startsWith('key')) : []
         // A login session cannot be checked from here: runnable, but not confirmed.
         if (!missing.length && entry.auth === 'login' && st.credential !== 'configured') missing.push('logged-in session (not checked)')
         return { entry, status: missing.length ? 'limited' : 'ready', missing, use }
@@ -128,6 +136,9 @@ function assess(entry: CatalogEntry, ctx: RecommendContext): Assessed {
 }
 
 const TIER: Record<SuggestionStatus, number> = { ready: 0, limited: 1, needs_setup: 2, catalog_only: 3 }
+/** Among sources the user has NOT set up, the free ones are offered first and the paid ones last (a configured source is the user's own choice and keeps its fit order). */
+const COST_ORDER: Record<CostTier, number> = { anonymous: 0, 'free-quota': 1, paid: 2 }
+const setupCost = (a: Assessed): number => (a.status === 'needs_setup' || a.status === 'catalog_only' ? COST_ORDER[a.costTier] : 0)
 const isWeb = (e: CatalogEntry): boolean => !!e.resultKinds?.includes('web')
 /** Result kinds whose content belongs to a language community (the planner orders such a source in another language last, too). */
 const LANGUAGE_BOUND_KINDS: readonly string[] = ['forum', 'qa', 'video', 'social']
@@ -148,7 +159,7 @@ function toSuggestion(a: Assessed): Suggestion {
   const e = a.entry
   const executable = a.status === 'ready' || a.status === 'limited'
   return {
-    id: e.id, label: e.label, kind: e.kind, status: a.status, executable, use: a.use,
+    id: e.id, label: e.label, kind: e.kind, costTier: a.costTier, status: a.status, executable, use: a.use,
     why: e.recommendedFor[0] ?? e.label,
     ...a.missing.length ? { missing: a.missing, setup: e.install } : {},
     ...e.notFor[0] ? { notFor: e.notFor[0] } : {},
@@ -178,7 +189,7 @@ export function recommendSources(input: RecommendInput, ctx: RecommendContext): 
     // A general web engine in the wrong language is noise; a paper / code index in another language still works.
     .filter(e => hinted || !language || !isWeb(e) || e.languages.includes(language) || e.languages.includes('*'))
     .map(e => assess(e, ctx))
-    .sort((a, b) => Number(languageMismatch(a.entry, language)) - Number(languageMismatch(b.entry, language)) || TIER[a.status] - TIER[b.status] || score(b.entry, profile, language) - score(a.entry, profile, language) || a.entry.id.localeCompare(b.entry.id))
+    .sort((a, b) => Number(languageMismatch(a.entry, language)) - Number(languageMismatch(b.entry, language)) || TIER[a.status] - TIER[b.status] || setupCost(a) - setupCost(b) || score(b.entry, profile, language) - score(a.entry, profile, language) || a.entry.id.localeCompare(b.entry.id))
 
   // A general web engine that can run now leads (reference and vertical sources supplement it, they do not replace it) —
   // except for academic tasks, where the paper indexes are the primary sources.
@@ -210,7 +221,7 @@ export function recommendSources(input: RecommendInput, ctx: RecommendContext): 
 export function renderRecommendation(r: Recommendation): string {
   const lines = ['Recommended sources for profile ' + r.profile + (r.profileInferred ? ' (inferred)' : '') + (r.language ? ', language ' + r.language : '') + ':']
   r.picks.forEach((p, i) => {
-    lines.push((i + 1) + '. ' + p.label + ' [' + p.id + '] ' + p.status + (p.verified ? '' : ', unverified') + ' — ' + p.why)
+    lines.push((i + 1) + '. ' + p.label + ' [' + p.id + '] ' + p.status + ', ' + p.costTier + (p.verified ? '' : ', unverified') + ' — ' + p.why)
     lines.push('   use: ' + p.use + (p.missing?.length ? ' | missing: ' + p.missing.join('; ') : '') + (p.setup && p.missing?.length ? ' | setup: ' + p.setup : ''))
     if (p.notFor) lines.push('   not for: ' + p.notFor)
   })

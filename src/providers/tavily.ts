@@ -93,7 +93,8 @@ export const TAVILY_DESCRIPTOR = keyedDescriptor({
   regions: ['global'],
   supportedFilters: ['site', 'exclude_site', 'time_window'],
   priority: 20,
-  costNote: 'billed in credits per request from a Tavily plan (free monthly allowance); the plugin counts requests (provider tavily), the price is unknown to it',
+  costTier: 'free-quota',
+  costNote: 'billed in credits per request; free plan of 1,000 credits per month, no card (https://docs.tavily.com/documentation/api-credits, read 2026-10-04); the plugin counts requests (provider tavily), the price is unknown to it',
   verificationNote: 'contract from the official API reference and the MIT dsh-web-search-tavily provider; never called live (no key)',
 })
 

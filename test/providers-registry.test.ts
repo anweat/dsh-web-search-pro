@@ -120,7 +120,7 @@ test('probeLocal makes no network request and reports the dimensions', async () 
     const probe = async (id: string, over: object = {}, cli?: Map<string, boolean>) => r.resolve(id)!.probeLocal({ deps: deps(over), config, cli })
     assert.deepEqual(await probe('bocha'), { available: false, installation: 'not_required', credential: 'missing', reason: 'no Bocha key (set $BOCHA_SEARCH_API_KEY or $BOCHA_JEV_API_KEY, or bochaApiKey)', diagnosticCode: 'credential_missing' })
     assert.deepEqual(await probe('bocha', { bochaApiKey: 'k' }), { available: true, installation: 'not_required', credential: 'configured' })
-    assert.deepEqual(await probe('exa', { exaApiKey: 'k' }), { available: true, installation: 'not_required', credential: 'configured' })
+    assert.deepEqual(await probe('exa', { exaApiKey: 'k' }), { available: true, installation: 'not_required', credential: 'configured', costTier: 'free-quota' })
     const viaCli = await probe('exa', {}, new Map([['mcporter', true]]))
     assert.deepEqual([viaCli.available, viaCli.credential, viaCli.installation], [true, 'missing', 'detected'])
     const noCli = await probe('exa', {}, new Map([['mcporter', false]]))
@@ -255,7 +255,7 @@ test('router: a registered adapter becomes searchable, reportable and schedulabl
     }
     const statuses = await h.router.providerStatuses(['vendor:acme', 'ddg', 'zzz'])
     assert.deepEqual([...statuses.keys()].sort(), ['ddg', 'vendor:acme'])
-    assert.deepEqual(statuses.get('vendor:acme'), { state: 'ready', credential: 'configured' })
+    assert.deepEqual(statuses.get('vendor:acme'), { state: 'ready', credential: 'configured', costTier: 'anonymous' })
     assert.equal((await h.router.runProvider({ id: 'vendor:acme', query: 'q', count: 3, signal: new AbortController().signal })).state, 'ok')
 
     const report = await h.router.providerReport()
@@ -325,7 +325,7 @@ test('sources.status: lists registry providers with readiness dimensions (option
       for (const q of p.requirements) for (const key of Object.keys(q)) assert.ok(key in schema.properties.requirements.items.properties, key)
     }
     const text = renderResult('sources.status', out)
-    assert.match(text, /provider bocha \(builtin:bocha\): installation=not_required credential=configured health=unknown · zh · general\/news_fact\/experience\/compare\/docs_code · \[not verified live\]/)
+    assert.match(text, /provider bocha \(builtin:bocha\): installation=not_required credential=configured health=unknown · zh · general\/news_fact\/experience\/compare\/docs_code · paid · \[not verified live\]/)
     assert.match(text, /provider exa \(builtin:exa\): installation=\w+ credential=missing/)
     // the evidence section shows the effective mode, not "scorer rule"
     assert.equal(out.evidence.mode, 'hybrid')

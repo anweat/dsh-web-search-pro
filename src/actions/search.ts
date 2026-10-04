@@ -54,7 +54,7 @@ const EVIDENCE_OUTPUT_PROPERTIES: Record<string, OutputNode> = {
 const RECOMMEND_PROPERTIES: Record<string, OutputNode> = {
   profile: { type: 'string', required: true }, profileInferred: { type: 'boolean' }, language: { type: 'string' },
   picks: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
-    id: { type: 'string', required: true }, label: { type: 'string', required: true }, kind: { type: 'string' }, status: { type: 'string', required: true }, executable: { type: 'boolean', required: true },
+    id: { type: 'string', required: true }, label: { type: 'string', required: true }, kind: { type: 'string' }, costTier: { type: 'string' }, status: { type: 'string', required: true }, executable: { type: 'boolean', required: true },
     use: { type: 'string', required: true }, why: { type: 'string' }, missing: { type: 'array', items: { type: 'string' } }, setup: { type: 'string' }, notFor: { type: 'string' }, verified: { type: 'boolean' }, sourceFamily: { type: 'string' },
   } } },
   instruction: { type: 'string', required: true },

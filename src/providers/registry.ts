@@ -36,6 +36,18 @@ export interface Requirement {
   note?: string
 }
 
+/**
+ * What using a source costs the user, as information and as the default ordering among sources nobody expressed a
+ * preference about (dev-plan M11a):
+ *  - `anonymous`: no key, no account, no money (rate limits aside);
+ *  - `free-quota`: needs a key, an account or a login, and is free to use (a documented free allowance, or a free account);
+ *  - `paid`: needs a key and is billed per use (a free allowance could not be confirmed from the official pages).
+ * A provider with two routes (Exa: the keyless MCP route, the API key route) reports the tier of the route that would run
+ * (`Readiness.costTier`); the descriptor carries the default one.
+ */
+export const COST_TIERS = ['anonymous', 'free-quota', 'paid'] as const
+export type CostTier = typeof COST_TIERS[number]
+
 export interface CostDescriptor {
   kind: 'free' | 'metered' | 'subscription' | 'unknown'
   /** What one billed unit is (`request`). */
@@ -75,6 +87,8 @@ export interface ProviderDescriptor {
    */
   supportedFilters: readonly string[]
   costModel: CostDescriptor
+  /** Cost tier of the default route (absent = derived from `costModel`: `free` is `anonymous`, anything else `paid`). */
+  costTier?: CostTier
   /** Order among providers promoted for a language (lower first, default 100). */
   priority?: number
   /** Default `web`. A `platform` provider is never added to a plan on its own, only by an explicit source choice or a hard `site` constraint naming one of its `domains`. */
@@ -102,6 +116,10 @@ export interface Readiness {
   health?: Health
   reason?: string
   diagnosticCode?: string
+  /** Tier of the route that would actually run now, when it differs from the descriptor's (Exa without a key runs its keyless MCP route). */
+  costTier?: CostTier
+  /** The provider would run through a route that needs no key or account (Exa over MCP): planning treats it as runnable without a credential. */
+  keyless?: boolean
 }
 
 /** What `probeLocal` may look at: resolved dependencies and settings, plus CLI presence when the caller scanned it. No network. */
@@ -118,6 +136,11 @@ export interface ProviderAdapter {
   create(deps: EngineDeps, config: ResolvedConfig): Engine
   /** Optional native query compilation (constraints -> provider options); absent = the core compiler's rules / plain query. */
   compile?(task: Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>, now: Date): CompiledQuery
+}
+
+/** The cost tier of a descriptor: its own, else derived from the cost model (`free` = anonymous, anything else paid). */
+export function costTierOf(descriptor: Pick<ProviderDescriptor, 'costTier' | 'costModel'>): CostTier {
+  return descriptor.costTier ?? (descriptor.costModel.kind === 'free' ? 'anonymous' : 'paid')
 }
 
 /** The id under which a provider appears in tool output, history, cache keys and backend state. */
