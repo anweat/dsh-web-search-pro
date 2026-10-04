@@ -248,6 +248,19 @@ export class SearchRouter {
     return { deps: await this.deps(false), config: this.dynamic(), ...cli ? { cli } : {} }
   }
 
+  /**
+   * The configured `engines` list with the user's `sources.*` preferences applied: disabled sources removed, `priority` ones that are
+   * already in the list moved to the front in their listed order. An explicit `engines` of a call never goes through this.
+   */
+  private preferred(ids: string[]): string[] {
+    const src = this.dynamic().sources
+    const disabled = new Set(this.canonicalIds(src?.disabled ?? []))
+    const kept = ids.filter(id => !disabled.has(id))
+    if (ids.length && !kept.length) throw new Error('every configured engine is disabled (sources.disabled): ' + ids.join(', '))
+    const first = this.canonicalIds(src?.priority ?? []).filter(id => kept.includes(id))
+    return [...first, ...kept.filter(id => !first.includes(id))]
+  }
+
   /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
   private canonicalIds(ids: readonly string[]): string[] {
     return [...new Set(ids.map(id => this.registry.routeId(id) ?? id))]
@@ -548,7 +561,7 @@ export class SearchRouter {
     const platform = opts.platform ? this.resolvePlatform(opts.platform, opts.query) : undefined
     const query = platform ? platform.query : opts.query.trim()
     if (!platform && !query) throw new Error('query must be a non-empty string')
-    const ids = platform ? [platform.id] : this.canonicalIds(opts.engines && opts.engines.length ? opts.engines : cfg.engines)
+    const ids = platform ? [platform.id] : opts.engines && opts.engines.length ? this.canonicalIds(opts.engines) : this.preferred(this.canonicalIds(cfg.engines))
     const nq = normQuery(platform ? query || platform.url || platform.id : query)
     const count = Math.min(Math.max(opts.count, 1), 20)
     const multi = !platform && opts.multi && ids.length > 1

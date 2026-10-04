@@ -6,6 +6,7 @@
  */
 
 import { resolveBudget } from '../pipeline/budget-spec.ts'
+import { resolveSources, type SourcesInput } from '../pipeline/sources-spec.ts'
 import { CALIBRATED_THRESHOLDS, thresholdKey, thresholdsProblems } from '../pipeline/coverage.ts'
 import { DEFAULT_PROVIDER_ID, PRESETS, resolveProviders, unusableReason, type JudgeSettings } from '../pipeline/judges/providers-spec.ts'
 import { BUILTIN_RUBRIC_IDS, builtinDef, overrideProblems } from '../pipeline/rubrics-spec.ts'
@@ -153,6 +154,20 @@ export function evidenceIssues(ev: Json): Issue[] {
   }
 
   for (const [id, problems] of Object.entries(rubricIssues(ev.rubrics))) add(rubricField(id), problems.join('\n'))
+  return issues
+}
+
+/**
+ * Problems of the effective `sources` object (priority / disabled / budget), from the server's own `resolveSources`. A source that is
+ * both prioritised and disabled is accepted (disabled wins) but is probably not what was meant.
+ */
+export function sourcesIssues(sources: Json): Issue[] {
+  const issues: Issue[] = []
+  for (const message of resolveSources(sources as SourcesInput).diagnostics) {
+    if (message.includes('both prioritised and disabled')) { for (const field of ['sources.priority', 'sources.disabled'] as const) issues.push({ field, message, level: 'warning', related: ['sources.priority', 'sources.disabled'] }); continue }
+    const field: SettingField = message.includes('sources.disabled') ? 'sources.disabled' : 'sources.priority'
+    issues.push({ field, message, level: 'error' })
+  }
   return issues
 }
 

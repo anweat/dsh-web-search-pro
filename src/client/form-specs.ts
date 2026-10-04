@@ -11,7 +11,7 @@
  * @module web-search-pro/client/form-specs
  */
 
-import { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, TOOL_SURFACES } from '../config-enums.ts'
+import { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES } from '../config-enums.ts'
 import { COVERAGE_MODES } from '../pipeline/coverage.ts'
 import { DEFAULT_BUDGET } from '../pipeline/budget-spec.ts'
 import { KEY_REF_PATTERN } from '../pipeline/judges/providers-spec.ts'
@@ -33,21 +33,21 @@ export type TopField =
 
 /** Options inside `evidence` / `provider`, addressed by their dotted config path. */
 export type PathField =
-  | 'evidence.autoProviders' | 'evidence.maxRounds' | 'evidence.maxQueries'
+  | 'evidence.autoProviders' | 'evidence.sourcePolicy' | 'evidence.maxRounds' | 'evidence.maxQueries'
   | 'evidence.judge.mode' | 'evidence.hybridBorderline' | 'evidence.judge.provider' | 'evidence.maxJevQuestions'
   | 'evidence.judge.allowLlm' | 'evidence.judge.providers'
   | 'evidence.coverage.mode' | 'evidence.coverage.provider'
   | 'evidence.coverage.thresholds.weak' | 'evidence.coverage.thresholds.covered'
   | 'evidence.budget.perSearchInputTokens' | 'evidence.budget.dailyInputTokens' | 'evidence.budget.timezone' | 'evidence.budget.providers'
   | 'provider.evidence' | 'provider.deadlineMs'
+  | 'sources.priority' | 'sources.disabled'
 
 /** One rubric override entry (`evidence.rubrics.<id>`) and one keyed-source field. */
 export type RubricField = `evidence.rubrics.${string}`
 export type KeyedField = `keyedSources.${string}.apiKeyEnv` | `keyedSources.${string}.baseUrl`
-
 export type SettingField = TopField | PathField | RubricField | KeyedField
 
-export type RootKey = 'evidence' | 'provider' | 'keyedSources'
+export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources'
 
 export type FieldWrite = { kind: 'set'; value: unknown } | { kind: 'clear' }
 export type PathOp = { op: 'set'; path: string[]; value: unknown } | { op: 'unset'; path: string[] }
@@ -208,7 +208,7 @@ const path = (spec: FieldSpec, root: RootKey, at: readonly string[], extra: Part
 // ── defaults the card shows when the Host section carries none (pinned to config.ts by a test) ──
 
 export const DEFAULTS = {
-  evidence: { autoProviders: true, maxRounds: 2, maxQueries: 4, hybridBorderline: false, maxJevQuestions: 64, scorer: 'rule', jevMode: 'off' },
+  evidence: { autoProviders: true, sourcePolicy: 'default', maxRounds: 2, maxQueries: 4, hybridBorderline: false, maxJevQuestions: 64, scorer: 'rule', jevMode: 'off' },
   judge: { allowLlm: false },
   coverage: { mode: 'off' },
   provider: { evidence: 'auto', deadlineMs: 25_000 },
@@ -285,6 +285,7 @@ const E = 'evidence' as const
 /** Fields inside `evidence` and `provider`, in display order. */
 export const PATH_SPECS: readonly PathSpec[] = [
   path(booleanField('evidence.autoProviders', DEFAULTS.evidence.autoProviders), E, ['autoProviders']),
+  path(enumField('evidence.sourcePolicy', SOURCE_POLICIES, DEFAULTS.evidence.sourcePolicy), E, ['sourcePolicy']),
   path(numberField('evidence.maxRounds', { min: 1, integer: true }), E, ['maxRounds'], { read: ev => ev.maxRounds ?? DEFAULTS.evidence.maxRounds }),
   path(numberField('evidence.maxQueries', { min: 1, integer: true }), E, ['maxQueries'], { read: ev => ev.maxQueries ?? DEFAULTS.evidence.maxQueries }),
   path(enumField('evidence.judge.mode', JUDGE_MODES, DEFAULTS.evidence.jevMode), E, ['judge', 'mode'], {
@@ -307,6 +308,8 @@ export const PATH_SPECS: readonly PathSpec[] = [
   path(jsonField('evidence.budget.providers'), E, ['budget', 'providers']),
   path(enumField('provider.evidence', PROVIDER_EVIDENCE_MODES, DEFAULTS.provider.evidence), 'provider', ['evidence']),
   path(numberField('provider.deadlineMs', { min: 100, integer: true }), 'provider', ['deadlineMs'], { read: p => getAt(p, ['deadlineMs']) ?? DEFAULTS.provider.deadlineMs }),
+  path(csvField('sources.priority'), 'sources', ['priority']),
+  path(csvField('sources.disabled'), 'sources', ['disabled']),
 ]
 
 /** The keyed sources the card has controls for: route id and the environment variable its key is read from by default. */

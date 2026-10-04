@@ -7,7 +7,7 @@ import {
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
-import { evidenceIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
+import { evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
 export { CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
 export type { CredentialId, SettingField }
@@ -71,7 +71,7 @@ interface Draft { text: string; clear: boolean }
 interface PlanItem { target: string; write: FieldWrite | undefined }
 interface Analysis { settings: PlanItem[]; issues: Issue[]; blocked: Set<SettingField>; evidence: Json }
 
-const ROOTS: readonly RootKey[] = ['evidence', 'provider', 'keyedSources']
+const ROOTS: readonly RootKey[] = ['evidence', 'provider', 'keyedSources', 'sources']
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
@@ -443,7 +443,8 @@ export class WebSearchSettingsController {
     // Effective evidence settings of the draft: the composition layer under the user layer as it would be written.
     const base = (this.scope.getSnapshot().base as Record<string, unknown> | undefined)?.evidence
     const evidence = deepMerge(isRecord(base) ? base : {}, candidates.get('evidence')) as Json
-    const issues = evidenceIssues(evidence)
+    const baseSources = (this.scope.getSnapshot().base as Record<string, unknown> | undefined)?.sources
+    const issues = [...evidenceIssues(evidence), ...sourcesIssues(deepMerge(isRecord(baseSources) ? baseSources : {}, candidates.get('sources')) as Json)]
     // An error blocks the save when the person is editing what it is about; otherwise it is shown as it stands.
     const blocked = new Set<SettingField>()
     for (const issue of issues) {

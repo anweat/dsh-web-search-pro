@@ -17,6 +17,7 @@
  */
 
 import crypto from 'node:crypto'
+import type { SourcePolicy } from '../config-enums.ts'
 import { mergeCandidates, type ProviderOutput, type ProviderSource } from './candidates.ts'
 import { adaptivePreRankLimit, splitBlocks, preRankBlocks, type SplitOptions } from './blocks.ts'
 import { compileQuery, gapQueryText, type CompiledQuery } from './compile.ts'
@@ -83,6 +84,8 @@ export interface PipelineDeps {
   descriptors?: readonly ProviderDescriptor[]
   /** `evidence.autoProviders` (default true). */
   autoProviders?: boolean
+  /** The user's source preferences (dev-plan M11a): `sources.priority` / `sources.disabled` (route ids) and `evidence.sourcePolicy`. */
+  sources?: { priority?: readonly string[]; disabled?: readonly string[]; policy?: SourcePolicy }
   /** Per-provider query compilation (registry adapters may bring their own); default the core compiler. */
   compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery
   fusion: Omit<FusionOptions, 'nProviders' | 'now'>
@@ -202,7 +205,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   const now = deps.now?.() ?? new Date()
 
   // S1
-  const allIds = [...new Set([...options.engines ?? [], ...Object.values(PROFILE_PROVIDERS).flat(), ...deps.configuredEngines, ...(deps.descriptors ?? []).map(routeIdOf)])]
+  const allIds = [...new Set([...options.engines ?? [], ...Object.values(PROFILE_PROVIDERS).flat(), ...deps.configuredEngines, ...deps.sources?.priority ?? [], ...(deps.descriptors ?? []).map(routeIdOf)])]
   const statuses = deps.providerStatus ? await deps.providerStatus(allIds) : undefined
   checkUser()
   const plan = planSources(task, {
@@ -211,6 +214,9 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
     ...statuses ? { status: (id: string) => statuses.get(id) } : {},
     ...deps.descriptors ? { descriptors: deps.descriptors } : {},
     ...deps.autoProviders !== undefined ? { autoProviders: deps.autoProviders } : {},
+    ...deps.sources?.priority?.length ? { priority: deps.sources.priority } : {},
+    ...deps.sources?.disabled?.length ? { disabled: deps.sources.disabled } : {},
+    ...deps.sources?.policy ? { policy: deps.sources.policy } : {},
     ...deps.compiler ? { compiler: deps.compiler } : {},
     now,
   })

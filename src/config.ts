@@ -10,10 +10,10 @@ import type { CoverageSettings } from './pipeline/coverage.ts'
 import type { JudgeSettings } from './pipeline/judges/providers.ts'
 import type { BudgetInput } from './pipeline/ledger.ts'
 import type { RubricOverride } from './pipeline/rubrics.ts'
-import { PROVIDER_EVIDENCE_MODES, TOOL_SURFACES, type ToolSurface } from './config-enums.ts'
+import { PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES, type SourcePolicy, type ToolSurface } from './config-enums.ts'
 
-export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, TOOL_SURFACES } from './config-enums.ts'
-export type { ToolSurface }
+export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES } from './config-enums.ts'
+export type { SourcePolicy, ToolSurface }
 
 /** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
 export interface CustomPlatformSpec {
@@ -58,6 +58,12 @@ export interface EvidenceConfig {
    * (key configured) ahead of the profile table. Default true; false keeps the profile table / configured `engines` as they are.
    */
   autoProviders: boolean
+  /**
+   * Which sources the automatic plan may use (dev-plan M11a). `default`: sources the user configured (a key) are promoted for
+   * their language and profile, otherwise the anonymous / free ones lead. `anonymous-only`: never a source that needs a key,
+   * account or login, even a configured one. Explicit `engines` / `platform` in a call always win.
+   */
+  sourcePolicy: SourcePolicy
   /** Retrieval rounds per task (S8 bounded re-search): 1 disables the second round. Default 2. */
   maxRounds: number
   /** Search requests per task over all rounds (a second round only runs while this is not used up). Default 4. */
@@ -101,10 +107,24 @@ export function resolveProviderEvidence(value: unknown): ProviderSettings['evide
   return mode as ProviderSettings['evidence']
 }
 
+export function resolveSourcePolicy(value: unknown): SourcePolicy {
+  const policy = value ?? 'default'
+  if (typeof policy !== 'string' || !SOURCE_POLICIES.includes(policy as SourcePolicy)) throw new Error('evidence.sourcePolicy must be one of: ' + SOURCE_POLICIES.join(', '))
+  return policy as SourcePolicy
+}
+
 export function resolveToolSurface(value: unknown): ToolSurface {
   const surface = value ?? 'indexed'
   if (typeof surface !== 'string' || !TOOL_SURFACES.includes(surface as ToolSurface)) throw new Error('toolSurface must be one of: ' + TOOL_SURFACES.join(', '))
   return surface as ToolSurface
+}
+
+/** `sources.*`: the user's own say over which sources run (all optional, nothing is set by default). */
+export interface SourcesConfig {
+  /** Source ids to rank first, in this order, when they are ready and fit the task's profile and language. */
+  priority?: string[]
+  /** Source ids the automatic plan and the configured `engines` list never use (an explicit `engines` / `platform` in a call still can). */
+  disabled?: string[]
 }
 
 export interface Config {
@@ -207,6 +227,8 @@ export interface Config {
     /** Directory for read.snapshot artifacts; defaults to <dbDir>/snapshots. */
     snapshotDir?: string
   }
+  /** Source preferences and request budgets (dev-plan M11a). */
+  sources?: SourcesConfig
   /** Evidence pipeline (S6 scoring). */
   evidence?: Partial<EvidenceConfig>
   verbose: boolean
@@ -288,12 +310,17 @@ export const Config = z.object({
     enabled: z.boolean().default(true).volatile(),
     snapshotDir: z.string(),
   }),
+  sources: z.object({
+    priority: z.array(z.string()).volatile(),
+    disabled: z.array(z.string()).volatile(),
+  }),
   evidence: z.object({
     scorer: z.union(['rule', 'jev']).default('rule').volatile(),
     jevMode: z.union(['off', 'shadow', 'control', 'hybrid']).default('off').volatile(),
     hybridBorderline: z.boolean().default(false).volatile(),
     maxJevQuestions: z.number().default(64).volatile(),
     autoProviders: z.boolean().default(true).volatile(),
+    sourcePolicy: z.string().default('default').volatile(),
     maxRounds: z.number().default(2).volatile(),
     maxQueries: z.number().default(4).volatile(),
     rubrics: z.dict(z.object({
@@ -353,6 +380,7 @@ export interface ResolvedConfig extends Config {
   openalexMailto?: string
   keyedSources?: Config['keyedSources']
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
+  sources: Required<SourcesConfig>
   evidence: EvidenceConfig
   provider: ProviderSettings
 }
@@ -427,6 +455,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const snapshotDir = vOr(pw.snapshotDir, path.join(path.dirname(dbPath), 'snapshots'))
   const ev: Partial<EvidenceConfig> = config.evidence ?? {}
   const pv: Partial<ProviderSettings> = config.provider ?? {}
+  const sv: Partial<SourcesConfig> = config.sources ?? {}
   return {
     ...config,
     dbPath,
@@ -481,12 +510,17 @@ export function resolveConfig(config: Config): ResolvedConfig {
       hybridBorderline: vOr(ev.hybridBorderline, false) as boolean,
       maxJevQuestions: vOr(ev.maxJevQuestions, 64) as number,
       autoProviders: vOr(ev.autoProviders, true) as boolean,
+      sourcePolicy: resolveSourcePolicy(vOr(ev.sourcePolicy as unknown, 'default')),
       maxRounds: vOr(ev.maxRounds, 2) as number,
       maxQueries: vOr(ev.maxQueries, 4) as number,
       ...ev.rubrics !== undefined && v(ev.rubrics) ? { rubrics: normalizeRubrics(v(ev.rubrics)) as Record<string, RubricOverride> } : {},
       ...ev.judge !== undefined && v(ev.judge) ? { judge: normalizeJudge(v(ev.judge)) as NonNullable<EvidenceConfig['judge']> } : {},
       ...ev.budget !== undefined && v(ev.budget) ? { budget: v(ev.budget) as NonNullable<EvidenceConfig['budget']> } : {},
       ...ev.coverage !== undefined && v(ev.coverage) ? { coverage: normalizeCoverage(v(ev.coverage)) as NonNullable<EvidenceConfig['coverage']> } : {},
+    },
+    sources: {
+      priority: vOr(sv.priority, [] as string[]) as string[],
+      disabled: vOr(sv.disabled, [] as string[]) as string[],
     },
     verbose: vOr(config.verbose, false) as boolean,
   }

@@ -158,6 +158,13 @@ export function SettingsCard(props: SettingsCardProps) {
           </Section>
 
           <Section id="sources" title={t('sourcesSection')} hint={t('sourcesSectionHint')}>
+            <h4 className={css.subheading}>{t('strategyGroup')}</h4>
+            <p className={css.hint} data-web-search-pro-strategy>{t('strategyNote')}</p>
+            <div className={css.grid}>
+              {select('evidence.sourcePolicy', 'sourcePolicy', 'sourcePolicyHint', [{ value: 'default', label: t('optPolicyDefault') }, { value: 'anonymous-only', label: t('optPolicyAnonymousOnly') }])}
+              {text('sources.priority', 'srcPriority', 'srcPriorityHint', 'text', 'bocha, exa')}
+              {text('sources.disabled', 'srcDisabled', 'srcDisabledHint')}
+            </div>
             <h4 className={css.subheading}>{t('bochaGroup')}</h4>
             <div className={css.grid}>
               {text('bochaApiKeyEnv', 'bochaApiKeyEnv', 'bochaApiKeyEnvHint', 'text', 'BOCHA_SEARCH_API_KEY')}

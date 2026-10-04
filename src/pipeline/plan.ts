@@ -6,6 +6,7 @@
  * @module web-search-pro/pipeline/plan
  */
 
+import type { SourcePolicy } from '../config-enums.ts'
 import { compileQuery, type CompiledQuery } from './compile.ts'
 import { detectLang } from './align.ts'
 import { domainOf, hostMatches } from './gate.ts'
@@ -52,6 +53,8 @@ export interface ProviderStatus {
   costTier?: CostTier
   /** The provider can run through a route that needs no credential (Exa over MCP): promotable although `credential` is `missing`. */
   keyless?: boolean
+  /** Unavailable because its request budget (`sources.budget`) is used up: the plan says so and falls back to other sources. */
+  budgetExhausted?: boolean
 }
 
 export interface PlannedProvider { id: string; compiled: CompiledQuery }
@@ -92,6 +95,14 @@ export interface PlanOptions {
   webFallbacks?: number
   /** Most providers promoted for the task language (default {@link DEFAULT_MAX_PROMOTED}); providers of one `sourceFamily` count once. */
   maxPromoted?: number
+  /**
+   * The user's own say (dev-plan M11a), below an explicit `engines` and above the automatic promotion: `priority` ids that are
+   * ready and fit the task's profile and language go first, in that order; `disabled` ids are never planned. Route ids.
+   */
+  priority?: readonly string[]
+  disabled?: readonly string[]
+  /** `anonymous-only`: no source that needs a key, account or login is planned automatically, configured or not. Default `default`. */
+  policy?: SourcePolicy
   /** Per-provider compilation; defaults to the core compiler (adapters may supply their own). */
   compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery
 }
@@ -154,14 +165,26 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
   const profile = task.profile ?? inferProfile(task.goal + ' ' + task.query)
   const explicit = Boolean(options.engines?.length)
   const language = taskLanguage(task)
-  const base: readonly string[] = options.engines?.length
-    ? options.engines
-    : profile === 'general' ? options.configured : PROFILE_PROVIDERS[profile]
   const descriptors = new Map((options.descriptors ?? []).map(d => [routeIdOf(d), d] as const))
   const isReady = (id: string): ProviderStatus | undefined => {
     const status = options.status ? options.status(id) : { state: 'ready' as const }
     return status && status.state === 'ready' ? status : undefined
   }
+
+  // The user's own say: `disabled` sources and, under `anonymous-only`, every source that needs a key, account or login are
+  // never planned automatically. An explicit `engines` list is the caller's decision and skips all of this.
+  const disabled = new Set(explicit ? [] : options.disabled ?? [])
+  const anonymousOnly = !explicit && options.policy === 'anonymous-only'
+  const tierOf = (id: string): CostTier => options.status?.(id)?.costTier ?? (descriptors.get(id) ? costTierOf(descriptors.get(id)!) : 'anonymous')
+  const blocked = (id: string): boolean => disabled.has(id) || (anonymousOnly && tierOf(id) !== 'anonymous')
+  const fullBase: readonly string[] = options.engines?.length
+    ? options.engines
+    : profile === 'general' ? options.configured : PROFILE_PROVIDERS[profile]
+  const base = fullBase.filter(id => !blocked(id))
+  const dropped = fullBase.filter(id => blocked(id))
+  if (dropped.length) notes.push('not planned: ' + dropped.map(id => id + (disabled.has(id) ? ' (sources.disabled)' : ' (sourcePolicy anonymous-only: ' + tierOf(id) + ')')).join(', '))
+
+  const configured = (id: string): boolean => options.status?.(id)?.credential === 'configured'
 
   // Promotion: specialists for the task's language, then the table with its language-agnostic web engines trimmed.
   let planList = [...base]
@@ -170,13 +193,21 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
   const surplus: string[] = []
   if (!explicit && language && options.autoProviders !== false && descriptors.size) {
     const candidates = [...descriptors.values()]
-      .filter(d => d.kind !== 'platform' && d.operations.includes('search') && d.resultKinds.includes('web') && d.languages.includes(language) && d.taskProfiles.includes(profile))
-      .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
+      .filter(d => d.kind !== 'platform' && d.operations.includes('search') && d.resultKinds.includes('web') && d.languages.includes(language) && d.taskProfiles.includes(profile) && !blocked(routeIdOf(d)))
+      // A source the user set up (a configured key) is a stated preference and leads; sources that need nothing (Exa over its keyless
+      // route) follow. Within each group the descriptor's priority decides.
+      .sort((a, b) => Number(configured(routeIdOf(b))) - Number(configured(routeIdOf(a))) || (a.priority ?? 100) - (b.priority ?? 100))
     const maxPromoted = Math.max(options.maxPromoted ?? DEFAULT_MAX_PROMOTED, 1)
     const families = new Set<string>()
     for (const d of candidates) {
       const status = isReady(routeIdOf(d))
-      if (!status || !PROMOTABLE_CREDENTIALS.includes(status.credential)) continue
+      if (!status) {
+        const why = options.status?.(routeIdOf(d))
+        if (why?.budgetExhausted) notes.push(routeIdOf(d) + ' skipped: ' + (why.reason ?? 'request budget used up'))
+        continue
+      }
+      // A key that is configured, a source that needs none, or a route that needs none (Exa over MCP) may be promoted.
+      if (!PROMOTABLE_CREDENTIALS.includes(status.credential) && !status.keyless) continue
       // Two sources over one upstream index (Serper and another Google wrapper) are not two vantage points: the second waits for round 2.
       if (promoted.length >= maxPromoted || (d.sourceFamily && families.has(d.sourceFamily))) { surplus.push(routeIdOf(d)); continue }
       if (d.sourceFamily) families.add(d.sourceFamily)
@@ -218,6 +249,18 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
       planList = [...planList.filter(id => !wrongLanguage(id)), ...demoted]
       notes.push('language ' + language + ': ' + demoted.join(', ') + ' ordered last (community source in another language)')
     }
+    // A general web engine that is strong only in another language (Exa over its keyless route for a Chinese task) is not worth a
+    // first-round slot while a language-agnostic one is ready: it waits for round 2. One the user configured (a key) keeps its place.
+    const otherLanguageWeb = (id: string): boolean => {
+      const d = descriptors.get(id)
+      return !!d && d.kind !== 'platform' && d.resultKinds.includes('web') && !d.languages.includes('*') && !d.languages.includes(language) && !promoted.includes(id) && !configured(id)
+    }
+    const waiting = planList.filter(otherLanguageWeb)
+    if (waiting.length && planList.some(id => !otherLanguageWeb(id) && !!descriptors.get(id)?.resultKinds.includes('web') && !!isReady(id))) {
+      planList = planList.filter(id => !otherLanguageWeb(id))
+      held.push(...waiting)
+      notes.push('language ' + language + ': ' + waiting.join(', ') + ' held for a second round (strong in another language)')
+    }
   }
 
   // Platforms are never planned on their own: round 1 draws from the profile table (whose vertical sources are curated), the
@@ -234,7 +277,7 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
       if (!host) continue
       for (const d of descriptors.values()) {
         const id = routeIdOf(d)
-        if (d.kind !== 'platform' || !d.domains?.some(domain => hostMatches(host, domain)) || sitePlatforms.includes(id) || siblings.includes(id)) continue
+        if (d.kind !== 'platform' || blocked(id) || !d.domains?.some(domain => hostMatches(host, domain)) || sitePlatforms.includes(id) || siblings.includes(id)) continue
         const status = options.status ? options.status(id) : { state: 'ready' as const }
         // One entry per upstream family (github, github-code and github-issues are one site): the others wait for round 2.
         if (isReady(id) && d.sourceFamily && families.has(d.sourceFamily)) { siblings.push(id); continue }
@@ -249,6 +292,26 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
       for (const id of rest) if (!held.includes(id)) held.push(id)
       notes.push('site ' + [...new Set(hosts)].join(', ') + ': platform ' + sitePlatforms.join(', ') + ' first' + (web ? ', ' + web + ' kept as the web fallback' : ', no web fallback is ready') + (rest.length ? '; held for a second round: ' + rest.join(', ') : ''))
     }
+  }
+
+  // The user's ranking (`sources.priority`) sits above the automatic promotion: listed sources that fit the task's profile and
+  // language go first, in the listed order (one that is not ready is skipped below with its reason, like any other). A platform
+  // is only reordered when the plan already holds it: a ranking never adds a site source to a task that did not ask for one.
+  if (!explicit && options.priority?.length) {
+    const fits = (id: string): boolean => {
+      if (blocked(id)) return false
+      const d = descriptors.get(id)
+      if (!d) return planList.includes(id)
+      if (d.kind === 'platform') return planList.includes(id)
+      return d.operations.includes('search') && d.taskProfiles.includes(profile) && (!language || d.languages.includes('*') || d.languages.includes(language))
+    }
+    const head = [...new Set(options.priority)].filter(fits)
+    if (head.length) {
+      planList = [...head, ...planList.filter(id => !head.includes(id))]
+      notes.push('sources.priority: ' + head.join(', ') + ' first')
+    }
+    const unfit = [...new Set(options.priority)].filter(id => !head.includes(id) && !blocked(id))
+    if (unfit.length) notes.push('sources.priority: ' + unfit.join(', ') + ' not used for this task (profile ' + profile + (language ? ', language ' + language : '') + ')')
   }
 
   const max = Math.max(options.maxProviders ?? DEFAULT_MAX_PROVIDERS, 1)
@@ -271,5 +334,5 @@ export function planSources(task: TaskSpec, options: PlanOptions): SourcePlan {
   if (!providers.length) notes.push('no usable provider for profile ' + profile + (explicit ? ' (explicit engines)' : ''))
   // Supplements (registered ones only) are second-round candidates behind everything the plan already wants.
   const supplements = !explicit && options.autoProviders !== false ? PROFILE_SUPPLEMENTS[profile].filter(id => descriptors.has(id)) : []
-  return { profile, profileInferred, providers, ...language ? { language } : {}, wanted: [...new Set([...planList, ...surplus, ...held, ...supplements])], skipped, notes }
+  return { profile, profileInferred, providers, ...language ? { language } : {}, wanted: [...new Set([...planList, ...surplus, ...held, ...supplements])].filter(id => !blocked(id)), skipped, notes }
 }
