@@ -353,10 +353,15 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
        maxJevQuestions: 64
        maxRounds: 2 # 证据包补搜轮数上限；1 = 关闭第二轮
        maxQueries: 4 # 单任务搜索查询总数（含第一轮；一次 provider 调用算一次）
-       autoProviders: true # 按任务语言提前就绪的来源（中文博查 / 英文 Exa）；false = 只用 profile 表
+       autoProviders: true # 按任务语言提前就绪的来源（你配置了 Key 的来源，英文无 Key 时的 Exa）；false = 只用 profile 表
+       # sourcePolicy: default # default | anonymous-only（自动规划绝不用需要 Key / 账号 / 登录的来源，见“来源策略”）
        # rubrics: ...   # 可选：覆盖 Jev 提示词，见下文“Jev 提示词（rubric）”
        # judge: ...     # 可选：选择/自定义模型 provider，见下文“评分模型 provider 与用量上限”
        # budget: ...    # 可选：模型输入 token 上限（单次搜索 / 每日），默认 60000 / 1000000
+     # sources: # 来源偏好与请求额度（全部可选，默认什么都不设）
+     #   priority: [bocha, exa] # 就绪且适合任务语言 / profile 的来源按此顺序排最前
+     #   disabled: [bing]       # 自动规划与 engines 列表都不用
+     #   budget: { bocha: { total: 1000, daily: 50 } } # 请求上限；用完被跳过并回退，不报错
      ttlSeconds: 3600
      searchMaxResults: 8
      browserBindings:
@@ -381,7 +386,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | 证据管线 | `evidence.autoProviders`、`maxRounds`、`maxQueries`，`fetchDefaultChars`、`exaContentsPerUrlChars` / `TotalChars`。`minKeep` 与证据包字符预算没有配置项（内置默认 / `search.run` 的 `budget` 参数） |
 | 评分模型 | `evidence.judge.mode`（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer` 保持一致）、`hybridBorderline`、provider 下拉（内置预设 + 自定义 id）、`maxJevQuestions`、`allowLlm`；覆盖判定 `evidence.coverage` 的模式、provider、阈值；用量上限 `evidence.budget`（单次 / 每日 / 时区 / 按 provider）；自定义 provider JSON（与服务端同一套校验，拒绝在定义里放密钥，只放 `keyRef` 名） |
 | 提示词（rubric） | 列出内置 rubric 与生效版本；逐个覆盖（版本、模板、等级、字符上限），按 `rubrics.ts` 的规则校验（未知变量、必需变量、等级数、版本必须不同于内置）；“恢复默认”删除覆盖 |
-| 来源 | 博查（Key 引用名、接口地址、长摘要）、七个需 Key 的来源（Key 引用名、写入式密钥、接口地址）、`searxngUrl`、`openalexMailto`，以及匿名来源参考表；各来源的实时就绪状态由 `web_call sources.status` 显示 |
+| 来源 | 来源策略（`evidence.sourcePolicy`、`sources.priority`、`sources.disabled`）、博查（Key 引用名、接口地址、长摘要）、七个需 Key 的来源（Key 引用名、写入式密钥、接口地址）、每个来源的请求额度（`sources.budget.<id>.total` / `daily`，已用 / 剩余见 `web_call sources.status`）、`searxngUrl`、`openalexMailto`，以及匿名来源参考表；各来源的实时就绪状态由 `web_call sources.status` 显示 |
 | 服务凭据 / 运行时与后端 / 高级 | Exa、Jina、GitHub 凭据引用与密钥；CLI、OpenCLI、Agent Reach、Playwright；缓存、排序加权、平台规则、自定义平台、浏览器绑定 |
 
 校验与服务端共用同一批纯函数（`pipeline/rubrics-spec.ts`、`judges/providers-spec.ts`、`judges/calibration-spec.ts`、`coverage.ts`、`budget-spec.ts`），它们不引入 Node 模块，客户端 bundle 仍只依赖宿主模块表里的少数模块（`pnpm run test:client-bundle` 检查）。
@@ -414,22 +419,47 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 `seam`（ctx.web/DeepSeek 原生）· `exa` · `bocha`（博查，中文强项，需 Key）· `ddg` · `bing` · `jina` · `github`（REST 搜索 API，免 CLI；可选 `$GITHUB_TOKEN`/`githubToken` 提升限额并解锁代码搜索）· `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；失败后短时冷却，`sources.status` 可查看原因；`multi` 并行融合。
 
-Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包含/排除、发布时间范围和 category。若没有裸 API Key、但启用了 CLI 后端且 Exa MCP 已连接，搜索会自动通过 `mcporter` 完成；该兼容路径只支持 query + 结果数，高级筛选和 `web_exa_contents` 仍要求 `EXA_API_KEY`。不同选项、结果数、引擎顺序和单/多引擎模式使用不同缓存指纹。
+Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包含/排除、发布时间范围和 category。若没有 API Key、但启用了 CLI 后端且 `mcporter` 里配置了 Exa MCP（`https://mcp.exa.ai/mcp`，匿名、有限额），搜索会自动通过 `mcporter` 完成——**这是匿名路线（2026-10-04 实测：无 Key 的 `exa.web_search_exa` 调用成功，结果可被插件解析），证据模式的英文任务默认先用它**；该路线只支持 query + 结果数，高级筛选和 `read.contents` 仍要求 `EXA_API_KEY`。不同选项、结果数、引擎顺序和单/多引擎模式使用不同缓存指纹。
 
 ### 博查（Bocha）与搜索 provider 注册器 / Bocha and the provider registry
 
-**中文**　博查是第一个中文搜索增量（`POST {bochaBaseUrl}/v1/web-search`，Bearer Key，默认 `https://api.bochaai.com`；官方 MIT 参考实现 `bocha-ai/dsh-web-search-bocha` 用 `https://api.bocha.cn`，可用 `bochaBaseUrl` 切换）。引擎 id `bocha`，也可写 `builtin:bocha`。
+**中文**　博查是第一个中文搜索增量（`POST {bochaBaseUrl}/v1/web-search`，Bearer Key，默认 `https://api.bocha.cn`（官方 MIT 参考实现 `bocha-ai/dsh-web-search-bocha` 用的地址，已实测）；`https://api.bochaai.com` 用同一个 Key 也返回同样的结构，可用 `bochaBaseUrl` 切换）。引擎 id `bocha`，也可写 `builtin:bocha`。
 
 - **配置**：Key 来自 `bochaApiKey`、凭据 / 环境变量 `BOCHA_SEARCH_API_KEY`（名称由 `bochaApiKeyEnv` 配置），找不到时回退 `BOCHA_JEV_API_KEY`（博查文档对同一账号的说明；用同一个 Key 也行）。用官方 provider 的 `BOCHA_API_KEY` 的话，把 `bochaApiKeyEnv: BOCHA_API_KEY` 即可。`bochaSummary`（默认 true）请求较长的页面摘要，更利于证据评分。
 - **费用**：按请求计费（余额或套餐），插件只记录请求数（用量账本里的 `bocha-search`，token 不适用、金额未知，`sources.status` 显示当日请求数）。**账号没有搜索余额 / 套餐时服务返回 HTTP 403 “You do not have enough money or package quota”**：插件把它归为不可重试的 `ENGINE_QUOTA`（与 401 的 `ENGINE_AUTH` 一样不进冷却），先到博查控制台确认搜索额度。429 按 `Retry-After` 冷却。
 - **原生过滤**（证据模式）：硬性 `site` / `exclude_site` → `include` / `exclude`，硬性 `time_window` → `freshness` 的 `起始..今天` 日期区间；其余约束（`exclude_term` 等）仍在本地校验，`verification.native / local` 如实报告。
-- **验证状态**：成功响应结构取自官方参考实现与文档；唯一一次真实调用（2026-10-02，Jev Key）返回了上述 403，所以成功路径、`include` / `exclude` 与日期区间尚未在真实服务上验证，`sources.status` 标注 `[not verified live]`。
+- **验证状态**：2026-10-04 用已开通额度的搜索 Key 实测 4 次请求（`api.bocha.cn` 3 次、`api.bochaai.com` 1 次）：成功响应的结构（`code` 为数字 200、`data.webPages.value[]`、`summary` 与约 100 字的 `snippet`）、`include` / `exclude`（含子域名）、`freshness` 日期区间都按预期生效，两个域名都接受该 Key。此前（2026-10-02，Jev Key）的 403 只说明当时账号没有搜索额度。脱敏样本：`test/fixtures/bocha-web-search.json`、`bocha-filters.json`。**博查是付费来源**：只在你配置了它的 Key 时才进入中文任务的第一轮；可选地用 `sources.budget.bocha` 限制请求数（例：账号有 1000 次请求，写 `total: 1000, daily: 50`）。
 
 **注册器**：搜索来源是 `ProviderDescriptor`（稳定命名空间 id `builtin:ddg`、`aliases`（旧短 id `ddg`）、`operations`、`taskProfiles`、`languages`、`regions`、`resultKinds`、`sourceFamily`（未知留空，绝不假定独立）、`requirements`（Key 环境变量 / CLI）、`supportedFilters`、`costModel`）加运行时（`probeLocal()` 只做本地检查、不联网；`create(deps)` 返回 Engine）。工具参数 `engines`、配置 `engines`、历史与缓存都接受别名或完整 id，输出沿用短 id；未知 id 报错并列出可用项。重复 id / 别名冲突直接抛错，`register()` 返回注销函数（暂不做外部动态加载）。新增来源 = 一个 descriptor + adapter 文件，不改路由器和计划器。
 
-**证据模式的来源规划（S1）按语言**：任务（goal + query）为中文时，已就绪且已配置 Key 的中文来源（博查）排在 profile 表之前；英文时优先 Exa（原生 API Key 才算，仅靠 mcporter 兜底的不提前）；`ddg` 等通用网页引擎退为一个后备（其余留给第二轮），GitHub / arXiv 等垂直来源不受影响。`academic` 保持 arxiv / pubmed。显式 `engines` 不受影响；`evidence.autoProviders: false` 关闭这一规则。`sources.status` 的 `providers` 列出每个来源的 installation / credential / health（`health` 只有真实调用成功才是 `ready`，仅通过本地探测为 `unknown`）。
+**证据模式的来源规划（S1）按语言**：见下一节“来源策略”。简言之：什么都没配置时用匿名 / 免费来源（英文先 Exa 的无 Key 路线，再 `ddg`；中文 `ddg` + `bing`）；你配置了 Key 的来源按任务语言提前；`ddg` 等通用网页引擎退为一个后备（其余留给第二轮），GitHub / arXiv 等垂直来源不受影响。`academic` 保持 arxiv / openalex / pubmed。显式 `engines` 不受影响；`evidence.autoProviders: false` 关闭自动提前。`sources.status` 的 `providers` 列出每个来源的 installation / credential / health（`health` 只有真实调用成功才是 `ready`，仅通过本地探测为 `unknown`）。
 
-**English**　Bocha (`bocha` / `builtin:bocha`) is a Chinese-strong key-based search source: `POST /v1/web-search`, Bearer key from `bochaApiKey` or `$BOCHA_SEARCH_API_KEY` (env name configurable via `bochaApiKeyEnv`), falling back to `$BOCHA_JEV_API_KEY` (same account). Billed per request; the plugin counts requests in the usage ledger (`bocha-search`, tokens n/a, price unknown). HTTP 401/403 are non-retryable (no cooldown; "no balance or package" is reported as quota), 429 cools down for `Retry-After`. Hard site / exclude_site / time_window are pushed down (`include` / `exclude` / `freshness` date range); everything else is verified locally and reported. The success path is not yet verified live (the only live call answered 403 no-quota). Search sources are registry entries (descriptor + adapter, namespaced ids with legacy aliases, duplicates throw, `register` returns an unregister function); evidence-mode S1 promotes a ready, keyed provider strong in the task language (Bocha for Chinese, Exa for English) ahead of the profile table, keeping one general web fallback.
+**English**　Bocha (`bocha` / `builtin:bocha`) is a Chinese-strong key-based search source: `POST /v1/web-search`, Bearer key from `bochaApiKey` or `$BOCHA_SEARCH_API_KEY` (env name configurable via `bochaApiKeyEnv`), falling back to `$BOCHA_JEV_API_KEY` (same account). Billed per request; the plugin counts requests in the usage ledger (`bocha-search`, tokens n/a, price unknown). HTTP 401/403 are non-retryable (no cooldown; "no balance or package" is reported as quota), 429 cools down for `Retry-After`. Hard site / exclude_site / time_window are pushed down (`include` / `exclude` / `freshness` date range); everything else is verified locally and reported. The success path was verified live on 2026-10-04 (4 requests: success shape, include / exclude / freshness range, both hosts accept the key); the default host is `https://api.bocha.cn`. Search sources are registry entries (descriptor + adapter, namespaced ids with legacy aliases, duplicates throw, `register` returns an unregister function); evidence-mode source planning is described in the next section.
+
+### 来源策略 / Source policy
+
+**中文**　插件主要依赖**免费 / 匿名额度**的来源；付费来源是预留接口，**不会因为存在 Key 之外的任何原因成为默认**。每个来源有成本层级（`search.recommend`、`sources.status` 与目录的 `costTier` 都显示）：
+
+| 层级 | 含义 | 来源 |
+|---|---|---|
+| `anonymous` | 无需 Key、账号或付费（只有限流） | `ddg`、`bing`、`exa`（匿名 MCP 路线）、`wikipedia`、`hackernews`、`stackexchange`、`openalex`、`semanticscholar`、`anysearch`、`github`、`arxiv`、`pubmed`、`v2ex`、`rss`、`searxng`、`bilibili`、`youtube`、`seam`（成本由宿主决定） |
+| `free-quota` | 需要 Key / 账号 / 登录，可免费使用（有文档可查的免费额度，或只需免费账号） | `tavily`（每月 1000 credits）、`brave`（每月 $5 额度，需绑卡验证身份）、`linkup`（专业邮箱注册送 $20，符合条件的账号每月补足）、`serper`（注册送 2500 次，一次性）、`jina`（每个新 Key 1000 万 token，一次性）、`baidu-qianfan`（每日 100 次）、`exa`（有 API Key 时每月 $10）、`github-code`（免费 Token）、各登录态平台 |
+| `paid` | 需要 Key 并按次计费；官方页面未能确认免费额度 | `bocha`、`metaso`、`zhipu` |
+
+免费额度的依据写在目录条目的 `cost` 里（带官方页面 URL，读于 2026-10-04）；确认不了的一律标 `paid`。Exa 有两条路线，按**实际会走的那条**报告层级：没有 Key 走匿名 MCP 路线（`anonymous`），配置了 Key 走 API（`free-quota`）。
+
+**自动规划的优先顺序**（证据模式第一轮至多 3 个来源，同一 `sourceFamily` 只取一个）：
+
+1. 调用里明确写的 `engines` / `platform`——永远最优先，不受下面任何设置影响。
+2. 你的偏好 `sources.priority: [id, …]`：列出的、已就绪且适合任务 profile 和语言的来源按此顺序排最前；`sources.disabled: [id, …]` 的来源完全不用（自动规划和 `engines` 配置列表都不用）。
+3. 你**配置了 Key** 的来源按任务语言 / profile 提前（最多 2 个，其余留给第二轮）：这是“排名跟着用户的需要走”——配了的可以排在前面，付费的也一样。
+4. 什么都没配置时用匿名 / 免费默认：**英文先 Exa 的无 Key 路线**（需要 `mcporter` 且其中配置了 Exa MCP），再 `ddg`；**中文** `ddg` + `bing`（Exa 擅长英文，退到第二轮）；`academic` / `experience` / `docs_code` 的垂直来源不变。
+
+`evidence.sourcePolicy: anonymous-only` 让自动规划**绝不**使用需要 Key、账号或登录的来源（即使配置了；`priority` 也不能把它们带回来；Exa 一旦有 API Key 走的就是付费 / 额度路线，也会被排除）。默认 `default`。
+
+**请求额度（可选）**：`sources.budget.<id>: { total?, daily? }`，**默认不设任何上限**——例如博查账号有 1000 次请求，可写 `sources: { budget: { bocha: { total: 1000, daily: 50 } } }`（这只是示例，不是插件默认值）。计数在用量账本里（持久化，重启后仍有效；发送前在立即事务里预留一次请求，两个搜索或两个进程不会同时花掉最后一次；适配器自己的计数会结算这次预留，所以一次请求只算一次；失败的请求归还预留，空结果算一次）。用完后该来源被**跳过并回退到其他来源**，记一条 “request budget used up” 的说明，**不是错误**；`web_call sources.status` 显示每个设了额度的来源的已用 / 剩余与策略一行。`daily` 的日界线取 `evidence.budget.timezone`。
+
+**English**　The plugin relies mainly on sources with a free or anonymous allowance; paid sources are reserved interfaces and never become the default for any reason other than the user configuring their key. Cost tiers (shown by `search.recommend`, `sources.status` and the catalog's `costTier`): `anonymous` (no key, account or money), `free-quota` (needs a key / account / login, free to use; the allowance and its official page are cited in the catalog `cost` note) and `paid` (billed per use; a free allowance could not be confirmed). Exa reports the tier of the route that would run: keyless MCP is `anonymous`, an API key is `free-quota`. Precedence of the automatic plan: (1) `engines` / `platform` in the call, always; (2) the user's `sources.priority` (ready sources that fit the profile and language go first, in order) and `sources.disabled` (never used); (3) sources the user configured a key for are promoted for their language and profile (at most two, one per family), paid ones included: ranking follows the user's needs; (4) otherwise the anonymous / free defaults: English leads with Exa over its keyless MCP route (needs `mcporter` with an Exa MCP server), then `ddg`; Chinese uses `ddg` and `bing`. `evidence.sourcePolicy: anonymous-only` never plans a source that needs a key, account or login, even a configured one. `sources.budget.<id>: { total?, daily? }` is optional and unset by default (the Bocha example `total: 1000, daily: 50` is documentation, not a default): counted in the usage ledger, reserved atomically before the request, persistent across restarts; a used-up source is skipped with a note and the plan falls back, never an error; `sources.status` shows used and remaining.
 
 ### 匿名来源与来源目录 / Anonymous sources and the source catalog
 

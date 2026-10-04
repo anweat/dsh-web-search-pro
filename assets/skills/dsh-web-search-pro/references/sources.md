@@ -2,6 +2,16 @@
 
 `search.recommend` answers "which source for this task" from the shipped catalog (`catalog/sources.v1.json`) plus what is actually ready on this machine. Ask it; do not read this list to choose.
 
+## 来源策略 (source policy and cost tiers)
+
+Every source has a cost tier, shown by `search.recommend` and `sources.status`:
+
+- `anonymous`: no key, account or money (rate limits aside): `ddg`, `bing`, `exa` over its keyless MCP route (needs `mcporter` and an `exa` MCP server), `wikipedia`, `hackernews`, `stackexchange`, `openalex`, `semanticscholar`, `anysearch`, `github`, `arxiv`, `pubmed`, `v2ex`, `rss`, `searxng`.
+- `free-quota`: needs a key, account or login and is free to use: `tavily` (1000 credits a month), `brave` ($5 of credits a month, a card for identity), `linkup`, `serper` (2500 queries at sign-up, once), `jina` (10M tokens per new key, once), `baidu-qianfan` (100 calls a day), `exa` with an API key ($10 a month), `github-code` (a free token), login platforms.
+- `paid`: `bocha`, `metaso`, `zhipu` (no free allowance on the official pages).
+
+Order of precedence for the automatic plan: (1) `engines` / `platform` in the call; (2) the user's `priority` list (setting `sources:`); (3) sources the user configured with a key, promoted for their language and profile (at most two, one per family); (4) otherwise the anonymous / free defaults. A paid source is used only when the user configured its key; `evidence.sourcePolicy: anonymous-only` never uses a source that needs a key, account or login. `budget: { <id>: {total, daily} }` under `sources:` (optional, nothing is capped by default) caps a source; a used-up one is skipped with a note and the plan falls back to free sources. `sources.status` shows used and remaining requests. Example for a Bocha account with 1000 requests: `sources: { budget: { bocha: { total: 1000, daily: 50 } } }`. These are the user's settings: do not change them, tell the user.
+
 ## Kinds
 
 - **Anonymous APIs** (no setup): `ddg`, `bing`, `wikipedia` (zh/en), `hackernews`, `stackexchange` (daily quota), `openalex`, `semanticscholar`, `arxiv`, `pubmed`, `github` (a token only raises the rate limit), `v2ex`, `rss`, `anysearch` (per-IP limit).
@@ -10,7 +20,7 @@
 | id | language | key variable |
 |---|---|---|
 | `exa` | en | `EXA_API_KEY` |
-| `bocha` | zh | `BOCHA_SEARCH_API_KEY` (falls back to `BOCHA_JEV_API_KEY`) |
+| `bocha` | zh | `BOCHA_SEARCH_API_KEY` (falls back to `BOCHA_JEV_API_KEY`; verified live 2026-10-04) |
 | `tavily` | en | `TAVILY_API_KEY` |
 | `brave` | en | `BRAVE_API_KEY` |
 | `linkup` | en | `LINKUP_API_KEY` |
