@@ -21,21 +21,10 @@ import { EngineError, type Engine, type EngineDeps, type EngineSearchOptions, ty
 import type { CompiledQuery } from '../pipeline/compile.ts'
 import type { TaskSpec } from '../pipeline/types.ts'
 import { requestProvider, safeDetail, statusFailure, type ProviderResponse } from './http.ts'
+import { KEYED_SOURCE_ENVS } from './keyed-meta.ts'
 import type { ProviderAdapter, ProviderDescriptor, Readiness } from './registry.ts'
 
-/** Default environment variable names of each keyed source's API key, first one preferred (route id -> names). */
-export const KEYED_SOURCE_ENVS: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  tavily: ['TAVILY_API_KEY'],
-  brave: ['BRAVE_API_KEY'],
-  linkup: ['LINKUP_API_KEY'],
-  serper: ['SERPER_API_KEY'],
-  metaso: ['METASO_API_KEY'],
-  zhipu: ['ZHIPU_API_KEY'],
-  // The official page says "AppBuilder API Key" without naming a variable; the MIT reference SDK (searchsuite) reads both.
-  'baidu-qianfan': ['QIANFAN_API_KEY', 'BAIDU_API_KEY'],
-})
-
-export const KEYED_SOURCE_IDS: readonly string[] = Object.freeze(Object.keys(KEYED_SOURCE_ENVS))
+export { KEYED_SOURCE_ENVS, KEYED_SOURCE_IDS } from './keyed-meta.ts'
 
 export const KEYED_TIMEOUT_MS = 30_000
 export const SNIPPET_CHARS = 1_000

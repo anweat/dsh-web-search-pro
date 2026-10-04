@@ -10,6 +10,10 @@ import type { CoverageSettings } from './pipeline/coverage.ts'
 import type { JudgeSettings } from './pipeline/judges/providers.ts'
 import type { BudgetInput } from './pipeline/ledger.ts'
 import type { RubricOverride } from './pipeline/rubrics.ts'
+import { PROVIDER_EVIDENCE_MODES, TOOL_SURFACES, type ToolSurface } from './config-enums.ts'
+
+export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, TOOL_SURFACES } from './config-enums.ts'
+export type { ToolSurface }
 
 /** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
 export interface CustomPlatformSpec {
@@ -91,17 +95,11 @@ export interface ProviderSettings {
   deadlineMs: number
 }
 
-export const PROVIDER_EVIDENCE_MODES = ['auto', 'off'] as const
-
 export function resolveProviderEvidence(value: unknown): ProviderSettings['evidence'] {
   const mode = value ?? 'auto'
   if (typeof mode !== 'string' || !(PROVIDER_EVIDENCE_MODES as readonly string[]).includes(mode)) throw new Error('provider.evidence must be one of: ' + PROVIDER_EVIDENCE_MODES.join(', '))
   return mode as ProviderSettings['evidence']
 }
-
-/** `indexed` registers web_index + web_call; `flat` registers one tool per action (comparison and debugging only). */
-export const TOOL_SURFACES = ['indexed', 'flat'] as const
-export type ToolSurface = typeof TOOL_SURFACES[number]
 
 export function resolveToolSurface(value: unknown): ToolSurface {
   const surface = value ?? 'indexed'
