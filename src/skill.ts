@@ -84,13 +84,13 @@ export function registerSkillWhenAvailable(ctx: Context, dir = SKILL_DIR): Skill
   ;(ctx as any).inject(['skills'], (skillCtx: any) => {
     let provider: ReturnType<typeof createSkillProvider>
     try { provider = createSkillProvider(dir) } catch (error) {
-      skillCtx.logger?.(PROVIDER_NAME)?.warn?.('dsh-web-search-pro skill not registered: ' + String(error))
+      skillCtx.logger(PROVIDER_NAME).warn('dsh-web-search-pro skill not registered: ' + String(error))
       return
     }
-    const handle = skillCtx.skills.registerProvider(() => provider)
-    const unregister: () => void = typeof handle === 'function' ? handle : () => {}
+    // registerProvider returns the Cordis effect disposer that withdraws the provider.
+    const unregister: () => void = skillCtx.skills.registerProvider(() => provider)
     available = true
-    skillCtx.effect?.(() => () => {
+    skillCtx.effect(() => () => {
       try { unregister() } catch { /* the Host may already have dropped it */ }
       available = false
     })

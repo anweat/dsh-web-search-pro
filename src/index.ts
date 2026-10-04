@@ -58,10 +58,10 @@ export function apply(ctx: Context, config: Config): void {
   // 1. Persistent store (closed on plugin unload). On startup, purge search
   //    rows minted with an older cache-key version so stale titles-only ddg
   //    results saved before the snippet-regex fix are never replayed.
-  const store = new Store(dbPath, { onDiagnostic: message => { try { ctx.logger?.(name).warn(message) } catch { /* logging is best-effort */ } } })
+  const store = new Store(dbPath, { onDiagnostic: message => { try { ctx.logger(name).warn(message) } catch { /* logging is best-effort */ } } })
   try {
     const purged = store.cleanupLegacySearchCache('search:v' + SEARCH_CACHE_VERSION + ':')
-    if (purged.queries > 0) ctx.logger?.(name).info('web-search-pro: purged ' + purged.queries + ' legacy search rows (' + purged.results + ' results) from cache-key v<=' + (SEARCH_CACHE_VERSION - 1))
+    if (purged.queries > 0) ctx.logger(name).info('web-search-pro: purged ' + purged.queries + ' legacy search rows (' + purged.results + ' results) from cache-key v<=' + (SEARCH_CACHE_VERSION - 1))
   } catch { /* non-fatal */ }
   ctx.effect(() => () => store.close())
 
@@ -78,7 +78,7 @@ export function apply(ctx: Context, config: Config): void {
   //    object reflects the new values without a remount. Every operation
   //    therefore reads through the SAME stable `dynamic` closure that
   //    dereferences the live config per call — hot-reloaded sections reach
-  //    every consumer. (Hosts without volatile support keep the startup value.)
+  //    every consumer.
   const dynamic = (): ResolvedConfig => resolveConfig(ctx.fiber.config as Config)
 
   // 4. Services.
@@ -148,7 +148,7 @@ export function apply(ctx: Context, config: Config): void {
     } catch { /* marker is best-effort */ }
   }
 
-  ctx.logger?.(name).info('web-search-pro loaded: db=' + dbPath + ' engines=[' + resolved.engines.join(',') + ']')
+  ctx.logger(name).info('web-search-pro loaded: db=' + dbPath + ' engines=[' + resolved.engines.join(',') + ']')
 }
 
 // The loader unwraps `default` before reading Config. A named export alone
