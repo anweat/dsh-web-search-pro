@@ -4,6 +4,7 @@ import type { Context } from './context-types.ts'
 import {
   WebSearchSettingsController,
   type CredentialId,
+  type RubricTextKey,
   type SettingField,
   type WebSearchCardState,
 } from './form.ts'
@@ -21,6 +22,9 @@ export type SettingsCardProps = PropsLocale<typeof NS> & {
   edit: (field: SettingField, text: string) => void
   resetField: (field: SettingField) => void
   editCredential: (id: CredentialId, text: string) => void
+  editRubric: (id: string, key: RubricTextKey, text: string) => void
+  startRubric: (id: string) => void
+  restoreRubric: (id: string) => void
   save: () => void
   discard: () => void
   refreshCredentials: () => void
