@@ -169,7 +169,7 @@ export function SettingsCard(props: SettingsCardProps) {
             <div className={css.grid}>
               {text('bochaApiKeyEnv', 'bochaApiKeyEnv', 'bochaApiKeyEnvHint', 'text', 'BOCHA_SEARCH_API_KEY')}
               {credential('bocha', 'bochaApiKey')}
-              {text('bochaBaseUrl', 'bochaBaseUrl', 'bochaBaseUrlHint', 'text', 'https://api.bochaai.com')}
+              {text('bochaBaseUrl', 'bochaBaseUrl', 'bochaBaseUrlHint', 'text', 'https://api.bocha.cn')}
               {toggle('bochaSummary', 'bochaSummary', 'bochaSummaryHint')}
               {text('sources.budget.bocha.total', 'reqTotal', 'reqTotalHint', 'number')}
               {text('sources.budget.bocha.daily', 'reqDaily', 'reqDailyHint', 'number')}

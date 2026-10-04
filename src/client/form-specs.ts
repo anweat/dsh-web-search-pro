@@ -218,7 +218,7 @@ export const DEFAULTS = {
   budget: { ...DEFAULT_BUDGET },
   toolSurface: 'indexed',
   bochaApiKeyEnv: 'BOCHA_SEARCH_API_KEY',
-  bochaBaseUrl: 'https://api.bochaai.com',
+  bochaBaseUrl: 'https://api.bocha.cn',
   bochaSummary: true,
 } as const
 

@@ -102,7 +102,7 @@ test('descriptors state their needs as data: key env names, optional CLI fallbac
   const d = (id: string) => r.resolve(id)!.descriptor
   assert.deepEqual(d('bocha').requirements, [{ kind: 'key', id: 'bocha-key', env: ['BOCHA_SEARCH_API_KEY', 'BOCHA_JEV_API_KEY'], note: 'a search key; the Jev key of the same account is the documented fallback' }])
   assert.deepEqual([d('bocha').languages, d('bocha').regions, d('bocha').supportedFilters, d('bocha').costModel.kind], [['zh'], ['cn'], ['site', 'exclude_site', 'time_window'], 'metered'])
-  assert.equal(d('bocha').verification?.live, false, 'not verified against the live service yet')
+  assert.equal(d('bocha').verification?.live, true, 'verified live 2026-10-04')
   assert.deepEqual([d('exa').languages, d('exa').supportedFilters], [['en'], ['site', 'exclude_site', 'time_window', 'category']])
   assert.ok(d('exa').requirements.some(q => q.kind === 'cli' && q.id === 'mcporter' && q.optional))
   assert.equal(d('ddg').sourceFamily, undefined, 'unknown is never read as independent')
@@ -307,7 +307,7 @@ test('sources.status: lists registry providers with readiness dimensions (option
     const out = await callAction(definitions, 'sources.status')
     assert.deepEqual(checkOutput(def.output, out), [], 'the result fits its closed output schema')
     const bocha = out.providers.find((p: any) => p.id === 'builtin:bocha')
-    assert.deepEqual([bocha.route, bocha.aliases, bocha.languages, bocha.unverified, bocha.sourceFamily], ['bocha', ['bocha'], ['zh'], true, undefined])
+    assert.deepEqual([bocha.route, bocha.aliases, bocha.languages, bocha.unverified, bocha.sourceFamily], ['bocha', ['bocha'], ['zh'], undefined, undefined])
     assert.deepEqual(bocha.requirements[0].env, ['BOCHA_SEARCH_API_KEY', 'BOCHA_JEV_API_KEY'])
     assert.deepEqual([bocha.readiness.available, bocha.readiness.credential, bocha.readiness.health], [true, 'configured', 'unknown'])
     assert.ok(typeof bocha.readiness.lastLocalCheck === 'string' && bocha.readiness.lastRemoteSuccess === undefined, 'nothing was called, so nothing is claimed verified')
@@ -325,7 +325,7 @@ test('sources.status: lists registry providers with readiness dimensions (option
       for (const q of p.requirements) for (const key of Object.keys(q)) assert.ok(key in schema.properties.requirements.items.properties, key)
     }
     const text = renderResult('sources.status', out)
-    assert.match(text, /provider bocha \(builtin:bocha\): installation=not_required credential=configured health=unknown · zh · general\/news_fact\/experience\/compare\/docs_code · paid · \[not verified live\]/)
+    assert.match(text, /provider bocha \(builtin:bocha\): installation=not_required credential=configured health=unknown · zh · general\/news_fact\/experience\/compare\/docs_code · paid(?! · \[not verified live)/)
     assert.match(text, /provider exa \(builtin:exa\): installation=\w+ credential=missing/)
     // the evidence section shows the effective mode, not "scorer rule"
     assert.equal(out.evidence.mode, 'hybrid')

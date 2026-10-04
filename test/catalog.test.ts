@@ -65,7 +65,8 @@ test('catalog: provider / platform links resolve to what this plugin implements;
   }
   // Every provider this plugin registers has a catalog entry (the catalog is how it is explained).
   for (const route of routes) assert.ok(catalog.entries.some(e => e.provider === route), 'catalog entry for provider ' + route)
-  assert.equal(byId('bocha').verification.status, 'unverified', 'only a 403 was ever recorded live')
+  assert.equal(byId('bocha').verification.status, 'verified', 'Bocha was verified live on 2026-10-04')
+  assert.equal(byId('bocha').verification.date, '2026-10-04')
   assert.ok(catalog.entries.filter(e => e.verification.status === 'unverified').length > 0)
   for (const e of catalog.entries) assert.ok(!/(?:sk|key)-[a-z0-9]{12,}/i.test(JSON.stringify(e)), e.id + ' holds no secret-looking value')
 })

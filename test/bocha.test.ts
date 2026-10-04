@@ -41,19 +41,47 @@ const task = (constraints: Constraint[], query = '博查 搜索') => ({ goal: qu
 
 // ── mapping ──────────────────────────────────────────────────────────────────
 
-test('bocha mapping (contract fixture): summary over snippet, title, publishedAt; URL-less and non-http entries dropped', () => {
+test('bocha mapping (live capture 2026-10-04): summary over snippet, title, publishedAt; URL-less and non-http entries dropped', () => {
+  assert.equal(SUCCESS.live, true, 'the fixture is a sanitized real response')
+  assert.equal(SUCCESS.baseUrl, 'https://api.bocha.cn')
+  assert.equal(SUCCESS.body.code, 200, 'the success code is the number 200')
   const sources = parseBochaResponse(SUCCESS.body, 10)
-  assert.deepEqual(sources.map(s => s.url), ['https://open.bochaai.com/', 'https://example.test/docs/web-search', 'https://news.example.test/a?utm=1'])
-  assert.equal(sources[0]!.title, '博查 AI 开放平台')
-  assert.match(sources[0]!.snippet!, /^博查提供面向 AI 的网页搜索 API/, 'the summary wins over the short snippet')
-  assert.equal(sources[0]!.publishedAt, '2026-08-14T08:00:00+08:00')
-  assert.equal(sources[1]!.snippet, '请求参数 query、freshness、summary、count。', 'no summary: the snippet')
-  assert.ok(!('publishedAt' in sources[1]!), 'null date omitted')
-  assert.equal(sources[2]!.snippet, '只有简短 snippet，没有 summary。', 'blank summary falls back')
+  assert.deepEqual(sources.map(s => s.url), ['https://blog.csdn.net/qq_41840843/article/details/163136425', 'https://dyclt.blog.csdn.net/article/details/148104826', 'https://www.php.cn/faq/3106505.html'])
+  assert.equal(sources[0]!.title, 'Redis Cluster 数据分布模型:哈希槽的静态划分-CSDN博客')
+  assert.equal(sources[0]!.snippet, SUCCESS.body.data.webPages.value[0].summary, 'the summary wins over the short snippet')
+  assert.notEqual(SUCCESS.body.data.webPages.value[0].summary, SUCCESS.body.data.webPages.value[0].snippet)
+  assert.equal(sources[0]!.publishedAt, '2026-07-23T15:48:29+08:00')
   assert.equal(parseBochaResponse(SUCCESS.body, 2).length, 2, 'bounded by count')
   // the envelope-less shape (webPages at the top level) is tolerated too
   assert.equal(parseBochaResponse({ webPages: { value: [{ url: 'https://a.test/' }] } }, 5).length, 1)
   assert.equal(mapBochaPages([{ url: 'https://a.test/', summary: 'x'.repeat(5000) }], 1)[0]!.snippet!.length, 1001, 'cut at 1000 characters plus an ellipsis')
+  // edge cases the live capture does not contain
+  const edge = mapBochaPages([
+    { name: 'no url', snippet: 's' }, { name: 'ftp', url: 'ftp://x.test/a' },
+    { name: 'plain snippet', url: 'https://a.test/1', summary: '  ', snippet: '只有简短 snippet', datePublished: null },
+    { name: 'dated', url: 'https://a.test/2', summary: 'long summary', snippet: 'short', datePublished: '2026-08-14T08:00:00+08:00' },
+  ], 10)
+  assert.deepEqual(edge.map(s => s.url), ['https://a.test/1', 'https://a.test/2'])
+  assert.equal(edge[0]!.snippet, '只有简短 snippet', 'blank summary falls back to the snippet')
+  assert.ok(!('publishedAt' in edge[0]!), 'null date omitted')
+})
+
+test('bocha live filters (2026-10-04): include / exclude / freshness range as the request compiler writes them, and what came back honoured them', () => {
+  const FILTERS = fixture('bocha-filters.json')
+  assert.equal(FILTERS.live, true)
+  const [withInclude, withExclude] = FILTERS.captures
+  // the compiler writes exactly the fields that were sent live
+  const now = new Date('2026-10-04T00:00:00Z')
+  const compiled = compileBocha(task([hard('s1', 'site', 'csdn.net'), hard('s2', 'site', 'cnblogs.com'), hard('t', 'time_window', '2026 年以后')]), 'bocha', now).options!.bocha!
+  assert.deepEqual(bochaRequestBody('q', 10, true, compiled), { query: 'q', count: 10, summary: true, freshness: withInclude.request.freshness.replace('2026-01-01', '2026-01-01'), include: withInclude.request.include })
+  const exclude = compileBocha(task([hard('x1', 'exclude_site', 'csdn.net'), hard('x2', 'exclude_site', 'php.cn')]), 'bocha', now).options!.bocha!
+  assert.equal(bochaRequestBody('q', 10, false, exclude).exclude, withExclude.request.exclude)
+  // what the service returned
+  const hostIn = (host: string, domains: string[]): boolean => domains.some(d => host === d || host.endsWith('.' + d))
+  assert.ok(withInclude.results.length > 0 && withInclude.results.every((r: any) => hostIn(r.host, ['csdn.net', 'cnblogs.com'])), 'include keeps only the listed domains, subdomains included')
+  assert.ok(withInclude.results.every((r: any) => r.datePublished >= '2026-01-01' && r.datePublished <= '2026-10-04T23:59:59'), 'freshness range keeps publication dates inside it')
+  assert.ok(withExclude.results.length > 0 && withExclude.results.every((r: any) => !hostIn(r.host, ['csdn.net', 'php.cn'])), 'exclude drops the listed domains')
+  assert.equal(FILTERS.sameKeyOtherBase.status, 200, 'api.bochaai.com serves the same API')
 })
 
 test('bocha: an empty or missing result list is ENGINE_EMPTY; a malformed one is a retryable ENGINE_ERROR', () => {
@@ -72,7 +100,7 @@ test('bocha request: bearer key, documented body fields, native options, count b
   const out = await e.search('博查 搜索', 5, undefined, { bocha: { freshness: '2026-01-01..2026-10-02', include: ['Open.BochaAI.com', 'bad host', 'a.test', 'a.test'], exclude: ['spam.example'] } })
   assert.equal(out.sources.length, 3)
   const [call] = calls
-  assert.equal(call!.url, 'https://api.bochaai.com/v1/web-search')
+  assert.equal(call!.url, 'https://api.bocha.cn/v1/web-search', 'the reference plugin\'s host, verified live')
   assert.equal(call!.init.method, 'POST')
   assert.equal(call!.init.redirect, 'error')
   assert.equal((call!.init.headers as Record<string, string>).authorization, 'Bearer ' + KEY)
@@ -87,9 +115,9 @@ test('bocha request: bearer key, documented body fields, native options, count b
   assert.equal(joinSites(['a.test', 'not a domain', '']), 'a.test')
   assert.equal(joinSites(Array.from({ length: 150 }, (_, i) => 'h' + i + '.test'))!.split('|').length, 100)
 
-  const custom = engine(() => reply(200, SUCCESS.body), { bochaBaseUrl: 'https://api.bocha.cn/', bochaSummary: false })
+  const custom = engine(() => reply(200, SUCCESS.body), { bochaBaseUrl: 'https://api.bochaai.com/', bochaSummary: false })
   await custom.e.search('q', 3)
-  assert.equal(custom.calls[0]!.url, 'https://api.bocha.cn/v1/web-search')
+  assert.equal(custom.calls[0]!.url, 'https://api.bochaai.com/v1/web-search', 'the second live-verified host')
   assert.equal(custom.calls[0]!.body.summary, false)
 })
 

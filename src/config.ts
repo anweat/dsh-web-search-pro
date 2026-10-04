@@ -192,7 +192,7 @@ export interface Config {
   bochaApiKey?: string
   /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
   bochaApiKeyEnv?: string
-  /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bochaai.com. */
+  /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bocha.cn. */
   bochaBaseUrl?: string
   /** Ask Bocha for its longer per-page summary (default true). */
   bochaSummary?: boolean
@@ -275,7 +275,7 @@ export const Config = z.object({
   jinaApiKeyEnv: z.string().default('JINA_API_KEY').volatile(),
   bochaApiKey: z.string().role('secret').volatile(),
   bochaApiKeyEnv: z.string().default('BOCHA_SEARCH_API_KEY').volatile(),
-  bochaBaseUrl: z.string().default('https://api.bochaai.com').volatile(),
+  bochaBaseUrl: z.string().default('https://api.bocha.cn').volatile(),
   bochaSummary: z.boolean().default(true).volatile(),
   searxngUrl: z.string().volatile(),
   openalexMailto: z.string().volatile(),
@@ -490,7 +490,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     jinaApiKeyEnv: vOr(config.jinaApiKeyEnv, 'JINA_API_KEY') as string,
     bochaApiKey: config.bochaApiKey !== undefined ? v(config.bochaApiKey) : undefined,
     bochaApiKeyEnv: vOr(config.bochaApiKeyEnv, 'BOCHA_SEARCH_API_KEY') as string,
-    bochaBaseUrl: vOr(config.bochaBaseUrl, 'https://api.bochaai.com') as string,
+    bochaBaseUrl: vOr(config.bochaBaseUrl, 'https://api.bocha.cn') as string,
     bochaSummary: vOr(config.bochaSummary, true) as boolean,
     searxngUrl: config.searxngUrl !== undefined ? v(config.searxngUrl) : undefined,
     openalexMailto: config.openalexMailto !== undefined ? v(config.openalexMailto) : undefined,
