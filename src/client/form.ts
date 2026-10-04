@@ -3,13 +3,13 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { BUILTIN_RUBRIC_IDS, builtinDef, type RubricKind } from '../pipeline/rubrics-spec.ts'
 import type { Context } from './context-types.ts'
 import {
-  CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, applyOps, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
+  BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, applyOps, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
 import { evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
-export { CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
+export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
 export type { CredentialId, SettingField }
 
 export interface CardFieldState {
@@ -87,7 +87,7 @@ function same(left: unknown, right: unknown): boolean {
   return stable(left) === stable(right)
 }
 
-const SPECS: readonly FieldSpec[] = [...FIELD_SPECS, ...PATH_SPECS, ...KEYED_SPECS, ...BUILTIN_RUBRIC_IDS.map(rubricSpec)]
+const SPECS: readonly FieldSpec[] = [...FIELD_SPECS, ...PATH_SPECS, ...KEYED_SPECS, ...BUDGET_SPECS, ...BUILTIN_RUBRIC_IDS.map(rubricSpec)]
 const SPEC_BY_FIELD = new Map<SettingField, FieldSpec>(SPECS.map(spec => [spec.field, spec]))
 
 function createLocalStore<T>(initial: T): SnapshotStore<T> {

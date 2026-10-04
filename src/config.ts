@@ -10,6 +10,7 @@ import type { CoverageSettings } from './pipeline/coverage.ts'
 import type { JudgeSettings } from './pipeline/judges/providers.ts'
 import type { BudgetInput } from './pipeline/ledger.ts'
 import type { RubricOverride } from './pipeline/rubrics.ts'
+import type { SourceBudgetInput } from './pipeline/sources-spec.ts'
 import { PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES, type SourcePolicy, type ToolSurface } from './config-enums.ts'
 
 export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES } from './config-enums.ts'
@@ -125,6 +126,13 @@ export interface SourcesConfig {
   priority?: string[]
   /** Source ids the automatic plan and the configured `engines` list never use (an explicit `engines` / `platform` in a call still can). */
   disabled?: string[]
+  /**
+   * Optional request caps per source id, counted in the usage ledger (persistent, atomic): `total` over all time, `daily` per
+   * calendar day (time zone of `evidence.budget`). No source has a cap unless it is set here. An exhausted source is skipped
+   * with a note and the plan falls back to other sources; it is never an error. Example for a Bocha account with 1000 requests:
+   * `budget: { bocha: { total: 1000, daily: 50 } }`.
+   */
+  budget?: Record<string, SourceBudgetInput>
 }
 
 export interface Config {
@@ -313,6 +321,7 @@ export const Config = z.object({
   sources: z.object({
     priority: z.array(z.string()).volatile(),
     disabled: z.array(z.string()).volatile(),
+    budget: z.dict(z.object({ total: z.number(), daily: z.number() })).volatile(),
   }),
   evidence: z.object({
     scorer: z.union(['rule', 'jev']).default('rule').volatile(),
@@ -521,6 +530,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     sources: {
       priority: vOr(sv.priority, [] as string[]) as string[],
       disabled: vOr(sv.disabled, [] as string[]) as string[],
+      budget: vOr(sv.budget, {} as Record<string, SourceBudgetInput>) as Record<string, SourceBudgetInput>,
     },
     verbose: vOr(config.verbose, false) as boolean,
   }

@@ -45,7 +45,10 @@ export type PathField =
 /** One rubric override entry (`evidence.rubrics.<id>`) and one keyed-source field. */
 export type RubricField = `evidence.rubrics.${string}`
 export type KeyedField = `keyedSources.${string}.apiKeyEnv` | `keyedSources.${string}.baseUrl`
-export type SettingField = TopField | PathField | RubricField | KeyedField
+/** One axis of one source's request budget (`sources.budget.<id>.total|daily`). */
+export type BudgetField = `sources.budget.${string}.${'total' | 'daily'}`
+
+export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField
 
 export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources'
 
@@ -319,6 +322,12 @@ export const KEYED_SPECS: readonly PathSpec[] = KEYED_SOURCES.flatMap(({ id }) =
   path(textField(`keyedSources.${id}.apiKeyEnv`, { pattern: KEY_REF_PATTERN }), 'keyedSources', [id, 'apiKeyEnv']),
   path(textField(`keyedSources.${id}.baseUrl`, { url: true }), 'keyedSources', [id, 'baseUrl']),
 ])
+
+/** The sources the card has a request budget for: Bocha and the keyed sources (any registered id works in settings.yaml). */
+export const BUDGETED_SOURCES: readonly string[] = ['bocha', ...KEYED_SOURCE_IDS]
+
+export const BUDGET_SPECS: readonly PathSpec[] = BUDGETED_SOURCES.flatMap(id => (['total', 'daily'] as const).map(axis =>
+  path(numberField(`sources.budget.${id}.${axis}`, { min: 0, integer: true }), 'sources', ['budget', id, axis])))
 
 /** The spec of a rubric override entry: the whole object as one JSON draft, which the rubric editor builds field by field. */
 export const rubricSpec = (id: string): PathSpec => path(jsonField(`evidence.rubrics.${id}`), E, ['rubrics', id])

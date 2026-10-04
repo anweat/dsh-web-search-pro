@@ -171,7 +171,10 @@ export function SettingsCard(props: SettingsCardProps) {
               {credential('bocha', 'bochaApiKey')}
               {text('bochaBaseUrl', 'bochaBaseUrl', 'bochaBaseUrlHint', 'text', 'https://api.bochaai.com')}
               {toggle('bochaSummary', 'bochaSummary', 'bochaSummaryHint')}
+              {text('sources.budget.bocha.total', 'reqTotal', 'reqTotalHint', 'number')}
+              {text('sources.budget.bocha.daily', 'reqDaily', 'reqDailyHint', 'number')}
             </div>
+            <p className={css.note} data-web-search-pro-req-budget>{t('reqBudgetGroup')}: {t('reqBudgetNote')}</p>
             <h4 className={css.subheading}>{t('keyedGroup')}</h4>
             <p className={css.hint}>{t('keyedGroupHint')}</p>
             {KEYED_SOURCES.map(({ id, defaultEnv }) => {
@@ -179,12 +182,14 @@ export function SettingsCard(props: SettingsCardProps) {
               const urlField = `keyedSources.${id}.baseUrl` as const
               const status = state.credentials[`keyed:${id}`]
               return (
-                <details key={id} className={css.keyedSource} open={state.fields[envField].overridden || state.fields[urlField].overridden || status.configured || undefined} data-web-search-pro-keyed={id}>
+                <details key={id} className={css.keyedSource} open={state.fields[envField].overridden || state.fields[urlField].overridden || state.fields[`sources.budget.${id}.total`].overridden || state.fields[`sources.budget.${id}.daily`].overridden || status.configured || undefined} data-web-search-pro-keyed={id}>
                   <summary>{KEYED_NAMES[id] ?? id}<span className={css.badge} data-on={status.configured || undefined}>{status.loading ? t('credentialChecking') : status.configured ? t('credentialSet') : t('credentialUnset')}</span></summary>
                   <div className={css.grid}>
                     <TextField field={envField} state={state.fields[envField]} label={t('keyedEnv')} hint={`${t('keyedEnvHint')}${defaultEnv}`} disabled={disabled} t={t} edit={props.edit} reset={props.resetField} placeholder={defaultEnv} />
                     {credential(`keyed:${id}`, 'keyedApiKey')}
                     <TextField field={urlField} state={state.fields[urlField]} label={t('keyedBaseUrl')} hint={t('keyedBaseUrlHint')} disabled={disabled} t={t} edit={props.edit} reset={props.resetField} />
+                    {text(`sources.budget.${id}.total`, 'reqTotal', 'reqTotalHint', 'number')}
+                    {text(`sources.budget.${id}.daily`, 'reqDaily', 'reqDailyHint', 'number')}
                   </div>
                 </details>
               )

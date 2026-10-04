@@ -444,6 +444,51 @@ export class Store {
     }
   }
 
+  /**
+   * Requests booked for a request-counted provider (protocol `search`): over all time and on `day`. A settled row counts its
+   * `requests`, an open reservation counts one (a crash never frees it), a released row none.
+   */
+  requestCounts(provider: string, day: string): { total: number; today: number } {
+    return this.read({ total: 0, today: 0 }, () => {
+      const sum = (extra: string, ...params: string[]): number => (this.db.prepare(
+        `SELECT COALESCE(SUM(CASE WHEN status = 'reserved' THEN 1 ELSE requests END), 0) AS n FROM usage_ledger WHERE provider = ? AND protocol = 'search' AND status != 'released'` + extra,
+      ).get(provider, ...params) as { n: number }).n
+      return { total: sum(''), today: sum(' AND day = ?', day) }
+    })
+  }
+
+  /**
+   * Reserve ONE request of a request-capped source, atomically across processes sharing this file (BEGIN IMMEDIATE), like
+   * {@link reserveUsage} does for tokens: refused when the all-time `total` or today's `daily` cap would be passed. A closed or
+   * failing store refuses.
+   */
+  reserveRequest(input: { id: string; ts: string; day: string; searchId?: string; provider: string; protocol: string; total?: number; daily?: number }): { ok: true } | { ok: false; scope: 'total' | 'daily' | 'unavailable'; used: number; cap: number } {
+    if (this.closed) return { ok: false, scope: 'unavailable', used: 0, cap: 0 }
+    try {
+      return this.transaction(() => {
+        const count = (extra: string, ...params: string[]): number => (this.db.prepare(
+          `SELECT COALESCE(SUM(CASE WHEN status = 'reserved' THEN 1 ELSE requests END), 0) AS n FROM usage_ledger WHERE provider = ? AND protocol = 'search' AND status != 'released'` + extra,
+        ).get(input.provider, ...params) as { n: number }).n
+        if (input.total !== undefined) {
+          const used = count('')
+          if (used + 1 > input.total) return { ok: false as const, scope: 'total' as const, used, cap: input.total }
+        }
+        if (input.daily !== undefined) {
+          const used = count(' AND day = ?', input.day)
+          if (used + 1 > input.daily) return { ok: false as const, scope: 'daily' as const, used, cap: input.daily }
+        }
+        this.db.prepare(
+          `INSERT INTO usage_ledger (id, ts, day, search_id, provider, protocol, model, status, requests, input_tokens, output_tokens, estimated, amount, currency, note)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, 'reserved', 0, 0, 0, 0, NULL, NULL, NULL)`,
+        ).run(input.id, input.ts, input.day, input.searchId ?? null, input.provider, input.protocol)
+        return { ok: true as const }
+      })
+    } catch (error) {
+      this.note('request reserve failed: ' + (error as Error).message)
+      return { ok: false, scope: 'unavailable', used: 0, cap: 0 }
+    }
+  }
+
   /** Close a reservation: final tokens (actual, or the estimate flagged `estimated`) and amount (null = unknown price). */
   settleUsage(id: string, final: { status: 'settled' | 'released'; requests: number; inputTokens: number; outputTokens: number; estimated: boolean; amount: number | null; currency?: string; note?: string }): void {
     this.write('settleUsage', undefined, () => {

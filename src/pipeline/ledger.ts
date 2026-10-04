@@ -22,6 +22,7 @@ import type { Store, UsageTotals } from '../store.ts'
 import { BudgetExceededError } from './judges/errors.ts'
 import type { ProviderConfig, UsageMeter, UsageSettled, UsageTicket } from './judges/types.ts'
 import { DEFAULT_BUDGET, resolveBudget, type BudgetCaps, type BudgetInput, type ProviderBudgetInput } from './budget-spec.ts'
+import type { SourceBudgetInput } from './sources-spec.ts'
 
 export { DEFAULT_BUDGET, resolveBudget }
 export type { BudgetCaps, BudgetInput, ProviderBudgetInput }
@@ -30,6 +31,46 @@ export type { BudgetCaps, BudgetInput, ProviderBudgetInput }
 /** Calendar day `YYYY-MM-DD` of `ts` in `timezone` (the system zone when absent). */
 export function dayKey(ts: number, timezone?: string): string {
   return new Intl.DateTimeFormat('en-CA', { ...timezone ? { timeZone: timezone } : {}, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts))
+}
+
+/** The ledger provider name of a source's request rows: Bocha books them as `bocha-search`, every other source under its route id. */
+export function usageProviderOf(route: string): string {
+  return route === 'bocha' ? 'bocha-search' : route
+}
+
+/** One axis of a request budget: the cap, what is booked, what is left. */
+export interface RequestAxis { limit: number; used: number; remaining: number }
+
+/** Used and remaining requests of one budgeted source (`sources.budget.<id>`), read from the ledger. */
+export interface RequestBudgetState {
+  /** Route id of the source. */
+  source: string
+  total?: RequestAxis
+  daily?: RequestAxis
+  /** The calendar day `daily` counts. */
+  day: string
+  exhausted: boolean
+  /** Words for a skip note (`request budget used up: 1000/1000 total`); only when exhausted. */
+  reason?: string
+}
+
+/** A reserved request of a capped source: settled when the service answered, released when it did not. */
+export class RequestTicket {
+  private open = true
+  constructor(private readonly store: Store, private readonly id: string) {}
+  get closed(): boolean { return !this.open }
+  /** The request reached the service and is booked (`requests` normally 1). */
+  settle(requests = 1, note?: string): void {
+    if (!this.open) return
+    this.open = false
+    this.store.settleUsage(this.id, { status: 'settled', requests: Math.max(Math.floor(requests), 0), inputTokens: 0, outputTokens: 0, estimated: false, amount: null, ...note ? { note } : {} })
+  }
+  /** The request did not reach the service (or was refused before billing): the reservation is given back. */
+  release(note?: string): void {
+    if (!this.open) return
+    this.open = false
+    this.store.settleUsage(this.id, { status: 'released', requests: 0, inputTokens: 0, outputTokens: 0, estimated: false, amount: null, ...note ? { note } : {} })
+  }
 }
 
 export interface UsageSnapshot {
@@ -66,6 +107,30 @@ export class UsageLedger {
     const res = this.store.reserveUsage({ id, ts: new Date(ts).toISOString(), day: dayKey(ts, this.caps.timezone), ...entry.searchId ? { searchId: entry.searchId } : {}, provider: entry.provider, protocol: entry.protocol, ...entry.model ? { model: entry.model } : {}, inputTokens: 0 })
     if (!res.ok) return
     this.store.settleUsage(id, { status: 'settled', requests: Math.max(Math.floor(entry.requests), 0), inputTokens: 0, outputTokens: 0, estimated: false, amount: null, ...entry.note ? { note: entry.note } : {} })
+  }
+
+  /** Used and remaining requests of a budgeted source: the ledger's persistent counters (all time and today). Read-only. */
+  requestBudget(route: string, budget: SourceBudgetInput): RequestBudgetState {
+    const day = this.day()
+    const counts = this.store.requestCounts(usageProviderOf(route), day)
+    const axis = (limit: number | undefined, used: number): RequestAxis | undefined => (limit === undefined ? undefined : { limit, used, remaining: Math.max(limit - used, 0) })
+    const total = axis(budget.total, counts.total)
+    const daily = axis(budget.daily, counts.today)
+    const spent = [total && total.remaining <= 0 ? 'total ' + total.used + '/' + total.limit : undefined, daily && daily.remaining <= 0 ? 'today ' + daily.used + '/' + daily.limit : undefined].filter((x): x is string => !!x)
+    return { source: route, ...total ? { total } : {}, ...daily ? { daily } : {}, day, exhausted: spent.length > 0, ...spent.length ? { reason: 'request budget used up (' + spent.join(', ') + ')' } : {} }
+  }
+
+  /**
+   * Reserve one request of a capped source before it is sent, atomically (immediate transaction) so two searches or two
+   * processes cannot both spend the last one. Refused when the total or today's cap would be passed.
+   */
+  reserveRequest(route: string, budget: SourceBudgetInput, searchId?: string): RequestTicket | { refused: string } {
+    const id = 'u_' + crypto.randomUUID().slice(0, 12)
+    const ts = this.now()
+    const res = this.store.reserveRequest({ id, ts: new Date(ts).toISOString(), day: dayKey(ts, this.caps.timezone), ...searchId ? { searchId } : {}, provider: usageProviderOf(route), protocol: 'search', ...budget.total !== undefined ? { total: budget.total } : {}, ...budget.daily !== undefined ? { daily: budget.daily } : {} })
+    if (res.ok) return new RequestTicket(this.store, id)
+    if (res.scope === 'unavailable') return { refused: 'usage ledger unavailable' }
+    return { refused: 'request budget used up (' + (res.scope === 'total' ? 'total ' : 'today ') + res.used + '/' + res.cap + ')' }
   }
 
   /**

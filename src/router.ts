@@ -21,7 +21,8 @@ import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
 import { SEMANTICSCHOLAR_KEY_ENV } from './providers/semanticscholar.ts'
 import { ANYSEARCH_KEY_ENV } from './providers/anysearch.ts'
 import { KEYED_SOURCE_ENVS } from './providers/keyed.ts'
-import { resolveBudget, UsageLedger } from './pipeline/ledger.ts'
+import { resolveBudget, UsageLedger, type RequestBudgetState, type RequestTicket } from './pipeline/ledger.ts'
+import { resolveSources, type SourceBudgetInput } from './pipeline/sources-spec.ts'
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import type { BrowserService } from './browser-service.ts'
@@ -104,6 +105,8 @@ export interface ProviderReport {
   costModel: ProviderDescriptor['costModel']
   /** What it costs the user: `anonymous`, `free-quota` or `paid`; for a provider with two routes (Exa) the tier of the route that would run now. */
   costTier: CostTier
+  /** Request budget (`sources.budget`): cap, used and remaining; only for a source that has one. */
+  budget?: RequestBudgetState
   /** Not verified against the live service (descriptor.verification). */
   unverified?: boolean
   readiness: Readiness & { lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
@@ -186,20 +189,37 @@ export class SearchRouter {
           if (!adapter) return { available: false, reason: 'unregistered' }
           const readiness = await adapter.probeLocal(await this.probeEnv())
           this.readiness.set(id, readiness)
+          // A source whose request budget is used up is skipped (never an error): the plan falls back to the other sources.
+          const spent = readiness.available ? this.requestBudgetOf(id) : undefined
+          if (spent?.exhausted) return { available: false, reason: spent.reason ?? 'request budget used up' }
           return { available: readiness.available, ...readiness.reason ? { reason: readiness.reason } : {} }
         } catch (error) {
           return { available: false, reason: error instanceof Error ? error.message : String(error) }
         }
       },
       run: async input => {
-        const engine = await this.build(id, input.skipSeam)
-        if (!engine.available()) throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
+        // A capped source reserves its request first (atomic over the ledger); an adapter's own usage record settles that
+        // reservation instead of booking a second row, and a failure before the service answered gives it back.
+        const budget = this.budgetFor(id)
+        let ticket: RequestTicket | undefined
+        if (budget) {
+          const reserved = new UsageLedger(this.store, resolveBudget(this.dynamic().evidence?.budget).caps).reserveRequest(id, budget)
+          if ('refused' in reserved) throw new EngineError(id + ': ' + reserved.refused, 'ENGINE_BUDGET', false)
+          ticket = reserved
+        }
+        const engine = await this.build(id, input.skipSeam, ticket ? { record: entry => { if (ticket && !ticket.closed) ticket.settle(entry.requests, entry.note); else this.usageRecorder().record(entry) } } : undefined).catch((error: unknown) => { ticket?.release(); throw error })
+        if (!engine.available()) { ticket?.release(); throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false) }
         try {
           const outcome = await engine.search(input.query, input.count, input.signal, this.withBindings(id, input.options))
+          ticket?.settle(1, 'request counted by the router (the adapter booked none)')
           this.outcomes.set(id, { ok: true, at: new Date().toISOString() })
           return { ...outcome, via: outcome.via ?? engine.id }
         } catch (error) {
           const code = (error as { code?: unknown } | null)?.code
+          // An empty answer is a request the service served; any other failure did not book one (the adapters count only 2xx answers).
+          if (code === 'ENGINE_EMPTY') ticket?.settle(1, 'empty answer')
+          else if (input.signal?.aborted || code === 'ENGINE_TIMEOUT') ticket?.settle(1, 'outcome unknown (timeout or abort): booked')
+          else ticket?.release('failed before an answer: ' + (error instanceof Error ? error.message : String(error)).slice(0, 120))
           // An empty answer is the service working; a cancelled call says nothing about it.
           if (code === 'ENGINE_EMPTY') this.outcomes.set(id, { ok: true, at: new Date().toISOString() })
           else if (!input.signal?.aborted) this.outcomes.set(id, { ok: false, at: new Date().toISOString(), message: error instanceof Error ? error.message : String(error), ...typeof code === 'string' ? { code } : {} })
@@ -319,6 +339,7 @@ export class SearchRouter {
       byId.set(d.id, {
         state: d.state, ...reason ? { reason } : {}, ...local?.credential ? { credential: local.credential } : {},
         ...adapter ? { costTier: local?.costTier ?? costTierOf(adapter.descriptor) } : {}, ...local?.keyless ? { keyless: true } : {},
+        ...this.requestBudgetOf(d.id)?.exhausted ? { budgetExhausted: true } : {},
       })
     }
     const out = new Map<string, ProviderStatus>()
@@ -479,6 +500,31 @@ export class SearchRouter {
     return { ...Object.keys(sourceKeys).length ? { sourceKeys } : {}, ...Object.keys(sourceBaseUrls).length ? { sourceBaseUrls } : {} }
   }
 
+  /** The configured request budgets by ROUTE id (aliases and full ids in `sources.budget` resolved; unknown ids are reported by {@link sourceDiagnostics}). */
+  private budgets(): Map<string, SourceBudgetInput> {
+    const resolved = resolveSources({ budget: this.dynamic().sources?.budget }, id => this.registry.routeId(id) !== undefined)
+    const out = new Map<string, SourceBudgetInput>()
+    for (const [id, cap] of Object.entries(resolved.budget)) out.set(this.registry.routeId(id) ?? id, cap)
+    return out
+  }
+
+  private budgetFor(route: string): SourceBudgetInput | undefined {
+    return this.budgets().get(route)
+  }
+
+  /** Used / remaining requests of a capped source (read-only), or undefined when no cap is set for it. */
+  requestBudgetOf(route: string): RequestBudgetState | undefined {
+    const cap = this.budgetFor(this.registry.routeId(route) ?? route)
+    if (!cap) return undefined
+    return new UsageLedger(this.store, resolveBudget(this.dynamic().evidence?.budget).caps).requestBudget(this.registry.routeId(route) ?? route, cap)
+  }
+
+  /** Problems of the `sources.*` settings (unknown ids, bad numbers), for `sources.status`. */
+  sourceDiagnostics(): string[] {
+    const src = this.dynamic().sources
+    return resolveSources({ priority: src?.priority, disabled: src?.disabled, budget: src?.budget }, id => this.registry.routeId(id) !== undefined).diagnostics
+  }
+
   /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
   private usageRecorder(): UsageRecorder {
     return {
@@ -495,10 +541,11 @@ export class SearchRouter {
     return ids.some(id => { try { return this.buildSync(id, false).available() } catch { return false } })
   }
 
-  private async build(id: string, skipSeam: boolean): Promise<Engine> {
+  private async build(id: string, skipSeam: boolean, usage?: UsageRecorder): Promise<Engine> {
     const adapter = this.registry.resolve(id)
     if (!adapter) throw new EngineError(this.registry.unknownMessage([id]), 'ENGINE_UNAVAILABLE', false)
-    return adapter.create(await this.deps(skipSeam), this.dynamic())
+    const deps = await this.deps(skipSeam)
+    return adapter.create(usage ? { ...deps, usage } : deps, this.dynamic())
   }
 
   private buildSync(id: string, skipSeam: boolean): Engine {
@@ -537,6 +584,7 @@ export class SearchRouter {
         ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
         requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel }, costTier: local.costTier ?? costTierOf(d),
         ...d.verification?.live ? {} : { unverified: true },
+        ...this.requestBudgetOf(route) ? { budget: this.requestBudgetOf(route)! } : {},
         readiness: {
           available,
           ...local.installation ? { installation: local.installation } : {},
@@ -695,6 +743,9 @@ export class SearchRouter {
             .join(' -> ')
           fallbackNote = 'fallback; ' + lowQualityAttempts.map(a => a.id + ' returned results but ' + (a.detail ?? 'low quality')).join('; ') + '\ntried: ' + triedLine
         }
+        // A source whose request budget is used up was skipped: say so, the answer came from the next engine.
+        const spent = selected.attempts.filter(a => a.outcome === 'skipped' && /request budget used up/.test(a.detail ?? ''))
+        if (spent.length) fallbackNote = (fallbackNote ? fallbackNote + '\n' : '') + 'skipped: ' + spent.map(a => a.id + ': ' + a.detail).join('; ')
       } catch (error) {
         if (signal?.aborted) throw error
         enginesTried.push(...ids)

@@ -154,7 +154,7 @@ test('the policy value and the preference lists are validated: an unknown policy
   assert.throws(() => resolveSourcePolicy('allow-paid'), /evidence\.sourcePolicy must be one of: default, anonymous-only/)
   assert.equal(resolveConfig({ evidence: { sourcePolicy: 'anonymous-only' } } as never).evidence.sourcePolicy, 'anonymous-only')
   assert.equal(resolveConfig({} as never).evidence.sourcePolicy, 'default')
-  assert.deepEqual(resolveConfig({} as never).sources, { priority: [], disabled: [] })
+  assert.deepEqual(resolveConfig({} as never).sources, { priority: [], disabled: [], budget: {} }, 'nothing is capped, ranked or disabled by default')
   const r = resolveSources({ priority: ['exa', 'exa', 'x y', 7 as never, 'nope'], disabled: ['exa', 'bing'] }, id => id !== 'nope')
   assert.deepEqual([r.priority, r.disabled], [['exa'], ['exa', 'bing']])
   assert.equal(r.diagnostics.length, 4)

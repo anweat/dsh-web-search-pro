@@ -23,6 +23,11 @@ const PROVIDER_REPORT_SCHEMA: OutputNode = {
     requirements: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, id: { type: 'string', required: true }, env: { type: 'array', items: { type: 'string' } }, optional: { type: 'boolean' }, note: { type: 'string' } } } },
     supportedFilters: { type: 'array', items: { type: 'string' } },
     costModel: { type: 'object', additionalProperties: false, properties: { kind: { type: 'string', required: true }, unit: { type: 'string' }, note: { type: 'string' } } },
+    budget: { type: 'object', additionalProperties: false, properties: {
+      source: { type: 'string', required: true }, day: { type: 'string', required: true }, exhausted: { type: 'boolean', required: true }, reason: { type: 'string' },
+      total: { type: 'object', additionalProperties: false, properties: { limit: { type: 'number', required: true }, used: { type: 'number', required: true }, remaining: { type: 'number', required: true } } },
+      daily: { type: 'object', additionalProperties: false, properties: { limit: { type: 'number', required: true }, used: { type: 'number', required: true }, remaining: { type: 'number', required: true } } },
+    } },
     unverified: { type: 'boolean' },
     readiness: { type: 'object', additionalProperties: false, properties: {
       available: { type: 'boolean', required: true }, installation: { type: 'string' }, credential: { type: 'string' }, health: { type: 'string' }, reason: { type: 'string' }, diagnosticCode: { type: 'string' },
@@ -104,6 +109,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
         webRoute: WEB_ROUTE_SCHEMA,
         notes: { type: 'array', items: { type: 'string' } },
+        sources: { type: 'object', additionalProperties: false, properties: { policy: { type: 'string', required: true }, priority: { type: 'array', required: true, items: { type: 'string' } }, disabled: { type: 'array', required: true, items: { type: 'string' } } } },
         evidence: EVIDENCE_STATUS_SCHEMA,
       },
     },
@@ -119,7 +125,10 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
       const judge = await judgeStatus(ev, store, { hasSecret: typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function' ? async ref => !!(await router.resolveSecret(ref)) : undefined })
       // Custom platforms the registry could not take (a key that clashes with a built-in source, a bad key).
-      const problems = typeof (router as { customPlatformProblems?: unknown }).customPlatformProblems === 'function' ? router.customPlatformProblems() : []
+      const problems = [
+        ...typeof (router as { customPlatformProblems?: unknown }).customPlatformProblems === 'function' ? router.customPlatformProblems() : [],
+        ...typeof (router as { sourceDiagnostics?: unknown }).sourceDiagnostics === 'function' ? router.sourceDiagnostics() : [],
+      ]
       return {
         engines: await router.backendDiagnostics(availability),
         ...typeof (router as { providerReport?: unknown }).providerReport === 'function' ? { providers: await router.providerReport(availability) } : {},
@@ -130,17 +139,21 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         browser: browserState(ctx.browser()),
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
         ...problems.length ? { notes: problems } : {},
+        sources: { policy: ev.sourcePolicy ?? 'default', priority: cfg.sources?.priority ?? [], disabled: cfg.sources?.disabled ?? [] },
         evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.coverage ? { coverage: judge.coverage } : {}, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; sources?: { policy: string; priority: string[]; disabled: string[] }; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
       const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health].filter(Boolean).join(' ')
         lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
+        const b = p.budget
+        if (b) lines.push('    request budget ' + p.route + ': ' + [b.total && 'total ' + b.total.used + '/' + b.total.limit + ' (' + b.total.remaining + ' left)', b.daily && 'today ' + b.daily.used + '/' + b.daily.limit + ' (' + b.daily.remaining + ' left)'].filter(Boolean).join(', ') + (b.exhausted ? ' — used up: skipped, the plan falls back to other sources' : ''))
       }
+      if (v.sources) lines.push('source strategy: policy=' + v.sources.policy + (v.sources.priority.length ? ', priority: ' + v.sources.priority.join(' > ') : '') + (v.sources.disabled.length ? ', disabled: ' + v.sources.disabled.join(', ') : ''))
       lines.push(...(v.notes ?? []).map(n => '  ⚠ ' + n))
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
       if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + v.browser.state + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))

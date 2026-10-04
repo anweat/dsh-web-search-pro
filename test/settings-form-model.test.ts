@@ -5,7 +5,7 @@ import { configuredDecider } from '../src/pipeline/judge-status.ts'
 import { BUILTIN_RUBRIC_IDS } from '../src/pipeline/rubrics-spec.ts'
 import { resolveAllRubrics } from '../src/pipeline/rubrics.ts'
 import { resolveProviders } from '../src/pipeline/judges/providers.ts'
-import { DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
+import { BUDGET_SPECS, BUDGETED_SOURCES, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
 import { BASE, harness } from './settings-harness.ts'
 
 // ── the form covers the whole schema ────────────────────────────────────────
@@ -33,6 +33,11 @@ test('every leaf of the Config schema is a control, a derived control, or a secr
       continue
     }
     if (leaf === 'evidence.rubrics') continue
+    if (leaf === 'sources.budget') {
+      assert.deepEqual(Object.keys(node.inner!.dict!), ['total', 'daily'])
+      assert.deepEqual(BUDGET_SPECS.map(spec => spec.field), BUDGETED_SOURCES.flatMap(id => [`sources.budget.${id}.total`, `sources.budget.${id}.daily`]))
+      continue
+    }
     if (!top.has(leaf) && !path.has(leaf)) missing.push(leaf)
   }
   assert.deepEqual(missing, [])
