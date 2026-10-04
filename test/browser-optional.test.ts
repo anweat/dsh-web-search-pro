@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { registerHooks } from 'node:module'
+import { BROWSER_020, legacyBrowser } from './browser-stub.ts'
 
 // dsh-tools is a host peer; tool definitions are identity in this isolated run.
 registerHooks({
@@ -17,7 +18,8 @@ registerHooks({
 })
 const plugin = await import('../src/index.ts')
 const { findAction } = await import('../src/actions/registry.ts')
-const { callAction, renderResult } = await import('./call-helper.ts')
+const { callAction, callEnvelope, renderResult } = await import('./call-helper.ts')
+const { isLegacyBrowser, usableBrowser, browserGap, BROWSER_020_MARKERS, LEGACY_BROWSER_NOTICE } = await import('../src/browser-access.ts')
 const { buildPromptText } = await import('../src/prompt.ts')
 
 const TOOLS = ['web_call', 'web_index']
@@ -35,6 +37,7 @@ interface FakeBrowser {
 function fakeBrowser(): FakeBrowser {
   const calls: string[] = []
   return {
+    ...BROWSER_020,
     calls,
     render: async (url: string) => { calls.push('render:' + url); return { title: 'Rendered', text: 'rendered by browser', html: '<p>x</p>' } },
     snapshot: async (url: string) => { calls.push('snapshot:' + url); return { title: 'Snap', text: 'snap text', htmlPath: '/tmp/x.html' } },
@@ -176,7 +179,7 @@ test('(b) with a browser service the render fallback, snapshot and browser platf
   }
 })
 
-test('(b2) an older browser missing a method reports which method and asks for an update', async () => {
+test('(b2) a 0.2 browser missing a method reports which method and asks for an update', async () => {
   const h = boot()
   const partial = fakeBrowser() as any
   delete partial.snapshot
@@ -225,6 +228,105 @@ test('(d) a browser removed after apply degrades to the no-browser behaviour wit
     assert.equal((await h.run('sources.status', {})).browser.state, 'missing')
   } finally {
     restore()
+    h.cleanup()
+  }
+})
+
+test('the legacy dsh-browser 0.1.x line is told apart from 0.2 by its shape: none of the 0.2-only methods', () => {
+  assert.equal(isLegacyBrowser(undefined), false, 'absent is not legacy, it is missing')
+  assert.equal(isLegacyBrowser(legacyBrowser() as any), true)
+  assert.equal(isLegacyBrowser(fakeBrowser() as any), false)
+  assert.equal(isLegacyBrowser({ ...legacyBrowser(), ...BROWSER_020 } as any), false)
+  for (const marker of BROWSER_020_MARKERS) {
+    assert.equal(isLegacyBrowser({ ...legacyBrowser(), [marker]: () => undefined } as any), false, 'one marker is enough: ' + marker)
+  }
+  assert.equal(usableBrowser(legacyBrowser() as any), undefined)
+  const current = fakeBrowser() as any
+  assert.equal(usableBrowser(current), current)
+  // The one message every refusal carries.
+  assert.equal(LEGACY_BROWSER_NOTICE, 'dsh-browser 0.1.x is not supported by web-search-pro 0.2+; upgrade to @anweat/dsh-browser ^0.2.0')
+  assert.match(browserGap(legacyBrowser() as any, 'render', 'read.fetch mode=playwright')!, /^read\.fetch mode=playwright is unavailable: dsh-browser 0\.1\.x is not supported by web-search-pro 0\.2\+; upgrade to @anweat\/dsh-browser \^0\.2\.0\.$/)
+})
+
+test('(e) a legacy 0.1.x browser: browser actions say it is unsupported, auto fallbacks skip it, everything else keeps working', async () => {
+  const h = boot()
+  const legacy = legacyBrowser() as any
+  const used: string[] = []
+  for (const method of ['render', 'snapshot', 'searchResults', 'opencli'] as const) {
+    const original = legacy[method]
+    legacy[method] = async (...args: unknown[]) => { used.push(method); return original(...args) }
+  }
+  h.holder.browser = legacy
+  const restore = stubNetwork({ jinaOk: 'ok.test', pages: { 'https://feed.test/rss': RSS } })
+  try {
+    // Explicit browser actions: a CAPABILITY_UNAVAILABLE error with the upgrade instruction.
+    for (const [action, args] of [
+      ['read.snapshot', { url: 'https://ok.test/page' }],
+      ['read.fetch', { url: 'https://down.test/page', mode: 'playwright' }],
+      ['search.run', { platform: 'zhihu', query: 'x', fresh: true }],
+      ['search.run', { platform: 'forum', query: 'x', fresh: true }],
+      ['search.run', { platform: 'reddit', query: 'x', fresh: true }],
+    ] as const) {
+      const envelope = await callEnvelope(h.tools, action, args as any)
+      assert.equal(envelope.ok, false, action + ' ' + JSON.stringify(args))
+      assert.equal(envelope.error.code, 'CAPABILITY_UNAVAILABLE', action + ' ' + JSON.stringify(args))
+      assert.match(envelope.error.message, /dsh-browser 0\.1\.x is not supported by web-search-pro 0\.2\+; upgrade to @anweat\/dsh-browser \^0\.2\.0/, action)
+    }
+
+    // Auto mode never reaches for it: a page the cheap backends serve is served, and when they all fail the note says why.
+    assert.equal((await h.run('read.fetch', { url: 'https://ok.test/page', ...auto })).source, 'jina')
+    await assert.rejects(h.run('read.fetch', { url: 'https://down.test/page', ...auto }), /all fetch backends failed.*dsh-browser 0\.1\.x is not supported/)
+
+    // Everything that does not need the browser works as before.
+    assert.equal((await h.run('search.run', { query: 'still works' })).engine, 'seam')
+    assert.equal((await h.run('search.run', { platform: 'rss', url: 'https://feed.test/rss', query: 'feed', fresh: true })).sources[0].title, 'Feed hit')
+
+    // sources.status: structured state and the rendered line.
+    const status = await h.run('sources.status', {})
+    assert.equal(status.browser.available, false)
+    assert.equal(status.browser.state, 'legacy')
+    assert.match(status.browser.reason, /dsh-browser 0\.1\.x is not supported/)
+    assert.match(renderResult('sources.status', status), /❌ browser:dsh-browser \[legacy \(unsupported\)\] — dsh-browser 0\.1\.x is not supported/)
+    const zhihu = status.providers.find((p: any) => p.route === 'zhihu')
+    assert.equal(zhihu.readiness.available, false)
+    assert.equal(zhihu.readiness.installation, 'incompatible')
+    assert.match(zhihu.readiness.reason, /dsh-browser 0\.1\.x is not supported/)
+
+    // The web_index root lists browser-only actions as unavailable, with the version hint.
+    const index = await h.tools.get('web_index').execute({ group: 'read' }, {})
+    assert.match(index.text, /Unavailable \(needs the dsh-browser plugin[^)]*unsupported 0\.1\.x[^)]*\): read\.snapshot/)
+
+    assert.deepEqual(used, [], 'no method of the legacy service was ever called')
+
+    // Upgrading in place is picked up on the next call.
+    h.holder.browser = fakeBrowser()
+    assert.equal((await h.run('read.snapshot', { url: 'https://ok.test/page', screenshot: false })).title, 'Snap')
+    assert.deepEqual((await h.run('sources.status', {})).browser, { available: true, state: 'ready' })
+  } finally {
+    restore()
+    h.cleanup()
+  }
+})
+
+test('(e2) a legacy browser adds no prompt line and its automationMode is not read for approvals', async () => {
+  const h = boot()
+  try {
+    const section = h.sections[0]
+    const without = section.text()
+    h.holder.browser = legacyBrowser() as any
+    assert.equal(section.text(), without, 'no dsh-browser line for a legacy service')
+    assert.doesNotMatch(section.text(), /dsh-browser/)
+    h.holder.browser = fakeBrowser()
+    assert.match(section.text(), /dsh-browser available/)
+
+    // The legacy service reports automationMode=unrestricted; a 0.2 one would make cache.clear allowed. A legacy one must not.
+    const hook = h.listeners.find(l => l.event === 'tools/pre-execute')!
+    const decide = (action: string): Promise<any> => hook.handler({ name: 'web_call', arguments: { action, args: {} } }, async () => ({ kind: 'allow' as const }))
+    h.holder.browser = legacyBrowser() as any
+    assert.equal((await decide('cache.clear')).kind, 'ask')
+    h.holder.browser = { ...fakeBrowser(), status: async () => ({ automationMode: 'unrestricted' }) } as any
+    assert.equal((await decide('cache.clear')).kind, 'allow')
+  } finally {
     h.cleanup()
   }
 })

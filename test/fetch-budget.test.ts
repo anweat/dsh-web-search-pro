@@ -12,6 +12,7 @@ import { capText } from '../src/util.ts'
 import { findAction } from '../src/actions/registry.ts'
 import { fairShareLimit } from '../src/actions/format.ts'
 import { callAction, renderResult } from './call-helper.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 // dsh-tools is a host peer; tool definitions are identity in this isolated run.
 registerHooks({
@@ -290,7 +291,7 @@ test('read.snapshot and history page replay return at most fetchDefaultChars; th
       ctx: { tools: { register: (d: any) => definitions.set(d.name, d) } } as any,
       config: h.config, dynamic: () => h.config, store: h.store,
       router: {} as any, fetch: {} as any,
-      browser: { snapshot: async () => ({ title: 'Snap', text: long, htmlPath: path.join(h.dir, 'p.html') }) } as any,
+      browser: { ...BROWSER_020, snapshot: async () => ({ title: 'Snap', text: long, htmlPath: path.join(h.dir, 'p.html') }) } as any,
     })
     const snap = await callAction(definitions, 'read.snapshot', { url: 'https://ex.test/snap', screenshot: false })
     assert.ok(snap.text.length <= 20_000 + 60 && snap.text.length > 19_000)

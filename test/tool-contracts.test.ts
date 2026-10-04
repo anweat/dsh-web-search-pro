@@ -11,6 +11,7 @@ import { Store } from '../src/store.ts'
 import { findAction } from '../src/actions/registry.ts'
 import { checkOutput } from '../src/actions/schema.ts'
 import { callAction, callEnvelope, renderResult } from './call-helper.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 // Tool definitions are the unit under test; the Harness registry itself is a
 // host peer and is replaced with its identity constructor in this isolated run.
@@ -74,7 +75,7 @@ test('read.snapshot forwards screenshot=false and persists no PNG path', async (
       ctx: { tools: { register: (definition: any) => h.definitions.set(definition.name, definition) } } as any,
       config: h.config, dynamic: () => h.config, store: h.store,
       router: {} as any, fetch: {} as any,
-      browser: { snapshot: async (_url: string, _rules: unknown, opts: { screenshot?: boolean }) => {
+      browser: { ...BROWSER_020, snapshot: async (_url: string, _rules: unknown, opts: { screenshot?: boolean }) => {
         snapshotOption = opts.screenshot
         return { title: 'Fixture', text: 'body', htmlPath: path.join(h.dir, 'page.html') }
       } } as any,

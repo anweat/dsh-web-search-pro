@@ -10,6 +10,7 @@ import { SearchRouter } from '../src/router.ts'
 import { Store } from '../src/store.ts'
 import { SourceUnavailableError } from '../src/providers/unavailable.ts'
 import { callEnvelope, renderResult } from './call-helper.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -28,6 +29,7 @@ function harness(opts: { browser?: boolean; extra?: Record<string, unknown> } = 
   const fetched: string[] = []
   const holder: { browser: any } = {
     browser: opts.browser === false ? undefined : {
+      ...BROWSER_020,
       render: async () => ({}), snapshot: async () => ({}), close: async () => {}, opencli: async () => ({ code: 0, stdout: '', stderr: '' }),
       searchResults: async (url: string, _spec: unknown, o: unknown) => {
         calls.push({ url, opts: o })
@@ -194,7 +196,7 @@ test('sources.status lists platforms in the one provider list with browser and l
     assert.match(text, /provider ddg \(builtin:ddg\)/)
     assert.match(text, /⚠ custom platform "github" was not registered/)
     // With the browser the platform becomes ready and still says the login is unverified.
-    h.holder.browser = { render: async () => ({}), snapshot: async () => ({}), searchResults: async () => [], opencli: async () => ({ code: 0, stdout: '', stderr: '' }), close: async () => {} }
+    h.holder.browser = { ...BROWSER_020, render: async () => ({}), snapshot: async () => ({}), searchResults: async () => [], opencli: async () => ({ code: 0, stdout: '', stderr: '' }), close: async () => {} }
     const ready = (await callEnvelope(h.definitions, 'sources.status', {})).result.providers.find((p: any) => p.route === 'zhihu')
     assert.equal(ready.readiness.available, true)
     assert.equal(ready.readiness.installation, 'detected')

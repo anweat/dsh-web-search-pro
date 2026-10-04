@@ -12,6 +12,7 @@ import { assertResolvedPublicUrl, assertSafePublicUrl } from '../src/safe-http.t
 import { Store } from '../src/store.ts'
 import { resolveConfig } from '../src/config.ts'
 import { SearchRouter } from '../src/router.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 test('RSS platform search filters all feed items by the requested query before applying count', async () => {
   const originalLookup = dns.lookup
@@ -194,6 +195,7 @@ test('fetch memory cache respects maxChars and does not cross persist semantics'
   const store = new Store(path.join(dir, 'store.db'))
   let renders = 0
   const browser = {
+    ...BROWSER_020,
     async render(_url: string, _rules: unknown, opts: { maxChars?: number }) {
       renders++
       const maxChars = opts.maxChars ?? 200_000

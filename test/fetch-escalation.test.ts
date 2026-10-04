@@ -7,6 +7,7 @@ import path from 'node:path'
 import { FetchService, classifyPage } from '../src/fetch.ts'
 import { resolveConfig } from '../src/config.ts'
 import { Store } from '../src/store.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 const PROSE = 'The busy timeout of a SQLite connection decides how long a writer waits for a lock before it fails with SQLITE_BUSY. Setting it to a few seconds avoids most spurious failures in applications with several writers, and the value can be changed at any time with a pragma. '.repeat(3)
 const NAV = Array.from({ length: 12 }, (_, i) => `[Section ${i}](https://nav.test/s${i})`).join(' ')
@@ -66,6 +67,7 @@ function harness(browserText?: string | (() => string)) {
   const store = new Store(config.dbPath)
   const renders: string[] = []
   const browser = browserText === undefined ? undefined : {
+    ...BROWSER_020,
     render: async (url: string, _rules: unknown, opts: { maxChars?: number }) => {
       renders.push(url)
       const text = typeof browserText === 'function' ? browserText() : browserText

@@ -26,7 +26,7 @@ import { Config, resolveConfig, type ResolvedConfig } from './config.ts'
 import { SEARCH_CACHE_VERSION } from './cache-key.ts'
 import { Store } from './store.ts'
 import type { BrowserService } from './browser-service.ts'
-import type { BrowserGetter } from './browser-access.ts'
+import { isLegacyBrowser, usableBrowser, type BrowserGetter } from './browser-access.ts'
 import { SearchRouter } from './router.ts'
 import { FetchService } from './fetch.ts'
 import { registerTools } from './tools.ts'
@@ -107,7 +107,7 @@ export function apply(ctx: Context, config: Config): void {
     if (call?.kind !== 'action') return downstream
     const action = findAction(call.action)
     if (!action || action.approval === 'none') return downstream
-    return webPolicyDecision(call.action, call.args, await automationModeOf(getBrowser()))
+    return webPolicyDecision(call.action, call.args, await automationModeOf(usableBrowser(getBrowser())))
   })
 
   // 5. Optional ctx.web provider registration (opt-in: `registerProvider`). The Host picks a provider only when the `web`
@@ -128,7 +128,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({
     name: 'tool:web-search-pro',
     order: 112,
-    text: () => buildPromptText(getBrowser() !== undefined),
+    text: () => buildPromptText(usableBrowser(getBrowser()) !== undefined),
   })
 
   // 7. Apply marker for diagnostics (proves live registration).
@@ -143,7 +143,7 @@ export function apply(ctx: Context, config: Config): void {
         tools: resolved.toolSurface === 'flat' ? ACTIONS.map(flatToolName) : ['web_index', 'web_call'],
         provider: resolved.registerProvider ? resolved.providerId : undefined,
         engines: resolved.engines,
-        browser: getBrowser() ? 'present' : 'absent',
+        browser: getBrowser() === undefined ? 'absent' : isLegacyBrowser(getBrowser()) ? 'legacy' : 'present',
       }) + '\n', 'utf8')
     } catch { /* marker is best-effort */ }
   }

@@ -7,7 +7,7 @@
 import type { Store } from './store.ts'
 import type { ResolvedConfig } from './config.ts'
 import type { BrowserService } from './browser-service.ts'
-import { BrowserUnavailableError, browserGap, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
+import { BrowserUnavailableError, browserGap, isLegacyBrowser, toBrowserGetter, type BrowserGetter } from './browser-access.ts'
 import type { ExtractRule } from './extract.ts'
 import { extractText, BUILTIN_RULES } from './extract.ts'
 import { httpGet, capText } from './util.ts'
@@ -310,8 +310,10 @@ export class FetchService {
         if (!gap) await attempt('playwright', () => this.fetchPlaywright(browser!, normalized, opts, maxChars, rules))
         else if (opts.mode === 'playwright') throw new BrowserUnavailableError(gap)
         else {
-          browserNote = ' (browser render fallback unavailable: dsh-browser not installed or not enabled)'
-          if (tried.length) attempts.push({ source: 'playwright', class: 'error', detail: 'skipped: dsh-browser not installed or not enabled' })
+          // Auto mode skips the browser step quietly; only the closing note says why it was not there.
+          const why = isLegacyBrowser(browser) ? 'dsh-browser 0.1.x is not supported, need @anweat/dsh-browser ^0.2.0' : 'dsh-browser not installed or not enabled'
+          browserNote = ' (browser render fallback unavailable: ' + why + ')'
+          if (tried.length) attempts.push({ source: 'playwright', class: 'error', detail: 'skipped: ' + why })
         }
       }
     }

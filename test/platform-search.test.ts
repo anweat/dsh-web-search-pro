@@ -8,6 +8,7 @@ import { resolveConfig } from '../src/config.ts'
 import { createBuiltinRegistry } from '../src/providers/index.ts'
 import { SearchRouter } from '../src/router.ts'
 import { Store } from '../src/store.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 interface Calls { searchResults: { url: string; opts: any }[]; opencli: { args: string[] }[] }
 
@@ -17,6 +18,7 @@ function harness(extra: Record<string, unknown> = {}, opts: { browser?: boolean;
   const calls: Calls = { searchResults: [], opencli: [] }
   const holder: { browser: any } = {
     browser: opts.browser === false ? undefined : {
+      ...BROWSER_020,
       render: async () => ({}), snapshot: async () => ({}), close: async () => {},
       searchResults: async (url: string, _spec: unknown, o: unknown) => { calls.searchResults.push({ url, opts: o }); const r = opts.results ?? [{ url: 'https://zh.test/1', title: 'Browser hit', snippet: 'from the browser' }]; return typeof r === 'function' ? r() : r },
       opencli: async (args: string[]) => { calls.opencli.push({ args }); return { code: 0, stdout: '- url: https://x.com/a/status/1\n  title: tweet\n', stderr: '' } },

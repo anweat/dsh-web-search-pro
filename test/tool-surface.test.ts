@@ -12,6 +12,7 @@ import { legacyLine } from '../src/actions/legacy.ts'
 import { checkOutput } from '../src/actions/schema.ts'
 import { renderEnvelope } from '../src/actions/run.ts'
 import { callAction, callEnvelope } from './call-helper.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -59,7 +60,7 @@ test('web_index root: groups with their actions, the two everyday calls, the old
 })
 
 test('web_index root with the skill registered points at it instead of the guide; with a ready browser read.snapshot is listed', async () => {
-  const browser = { render() {}, snapshot() {}, searchResults() {}, opencli() {}, close() {} }
+  const browser = { ...BROWSER_020, render() {}, snapshot() {}, searchResults() {}, opencli() {}, close() {} }
   const h = harness({ skill: true, browser })
   try {
     const { text } = await index(h)

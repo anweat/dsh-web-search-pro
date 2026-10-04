@@ -9,12 +9,13 @@ import { createBuiltinRegistry, routeIdOf, type ProbeEnv } from '../src/provider
 import { chainEngine, customPlatformAdapter, customProviderId } from '../src/providers/platforms.ts'
 import { SearchRouter } from '../src/router.ts'
 import { Store } from '../src/store.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 const PLATFORMS = ['github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed']
 const BROWSER_ONLY = ['zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou']
 const OPENCLI = ['xiaohongshu', 'reddit', 'instagram', 'facebook']
 
-const fakeBrowser = (): any => ({ render: async () => ({}), snapshot: async () => ({}), searchResults: async () => [], opencli: async () => ({ code: 0, stdout: '', stderr: '' }), close: async () => {} })
+const fakeBrowser = (): any => ({ ...BROWSER_020, render: async () => ({}), snapshot: async () => ({}), searchResults: async () => [], opencli: async () => ({ code: 0, stdout: '', stderr: '' }), close: async () => {} })
 
 function env(over: { browser?: unknown; config?: Record<string, unknown>; deps?: Partial<EngineDeps>; cli?: Map<string, boolean> } = {}): ProbeEnv {
   const config = resolveConfig({ engines: ['ddg'], ...over.config } as never)
