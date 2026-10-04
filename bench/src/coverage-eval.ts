@@ -96,6 +96,17 @@ export function coverageMetrics(runs: readonly CoverageRun[], t?: CoverageThresh
   }
 }
 
+/** Probability that a truly covered claim got a higher judge probability than a false one (0.5 = no signal); ties count half. */
+export function claimAuc(runs: readonly CoverageRun[]): { auc: number | undefined; positives: number; negatives: number } {
+  const answered = runs.flatMap(r => r.needs).filter(n => n.claimed && n.prob !== undefined)
+  const pos = answered.filter(n => n.hit)
+  const neg = answered.filter(n => !n.hit)
+  if (!pos.length || !neg.length) return { auc: undefined, positives: pos.length, negatives: neg.length }
+  let wins = 0
+  for (const p of pos) for (const n of neg) wins += p.prob! > n.prob! ? 1 : p.prob! === n.prob! ? 0.5 : 0
+  return { auc: wins / (pos.length * neg.length), positives: pos.length, negatives: neg.length }
+}
+
 // ── calibration (v1 calibration split only) ─────────────────────────────────
 
 export interface Calibrated {
@@ -163,6 +174,9 @@ function row(label: string, runs: readonly CoverageRun[], t?: CoverageThresholds
 
 const table = (rows: string[][]): string => [HEAD, ALIGN, ...rows].map(r => '| ' + r.join(' | ') + ' |').join('\n')
 
+/** Weak cuts of the sensitivity table (report only: nothing is tuned on it). */
+export const SENSITIVITY_CUTS: readonly number[] = [0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+
 export const ARM_LABEL: Record<CoverageArm, string> = { rule: '(b′) 规则 + 对齐', hybridB: '(d′) 混合 + 边界对' }
 
 /** Markdown of the coverage judge section: one table per arm and group (all / split / language), rule coverage versus judged coverage at `t`. */
@@ -192,6 +206,13 @@ export function renderCoverageSection(tasks: readonly CoverageReportTask[], t: C
       if (t) langRows.push(row(lang + ' · + 覆盖判定', runs(xs), t))
     }
     out.push(table(langRows), '')
+    const sens: string[][] = []
+    for (const [label, xs] of groups) {
+      const a = claimAuc(runs(xs))
+      sens.push([label + ' · AUC ' + (a.auc === undefined ? '—' : a.auc.toFixed(3)) + '（真 ' + a.positives + ' / 假 ' + a.negatives + '）', '', '', '', '', '', '', '', '', '', ''])
+      for (const cut of SENSITIVITY_CUTS) sens.push(row(label + ' · weak<' + cut, runs(xs), { weak: cut, covered: Math.max(cut, t?.covered ?? cut) }))
+    }
+    out.push('阈值敏感性（只报告，不据此调参；`covered` 取阈值值或与 weak 相同，不影响降级）：', '', table(sens), '')
     const all = runs(have)
     const sum = (f: (r: CoverageRun) => number): number => all.reduce((n, r) => n + f(r), 0)
     out.push('提问 ' + sum(r => r.asked) + ' 个（回答 ' + sum(r => r.answered) + '，缓存命中 ' + sum(r => r.cacheHits) + '），冷缓存请求 ' + sum(r => r.cold) + '，本次实际请求 ' + sum(r => r.requests) + '，输入 token ' + sum(r => r.inputTokens) + '。', '')

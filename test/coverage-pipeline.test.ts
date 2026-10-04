@@ -337,12 +337,13 @@ test('the judged pack fits the closed output schema of search.run (band, uncerta
 })
 
 test('service: unusable setups keep the rule coverage and say why (no thresholds, no key, wrong protocol, bad provider, invalid mode)', async () => {
-  const noThresholds = service({ evidence: { coverage: { mode: 'control' } }, secrets: SECRETS })
+  const providers = { 'my-jev': { protocol: 'systemone', baseUrl: 'https://jev.example.test', model: 'm', keyRef: 'MY_KEY' } }
+  const noThresholds = service({ evidence: { coverage: { mode: 'control', provider: 'my-jev' }, judge: { providers } }, secrets: { MY_KEY: 'k' } })
   try {
     const out = await noThresholds.run()
     assert.equal(noThresholds.seen.length, 0)
     assert.deepEqual(out.coveredNeeds, ['n1', 'n2'])
-    assert.match(out.notes.join('|'), /coverage judge \(control\) not used, rule coverage kept: no calibrated thresholds for bocha-jev\|cover\.sufficient@v1: set evidence\.coverage\.thresholds/)
+    assert.match(out.notes.join('|'), /coverage judge \(control\) not used, rule coverage kept: no calibrated thresholds for my-jev\|cover\.sufficient@v1: set evidence\.coverage\.thresholds/)
   } finally { noThresholds.cleanup() }
   const noKey = service({ evidence: { coverage: { mode: 'shadow', thresholds: T } } })
   try {
@@ -390,6 +391,15 @@ test('service, overridden rubric: a new version words the question and is record
   } finally { bare.cleanup() }
 })
 
+test('service: the shipped calibration for bocha-jev + cover.sufficient@v1 needs no thresholds setting, and is recorded in stats', async () => {
+  const s = service({ evidence: { coverage: { mode: 'shadow' } }, secrets: SECRETS })
+  try {
+    const out = await s.run()
+    assert.equal(s.seen.length, 1)
+    assert.deepEqual(out.stats.coverage!.thresholds, { weak: 0.0512, covered: 0.313 })
+  } finally { s.cleanup() }
+})
+
 test('sources.status reports the coverage judge only when it is switched on: usable or why not, thresholds and their source', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-cover-status-'))
   const store = new Store(path.join(dir, 'store.db'))
@@ -401,7 +411,9 @@ test('sources.status reports the coverage judge only when it is switched on: usa
     assert.deepEqual(ok, { mode: 'control', provider: 'bocha-jev', rubric: 'cover.sufficient@v1', usable: true, thresholds: T, thresholdSource: 'configured', keyConfigured: true })
     const noKey = (await judgeStatus(cfg({ mode: 'shadow', thresholds: T }), store, { hasSecret: async () => false })).coverage!
     assert.deepEqual([noKey.usable, noKey.reason], [false, 'key not found for BOCHA_JEV_API_KEY'])
-    const none = (await judgeStatus(cfg({ mode: 'shadow' }), store)).coverage!
+    const shipped = (await judgeStatus(cfg({ mode: 'shadow' }), store)).coverage!
+    assert.deepEqual([shipped.usable, shipped.thresholds, shipped.thresholdSource], [true, { weak: 0.0512, covered: 0.313 }, 'calibrated'])
+    const none = (await judgeStatus(cfg({ mode: 'shadow', provider: 'laya-local' }), store)).coverage!
     assert.equal(none.usable, false)
     assert.match(none.reason!, /no calibrated thresholds/)
     assert.match((await judgeStatus(cfg({ mode: 'shadow', provider: 'jina-rerank', thresholds: T }), store)).coverage!.reason!, /rerank|calibration/)

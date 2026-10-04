@@ -147,9 +147,9 @@ test('thresholds are validated; without configured or shipped ones the judge say
   const r = builtinRubric('cover.sufficient')
   assert.deepEqual(resolveThresholds({ thresholds: { weak: 0.2, covered: 0.6 } }, 'my-jev', r), { thresholds: { weak: 0.2, covered: 0.6 }, source: 'configured' })
   assert.match(resolveThresholds({ thresholds: { weak: 0.9, covered: 0.1 } }, 'bocha-jev', r).reason!, /ignored: thresholds.weak must not exceed/)
-  const shipped = CALIBRATED_THRESHOLDS['bocha-jev|cover.sufficient@v1']
-  if (shipped) assert.deepEqual(resolveThresholds({}, 'bocha-jev', r), { thresholds: shipped, source: 'calibrated' })
-  else assert.match(resolveThresholds({}, 'bocha-jev', r).reason!, /no calibrated thresholds for bocha-jev\|cover.sufficient@v1/)
+  assert.deepEqual(CALIBRATED_THRESHOLDS['bocha-jev|cover.sufficient@v1'], { weak: 0.0512, covered: 0.313 })
+  assert.deepEqual(resolveThresholds({}, 'bocha-jev', r), { thresholds: CALIBRATED_THRESHOLDS['bocha-jev|cover.sufficient@v1']!, source: 'calibrated' })
+  assert.match(resolveThresholds({}, 'bocha-jev', { id: 'cover.sufficient', version: 'v2' }).reason!, /no calibrated thresholds for bocha-jev\|cover.sufficient@v2/)
   assert.match(resolveThresholds({}, 'other', r).reason!, /no calibrated thresholds for other\|cover.sufficient@v1.*set evidence.coverage.thresholds/)
 })
 

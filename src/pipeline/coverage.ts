@@ -78,10 +78,14 @@ export const DEFAULT_VIEW_CHARS = 2400
 export const MAX_COVERAGE_QUESTIONS = 12
 
 /**
- * Thresholds fitted on the v1 CALIBRATION split (bench/README, dev-plan M9), keyed `provider|rubric@version`.
- * Another provider, model or rubric version has no entry: it needs `evidence.coverage.thresholds`.
+ * Thresholds fitted on the v1 CALIBRATION split (bench/README, dev-plan M9: false weak <= 5% of the truly covered claims,
+ * then the most false claims removed; `covered` = lowest probability from which the standing claims reach 85% precision),
+ * keyed `provider|rubric@version`. Another provider, model or rubric version has no entry: it needs `evidence.coverage.thresholds`.
+ * Shipping them does not turn the judge on: `evidence.coverage.mode` stays `off` until set.
  */
-export const CALIBRATED_THRESHOLDS: Readonly<Record<string, CoverageThresholds>> = {}
+export const CALIBRATED_THRESHOLDS: Readonly<Record<string, CoverageThresholds>> = {
+  'bocha-jev|cover.sufficient@v1': { weak: 0.0512, covered: 0.313 },
+}
 
 export const thresholdKey = (providerId: string, rubric: Pick<ResolvedRubric, 'id' | 'version'>): string => providerId + '|' + rubric.id + '@' + rubric.version
 
