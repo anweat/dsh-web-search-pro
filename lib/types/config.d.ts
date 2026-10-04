@@ -3,6 +3,7 @@
  * @module web-search-pro/config
  */
 import z from '@deepseek-ai/schemastery';
+import type { CoverageSettings } from './pipeline/coverage.ts';
 import type { JudgeSettings } from './pipeline/judges/providers.ts';
 import type { BudgetInput } from './pipeline/ledger.ts';
 import type { RubricOverride } from './pipeline/rubrics.ts';
@@ -66,6 +67,13 @@ export interface EvidenceConfig {
     };
     /** Model usage caps (input tokens) per search and per day, with per-provider overrides. Absent = 60k per search, 1M per day. */
     budget?: BudgetInput;
+    /**
+     * S8 coverage judge (dev-plan M9): asks a model whether the selected excerpts state the answer for each need the rules claim
+     * covered. Absent / `off` = rule coverage only. `shadow` records verdicts in `stats.coverage` without changing the coverage;
+     * `control` turns weak verdicts into `weak_support` gaps. Never enabled by another mode (a ready hybrid scorer does not turn
+     * it on). Needs thresholds for the provider + rubric pair (`thresholds`, or the ones shipped for it).
+     */
+    coverage?: CoverageSettings;
 }
 /**
  * Settings of the ctx.web provider route (dev-plan M8c): what the Host's built-in `web_search` returns when this plugin is the selected provider.
@@ -291,7 +299,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+        jevMode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
@@ -312,7 +320,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         }>>, string>>, "volatile">;
         judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -364,7 +372,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             }>>, string>, "plain">;
         }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -414,6 +422,27 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
                     currency: z<string, string, "plain">;
                 }>>, "plain">;
             }>>, string>, "plain">;
+        }>>>, "volatile">;
+        coverage: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
         }>>>, "volatile">;
         budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             perSearchInputTokens: z<number, number, "plain">;
@@ -440,7 +469,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         }>>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+        jevMode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
@@ -461,7 +490,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         }>>, string>>, "volatile">;
         judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -513,7 +542,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             }>>, string>, "plain">;
         }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -563,6 +592,27 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
                     currency: z<string, string, "plain">;
                 }>>, "plain">;
             }>>, string>, "plain">;
+        }>>>, "volatile">;
+        coverage: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
         }>>>, "volatile">;
         budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             perSearchInputTokens: z<number, number, "plain">;
@@ -684,7 +734,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+        jevMode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
@@ -705,7 +755,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         }>>, string>>, "volatile">;
         judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -757,7 +807,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             }>>, string>, "plain">;
         }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -807,6 +857,27 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
                     currency: z<string, string, "plain">;
                 }>>, "plain">;
             }>>, string>, "plain">;
+        }>>>, "volatile">;
+        coverage: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
         }>>>, "volatile">;
         budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             perSearchInputTokens: z<number, number, "plain">;
@@ -833,7 +904,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         }>>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-        jevMode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+        jevMode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
@@ -854,7 +925,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         }>>, string>>, "volatile">;
         judge: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -906,7 +977,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             }>>, string>, "plain">;
         }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
             provider: z<string, string, "plain">;
-            mode: z<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+            mode: z<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
             allowLlm: z<boolean, boolean, "plain">;
             providers: z<import("@deepseek-ai/cosmokit").Dict<{
                 protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -956,6 +1027,27 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
                     currency: z<string, string, "plain">;
                 }>>, "plain">;
             }>>, string>, "plain">;
+        }>>>, "volatile">;
+        coverage: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
+        }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+            mode: z<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+            provider: z<string, string, "plain">;
+            thresholds: z<Schemastery.ObjectS<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                weak: z<number, number, "plain">;
+                covered: z<number, number, "plain">;
+            }>>, "plain">;
         }>>>, "volatile">;
         budget: z<NoInfer<Schemastery.ObjectS<NoInfer<{
             perSearchInputTokens: z<number, number, "plain">;

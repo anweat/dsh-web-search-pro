@@ -22,6 +22,7 @@ import { type FusionOptions } from './fusion.ts';
 import { type ProviderStatus, type SourcePlan } from './plan.ts';
 import { type ProviderDescriptor } from '../providers/registry.ts';
 import { type ScoreJob, type Scorer } from './score.ts';
+import { type CoverageStage } from './coverage.ts';
 import { type SelectOptions } from './select.ts';
 import type { Block, EvidencePack, Need, ScoredBlock, TaskSpec } from './types.ts';
 /** Per-call provider options of the caller (not of the query): the platform's feed URL and browser auth profile / rule pack. */
@@ -79,6 +80,8 @@ export interface PipelineDeps {
         /** Runs in parallel to the decision for later comparison; never changes the pack. */
         shadow?: Scorer;
     };
+    /** S8 coverage judge (dev-plan M9): asks whether the selected excerpts state the answer for each need the rules claim covered. Omitted = rule coverage only. */
+    coverage?: CoverageStage;
     configuredEngines: readonly string[];
     /** Registry descriptors of the search providers: S1 prefers providers strong in the task's language (plan.ts). Omitted = the profile tables only. */
     descriptors?: readonly ProviderDescriptor[];

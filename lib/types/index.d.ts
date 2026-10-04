@@ -123,7 +123,7 @@ declare const _default: {
         }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -144,7 +144,7 @@ declare const _default: {
             }>>, string>>, "volatile">;
             judge: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -196,7 +196,7 @@ declare const _default: {
                 }>>, string>, "plain">;
             }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -246,6 +246,27 @@ declare const _default: {
                         currency: import("@deepseek-ai/schemastery").default<string, string, "plain">;
                     }>>, "plain">;
                 }>>, string>, "plain">;
+            }>>>, "volatile">;
+            coverage: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
+            }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
             }>>>, "volatile">;
             budget: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 perSearchInputTokens: import("@deepseek-ai/schemastery").default<number, number, "plain">;
@@ -272,7 +293,7 @@ declare const _default: {
             }>>>, "volatile">;
         }>>, Schemastery.ObjectT<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -293,7 +314,7 @@ declare const _default: {
             }>>, string>>, "volatile">;
             judge: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -345,7 +366,7 @@ declare const _default: {
                 }>>, string>, "plain">;
             }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -395,6 +416,27 @@ declare const _default: {
                         currency: import("@deepseek-ai/schemastery").default<string, string, "plain">;
                     }>>, "plain">;
                 }>>, string>, "plain">;
+            }>>>, "volatile">;
+            coverage: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
+            }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
             }>>>, "volatile">;
             budget: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 perSearchInputTokens: import("@deepseek-ai/schemastery").default<number, number, "plain">;
@@ -516,7 +558,7 @@ declare const _default: {
         }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -537,7 +579,7 @@ declare const _default: {
             }>>, string>>, "volatile">;
             judge: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -589,7 +631,7 @@ declare const _default: {
                 }>>, string>, "plain">;
             }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -639,6 +681,27 @@ declare const _default: {
                         currency: import("@deepseek-ai/schemastery").default<string, string, "plain">;
                     }>>, "plain">;
                 }>>, string>, "plain">;
+            }>>>, "volatile">;
+            coverage: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
+            }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
             }>>>, "volatile">;
             budget: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 perSearchInputTokens: import("@deepseek-ai/schemastery").default<number, number, "plain">;
@@ -665,7 +728,7 @@ declare const _default: {
             }>>>, "volatile">;
         }>>, Schemastery.ObjectT<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
-            jevMode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "volatile-defined">;
+            jevMode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -686,7 +749,7 @@ declare const _default: {
             }>>, string>>, "volatile">;
             judge: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -738,7 +801,7 @@ declare const _default: {
                 }>>, string>, "plain">;
             }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
                 provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-                mode: import("@deepseek-ai/schemastery").default<"control" | "shadow" | "hybrid" | "off", "control" | "shadow" | "hybrid" | "off", "plain">;
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "hybrid" | "off", "shadow" | "control" | "hybrid" | "off", "plain">;
                 allowLlm: import("@deepseek-ai/schemastery").default<boolean, boolean, "plain">;
                 providers: import("@deepseek-ai/schemastery").default<import("@deepseek-ai/cosmokit").Dict<{
                     protocol?: "systemone" | "rerank" | "llm" | null | undefined;
@@ -788,6 +851,27 @@ declare const _default: {
                         currency: import("@deepseek-ai/schemastery").default<string, string, "plain">;
                     }>>, "plain">;
                 }>>, string>, "plain">;
+            }>>>, "volatile">;
+            coverage: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
+            }>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+                mode: import("@deepseek-ai/schemastery").default<"shadow" | "control" | "off", "shadow" | "control" | "off", "plain">;
+                provider: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+                thresholds: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, Schemastery.ObjectT<NoInfer<{
+                    weak: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                    covered: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                }>>, "plain">;
             }>>>, "volatile">;
             budget: import("@deepseek-ai/schemastery").default<NoInfer<Schemastery.ObjectS<NoInfer<{
                 perSearchInputTokens: import("@deepseek-ai/schemastery").default<number, number, "plain">;

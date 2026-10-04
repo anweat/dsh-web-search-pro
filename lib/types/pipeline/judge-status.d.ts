@@ -6,6 +6,7 @@
  */
 import type { EvidenceConfig } from '../config.ts';
 import type { Store } from '../store.ts';
+import { type CoverageMode } from './coverage.ts';
 export type JudgeMode = EvidenceConfig['jevMode'];
 /** What decides S6 for the configured mode, ignoring whether the provider is usable (service.ts `scorers` makes the same choice). */
 export declare function configuredDecider(cfg: EvidenceConfig): {
@@ -13,6 +14,22 @@ export declare function configuredDecider(cfg: EvidenceConfig): {
     decides: 'rule' | 'hybrid' | 'model';
     note?: string;
 };
+/** The S8 coverage judge as configured (dev-plan M9); absent while `evidence.coverage.mode` is off. */
+export interface CoverageStatus {
+    mode: Exclude<CoverageMode, 'off'>;
+    provider: string;
+    /** Rubric `id@version`. */
+    rubric: string;
+    /** Whether a run would use the judge now; when not, the rule coverage stays and `reason` says why. */
+    usable: boolean;
+    reason?: string;
+    thresholds?: {
+        weak: number;
+        covered: number;
+    };
+    thresholdSource?: 'configured' | 'calibrated';
+    keyConfigured?: boolean;
+}
 export interface JudgeStatus {
     /** Effective judge mode (`judge.mode`, else the legacy `jevMode`), not the legacy `scorer` flag. */
     mode: JudgeMode;
@@ -31,6 +48,7 @@ export interface JudgeStatus {
     };
     /** Ids of every defined provider (presets and custom). */
     providers: string[];
+    coverage?: CoverageStatus;
     /** Absent when the store cannot be read. */
     usage?: {
         day: string;

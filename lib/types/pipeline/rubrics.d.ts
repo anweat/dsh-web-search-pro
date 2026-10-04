@@ -39,7 +39,7 @@ export interface RubricDef {
     description: string;
     /** Template; `{candidate}` is bound per item. */
     instructions: string;
-    /** score: template of the shared state (billed again inside every question). */
+    /** score / noul: template of the shared state (billed again inside every question). */
     state?: string;
     /** score: ordered level descriptions, lowest first (index = grade). */
     criteria?: readonly string[];

@@ -68,6 +68,12 @@ export declare class EvidenceService {
      * up (unknown provider, missing key, uncalibrated reranker, ...) leaves the rule scorer in charge and says why.
      */
     private scorers;
+    /**
+     * The S8 coverage judge (`evidence.coverage`, dev-plan M9), or `undefined` with the reason in `notes`: the rules keep the
+     * coverage. It is switched on only by its own setting, whatever the S6 scorer mode is, and needs a systemone provider, its
+     * key, and thresholds for that provider + rubric pair.
+     */
+    private coverageStage;
     search(request: EvidenceRequest): Promise<EvidenceOutput>;
     /** Best-effort: the pack already exists, a storage failure must not lose it. */
     private persist;

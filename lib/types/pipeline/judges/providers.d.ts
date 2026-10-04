@@ -7,6 +7,7 @@
  * @module web-search-pro/pipeline/judges/providers
  */
 import { type ResolvedRubric } from '../rubrics.ts';
+import { SystemOneCoverageJudge } from './coverage.ts';
 import type { ModelScorerBase } from './model-scorer.ts';
 import { type JudgeAnswerCache, type ProviderConfig, type UsageMeter } from './types.ts';
 /** Credentials ref / environment variable holding the Bocha Jev key. */
@@ -58,3 +59,8 @@ export interface ScorerDeps {
 }
 /** The scorer for a provider: ModelScorer over its protocol. Throws when the provider cannot be built (e.g. an uncalibrated reranker). */
 export declare function createModelScorer(p: ProviderConfig, deps?: ScorerDeps): ModelScorerBase;
+/**
+ * The coverage judge (dev-plan M9) of a provider: one `noul` question per need, so only the `systemone` protocol
+ * can serve it. Throws for any other protocol and for a provider that needs a key it was not given.
+ */
+export declare function createCoverageJudge(p: ProviderConfig, deps?: ScorerDeps): SystemOneCoverageJudge;

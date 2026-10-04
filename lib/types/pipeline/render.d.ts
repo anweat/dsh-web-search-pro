@@ -16,7 +16,7 @@ export interface RenderSource {
 export declare const LOW_RELEVANCE = " (low relevance)";
 /** One line under the header (dev-plan M3b): "covered" is a lexical judgement, and a missing passage proves nothing. */
 export declare const COVERAGE_CAVEAT = "Coverage is heuristic: no evidence here does not mean it does not exist; fetch/expand before concluding.";
-export declare function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'>, sources: readonly RenderSource[], engineLine: string, expandLine?: string): string;
+export declare function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'> & Partial<Pick<EvidencePack, 'uncertainNeeds'>>, sources: readonly RenderSource[], engineLine: string, expandLine?: string): string;
 /** The pack as `search.run` and the ctx.web provider return it (`EvidenceOutput` of pipeline/service.ts). */
 type PackFields = Parameters<typeof renderEvidencePack>[0];
 export interface RenderableOutput extends PackFields {
