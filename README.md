@@ -31,7 +31,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.1.17 dsh-web-search-pro@0.1.17
+dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.1.17
 # 或本地目录 / tarball：
 dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
@@ -49,7 +49,7 @@ dsh --profile web
 升级 Web Search Pro 时应同时升级浏览器插件；两者都需要作为 profile 的直接依赖。
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.1.17 dsh-web-search-pro@0.1.17
+dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.1.17
 ```
 
 > **破坏性变更（工具面）**：旧的 `web_search_pro`、`web_fetch_pro` 等 11 个工具名不再注册，也没有兼容包装。旧会话里对它们的调用会失败；把调用改成对应动作即可，对照表见[旧工具到新动作](#旧工具到新动作)。模型在 `web_call` 里写旧工具名会得到新动作名和翻译后的参数，`web_index()` 根目录也列出同一张对照。已存储的数据（历史、页面、规则、证据、账本）与 `ctx.web` provider 不受影响。
