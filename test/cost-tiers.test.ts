@@ -97,3 +97,18 @@ test('recommend: Exa over its keyless route is ready and anonymous; among source
   assert.equal(bocha.status, 'ready')
   assert.equal(bocha.costTier, 'paid')
 })
+
+test('recommend honours the user\'s sources.priority (ready sources lead in the listed order) and sources.disabled (never recommended)', () => {
+  const en = { task: 'how does postgres vacuum work', language: 'en' as const, profile: 'general' as const }
+  const all = providers({ tavily: { state: 'ready', credential: 'configured' } })
+  const ids = (r: ReturnType<typeof recommendSources>): string[] => r.picks.map(p => p.id)
+  assert.equal(ids(recommendSources(en, ctx({ providers: all })))[0], 'tavily', 'a source the user configured a key for leads the keyless ones, as in the plan')
+  assert.equal(ids(recommendSources(en, ctx()))[0], 'exa', 'nothing configured: the keyless Exa leads English')
+  const ranked = recommendSources(en, ctx({ providers: all, priority: ['bing'] }))
+  assert.equal(ranked.picks[0]!.id, 'bing', 'the user\'s ranking leads')
+  const disabled = recommendSources(en, ctx({ providers: all, disabled: ['exa', 'ddg'] }))
+  assert.ok(!ids(disabled).includes('exa') && !ids(disabled).includes('ddg'))
+  // a priority entry that cannot run now does not jump the queue
+  const notReady = recommendSources(en, ctx({ priority: ['jina'] }))
+  assert.notEqual(notReady.picks[0]!.id, 'jina')
+})

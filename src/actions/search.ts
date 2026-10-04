@@ -209,8 +209,8 @@ export const SEARCH_ACTIONS: ActionDef[] = [
   {
     name: 'search.recommend',
     group: 'search',
-    summary: 'Recommend at most 3 sources for a task (ready ones first, others with what is missing). Makes no search requests.',
-    notes: 'Use 1-2 of the picks; never fan out to every source. Each pick says how to call it (`use`).',
+    summary: 'Recommend at most 3 sources for a task: ready ones first (each with its cost tier: anonymous, free-quota, paid), then free sources to set up, paid ones last, with what is missing. Makes no search requests.',
+    notes: 'Use 1-2 of the picks; never fan out to every source. Each pick says how to call it (`use`). A source the user configured stays ready and keeps its rank; settings `sources.priority` / `disabled` apply.',
     params: {
       task: { type: 'string', description: 'Your goal in one sentence.' },
       query: { type: 'string', description: 'The search query, if any.' },
@@ -238,10 +238,11 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       const present = new Set<string>()
       if (typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function') await Promise.all(envNames.map(async n => { if (await router.resolveSecret(n)) present.add(n) }))
       else for (const n of envNames) if (process.env[n]) present.add(n)
+      const routeOf = (id: string): string => (router as { registry?: { routeId(id: string): string | undefined } }).registry?.routeId(id) ?? id
       return recommendSources({
         ...args.task?.trim() ? { task: args.task.trim() } : {}, ...args.query?.trim() ? { query: args.query.trim() } : {},
         ...profile ? { profile: profile as Profile } : {}, ...language ? { language: language as 'zh' | 'en' } : {}, ...args.platform?.trim() ? { platform: args.platform.trim() } : {},
-      }, { catalog, providers, cli: availability, browser: browserState(ctx.browser()).state === 'ready', hasEnv: n => present.has(n), hasConfig: n => typeof cfg[n] === 'string' ? (cfg[n] as string).trim().length > 0 : !!cfg[n] })
+      }, { catalog, providers, cli: availability, browser: browserState(ctx.browser()).state === 'ready', hasEnv: n => present.has(n), hasConfig: n => typeof cfg[n] === 'string' ? (cfg[n] as string).trim().length > 0 : !!cfg[n], priority: (ctx.dynamic().sources?.priority ?? []).map(routeOf), disabled: (ctx.dynamic().sources?.disabled ?? []).map(routeOf) })
     },
     render: value => renderRecommendation(value as Recommendation),
   },

@@ -39,6 +39,10 @@ export interface RecommendContext {
   hasEnv?: (name: string) => boolean
   /** Whether a plugin setting is set (`searxngUrl`). */
   hasConfig?: (name: string) => boolean
+  /** The user's `sources.priority`: ready sources named here lead, in this order (entry id, provider or platform id). */
+  priority?: readonly string[]
+  /** The user's `sources.disabled`: never recommended. */
+  disabled?: readonly string[]
   limit?: number
 }
 
@@ -176,12 +180,23 @@ export function recommendSources(input: RecommendInput, ctx: RecommendContext): 
   const profile: Profile = !profileInferred ? input.profile! : text ? inferProfile(text) : 'general'
   const language = input.language ?? (text ? taskLanguage({ goal: input.task ?? '', query: input.query ?? '' }) : undefined)
 
-  let pool = ctx.catalog.entries
+  const named = (e: CatalogEntry): string[] => [e.id, ...e.provider ? [e.provider] : [], ...e.platform ? [e.platform] : []]
+  const disabled = new Set(ctx.disabled ?? [])
+  let pool = ctx.catalog.entries.filter(e => !named(e).some(id => disabled.has(id)))
   const hint = input.platform?.trim().toLowerCase()
   let hinted = false
   if (hint) {
     const matched = pool.filter(e => e.id === hint || e.platform === hint || e.provider === hint || e.id === 'opencli-' + hint)
     if (matched.length) { pool = matched; hinted = true } else notes.push('no catalog entry for "' + input.platform + '": recommended by profile instead')
+  }
+  // The user's own say, for sources that can run now (the same precedence as the automatic plan): the listed ones first, in the
+  // listed order, then sources whose key the user configured, then the rest by fit.
+  const order = ctx.priority ?? []
+  const prio = (a: Assessed): number => {
+    if (a.status !== 'ready' && a.status !== 'limited') return Infinity
+    const listed = Math.min(...named(a.entry).map(id => (order.indexOf(id) < 0 ? Infinity : order.indexOf(id))))
+    if (listed !== Infinity) return listed
+    return a.entry.auth === 'key' && ctx.providers.get(a.entry.provider ?? '')?.credential === 'configured' ? 1_000 : 2_000
   }
   const candidates: Assessed[] = pool
     .filter(e => hinted || e.operations.includes('search'))
@@ -189,7 +204,7 @@ export function recommendSources(input: RecommendInput, ctx: RecommendContext): 
     // A general web engine in the wrong language is noise; a paper / code index in another language still works.
     .filter(e => hinted || !language || !isWeb(e) || e.languages.includes(language) || e.languages.includes('*'))
     .map(e => assess(e, ctx))
-    .sort((a, b) => Number(languageMismatch(a.entry, language)) - Number(languageMismatch(b.entry, language)) || TIER[a.status] - TIER[b.status] || setupCost(a) - setupCost(b) || score(b.entry, profile, language) - score(a.entry, profile, language) || a.entry.id.localeCompare(b.entry.id))
+    .sort((a, b) => Number(languageMismatch(a.entry, language)) - Number(languageMismatch(b.entry, language)) || TIER[a.status] - TIER[b.status] || prio(a) - prio(b) || setupCost(a) - setupCost(b) || score(b.entry, profile, language) - score(a.entry, profile, language) || a.entry.id.localeCompare(b.entry.id))
 
   // A general web engine that can run now leads (reference and vertical sources supplement it, they do not replace it) —
   // except for academic tasks, where the paper indexes are the primary sources.
