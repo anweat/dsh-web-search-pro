@@ -3,7 +3,7 @@
  * 断言 package.json 里所有受管 peer 范围在**两种解析模式**下都成立：
  *
  *   runtime —— DSH 组装期校验：semver.satisfies(host, range, { includePrerelease: true })
- *              （@deepseek-ai/dsh-app-boot/lib/index.js，0.1.7-rc.2 与 0.2.0-rc.2 同）
+ *              （@deepseek-ai/dsh-app-boot 的 plugin-compatibility.ts，0.1.7-rc.2 与 0.2.0-rc.2 同）
  *   install —— npm/pnpm 解析 peer：**默认** semver。预发布版本只有在某个比较符
  *              自带同号（同 major.minor.patch）预发布时才被判为满足。
  *
@@ -11,15 +11,15 @@
  * 而 DSH 自己的组装日志看起来是正常的 —— 所以这里两个都查。
  *
  * 用法：
- *   node test/compat/check-peer-ranges.js                    # 检查本仓库，覆盖策略里的两条基线
- *   node test/compat/check-peer-ranges.js 0.2.0-rc.2         # 只检查指定宿主版本
+ *   node test/compat/check-peer-ranges.js                    # 检查本仓库：受支持基线必须通过，已放弃/未验证的版本必须被拒绝
+ *   node test/compat/check-peer-ranges.js 0.2.0-rc.2         # 只检查指定宿主版本（必须通过）
  *   node test/compat/check-peer-ranges.js --selftest         # 自校验（含本文档引用的行为矩阵）
  *   node test/compat/check-peer-ranges.js --json             # 机器可读输出
  *
  * 本脚本自带最小 semver 实现（插件仓库没有 semver 依赖，也不该为了这个检查新增依赖）：
  * 只支持本仓库 peer 范围实际用到的写法（^ / ~ / >= / > / <= / < / =、`||` 分组、空格并列），
  * 以及 semver 的预发布优先级与上面那条“同号预发布”规则。
- * 形状与检查思路参考 anweat/dsh-web-search-pro PR #33 的 test/compat/check-peer-ranges.js。
+ * 与 anweat/dsh-browser 0.2.0 的 test/compat/check-peer-ranges.js 同一套策略：只有 0.2.0-rc.2 这一条基线。
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -155,13 +155,17 @@ function satisfies(version, range, options = {}) {
 }
 
 // ── 策略与检查 ────────────────────────────────────────────────────────────────
-/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线。 */
-const SUPPORTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.2']
+/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：只有这一条线。 */
+const SUPPORTED_BASELINES = ['0.2.0-rc.2']
+/**
+ * 必须被拒绝的宿主版本（runtime 与 install 两种模式都不能满足）：
+ * 已放弃的旧线、功能未在其上验证过的前一个预发布、以及不放行的下一个次版本的预发布。
+ */
+const REJECTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.1-alpha.1']
 /** 用于说明范围宽窄的代表性版本（只做展示，不影响退出码）。 */
 const MATRIX_VERSIONS = [
-  '0.1.5-rc.2', '0.1.7-rc.2', '0.1.7', '0.1.8',
-  '0.2.0-alpha.1', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0',
-  '0.2.1', '0.2.5', '0.3.0-rc.1',
+  '0.1.7-rc.2', '0.1.8', '0.2.0-alpha.1', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0-rc.3', '0.2.0',
+  '0.2.1-alpha.1', '0.2.1', '0.3.0-rc.1',
 ]
 
 const gatedPeers = (manifest) =>
@@ -181,28 +185,27 @@ const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..')
 
 function selftest() {
-  const capped = '^0.1.7-rc.2 || >=0.2.0-rc.1 <0.2.1-0'
-  const looseCaret = '^0.1.7-rc.2 || ^0.2.0-rc.1'
-  const single = '>=0.1.7-rc.2 <0.3.0'
-  const singleNarrow = '>=0.1.7-rc.2 <0.2.1-0'
+  const pinned = '>=0.2.0-rc.2 <0.2.1-0'
+  const looseCaret = '^0.2.0-rc.2'
+  const wide = '>=0.2.0-rc.2 <0.3.0'
+  const foreignLower = '>=0.1.7-rc.2 <0.2.1-0'
   const cases = [
-    // range, version, runtime, install —— 期望值取自 PR #33 / #35 的实测矩阵
-    [single, '0.2.0-rc.2', true, false],      // 宿主校验放行、npm 仍拒绝（单范围是 install 毒药）
-    [singleNarrow, '0.2.0-rc.2', true, false], // 同一个坑：比较符 tuple 是 0.2.1
-    [capped, '0.1.5-rc.2', false, false],
-    [capped, '0.1.7-rc.2', true, true],
-    [capped, '0.1.7', true, true],
-    [capped, '0.1.8', true, true],
-    [capped, '0.2.0-alpha.1', false, false],
-    [capped, '0.2.0-rc.1', true, true],
-    [capped, '0.2.0-rc.2', true, true],
-    [capped, '0.2.0', true, true],
-    [capped, '0.2.1', false, false],          // cap 生效：未实测的 0.2.x 后续版本不再声称兼容
-    [capped, '0.2.5', false, false],
-    [capped, '0.3.0-rc.1', false, false],
-    [looseCaret, '0.2.1', true, true],        // 旧范围把未实测的 0.2.1 也算兼容
-    [looseCaret, '0.3.0-rc.1', false, false], // ^ 的上界是 <0.3.0-0，连 0.3.0-rc.1 也挡掉
-    [single, '0.3.0-rc.1', true, false],      // 手写 <0.3.0 挡不住 0.3.0-rc.1（宿主放行）
+    // range, version, runtime, install —— 期望值与真实 semver 7（npm/pnpm 默认解析、includePrerelease 解析）实测一致
+    [pinned, '0.1.7-rc.2', false, false],     // 已放弃的旧线
+    [pinned, '0.1.8', false, false],
+    [pinned, '0.2.0-alpha.1', false, false],
+    [pinned, '0.2.0-rc.1', false, false],     // 新功能没有在 rc.1 宿主上验证过
+    [pinned, '0.2.0-rc.2', true, true],       // 受支持基线；`>=0.2.0-rc.2` 这个比较符自带同号预发布，是承重的
+    [pinned, '0.2.0-rc.3', true, true],
+    [pinned, '0.2.0', true, true],
+    [pinned, '0.2.1-alpha.1', false, false],  // 上界是 <0.2.1-0，不是 <0.2.1：连 0.2.1 的预发布也挡掉
+    [pinned, '0.2.1', false, false],          // cap 生效：未实测的 0.2.1 不声称兼容
+    [pinned, '0.3.0-rc.1', false, false],
+    [looseCaret, '0.2.1', true, true],        // ^0.2.0-rc.2 把未实测的 0.2.1 也算兼容
+    [looseCaret, '0.3.0-rc.1', false, false], // ^ 的上界是 <0.3.0-0
+    [wide, '0.2.0-rc.2', true, true],
+    [wide, '0.3.0-rc.1', true, false],        // 手写 <0.3.0 挡不住 0.3.0-rc.1（宿主放行）
+    [foreignLower, '0.2.0-rc.2', true, false], // 下界写成别条线的预发布：宿主校验放行、npm 拒绝（install 毒药）
   ]
   let failed = 0
   for (const [range, version, runtime, install] of cases) {
@@ -255,10 +258,24 @@ for (const version of targets) {
       bad += 1
     }
   }
-  if (!json) {
+  if (!json && rows.every((row) => row.runtime && row.install)) {
     const ranges = [...new Set(rows.map((row) => row.range))]
     console.log(`  ${rows.length} 个 dsh peer 在 ${version} 上两种模式均通过  ${ranges.join(' / ')}`)
   }
+}
+
+// 默认运行时，已放弃 / 未验证的版本必须被拒绝：任一 peer 在任一模式下放行，都说明范围比支持声明宽。
+const rejected = versions.length > 0 ? [] : REJECTED_BASELINES
+for (const version of rejected) {
+  const rows = evaluate(manifest, version)
+  report.checks.push({ version, expected: 'reject', peers: rows })
+  for (const row of rows) {
+    if (row.runtime || row.install) {
+      console.error(`  FAIL(accepts) ${version}  ${row.name} "${row.range}" 不应放行（runtime ${row.runtime ? 'accept' : 'reject'} / install ${row.install ? 'accept' : 'reject'}）`)
+      bad += 1
+    }
+  }
+  if (!json) console.log(`  ${rows.length} 个 dsh peer 在 ${version} 上两种模式均拒绝（符合预期）`)
 }
 
 if (!json && targets.includes('0.2.0-rc.2')) {
@@ -283,8 +300,8 @@ if (!json && targets.includes('0.2.0-rc.2')) {
 
 if (json) console.log(JSON.stringify(report, null, 2))
 if (bad > 0) {
-  console.error(`\n  ${bad} 处 peer 在指定宿主版本上不可用。预发布宿主必须用“显式点出该线”的范围，`)
-  console.error('  例如 ^0.1.7-rc.2 || >=0.2.0-rc.1 <0.2.1-0；只满足 runtime 的单范围是 install 毒药。')
+  console.error(`\n  ${bad} 处 peer 与支持声明不符（受支持版本不可用，或不受支持的版本被放行）。预发布宿主必须用“显式点出该线”的范围，`)
+  console.error('  例如 >=0.2.0-rc.2 <0.2.1-0；比较符的同号预发布是承重的，只满足 runtime 的范围是 install 毒药。')
   process.exit(1)
 }
-console.log(`\n  peer 范围检查通过（基线：${targets.join(', ')}）`)
+console.log(`\n  peer 范围检查通过（基线：${targets.join(', ')}${rejected.length > 0 ? `；拒绝：${rejected.join(', ')}` : ''}）`)
