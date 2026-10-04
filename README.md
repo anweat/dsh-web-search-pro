@@ -325,12 +325,11 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 三层，越靠前越日常：
 
-1. **DSH 可视化面板**：打开 `设置 → 插件 → 插件配置 → Web Search Pro`。面板按搜索策略、服务凭据、运行时后端和高级规则分组；修改先保留为本地草稿，点击“保存”后写入 `settings.yaml` 并热更新，支持放弃修改和逐字段恢复部署值。
+1. **DSH 可视化面板**：打开 `设置 → 插件 → 插件配置 → Web Search Pro`（各分组见下节“设置面板”）。修改先保留为本地草稿，点击“保存”后写入 `settings.yaml` 并热更新，支持放弃修改和逐字段恢复部署值。
 
-   - Exa、Jina、GitHub 密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器。
-   - `platformRules`、`customPlatforms`、`browserBindings` 与 Playwright 设置使用 JSON 对象编辑器；格式或数值范围无效时会阻止保存。
+   - Exa、Jina、GitHub、博查与各需 Key 来源的密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器，也不会把密钥值写进 `settings.yaml`。
+   - `platformRules`、`customPlatforms`、`browserBindings`、Playwright、自定义评分 provider 等使用 JSON 对象编辑器；格式、数值范围或服务端校验不通过时会阻止保存，并在字段下方给出与服务端一致的错误信息。
    - 浏览器工具的审批自由度由 `dsh-browser.automationMode` 管辖，调用缓冲由 `dsh-browser.usagePolicy` 管辖；用 `browser_call` 的 `runtime.status` 查看当前状态。Web Search Pro 面板只管理搜索插件自己的后端开关，不会绕过浏览器插件的审批或资源策略。
-   - `allowProxyFakeIp` 仅用于明确采用 Clash/TUN fake-IP DNS 的环境；普通网络保持关闭。
    - 更新带客户端面板的插件版本后需要重启 Web profile，让 DSH 客户端模块扫描器重新装载 `client.js`。
 
 2. **`$DSH_HOME/settings.yaml` → `web-search-pro:` 段**（热重载，改完即生效）：
@@ -367,7 +366,25 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
    ```
 
 3. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
-4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。设置面板暂未提供博查与 `keyedSources` 字段，用 settings.yaml / 凭据服务 / 环境变量配置。
+4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。这些引用名与密钥都可以在面板“来源”分组里设置。
+
+## 设置面板
+
+面板按以下分组折叠显示（中英文随 DSH 语言；搜索、凭据、运行时默认展开）。嵌套选项（`evidence.*`、`provider.*`、`keyedSources.*`）由面板整体写回各自的顶层字段，不认识的同级键原样保留。
+
+| 分组 | 内容 |
+|---|---|
+| 搜索策略 | 默认引擎顺序、默认结果数、并行融合 |
+| 网络 | `allowProxyFakeIp`（Clash/TUN fake-IP 症状说明）、`timeoutMs` |
+| 工具面 | `toolSurface`：`indexed`（默认）/ `flat`（仅调试），启动时生效 |
+| 内置 web 工具路由 | `registerProvider`、`providerId`、`provider.evidence`（auto / off）、`provider.deadlineMs`，以及选中本插件所需的 profile patch 片段（随 `providerId` 变化） |
+| 证据管线 | `evidence.autoProviders`、`maxRounds`、`maxQueries`，`fetchDefaultChars`、`exaContentsPerUrlChars` / `TotalChars`。`minKeep` 与证据包字符预算没有配置项（内置默认 / `search.run` 的 `budget` 参数） |
+| 评分模型 | `evidence.judge.mode`（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer` 保持一致）、`hybridBorderline`、provider 下拉（内置预设 + 自定义 id）、`maxJevQuestions`、`allowLlm`；覆盖判定 `evidence.coverage` 的模式、provider、阈值；用量上限 `evidence.budget`（单次 / 每日 / 时区 / 按 provider）；自定义 provider JSON（与服务端同一套校验，拒绝在定义里放密钥，只放 `keyRef` 名） |
+| 提示词（rubric） | 列出内置 rubric 与生效版本；逐个覆盖（版本、模板、等级、字符上限），按 `rubrics.ts` 的规则校验（未知变量、必需变量、等级数、版本必须不同于内置）；“恢复默认”删除覆盖 |
+| 来源 | 博查（Key 引用名、接口地址、长摘要）、七个需 Key 的来源（Key 引用名、写入式密钥、接口地址）、`searxngUrl`、`openalexMailto`，以及匿名来源参考表；各来源的实时就绪状态由 `web_call sources.status` 显示 |
+| 服务凭据 / 运行时与后端 / 高级 | Exa、Jina、GitHub 凭据引用与密钥；CLI、OpenCLI、Agent Reach、Playwright；缓存、排序加权、平台规则、自定义平台、浏览器绑定 |
+
+校验与服务端共用同一批纯函数（`pipeline/rubrics-spec.ts`、`judges/providers-spec.ts`、`judges/calibration-spec.ts`、`coverage.ts`、`budget-spec.ts`），它们不引入 Node 模块，客户端 bundle 仍只依赖宿主模块表里的少数模块（`pnpm run test:client-bundle` 检查）。
 
 ## 外部依赖（按需）
 
