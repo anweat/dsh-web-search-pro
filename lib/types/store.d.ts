@@ -215,6 +215,36 @@ export declare class Store {
         used: number;
         cap: number;
     };
+    /**
+     * Requests booked for a request-counted provider (protocol `search`): over all time and on `day`. A settled row counts its
+     * `requests`, an open reservation counts one (a crash never frees it), a released row none.
+     */
+    requestCounts(provider: string, day: string): {
+        total: number;
+        today: number;
+    };
+    /**
+     * Reserve ONE request of a request-capped source, atomically across processes sharing this file (BEGIN IMMEDIATE), like
+     * {@link reserveUsage} does for tokens: refused when the all-time `total` or today's `daily` cap would be passed. A closed or
+     * failing store refuses.
+     */
+    reserveRequest(input: {
+        id: string;
+        ts: string;
+        day: string;
+        searchId?: string;
+        provider: string;
+        protocol: string;
+        total?: number;
+        daily?: number;
+    }): {
+        ok: true;
+    } | {
+        ok: false;
+        scope: 'total' | 'daily' | 'unavailable';
+        used: number;
+        cap: number;
+    };
     /** Close a reservation: final tokens (actual, or the estimate flagged `estimated`) and amount (null = unknown price). */
     settleUsage(id: string, final: {
         status: 'settled' | 'released';

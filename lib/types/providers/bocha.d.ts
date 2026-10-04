@@ -1,15 +1,17 @@
 /**
  * Bocha web search (https://open.bochaai.com): a Chinese-strong, key-based search API.
  *
- * Contract sources (nothing here is guessed): the MIT reference provider
- * `bocha-ai/dsh-web-search-bocha` (src/provider.ts, src/types.ts, README) for the request
- * body, `data.webPages.value[]` mapping and error envelope; the documented request fields
- * `include` / `exclude` (domains separated by `|` or `,`, at most 100) from Bocha's web-search
- * parameter docs; and ONE live call (2026-10-02) that returned HTTP 403
- * `{"message":"You do not have enough money or package quota","log_id":"...","code":"403"}`
- * (test/fixtures/bocha-quota-403.json): note `code` is a STRING there. A successful live
- * response has not been recorded, so the success mapping and the `include` / `exclude` / date-range
- * request fields are verified only against the reference and its docs (descriptor `verification.live = false`).
+ * Contract sources: the MIT reference provider `bocha-ai/dsh-web-search-bocha` (src/provider.ts, src/types.ts, README) for the
+ * request body, `data.webPages.value[]` mapping and error envelope, and the documented request fields `include` / `exclude`
+ * (domains separated by `|` or `,`, at most 100). VERIFIED LIVE on 2026-10-04 with a funded search key, 4 requests:
+ * `https://api.bocha.cn` (the reference plugin's host, used by default) answered 200 `{ code: 200, log_id, msg: null,
+ * data: { _type: "SearchResponse", queryContext, webPages: { webSearchUrl, totalEstimatedMatches, value: [...], someResultsRemoved },
+ * images, videos } }` (`code` is the NUMBER 200; each page has id, name, url, displayUrl, snippet (about 100 characters), summary
+ * (long, only with `summary: true`), siteName, siteIcon, datePublished, dateLastCrawled); `include` kept only results of the listed
+ * domains (subdomains included), `exclude` dropped the listed ones, `freshness: "YYYY-MM-DD..YYYY-MM-DD"` kept every publication date
+ * inside the range; `https://api.bochaai.com` accepts the same key with the same response (test/fixtures/bocha-web-search.json,
+ * bocha-filters.json are sanitized captures). The earlier live call (2026-10-02, a Jev key) answered 403 with `code` as a STRING
+ * (test/fixtures/bocha-quota-403.json): the account had no balance then, so error envelopes may carry either type.
  *
  * `POST {base}/v1/web-search`, `Authorization: Bearer <key>`, body
  * `{ query, freshness?, summary?, count?, include?, exclude? }`.
@@ -19,7 +21,8 @@ import type { WebSearchSource } from '@deepseek-ai/dsh-web';
 import { EngineError, type Engine, type EngineDeps, type EngineSearchOptions } from '../engines.ts';
 import type { ProviderAdapter, ProviderDescriptor } from './registry.ts';
 export declare const BOCHA_ROUTE_ID = "bocha";
-export declare const BOCHA_DEFAULT_BASE_URL = "https://api.bochaai.com";
+/** The reference plugin's host, verified live; `https://api.bochaai.com` serves the same API and accepts the same key (`bochaBaseUrl` can point there). */
+export declare const BOCHA_DEFAULT_BASE_URL = "https://api.bocha.cn";
 export declare const BOCHA_PATH = "/v1/web-search";
 /** Credentials ref / environment variable of the search key. */
 export declare const BOCHA_KEY_ENV = "BOCHA_SEARCH_API_KEY";

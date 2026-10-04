@@ -15,6 +15,7 @@
  * back with `partial: true`.
  * @module web-search-pro/pipeline/run
  */
+import type { SourcePolicy } from '../config-enums.ts';
 import { type ProviderOutput, type ProviderSource } from './candidates.ts';
 import { type SplitOptions } from './blocks.ts';
 import { type CompiledQuery } from './compile.ts';
@@ -87,6 +88,12 @@ export interface PipelineDeps {
     descriptors?: readonly ProviderDescriptor[];
     /** `evidence.autoProviders` (default true). */
     autoProviders?: boolean;
+    /** The user's source preferences (dev-plan M11a): `sources.priority` / `sources.disabled` (route ids) and `evidence.sourcePolicy`. */
+    sources?: {
+        priority?: readonly string[];
+        disabled?: readonly string[];
+        policy?: SourcePolicy;
+    };
     /** Per-provider query compilation (registry adapters may bring their own); default the core compiler. */
     compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery;
     fusion: Omit<FusionOptions, 'nProviders' | 'now'>;

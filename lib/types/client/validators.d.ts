@@ -41,5 +41,10 @@ export declare function rubricIssues(rubrics: unknown): Record<string, string[]>
  * ignore; warnings are accepted values that cannot do what the mode asks (a placeholder provider, no thresholds).
  */
 export declare function evidenceIssues(ev: Json): Issue[];
+/**
+ * Problems of the effective `sources` object (priority / disabled / budget), from the server's own `resolveSources`. A source that is
+ * both prioritised and disabled is accepted (disabled wins) but is probably not what was meant.
+ */
+export declare function sourcesIssues(sources: Json): Issue[];
 /** Rubric override ids in a settings object that name no built-in rubric (the server ignores them). */
 export declare function unknownRubricIds(rubrics: unknown): string[];

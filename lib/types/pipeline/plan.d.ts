@@ -5,8 +5,9 @@
  * registry (or a test double) supplies it.
  * @module web-search-pro/pipeline/plan
  */
+import type { SourcePolicy } from '../config-enums.ts';
 import { type CompiledQuery } from './compile.ts';
-import { type CredentialState, type ProviderDescriptor } from '../providers/registry.ts';
+import { type CostTier, type CredentialState, type ProviderDescriptor } from '../providers/registry.ts';
 import type { Profile, TaskSpec } from './types.ts';
 /** Provider ids per profile (`general` uses the configured `engines`). */
 export declare const PROFILE_PROVIDERS: Readonly<Record<Exclude<Profile, 'general'>, readonly string[]>>;
@@ -23,6 +24,12 @@ export interface ProviderStatus {
     reason?: string;
     /** Local credential dimension from the registry probe; `missing` keeps a provider out of automatic promotion (it still runs when asked for). */
     credential?: CredentialState;
+    /** Tier of the route that would run now (Exa without a key: `anonymous`); absent = the descriptor's. */
+    costTier?: CostTier;
+    /** The provider can run through a route that needs no credential (Exa over MCP): promotable although `credential` is `missing`. */
+    keyless?: boolean;
+    /** Unavailable because its request budget (`sources.budget`) is used up: the plan says so and falls back to other sources. */
+    budgetExhausted?: boolean;
 }
 export interface PlannedProvider {
     id: string;
@@ -66,6 +73,14 @@ export interface PlanOptions {
     webFallbacks?: number;
     /** Most providers promoted for the task language (default {@link DEFAULT_MAX_PROMOTED}); providers of one `sourceFamily` count once. */
     maxPromoted?: number;
+    /**
+     * The user's own say (dev-plan M11a), below an explicit `engines` and above the automatic promotion: `priority` ids that are
+     * ready and fit the task's profile and language go first, in that order; `disabled` ids are never planned. Route ids.
+     */
+    priority?: readonly string[];
+    disabled?: readonly string[];
+    /** `anonymous-only`: no source that needs a key, account or login is planned automatically, configured or not. Default `default`. */
+    policy?: SourcePolicy;
     /** Per-provider compilation; defaults to the core compiler (adapters may supply their own). */
     compiler?: (task: TaskSpec, providerId: string, now: Date) => CompiledQuery;
 }

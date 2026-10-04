@@ -3,8 +3,8 @@
  * @module web-search-pro/providers
  */
 import type { ProviderRegistry } from './registry.ts';
-export { ProviderRegistry, routeIdOf } from './registry.ts';
-export type { ProviderAdapter, ProviderDescriptor, Readiness, ProbeEnv, Requirement, CostDescriptor, Operation, CredentialState, InstallationState, Health } from './registry.ts';
+export { ProviderRegistry, routeIdOf, costTierOf, COST_TIERS } from './registry.ts';
+export type { ProviderAdapter, ProviderDescriptor, Readiness, ProbeEnv, Requirement, CostDescriptor, Operation, CredentialState, InstallationState, Health, CostTier } from './registry.ts';
 export { createBuiltinRegistry, builtinAdapters } from './builtin.ts';
 /**
  * The registry every SearchRouter uses unless given another. External adapters (a later milestone) register here;

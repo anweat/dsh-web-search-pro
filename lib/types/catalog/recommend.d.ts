@@ -8,7 +8,7 @@
  */
 import { type ProviderStatus } from '../pipeline/plan.ts';
 import { type Profile } from '../pipeline/types.ts';
-import type { CatalogEntry, SourceCatalog } from './schema.ts';
+import type { CatalogEntry, CostTier, SourceCatalog } from './schema.ts';
 /** Most suggestions one call returns. */
 export declare const MAX_RECOMMENDATIONS = 3;
 /** Shown with every recommendation: the point of the feature is to NOT query everything. */
@@ -34,6 +34,10 @@ export interface RecommendContext {
     hasEnv?: (name: string) => boolean;
     /** Whether a plugin setting is set (`searxngUrl`). */
     hasConfig?: (name: string) => boolean;
+    /** The user's `sources.priority`: ready sources named here lead, in this order (entry id, provider or platform id). */
+    priority?: readonly string[];
+    /** The user's `sources.disabled`: never recommended. */
+    disabled?: readonly string[];
     limit?: number;
 }
 export type SuggestionStatus = 'ready' | 'limited' | 'needs_setup' | 'catalog_only';
@@ -41,6 +45,8 @@ export interface Suggestion {
     id: string;
     label: string;
     kind: CatalogEntry['kind'];
+    /** `anonymous` / `free-quota` / `paid` (the route that would run: Exa without a key is `anonymous`). */
+    costTier: CostTier;
     status: SuggestionStatus;
     /** True only for `ready` and `limited`: something this plugin can run right now. */
     executable: boolean;

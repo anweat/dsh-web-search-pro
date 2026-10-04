@@ -8,7 +8,8 @@ import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
 import { type EngineSearchOptions } from './engines.ts';
-import { type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
+import { type CostTier, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
+import { type RequestBudgetState } from './pipeline/ledger.ts';
 import { LruCache } from './memory-cache.ts';
 import type { BrowserService } from './browser-service.ts';
 import { type BrowserGetter } from './browser-access.ts';
@@ -85,6 +86,10 @@ export interface ProviderReport {
     })[];
     supportedFilters: string[];
     costModel: ProviderDescriptor['costModel'];
+    /** What it costs the user: `anonymous`, `free-quota` or `paid`; for a provider with two routes (Exa) the tier of the route that would run now. */
+    costTier: CostTier;
+    /** Request budget (`sources.budget`): cap, used and remaining; only for a source that has one. */
+    budget?: RequestBudgetState;
     /** Not verified against the live service (descriptor.verification). */
     unverified?: boolean;
     readiness: Readiness & {
@@ -133,6 +138,11 @@ export declare class SearchRouter {
     /** Bindings that apply to these providers, for cache keys: a rebound auth profile must not replay older results. */
     private bindingsOf;
     private probeEnv;
+    /**
+     * The configured `engines` list with the user's `sources.*` preferences applied: disabled sources removed, `priority` ones that are
+     * already in the list moved to the front in their listed order. An explicit `engines` of a call never goes through this.
+     */
+    private preferred;
     /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
     private canonicalIds;
     backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]>;
@@ -164,6 +174,13 @@ export declare class SearchRouter {
      */
     private keyedSources;
     private keyedSourcesSync;
+    /** The configured request budgets by ROUTE id (aliases and full ids in `sources.budget` resolved; unknown ids are reported by {@link sourceDiagnostics}). */
+    private budgets;
+    private budgetFor;
+    /** Used / remaining requests of a capped source (read-only), or undefined when no cap is set for it. */
+    requestBudgetOf(route: string): RequestBudgetState | undefined;
+    /** Problems of the `sources.*` settings (unknown ids, bad numbers), for `sources.status`. */
+    sourceDiagnostics(): string[];
     /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
     private usageRecorder;
     /** Whether any configured engine is currently usable. */

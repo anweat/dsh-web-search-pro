@@ -121,12 +121,34 @@ declare const _default: {
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
         }>>, "plain">;
+        sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            sourcePolicy: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -297,6 +319,7 @@ declare const _default: {
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            sourcePolicy: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -556,12 +579,34 @@ declare const _default: {
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
         }>>, "plain">;
+        sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            sourcePolicy: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -732,6 +777,7 @@ declare const _default: {
             hybridBorderline: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             maxJevQuestions: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             autoProviders: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            sourcePolicy: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
             maxRounds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             maxQueries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
             rubrics: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{

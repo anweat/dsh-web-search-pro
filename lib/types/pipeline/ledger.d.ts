@@ -19,10 +19,43 @@
 import type { Store, UsageTotals } from '../store.ts';
 import type { ProviderConfig, UsageMeter } from './judges/types.ts';
 import { DEFAULT_BUDGET, resolveBudget, type BudgetCaps, type BudgetInput, type ProviderBudgetInput } from './budget-spec.ts';
+import type { SourceBudgetInput } from './sources-spec.ts';
 export { DEFAULT_BUDGET, resolveBudget };
 export type { BudgetCaps, BudgetInput, ProviderBudgetInput };
 /** Calendar day `YYYY-MM-DD` of `ts` in `timezone` (the system zone when absent). */
 export declare function dayKey(ts: number, timezone?: string): string;
+/** The ledger provider name of a source's request rows: Bocha books them as `bocha-search`, every other source under its route id. */
+export declare function usageProviderOf(route: string): string;
+/** One axis of a request budget: the cap, what is booked, what is left. */
+export interface RequestAxis {
+    limit: number;
+    used: number;
+    remaining: number;
+}
+/** Used and remaining requests of one budgeted source (`sources.budget.<id>`), read from the ledger. */
+export interface RequestBudgetState {
+    /** Route id of the source. */
+    source: string;
+    total?: RequestAxis;
+    daily?: RequestAxis;
+    /** The calendar day `daily` counts. */
+    day: string;
+    exhausted: boolean;
+    /** Words for a skip note (`request budget used up: 1000/1000 total`); only when exhausted. */
+    reason?: string;
+}
+/** A reserved request of a capped source: settled when the service answered, released when it did not. */
+export declare class RequestTicket {
+    private readonly store;
+    private readonly id;
+    private open;
+    constructor(store: Store, id: string);
+    get closed(): boolean;
+    /** The request reached the service and is booked (`requests` normally 1). */
+    settle(requests?: number, note?: string): void;
+    /** The request did not reach the service (or was refused before billing): the reservation is given back. */
+    release(note?: string): void;
+}
 export interface UsageSnapshot {
     day: string;
     timezone?: string;
@@ -58,6 +91,15 @@ export declare class UsageLedger {
         searchId?: string;
         note?: string;
     }): void;
+    /** Used and remaining requests of a budgeted source: the ledger's persistent counters (all time and today). Read-only. */
+    requestBudget(route: string, budget: SourceBudgetInput): RequestBudgetState;
+    /**
+     * Reserve one request of a capped source before it is sent, atomically (immediate transaction) so two searches or two
+     * processes cannot both spend the last one. Refused when the total or today's cap would be passed.
+     */
+    reserveRequest(route: string, budget: SourceBudgetInput, searchId?: string): RequestTicket | {
+        refused: string;
+    };
     /**
      * Today's usage over reserved and settled MODEL calls, with the caps (read-only). Request-counted providers
      * (protocol `search`) are listed in `providers` but kept out of `totals`, so their unknown price does not blank the model cost.

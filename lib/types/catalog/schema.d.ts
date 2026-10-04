@@ -9,9 +9,12 @@ export declare const CATALOG_VERSION = 1;
 export declare const SOURCE_KINDS: readonly ["api", "cli", "mcp", "browser"];
 export declare const SOURCE_AUTH: readonly ["anonymous", "key", "login"];
 export declare const SOURCE_OPERATIONS: readonly ["search", "read", "fetch", "transcript", "comments", "extract", "answer", "trending"];
+/** What using the source costs: no key (`anonymous`), a key / account / login with a free allowance (`free-quota`), billed per use (`paid`). Same words as the provider registry. */
+export declare const COST_TIERS: readonly ["anonymous", "free-quota", "paid"];
 export declare const VERIFICATION_STATUSES: readonly ["verified", "unverified"];
 export type SourceKind = typeof SOURCE_KINDS[number];
 export type SourceAuth = typeof SOURCE_AUTH[number];
+export type CostTier = typeof COST_TIERS[number];
 export type SourceOperation = typeof SOURCE_OPERATIONS[number];
 export interface CatalogRequires {
     /** A command that must be on PATH (matches a `sources.deps` id where this plugin probes it). */
@@ -46,6 +49,8 @@ export interface CatalogEntry {
     /** What it returns: web, code, paper, video, forum, qa, reference, social, listing, audio, files. */
     resultKinds?: string[];
     auth: SourceAuth;
+    /** Cost tier of the route the plugin would run (Exa: its keyless MCP route); the `cost` note cites the pricing page behind a `free-quota` / `paid` verdict. */
+    costTier: CostTier;
     /** Environment variables / credentials refs of the key (or login session). Names this plugin reads, or plans to read once an adapter exists. */
     keyEnv?: string[];
     requires?: CatalogRequires;

@@ -7,9 +7,10 @@ import type { CoverageSettings } from './pipeline/coverage.ts';
 import type { JudgeSettings } from './pipeline/judges/providers.ts';
 import type { BudgetInput } from './pipeline/ledger.ts';
 import type { RubricOverride } from './pipeline/rubrics.ts';
-import { type ToolSurface } from './config-enums.ts';
-export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, TOOL_SURFACES } from './config-enums.ts';
-export type { ToolSurface };
+import type { SourceBudgetInput } from './pipeline/sources-spec.ts';
+import { type SourcePolicy, type ToolSurface } from './config-enums.ts';
+export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES } from './config-enums.ts';
+export type { SourcePolicy, ToolSurface };
 /** A user-defined custom platform: search URL template + result selectors + optional login cookie. */
 export interface CustomPlatformSpec {
     name: string;
@@ -51,6 +52,12 @@ export interface EvidenceConfig {
      * (key configured) ahead of the profile table. Default true; false keeps the profile table / configured `engines` as they are.
      */
     autoProviders: boolean;
+    /**
+     * Which sources the automatic plan may use (dev-plan M11a). `default`: sources the user configured (a key) are promoted for
+     * their language and profile, otherwise the anonymous / free ones lead. `anonymous-only`: never a source that needs a key,
+     * account or login, even a configured one. Explicit `engines` / `platform` in a call always win.
+     */
+    sourcePolicy: SourcePolicy;
     /** Retrieval rounds per task (S8 bounded re-search): 1 disables the second round. Default 2. */
     maxRounds: number;
     /** Search requests per task over all rounds (a second round only runs while this is not used up). Default 4. */
@@ -89,7 +96,22 @@ export interface ProviderSettings {
     deadlineMs: number;
 }
 export declare function resolveProviderEvidence(value: unknown): ProviderSettings['evidence'];
+export declare function resolveSourcePolicy(value: unknown): SourcePolicy;
 export declare function resolveToolSurface(value: unknown): ToolSurface;
+/** `sources.*`: the user's own say over which sources run (all optional, nothing is set by default). */
+export interface SourcesConfig {
+    /** Source ids to rank first, in this order, when they are ready and fit the task's profile and language. */
+    priority?: string[];
+    /** Source ids the automatic plan and the configured `engines` list never use (an explicit `engines` / `platform` in a call still can). */
+    disabled?: string[];
+    /**
+     * Optional request caps per source id, counted in the usage ledger (persistent, atomic): `total` over all time, `daily` per
+     * calendar day (time zone of `evidence.budget`). No source has a cap unless it is set here. An exhausted source is skipped
+     * with a note and the plan falls back to other sources; it is never an error. Example for a Bocha account with 1000 requests:
+     * `budget: { bocha: { total: 1000, daily: 50 } }`.
+     */
+    budget?: Record<string, SourceBudgetInput>;
+}
 export interface Config {
     /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
     dbPath?: string;
@@ -147,7 +169,7 @@ export interface Config {
     bochaApiKey?: string;
     /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
     bochaApiKeyEnv?: string;
-    /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bochaai.com. */
+    /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bocha.cn. */
     bochaBaseUrl?: string;
     /** Ask Bocha for its longer per-page summary (default true). */
     bochaSummary?: boolean;
@@ -199,6 +221,8 @@ export interface Config {
         /** Directory for read.snapshot artifacts; defaults to <dbDir>/snapshots. */
         snapshotDir?: string;
     };
+    /** Source preferences and request budgets (dev-plan M11a). */
+    sources?: SourcesConfig;
     /** Evidence pipeline (S6 scoring). */
     evidence?: Partial<EvidenceConfig>;
     verbose: boolean;
@@ -296,12 +320,34 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
         snapshotDir: z<string, string, "plain">;
     }>>, "plain">;
+    sources: z<Schemastery.ObjectS<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
+        sourcePolicy: z<string, string, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -472,6 +518,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
+        sourcePolicy: z<string, string, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -731,12 +778,34 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
         snapshotDir: z<string, string, "plain">;
     }>>, "plain">;
+    sources: z<Schemastery.ObjectS<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
+        sourcePolicy: z<string, string, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -907,6 +976,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         hybridBorderline: z<boolean, boolean, "volatile-defined">;
         maxJevQuestions: z<number, number, "volatile-defined">;
         autoProviders: z<boolean, boolean, "volatile-defined">;
+        sourcePolicy: z<string, string, "volatile-defined">;
         maxRounds: z<number, number, "volatile-defined">;
         maxQueries: z<number, number, "volatile-defined">;
         rubrics: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -1090,6 +1160,7 @@ export interface ResolvedConfig extends Config {
     openalexMailto?: string;
     keyedSources?: Config['keyedSources'];
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
+    sources: Required<SourcesConfig>;
     evidence: EvidenceConfig;
     provider: ProviderSettings;
 }
