@@ -13,10 +13,10 @@ export declare const jsYaml: {
  * Parse an HTML document into a queryable DOM.
  *
  * Deliberately NOT jsdom: jsdom depends on whatwg-url -> tr46, whose
- * `require('punycode/')` cannot be routed by dsh 0.1.7's CJS resolution
+ * `require('punycode/')` cannot be routed by the Host's CJS resolution
  * router (the router derives search paths from `createRequire().resolve.paths`,
- * which reports builtin-shadowed names as unresolvable), so any plugin
- * importing jsdom fails to load on dsh 0.1.7-rc.2. node-html-parser has a
+ * which reports builtin-shadowed names as unresolvable; observed on dsh
+ * 0.1.7-rc.2), so a plugin importing jsdom can fail to load. node-html-parser has a
  * tiny dependency tree (entities + css-select) with no such require.
  *
  * The returned object mimics the small slice of the DOM API the extractor
