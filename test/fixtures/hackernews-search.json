@@ -1,0 +1,88 @@
+{
+  "_comment": "LIVE capture, trimmed to the first 3 hits (highlight and children omitted).",
+  "status": 200,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "request": "GET https://hn.algolia.com/api/v1/search?query=rust+async+runtime&tags=story&hitsPerPage=5",
+  "contentType": "application/json",
+  "body": {
+    "exhaustive": {
+      "nbHits": false,
+      "typo": false
+    },
+    "exhaustiveNbHits": false,
+    "exhaustiveTypo": false,
+    "hits": [
+      {
+        "_tags": [
+          "story",
+          "author_RebootStr",
+          "story_37639896"
+        ],
+        "author": "RebootStr",
+        "children": [
+          37641323,
+          37641476,
+          37641598
+        ],
+        "created_at": "2023-09-25T05:20:13Z",
+        "created_at_i": 1695619213,
+        "num_comments": 198,
+        "objectID": "37639896",
+        "points": 258,
+        "story_id": 37639896,
+        "title": "The State of Async Rust: Runtimes",
+        "updated_at": "2026-08-02T17:15:09Z",
+        "url": "https://corrode.dev/blog/async/"
+      },
+      {
+        "_tags": [
+          "story",
+          "author_losfair",
+          "story_29493340"
+        ],
+        "author": "losfair",
+        "children": [
+          29493793,
+          29493943,
+          29494924
+        ],
+        "created_at": "2021-12-09T03:08:59Z",
+        "created_at_i": 1639019339,
+        "num_comments": 81,
+        "objectID": "29493340",
+        "points": 158,
+        "story_id": 29493340,
+        "title": "Monoio – A thread-per-core Rust async runtime with io_uring",
+        "updated_at": "2025-09-29T00:06:32Z",
+        "url": "https://github.com/bytedance/monoio"
+      },
+      {
+        "_tags": [
+          "story",
+          "author_YuukiRey",
+          "story_37614723"
+        ],
+        "author": "YuukiRey",
+        "created_at": "2023-09-22T17:16:03Z",
+        "created_at_i": 1695402963,
+        "num_comments": 0,
+        "objectID": "37614723",
+        "points": 5,
+        "story_id": 37614723,
+        "title": "The State of Async Rust: Runtimes",
+        "updated_at": "2024-09-20T15:09:29Z",
+        "url": "https://corrode.dev/blog/async/",
+        "children": []
+      }
+    ],
+    "hitsPerPage": 5,
+    "nbHits": 97,
+    "nbPages": 20,
+    "page": 0,
+    "params": "query=rust+async+runtime&tags=story&hitsPerPage=5&advancedSyntax=true&analyticsTags=backend",
+    "processingTimeMS": 23,
+    "query": "rust async runtime",
+    "serverTimeMS": 34
+  }
+}

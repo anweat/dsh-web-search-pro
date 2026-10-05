@@ -155,3 +155,26 @@ test('detectShellPage flags navigation/form shells but not real prose', () => {
   const prose = 'Ottawa recorded 1,240 mm of snowfall over the 2025-2026 season, well above the 30-year average of 980 mm. The peak month was January with 410 mm, and the earliest season-opening storm arrived on November 18. These figures come from Environment and Climate Change Canada station 50172.'
   assert.equal(detectShellPage(prose), false)
 })
+
+test('detectShellPage counts CJK characters as words: Chinese prose is not a shell, Chinese navigation is', () => {
+  // ~200 Chinese characters with a handful of citation links: whitespace splitting used to see ~5 words.
+  const prose = '据国家统计局发布的数据，2025年全国粮食总产量达到七亿零五百万吨，比上年增长百分之一点六，连续十年稳定在一万三千亿斤以上。其中夏粮产量[一](https://example.cn/a)，早稻产量[二](https://example.cn/b)，秋粮产量[三](https://example.cn/c)。单产提高主要得益于高标准农田建设和良种推广，全国累计建成高标准农田超过十亿亩，主要粮食作物良种覆盖率保持在百分之九十六以上。业内专家认为，未来粮食增产的潜力仍然集中在中低产田改造和科技应用上[四](https://example.cn/d)。'
+  assert.equal(detectShellPage(prose), false)
+  // Navigation page: mostly links plus a login prompt.
+  const nav = '首页 | 请登录 | 没有找到相关结果 ' + Array.from({ length: 12 }, (_, i) => `[栏目${i}](https://example.cn/c/${i})`).join(' ')
+  assert.equal(detectShellPage(nav), true)
+  // Long-enough Chinese prose that merely mentions a phrase is still prose.
+  assert.equal(detectShellPage(prose.repeat(3) + '请登录'), false)
+})
+
+test('detectShellPage: Chinese search-form stubs are shells even when short', () => {
+  assert.equal(detectShellPage('请输入关键词'), true)
+  assert.equal(detectShellPage('没有找到相关结果，请换个关键词再试。'), true)
+})
+
+test('detectShellPage: a short factual page without navigation signals is real data', () => {
+  assert.equal(detectShellPage('The Eiffel Tower is 330 metres tall and was completed in 1889.'), false)
+  assert.equal(detectShellPage('珠穆朗玛峰海拔8848.86米，位于中国与尼泊尔边境。'), false)
+  assert.equal(detectShellPage(''), true)
+  assert.equal(detectShellPage('   \n '), true)
+})

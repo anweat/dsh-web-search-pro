@@ -5,4 +5,4 @@
  * @module web-search-pro/browser-service
  */
 import type { BrowserService as DshBrowserService } from '@anweat/dsh-browser';
-export type BrowserService = Pick<DshBrowserService, 'render' | 'snapshot' | 'searchResults' | 'opencli' | 'close'>;
+export type BrowserService = Pick<DshBrowserService, 'render' | 'snapshot' | 'searchResults' | 'opencli' | 'close' | 'observe' | 'listTargets' | 'sessionState'>;

@@ -1,0 +1,17 @@
+{
+  "_comment": "NOT a live capture: constructed from MIT reference code that calls Serper (LangChain GoogleSerperAPIWrapper, searchsuite): organic[] of title/link/snippet/date/position, plus answerBox and knowledgeGraph that are never used as sources. Serper has no public API reference and no key was available.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "searchParameters": { "q": "apple inc", "gl": "us", "hl": "en", "num": 10, "type": "search", "engine": "google" },
+    "answerBox": { "snippet": "A GENERATED-LOOKING ANSWER BOX THAT IS NOT A SOURCE", "title": "x", "link": "https://answerbox.example.test/" },
+    "knowledgeGraph": { "title": "Apple", "description": "KNOWLEDGE GRAPH TEXT THAT IS NOT A SOURCE" },
+    "organic": [
+      { "title": "Apple", "link": "https://www.apple.com/", "snippet": "Discover the innovative world of Apple.", "position": 1 },
+      { "title": "Apple Inc. - Wikipedia", "link": "https://en.wikipedia.org/wiki/Apple_Inc.", "snippet": "Apple Inc. is an American multinational technology company.", "date": "Sep 13, 2025", "position": 2 },
+      { "title": "Apple news", "link": "https://news.example.test/apple", "snippet": "Latest.", "date": "3 days ago", "position": 3 },
+      { "title": "No link", "snippet": "dropped", "position": 4 }
+    ],
+    "credits": 1
+  }
+}

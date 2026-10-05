@@ -1,0 +1,12 @@
+{
+  "_comment": "LIVE capture, sanitized (no key, request headers omitted). POST https://api.bochaai.com/v1/web-search with a Bocha Jev key, body {query,freshness:oneYear,summary:true,count:5}, 2026-10-02. Note body.code is a STRING.",
+  "status": 403,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "contentType": "application/json;charset=UTF-8",
+  "body": {
+    "message": "You do not have enough money or package quota",
+    "log_id": "9a4c880abc39956b",
+    "code": "403"
+  }
+}

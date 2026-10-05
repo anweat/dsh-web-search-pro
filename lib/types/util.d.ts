@@ -4,6 +4,7 @@
  * resolves from the global npm root or config playwright.modulePath.
  * @module dsh-web-search-pro/util
  */
+import { type ResolvePublicUrlOptions } from './safe-http.ts';
 /** js-yaml parser (npm dep). */
 export declare const jsYaml: {
     load(input: string): unknown;
@@ -12,10 +13,10 @@ export declare const jsYaml: {
  * Parse an HTML document into a queryable DOM.
  *
  * Deliberately NOT jsdom: jsdom depends on whatwg-url -> tr46, whose
- * `require('punycode/')` cannot be routed by dsh 0.1.7's CJS resolution
+ * `require('punycode/')` cannot be routed by the Host's CJS resolution
  * router (the router derives search paths from `createRequire().resolve.paths`,
- * which reports builtin-shadowed names as unresolvable), so any plugin
- * importing jsdom fails to load on dsh 0.1.7-rc.2. node-html-parser has a
+ * which reports builtin-shadowed names as unresolvable; observed on dsh
+ * 0.1.7-rc.2), so a plugin importing jsdom can fail to load. node-html-parser has a
  * tiny dependency tree (entities + css-select) with no such require.
  *
  * The returned object mimics the small slice of the DOM API the extractor
@@ -45,6 +46,8 @@ export interface HttpResult {
     text: string;
     finalUrl: string;
     contentType?: string;
+    /** Response headers of the final answer (Retry-After and rate-limit headers for API clients). */
+    headers?: Headers;
 }
 /**
  * One HTTP request (GET by default) with UA spoofing, cooperative timeout,
@@ -58,7 +61,9 @@ export declare function httpGet(url: string, opts?: {
     method?: string;
     body?: string;
     maxBytes?: number;
-    allowProxyFakeIp?: boolean;
+    allowProxyFakeIp?: boolean; /** Test seams: replace the global fetch and the DNS lookup. */
+    fetchImpl?: typeof fetch;
+    lookup?: ResolvePublicUrlOptions['lookup'];
 }): Promise<HttpResult>;
 /** Decode bytes honoring charset; UTF-8 first with GBK fallback on garbage. */
 export declare function decodeText(buf: Buffer, contentType?: string): string;
@@ -89,3 +94,22 @@ export declare function runCli(bin: string, args: string[], opts?: {
 export declare function decodeRedirectUrl(href: string): string;
 /** Cap a string to maxChars while keeping whole lines near the boundary. */
 export declare function capText(text: string, maxChars: number): string;
+/** Max snippet length returned to callers, whichever path produced the sources. */
+export declare const SNIPPET_MAX_CHARS = 500;
+/**
+ * Single output shaping for search sources (live, SQLite hit, platform):
+ * slice to `count`, cap snippets, drop empty optional fields.
+ */
+export declare function shapeSources(sources: readonly {
+    url: string;
+    title?: string | null;
+    snippet?: string | null;
+    publishedAt?: string | null;
+    lowConfidence?: boolean;
+}[], count: number): {
+    url: string;
+    title?: string;
+    snippet?: string;
+    publishedAt?: string;
+    lowConfidence?: true;
+}[];

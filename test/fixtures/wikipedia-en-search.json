@@ -1,0 +1,43 @@
+{
+  "_comment": "LIVE capture, trimmed to the first 3 hits (no credentials involved). formatversion=2.",
+  "status": 200,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "request": "GET https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&formatversion=2&utf8=1&srsearch=Raft+consensus+algorithm&srlimit=5&srnamespace=0&srprop=snippet|timestamp",
+  "contentType": "application/json",
+  "body": {
+    "batchcomplete": true,
+    "continue": {
+      "sroffset": 5,
+      "continue": "-||"
+    },
+    "query": {
+      "searchinfo": {
+        "totalhits": 39
+      },
+      "search": [
+        {
+          "ns": 0,
+          "title": "Raft (algorithm)",
+          "pageid": 40226710,
+          "snippet": "<span class=\"searchmatch\">Raft</span> is a <span class=\"searchmatch\">consensus</span> <span class=\"searchmatch\">algorithm</span> designed as an alternative to the Paxos family of <span class=\"searchmatch\">algorithms</span>. It was meant to be more understandable than Paxos by means",
+          "timestamp": "2026-08-13T09:54:41Z"
+        },
+        {
+          "ns": 0,
+          "title": "Docker (software)",
+          "pageid": 40149201,
+          "snippet": "nodes from the swarm. Docker manages swarms using the <span class=\"searchmatch\">Raft</span> <span class=\"searchmatch\">consensus</span> <span class=\"searchmatch\">algorithm</span>. According to <span class=\"searchmatch\">Raft</span>, for an update to be performed, the majority of Swarm",
+          "timestamp": "2026-09-23T07:57:03Z"
+        },
+        {
+          "ns": 0,
+          "title": "Consensus (computer science)",
+          "pageid": 5406474,
+          "snippet": "is highly unlikely to occur. The Paxos <span class=\"searchmatch\">consensus</span> <span class=\"searchmatch\">algorithm</span> by Leslie Lamport, and variants of it such as <span class=\"searchmatch\">Raft</span>, are used pervasively in widely deployed",
+          "timestamp": "2026-08-28T13:18:07Z"
+        }
+      ]
+    }
+  }
+}

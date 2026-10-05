@@ -1,0 +1,14 @@
+{
+  "_comment": "NOT a live capture: constructed from the official page https://ai.baidu.com/ai-doc/AppBuilder/pmaxd1hvy: request_id and references[] of id/title/url/content/date/type/web_anchor/website/icon/rerank_score/authority_score. No key was available.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "request_id": "00000000-0000-4000-8000-000000000003",
+    "references": [
+      { "id": 1, "title": "百度千帆平台", "url": "https://cloud.baidu.com/product/wenxinworkshop", "content": "百度智能云千帆大模型平台，提供模型服务与工具。", "date": "2025-11-04 10:00:00", "type": "web", "web_anchor": "百度智能云", "website": "百度智能云", "icon": "", "rerank_score": 0.93, "authority_score": 0.8 },
+      { "id": 2, "title": "一段相关视频", "url": "https://video.example.test/v/1", "content": "dropped: not a web reference", "date": "2025-10-01", "type": "video", "video": { "url": "https://video.example.test/v/1.mp4", "height": 720, "width": 1280, "size": 10, "duration": 30, "hover_pic": "" } },
+      { "id": 3, "title": "千帆搜索文档", "url": "https://ai.baidu.com/ai-doc/AppBuilder/pmaxd1hvy", "content": "百度搜索 API 说明。", "date": "", "type": "web", "rerank_score": 0.7, "authority_score": 0.9 },
+      { "id": 4, "title": "没有链接", "content": "dropped", "type": "web" }
+    ]
+  }
+}

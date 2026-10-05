@@ -10,6 +10,7 @@ export declare function TextField(props: {
     edit: SettingsCardProps['edit'];
     reset: SettingsCardProps['resetField'];
     type?: 'text' | 'number';
+    placeholder?: string;
 }): import("react").JSX.Element;
 export declare function JsonField(props: {
     field: SettingField;
@@ -18,6 +19,22 @@ export declare function JsonField(props: {
     hint: string;
     disabled: boolean;
     rows?: number;
+    t: SettingsCardProps['t'];
+    edit: SettingsCardProps['edit'];
+    reset: SettingsCardProps['resetField'];
+}): import("react").JSX.Element;
+export declare function SelectField(props: {
+    field: SettingField;
+    state: CardFieldState;
+    label: string;
+    hint: string;
+    disabled: boolean;
+    /** `value` is what is stored; an empty value is offered as `emptyLabel` (the default applies). */
+    options: readonly {
+        value: string;
+        label: string;
+    }[];
+    emptyLabel?: string;
     t: SettingsCardProps['t'];
     edit: SettingsCardProps['edit'];
     reset: SettingsCardProps['resetField'];

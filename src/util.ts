@@ -12,7 +12,7 @@ import path from 'node:path'
 import crossSpawn from 'cross-spawn'
 import { load as yamlLoad } from 'js-yaml'
 import { parse as parseHtml } from 'node-html-parser'
-import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect } from './safe-http.ts'
+import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect, type ResolvePublicUrlOptions } from './safe-http.ts'
 
 /** js-yaml parser (npm dep). */
 export const jsYaml: { load(input: string): unknown } = { load: (input: string) => yamlLoad(input) }
@@ -21,10 +21,10 @@ export const jsYaml: { load(input: string): unknown } = { load: (input: string) 
  * Parse an HTML document into a queryable DOM.
  *
  * Deliberately NOT jsdom: jsdom depends on whatwg-url -> tr46, whose
- * `require('punycode/')` cannot be routed by dsh 0.1.7's CJS resolution
+ * `require('punycode/')` cannot be routed by the Host's CJS resolution
  * router (the router derives search paths from `createRequire().resolve.paths`,
- * which reports builtin-shadowed names as unresolvable), so any plugin
- * importing jsdom fails to load on dsh 0.1.7-rc.2. node-html-parser has a
+ * which reports builtin-shadowed names as unresolvable; observed on dsh
+ * 0.1.7-rc.2), so a plugin importing jsdom can fail to load. node-html-parser has a
  * tiny dependency tree (entities + css-select) with no such require.
  *
  * The returned object mimics the small slice of the DOM API the extractor
@@ -106,6 +106,8 @@ export interface HttpResult {
   text: string
   finalUrl: string
   contentType?: string
+  /** Response headers of the final answer (Retry-After and rate-limit headers for API clients). */
+  headers?: Headers
 }
 
 /**
@@ -114,7 +116,7 @@ export interface HttpResult {
  */
 export async function httpGet(
   url: string,
-  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean } = { signal: undefined },
+  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean; /** Test seams: replace the global fetch and the DNS lookup. */ fetchImpl?: typeof fetch; lookup?: ResolvePublicUrlOptions['lookup'] } = { signal: undefined },
 ): Promise<HttpResult> {
   const controller = new AbortController()
   const timer = opts.timeoutMs ? setTimeout(() => controller.abort(new Error('dsh-web-search-pro: request timed out')), opts.timeoutMs) : undefined
@@ -122,14 +124,15 @@ export async function httpGet(
   if (opts.signal?.aborted) onAbort()
   else opts.signal?.addEventListener('abort', onAbort)
   try {
-    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false }
+    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false, ...opts.lookup ? { lookup: opts.lookup } : {} }
+    const doFetch = opts.fetchImpl ?? fetch
     let current = (await assertResolvedPublicUrl(url, resolution)).href
     let method = opts.method ?? 'GET'
     let body = opts.body
     let requestHeaders: Record<string, string> = { ...opts.headers }
     let res: Response | undefined
     for (let redirects = 0; redirects <= 5; redirects++) {
-      res = await fetch(current, {
+      res = await doFetch(current, {
         redirect: 'manual', signal: controller.signal, method,
         ...body !== undefined ? { body } : {},
         headers: {
@@ -159,6 +162,7 @@ export async function httpGet(
       text,
       finalUrl: current,
       ...contentType != null ? { contentType } : {},
+      headers: res.headers,
     }
   } finally {
     clearTimeout(timer)
@@ -277,4 +281,24 @@ export function decodeRedirectUrl(href: string): string {
 export function capText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
   return text.slice(0, maxChars) + '\n\n(Content truncated at ' + maxChars + ' characters.)'
+}
+
+/** Max snippet length returned to callers, whichever path produced the sources. */
+export const SNIPPET_MAX_CHARS = 500
+
+/**
+ * Single output shaping for search sources (live, SQLite hit, platform):
+ * slice to `count`, cap snippets, drop empty optional fields.
+ */
+export function shapeSources(
+  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; lowConfidence?: boolean }[],
+  count: number,
+): { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: true }[] {
+  return sources.slice(0, count).map(s => ({
+    url: s.url,
+    ...s.title ? { title: s.title } : {},
+    ...s.snippet ? { snippet: capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
+    ...s.publishedAt ? { publishedAt: s.publishedAt } : {},
+    ...s.lowConfidence ? { lowConfidence: true as const } : {},
+  }))
 }

@@ -8,6 +8,7 @@
 import type { WebSearchResult, WebSearchSource, WebRuntime } from '@deepseek-ai/dsh-web'
 import { httpGet, runCli, jsYaml, stripTags, capText, decodeRedirectUrl } from './util.ts'
 import type { BrowserService } from './browser-service.ts'
+import { browserGap, requireBrowser, type BrowserMethod } from './browser-access.ts'
 import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } from './platform-search.ts'
 import type { CustomPlatformSpec } from './config.ts'
 import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
@@ -16,6 +17,8 @@ export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
   content?: string
   sources: WebSearchSource[]
+  /** Id of the concrete backend that answered (a platform provider with a fallback chain names the leg that ran). */
+  via?: string
 }
 
 export interface Engine {
@@ -23,32 +26,74 @@ export interface Engine {
   label: string
   /** Cheap local availability check; must not do network I/O. */
   available(): boolean
+  /** Browser-service method this engine depends on (dsh-browser is optional). */
+  needsBrowser?: BrowserMethod
   search(query: string, count: number, signal?: AbortSignal, options?: EngineSearchOptions): Promise<SearchOutcome>
 }
 
 export interface EngineSearchOptions {
   exa?: Omit<ExaSearchRequest, 'query' | 'numResults'>
+  /** Bocha native request fields compiled from hard constraints (pipeline/compile.ts). */
+  bocha?: { freshness?: string; include?: string[]; exclude?: string[] }
+  /** Lower bound of the publication date (ISO 8601), compiled from a hard time_window; the engine maps it to its native filter. */
+  since?: string
+  /** Domain lists compiled from hard site / exclude_site constraints (keyed sources that take them as request fields). */
+  sites?: { include?: string[]; exclude?: string[] }
+  /** Task language (`zh` / `en`) for engines with per-language editions or zones (Wikipedia, AnySearch); absent = detect from the query. */
+  lang?: 'zh' | 'en'
   browser?: { authProfile?: string; rulePack?: string }
+  /** Feed URL of the `rss` platform (it has no fixed endpoint). */
+  url?: string
 }
 
 export class EngineError extends Error {
-  constructor(message: string, readonly code: string, readonly retryable = true) {
+  /** `retryAfterMs`: the service's own wait hint (Retry-After); the router uses it as the cooldown. */
+  constructor(message: string, readonly code: string, readonly retryable = true, readonly retryAfterMs?: number) {
     super(message)
     this.name = 'EngineError'
   }
+}
+
+/** One metered request of a non-model provider (Bocha search): counted in the usage ledger, tokens n/a, price unknown. */
+export interface UsageRecorder {
+  record(entry: { provider: string; protocol: string; requests: number; note?: string }): void
 }
 
 export interface EngineDeps {
   web?: WebRuntime
   exaApiKey?: string
   jinaApiKey?: string
+  /** Bocha web-search key (config bochaApiKey / credentials ref / $BOCHA_SEARCH_API_KEY, then the Jev key of the same account). */
+  bochaApiKey?: string
+  /** Bocha endpoint base, default https://api.bochaai.com. */
+  bochaBaseUrl?: string
+  /** Ask Bocha for its longer per-page summary (default true). */
+  bochaSummary?: boolean
+  /** Records requests of metered non-model providers in the usage ledger (best effort, never throws). */
+  usage?: UsageRecorder
+  /** Test seam: replaces the global fetch of API clients that accept one. */
+  fetchImpl?: typeof fetch
+  /** Test seam: replaces the DNS lookup of the SSRF check. */
+  lookup?: (hostname: string) => Promise<{ address: string; family?: number }[]>
+  /** API keys of the keyed sources by route id (`tavily`, `brave`, ...): config literal -> credentials ref -> environment (router). */
+  sourceKeys?: Readonly<Record<string, string>>
+  /** Base URL overrides of the keyed sources by route id (settings `keyedSources.<id>.baseUrl`). */
+  sourceBaseUrls?: Readonly<Record<string, string>>
+  /** Self-hosted SearXNG instance (settings `searxngUrl`); no default public instance exists. */
+  searxngUrl?: string
+  /** Contact address appended to the User-Agent of OpenAlex requests (settings `openalexMailto`). */
+  openalexMailto?: string
+  /** Optional free keys of the anonymous APIs (credentials / environment); they raise limits, nothing needs them. */
+  openalexApiKey?: string
+  semanticScholarApiKey?: string
+  anysearchApiKey?: string
   /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
   githubToken?: string
   enableCli: boolean
   opencliEnabled: boolean
   agentReachEnabled: boolean
   allowProxyFakeIp: boolean
-  /** Browser service (dsh-browser) for Playwright platform search + bundled opencli. */
+  /** Browser service (dsh-browser, optional) for Playwright platform search + bundled opencli; resolved per call. */
   browser?: BrowserService
   /** Per-platform selector overrides (settings.yaml `platformRules`). */
   platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
@@ -363,7 +408,7 @@ export function githubEngine(deps: EngineDeps): Engine {
 export function githubCodeEngine(deps: EngineDeps): Engine {
   return {
     id: 'github-code', label: 'GitHub 代码',
-    available: () => true,
+    available: () => !!githubTokenOf(deps),
     async search(query, count, signal) {
       // Code search requires authentication — surface a clear hint when no token.
       if (!githubTokenOf(deps)) {
@@ -554,10 +599,12 @@ export function opencliEngine(platform: string, deps: EngineDeps): Engine {
   return {
     id: 'opencli-' + platform,
     label: 'OpenCLI ' + platform,
-    available: () => deps.enableCli && deps.opencliEnabled && !!adapter && !!deps.browser,
+    needsBrowser: 'opencli',
+    available: () => deps.enableCli && deps.opencliEnabled && !!adapter && !browserGap(deps.browser, 'opencli', ''),
     async search(query, count, signal) {
-      if (!adapter || !deps.browser) throw new EngineError('opencli bundled backend unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
-      const res = await deps.browser.opencli([adapter, 'search', query, '-f', 'yaml'], { timeoutMs: 45_000, signal })
+      if (!adapter) throw new EngineError('opencli bundled backend unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      const browser = requireBrowser(deps.browser, 'opencli', 'opencli ' + platform + ' search')
+      const res = await browser.opencli([adapter, 'search', query, '-f', 'yaml'], { timeoutMs: 45_000, signal })
       if (res.code !== 0) {
         const msg = res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code
         throw new EngineError('opencli ' + platform + ' search failed (browser session connected?): ' + msg.slice(0, 200), 'ENGINE_UNAVAILABLE', false)
@@ -590,6 +637,8 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
       available: () => deps.enableCli && deps.agentReachEnabled && !!process.env.TWITTER_AUTH_TOKEN && !!process.env.TWITTER_CT0,
       async search(query, count, signal) {
         const res = await runCli('twitter', ['search', query, '-n', String(Math.min(count, 10))], { timeoutMs: 45_000, signal })
+        // Spawn failure (no `twitter` on PATH) comes back as exit -1 with no output: say what is missing.
+        if (res.code === -1 && !res.timedOut && !res.stderr.trim() && !res.stdout.trim()) throw new EngineError('the twitter command could not be started: install twitter-cli (sources.install backend=twitter); Agent-Reach alone does not provide it', 'ENGINE_UNAVAILABLE', false)
         if (res.code !== 0) throw new EngineError('twitter search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
         const sources: WebSearchSource[] = []
         for (const line of res.stdout.split(/\r?\n/)) {
@@ -691,12 +740,13 @@ export function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps:
   return {
     id: 'custom-' + id,
     label: spec.name + ' (自定义)',
-    available: () => !!deps.browser,
+    needsBrowser: 'searchResults',
+    available: () => !browserGap(deps.browser, 'searchResults', ''),
     async search(query, count, signal, options) {
-      if (!deps.browser) throw new EngineError('custom platform search unavailable (no browser service)', 'ENGINE_UNAVAILABLE', false)
+      const browser = requireBrowser(deps.browser, 'searchResults', 'custom platform search')
       const url = spec.url.replace(/{query}/g, encodeURIComponent(query))
       const cookies = spec.cookie ? parseCookieString(spec.cookie, url) : undefined
-      const sources = await deps.browser.searchResults(url, searchSpec, { signal, count, cookies, ...options?.browser })
+      const sources = await browser.searchResults(url, searchSpec, { signal, count, cookies, ...options?.browser })
       if (!sources.length) throw new EngineError('自定义平台 ' + spec.name + ' 未取到结果：检查 url 的 {query} 占位、item/title/link 选择器，或补充 cookie。', 'ENGINE_EMPTY', false)
       return { sources }
     },
@@ -710,12 +760,14 @@ export function playwrightPlatformEngine(platform: string, deps: EngineDeps): En
   return {
     id: 'playwright-' + platform,
     label: (builtin?.label ?? platform) + ' (Playwright)',
-    available: () => !!builtin && !!deps.browser,
+    needsBrowser: 'searchResults',
+    available: () => !!builtin && !browserGap(deps.browser, 'searchResults', ''),
     async search(query, count, signal, options) {
-      if (!builtin || !deps.browser) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      if (!builtin) throw new EngineError('playwright platform search unavailable for ' + platform, 'ENGINE_UNAVAILABLE', false)
+      const browser = requireBrowser(deps.browser, 'searchResults', builtin.label + ' search')
       const override = deps.platformRules?.[platform]
       const spec = { ...builtin, ...override ?? {} } as typeof builtin
-      const sources = await deps.browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
+      const sources = await browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
       if (!sources.length) {
         throw new EngineError(
           builtin.label + ' 未取到结果：该平台需要浏览器登录态。运行 node scripts/save-login.mjs 登录一次，在 dsh-browser 中声明按域名授权的 AuthProfile，并通过 browserBindings.' + platform + ' 绑定；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
@@ -750,40 +802,4 @@ export function rssEngine(url: string, allowProxyFakeIp = false): Engine {
       return { sources }
     },
   }
-}
-
-/** Build the ordered engine list for a platform search. */
-export function platformEngines(platform: string, deps: EngineDeps): Engine[] {
-  switch (platform) {
-    case 'github': return [githubEngine(deps)]
-    case 'github-code': return [githubCodeEngine(deps)]
-    case 'github-issues': return [githubIssuesEngine(deps)]
-    case 'bilibili': return [bilibiliEngine(deps)]
-    case 'youtube': return [youtubeEngine(deps)]
-    case 'v2ex': return [v2exEngine(deps.allowProxyFakeIp)]
-    case 'xiaohongshu': return [opencliEngine('xiaohongshu', deps)]
-    case 'twitter': return [opencliEngine('twitter', deps), agentReachEngine('twitter', deps)]
-    case 'reddit': return [opencliEngine('reddit', deps)]
-    case 'instagram': return [opencliEngine('instagram', deps)]
-    case 'facebook': return [opencliEngine('facebook', deps)]
-    // Chinese communities (MediaCrawler-style): Playwright drives the logged-in search page.
-    case 'arxiv': return [arxivEngine(deps.allowProxyFakeIp)]
-    case 'pubmed': return [pubmedEngine(deps.allowProxyFakeIp)]
-    case 'zhihu': return [playwrightPlatformEngine('zhihu', deps)]
-    case 'weibo': return [playwrightPlatformEngine('weibo', deps)]
-    case 'douban': return [playwrightPlatformEngine('douban', deps)]
-    case 'tieba': return [playwrightPlatformEngine('tieba', deps)]
-    case 'douyin': return [playwrightPlatformEngine('douyin', deps)]
-    case 'kuaishou': return [playwrightPlatformEngine('kuaishou', deps)]
-    default: return []
-  }
-}
-
-export const SEARCH_ENGINE_IDS = ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed'] as const
-export const PLATFORM_IDS = ['github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'arxiv', 'pubmed'] as const
-
-/** Whether web_platform_search may route this built-in or configured custom id. */
-export function isPlatformSupported(platform: string, customPlatforms?: Record<string, CustomPlatformSpec>): boolean {
-  return PLATFORM_IDS.includes(platform as typeof PLATFORM_IDS[number])
-    || Object.hasOwn(customPlatforms ?? {}, platform)
 }

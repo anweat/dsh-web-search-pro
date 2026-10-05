@@ -1,0 +1,8 @@
+{
+  "id": "gate.nav.v1",
+  "version": "v1",
+  "lang": "zh",
+  "kind": "noul",
+  "description": "候选是否为导航、列表、搜索或目录页而非具体内容页。",
+  "instructions": "候选是否是导航页、列表页、搜索结果页、标签页或目录页，而不是承载具体内容的页面？\n候选：{candidate}"
+}

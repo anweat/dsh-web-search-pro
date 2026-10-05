@@ -31,6 +31,13 @@ test('rc.2 volatile form values are unwrapped at the runtime boundary', () => {
 
 test('an unset rc.2 volatile field falls back after unwrapping', () => {
   const resolved = resolveConfig({ dbPath: { get: () => undefined } } as never)
-  assert.match(resolved.dbPath, /web-search-pro\/store\.db$/)
+  assert.match(resolved.dbPath, /web-search-pro[\\/]store\.db$/)
   assert.equal(resolved.playwright.enabled, true)
+})
+
+test('evidence settings default to the rule scorer with Jev off, and unwrap volatile values', () => {
+  assert.deepEqual(resolveConfig({} as never).evidence, { scorer: 'rule', jevMode: 'off', hybridBorderline: false, maxJevQuestions: 64, autoProviders: true, sourcePolicy: 'default', maxRounds: 2, maxQueries: 4 })
+  const live = <T>(value: T) => ({ get: () => value })
+  const resolved = resolveConfig({ evidence: { scorer: live('jev'), jevMode: live('hybrid'), hybridBorderline: live(true), maxJevQuestions: live(24), maxRounds: live(1), maxQueries: live(3) } } as never)
+  assert.deepEqual(resolved.evidence, { scorer: 'jev', jevMode: 'hybrid', hybridBorderline: true, maxJevQuestions: 24, autoProviders: true, sourcePolicy: 'default', maxRounds: 1, maxQueries: 3 })
 })

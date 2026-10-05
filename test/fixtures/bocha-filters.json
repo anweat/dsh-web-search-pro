@@ -1,0 +1,115 @@
+{
+  "_comment": "LIVE capture, summarised to hosts and publication dates (no page text): which results came back for the request fields include / exclude / freshness. POST https://api.bocha.cn/v1/web-search, 2026-10-04, query \"Redis Cluster 哈希槽 迁移 原理\", count 10.",
+  "live": true,
+  "capturedAt": "2026-10-04",
+  "baseUrl": "https://api.bocha.cn",
+  "captures": [
+    {
+      "request": {
+        "summary": true,
+        "include": "csdn.net|cnblogs.com",
+        "freshness": "2026-01-01..2026-10-04"
+      },
+      "status": 200,
+      "code": 200,
+      "results": [
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-07-23T15:48:29+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-07-20T23:34:46+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-08-26T10:28:55+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-01-12T11:08:41+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-03-31T22:46:45+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-03-12T23:54:40+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-08-29T00:42:26+08:00"
+        },
+        {
+          "host": "www.cnblogs.com",
+          "datePublished": "2026-01-27T14:33:00+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-07-25T20:43:50+08:00"
+        },
+        {
+          "host": "blog.csdn.net",
+          "datePublished": "2026-08-29T00:38:24+08:00"
+        }
+      ]
+    },
+    {
+      "request": {
+        "summary": false,
+        "exclude": "csdn.net|php.cn"
+      },
+      "status": 200,
+      "code": 200,
+      "results": [
+        {
+          "host": "www.cnblogs.com",
+          "datePublished": "2019-09-11T16:54:00+08:00"
+        },
+        {
+          "host": "m.jb51.net",
+          "datePublished": "2024-11-24T10:38:43+08:00"
+        },
+        {
+          "host": "www.ctyun.cn",
+          "datePublished": "2023-06-30T02:24:14+08:00"
+        },
+        {
+          "host": "segmentfault.com",
+          "datePublished": "2022-11-20T21:13:06+08:00"
+        },
+        {
+          "host": "www.docin.com",
+          "datePublished": "2023-01-26T03:15:19+08:00"
+        },
+        {
+          "host": "cloud.tencent.com",
+          "datePublished": "2019-08-05T15:21:25+08:00"
+        },
+        {
+          "host": "juejin.cn",
+          "datePublished": "2026-06-12T00:00:00+08:00"
+        },
+        {
+          "host": "www.jianshu.com",
+          "datePublished": "2018-11-12T11:13:31+08:00"
+        },
+        {
+          "host": "shuyeidc.com",
+          "datePublished": "2025-05-02T23:10:00+08:00"
+        }
+      ]
+    }
+  ],
+  "sameKeyOtherBase": {
+    "baseUrl": "https://api.bochaai.com",
+    "request": {
+      "count": 2,
+      "summary": false
+    },
+    "status": 200,
+    "code": 200,
+    "note": "the same key is accepted by both hosts and the response has the same shape"
+  }
+}

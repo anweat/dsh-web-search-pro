@@ -1,0 +1,679 @@
+{
+  "_comment": "LIVE capture, trimmed to the first 3 works (meta omitted). Keyless: X-RateLimit-Limit 1000 was observed.",
+  "status": 200,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "request": "GET https://api.openalex.org/works?search=retrieval+augmented+generation&per_page=5&select=id,doi,display_name,publication_year,publication_date,cited_by_count,type,abstract_inverted_index,primary_location",
+  "contentType": "application/json",
+  "body": {
+    "results": [
+      {
+        "id": "https://openalex.org/W4389984066",
+        "doi": "https://doi.org/10.48550/arxiv.2312.10997",
+        "display_name": "Retrieval-Augmented Generation for Large Language Models: A Survey",
+        "publication_year": 2023,
+        "publication_date": "2023-12-18",
+        "cited_by_count": 749,
+        "type": "preprint",
+        "abstract_inverted_index": {
+          "Large": [
+            0
+          ],
+          "Language": [
+            1
+          ],
+          "Models": [
+            2
+          ],
+          "(LLMs)": [
+            3
+          ],
+          "showcase": [
+            4
+          ],
+          "impressive": [
+            5
+          ],
+          "capabilities": [
+            6
+          ],
+          "but": [
+            7
+          ],
+          "encounter": [
+            8
+          ],
+          "challenges": [
+            9,
+            155
+          ],
+          "like": [
+            10
+          ],
+          "hallucination,": [
+            11
+          ],
+          "outdated": [
+            12
+          ],
+          "knowledge,": [
+            13
+          ],
+          "and": [
+            14,
+            38,
+            47,
+            53,
+            93,
+            112,
+            146,
+            158,
+            165
+          ],
+          "non-transparent,": [
+            15
+          ],
+          "untraceable": [
+            16
+          ],
+          "reasoning": [
+            17
+          ],
+          "processes.": [
+            18
+          ],
+          "Retrieval-Augmented": [
+            19
+          ],
+          "Generation": [
+            20
+          ],
+          "(RAG)": [
+            21
+          ],
+          "has": [
+            22
+          ],
+          "emerged": [
+            23
+          ],
+          "as": [
+            24
+          ],
+          "a": [
+            25,
+            77,
+            130
+          ],
+          "promising": [
+            26
+          ],
+          "solution": [
+            27
+          ],
+          "by": [
+            28
+          ],
+          "incorporating": [
+            29
+          ],
+          "knowledge": [
+            30,
+            51,
+            63
+          ],
+          "from": [
+            31
+          ],
+          "external": [
+            32,
+            70
+          ],
+          "databases.": [
+            33,
+            71
+          ],
+          "This": [
+            34,
+            72
+          ],
+          "enhances": [
+            35
+          ],
+          "the": [
+            36,
+            41,
+            65,
+            81,
+            87,
+            90,
+            94,
+            100,
+            108,
+            110,
+            113,
+            119,
+            134,
+            149,
+            154
+          ],
+          "accuracy": [
+            37
+          ],
+          "credibility": [
+            39
+          ],
+          "of": [
+            40,
+            55,
+            69,
+            80,
+            83,
+            103,
+            125,
+            133
+          ],
+          "generation,": [
+            42
+          ],
+          "particularly": [
+            43
+          ],
+          "for": [
+            44,
+            49,
+            163
+          ],
+          "knowledge-intensive": [
+            45
+          ],
+          "tasks,": [
+            46
+          ],
+          "allows": [
+            48
+          ],
+          "continuous": [
+            50
+          ],
+          "updates": [
+            52
+          ],
+          "integration": [
+            54
+          ],
+          "domain-specific": [
+            56
+          ],
+          "information.": [
+            57
+          ],
+          "RAG": [
+            58,
+            84,
+            104,
+            137
+          ],
+          "synergistically": [
+            59
+          ],
+          "merges": [
+            60
+          ],
+          "LLMs'": [
+            61
+          ],
+          "intrinsic": [
+            62
+          ],
+          "with": [
+            64
+          ],
+          "vast,": [
+            66
+          ],
+          "dynamic": [
+            67
+          ],
+          "repositories": [
+            68
+          ],
+          "comprehensive": [
+            73
+          ],
+          "review": [
+            74
+          ],
+          "paper": [
+            75,
+            117,
+            141
+          ],
+          "offers": [
+            76
+          ],
+          "detailed": [
+            78
+          ],
+          "examination": [
+            79
+          ],
+          "progression": [
+            82
+          ],
+          "paradigms,": [
+            85
+          ],
+          "encompassing": [
+            86
+          ],
+          "Naive": [
+            88
+          ],
+          "RAG,": [
+            89,
+            92
+          ],
+          "Advanced": [
+            91
+          ],
+          "Modular": [
+            95
+          ],
+          "RAG.": [
+            96
+          ],
+          "It": [
+            97
+          ],
+          "meticulously": [
+            98
+          ],
+          "scrutinizes": [
+            99
+          ],
+          "tripartite": [
+            101
+          ],
+          "foundation": [
+            102
+          ],
+          "frameworks,": [
+            105
+          ],
+          "which": [
+            106
+          ],
+          "includes": [
+            107
+          ],
+          "retrieval,": [
+            109
+          ],
+          "generation": [
+            111
+          ],
+          "augmentation": [
+            114
+          ],
+          "techniques.": [
+            115
+          ],
+          "The": [
+            116
+          ],
+          "highlights": [
+            118
+          ],
+          "state-of-the-art": [
+            120
+          ],
+          "technologies": [
+            121
+          ],
+          "embedded": [
+            122
+          ],
+          "in": [
+            123,
+            136
+          ],
+          "each": [
+            124
+          ],
+          "these": [
+            126
+          ],
+          "critical": [
+            127
+          ],
+          "components,": [
+            128
+          ],
+          "providing": [
+            129
+          ],
+          "profound": [
+            131
+          ],
+          "understanding": [
+            132
+          ],
+          "advancements": [
+            135
+          ],
+          "systems.": [
+            138
+          ],
+          "Furthermore,": [
+            139
+          ],
+          "this": [
+            140,
+            151
+          ],
+          "introduces": [
+            142
+          ],
+          "up-to-date": [
+            143
+          ],
+          "evaluation": [
+            144
+          ],
+          "framework": [
+            145
+          ],
+          "benchmark.": [
+            147
+          ],
+          "At": [
+            148
+          ],
+          "end,": [
+            150
+          ],
+          "article": [
+            152
+          ],
+          "delineates": [
+            153
+          ],
+          "currently": [
+            156
+          ],
+          "faced": [
+            157
+          ],
+          "points": [
+            159
+          ],
+          "out": [
+            160
+          ],
+          "prospective": [
+            161
+          ],
+          "avenues": [
+            162
+          ],
+          "research": [
+            164
+          ],
+          "development.": [
+            166
+          ]
+        },
+        "primary_location": {
+          "id": "pmh:oai:arXiv.org:2312.10997",
+          "is_oa": true,
+          "landing_page_url": "http://arxiv.org/abs/2312.10997",
+          "pdf_url": "https://arxiv.org/pdf/2312.10997",
+          "source": {
+            "id": "https://openalex.org/S4306400194",
+            "display_name": "arXiv (Cornell University)",
+            "issn_l": "2331-8422",
+            "issn": [
+              "2331-8422"
+            ],
+            "is_oa": true,
+            "is_in_doaj": false,
+            "is_core": false,
+            "listed_in": [],
+            "host_organization": "https://openalex.org/I205783295",
+            "host_organization_name": "Cornell University",
+            "host_organization_lineage": [
+              "https://openalex.org/I205783295"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "text"
+        }
+      },
+      {
+        "id": "https://openalex.org/W4389519118",
+        "doi": "https://doi.org/10.18653/v1/2023.emnlp-main.495",
+        "display_name": "Active Retrieval Augmented Generation",
+        "publication_year": 2023,
+        "publication_date": "2023-01-01",
+        "cited_by_count": 456,
+        "type": "conference-paper",
+        "abstract_inverted_index": {
+          "2023": [
+            21
+          ],
+          "Zhengbao": [
+            0
+          ],
+          "Jiang,": [
+            1
+          ],
+          "Frank": [
+            2
+          ],
+          "Xu,": [
+            3
+          ],
+          "Luyu": [
+            4
+          ],
+          "Gao,": [
+            5
+          ],
+          "Zhiqing": [
+            6
+          ],
+          "Sun,": [
+            7
+          ],
+          "Qian": [
+            8
+          ],
+          "Liu,": [
+            9
+          ],
+          "Jane": [
+            10
+          ],
+          "Dwivedi-Yu,": [
+            11
+          ],
+          "Yiming": [
+            12
+          ],
+          "Yang,": [
+            13
+          ],
+          "Jamie": [
+            14
+          ],
+          "Callan,": [
+            15
+          ],
+          "Graham": [
+            16
+          ],
+          "Neubig.": [
+            17
+          ],
+          "Proceedings": [
+            18
+          ],
+          "of": [
+            19
+          ],
+          "the": [
+            20
+          ],
+          "Conference": [
+            22
+          ],
+          "on": [
+            23
+          ],
+          "Empirical": [
+            24
+          ],
+          "Methods": [
+            25
+          ],
+          "in": [
+            26
+          ],
+          "Natural": [
+            27
+          ],
+          "Language": [
+            28
+          ],
+          "Processing.": [
+            29
+          ],
+          "2023.": [
+            30
+          ]
+        },
+        "primary_location": {
+          "id": "doi:10.18653/v1/2023.emnlp-main.495",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.18653/v1/2023.emnlp-main.495",
+          "pdf_url": "https://aclanthology.org/2023.emnlp-main.495.pdf",
+          "source": null,
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing",
+          "raw_type": "proceedings-article"
+        }
+      },
+      {
+        "id": "https://openalex.org/W4411630045",
+        "doi": "https://doi.org/10.18653/v1/2024.eacl-demo.16",
+        "display_name": "RAGAs: Automated Evaluation of Retrieval Augmented Generation",
+        "publication_year": 2024,
+        "publication_date": "2024-01-01",
+        "cited_by_count": 500,
+        "type": "conference-paper",
+        "abstract_inverted_index": {
+          "Shahul": [
+            0
+          ],
+          "Es,": [
+            1
+          ],
+          "Jithin": [
+            2
+          ],
+          "James,": [
+            3
+          ],
+          "Luis": [
+            4
+          ],
+          "Espinosa": [
+            5
+          ],
+          "Anke,": [
+            6
+          ],
+          "Steven": [
+            7
+          ],
+          "Schockaert.": [
+            8
+          ],
+          "Proceedings": [
+            9
+          ],
+          "of": [
+            10,
+            14,
+            18
+          ],
+          "the": [
+            11,
+            15,
+            19
+          ],
+          "18th": [
+            12
+          ],
+          "Conference": [
+            13
+          ],
+          "European": [
+            16
+          ],
+          "Chapter": [
+            17
+          ],
+          "Association": [
+            20
+          ],
+          "for": [
+            21
+          ],
+          "Computational": [
+            22
+          ],
+          "Linguistics:": [
+            23
+          ],
+          "System": [
+            24
+          ],
+          "Demonstrations.": [
+            25
+          ],
+          "2024.": [
+            26
+          ]
+        },
+        "primary_location": {
+          "id": "doi:10.18653/v1/2024.eacl-demo.16",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.18653/v1/2024.eacl-demo.16",
+          "pdf_url": "https://aclanthology.org/2024.eacl-demo.16.pdf",
+          "source": null,
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics: System Demonstrations",
+          "raw_type": "proceedings-article"
+        }
+      }
+    ],
+    "group_by": []
+  }
+}

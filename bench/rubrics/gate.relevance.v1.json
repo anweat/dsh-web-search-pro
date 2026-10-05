@@ -1,0 +1,8 @@
+{
+  "id": "gate.relevance.v1",
+  "version": "v1",
+  "lang": "zh",
+  "kind": "noul",
+  "description": "只问主题相关，忽略约束。",
+  "instructions": "候选材料的主题是否与下列需求相关？只看主题，不考虑版本、时间、来源等限制条件。\n需求：{need}\n候选：{candidate}"
+}

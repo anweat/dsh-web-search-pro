@@ -1,0 +1,14 @@
+{
+  "id": "score.support.v1",
+  "version": "v1",
+  "lang": "zh",
+  "kind": "score",
+  "description": "(需求, 文本块) 对：文本块对需求的支撑程度，0–3。",
+  "instructions": "下面的文本块对该需求的支撑程度如何？\n需求：{need}\n文本块：{candidate}",
+  "criteria": [
+    "无关或只有同名词",
+    "同主题但不回答",
+    "部分回答",
+    "直接回答且含可定位证据"
+  ]
+}

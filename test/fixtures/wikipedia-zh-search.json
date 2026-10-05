@@ -1,0 +1,43 @@
+{
+  "_comment": "LIVE capture, trimmed to the first 3 hits.",
+  "status": 200,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "request": "GET https://zh.wikipedia.org/w/api.php?action=query&list=search&... srsearch=大语言模型",
+  "contentType": "application/json",
+  "body": {
+    "batchcomplete": true,
+    "continue": {
+      "sroffset": 5,
+      "continue": "-||"
+    },
+    "query": {
+      "searchinfo": {
+        "totalhits": 4650
+      },
+      "search": [
+        {
+          "ns": 0,
+          "title": "大型语言模型",
+          "pageid": 8406931,
+          "snippet": "大型<span class=\"searchmatch\">语言</span><span class=\"searchmatch\">模型</span>（英語：large language model，LLM），也称<span class=\"searchmatch\">大</span><span class=\"searchmatch\">语言</span><span class=\"searchmatch\">模型</span>，简称<span class=\"searchmatch\">大</span><span class=\"searchmatch\">模型</span>，是一種基於人工神经网络的<span class=\"searchmatch\">语言</span><span class=\"searchmatch\">模型</span>。其名稱中的「大型」指<span class=\"searchmatch\">模型</span>具有龐大的參數量（通常在數十億以上，如GPT-3含1750亿参数）以及巨大的訓練數據規模。<span class=\"searchmatch\">大</span><span class=\"searchmatch\">語言</span><span class=\"searchmatch\">模型</span>",
+          "timestamp": "2026-09-14T01:28:28Z"
+        },
+        {
+          "ns": 0,
+          "title": "Claude (语言模型)",
+          "pageid": 8717644,
+          "snippet": "<span class=\"searchmatch\">语言</span><span class=\"searchmatch\">模型</span>。Claude能够处理文本与图像输入，可用于回答问题、总结文档、撰写长篇文本与编写程序代码等任务。用户可通过网页浏览器使用Claude，亦可使用其桌面与移动应用程序。Claude训练方法的一个显著特点在于，Anthropic以一组明文写定的原则（即“宪法”）将人类的价值观与伦理准则纳入<span class=\"searchmatch\">模型</span>的训练框架。",
+          "timestamp": "2026-09-29T15:43:43Z"
+        },
+        {
+          "ns": 0,
+          "title": "GPT (语言模型)",
+          "pageid": 8294095,
+          "snippet": "基于转换器的生成式预训练<span class=\"searchmatch\">模型</span>（英語：generative pre-trained transformers，GPT，台湾作生成式预训练变换器），是一种大型<span class=\"searchmatch\">语言</span><span class=\"searchmatch\">模型</span>（LLM），也是生成式人工智慧的重要框架。首个GPT由OpenAI于2018年推出。GPT<span class=\"searchmatch\">模型</span>是基于Transformer<span class=\"searchmatch\">模型</span>",
+          "timestamp": "2026-09-04T17:42:48Z"
+        }
+      ]
+    }
+  }
+}

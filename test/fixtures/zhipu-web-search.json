@@ -1,0 +1,16 @@
+{
+  "_comment": "NOT a live capture: constructed from the Zhipu API reference (https://docs.bigmodel.cn/api-reference/工具-api/网络搜索) example response: id / created / request_id / search_intent[] / search_result[] of title, content, link, media, icon, refer, publish_date (YYYY-MM-DD). No key was available.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "id": "task_fixture_0001",
+    "created": 1704067200,
+    "request_id": "00000000-0000-4000-8000-000000000002",
+    "search_intent": [ { "query": "大模型备案", "intent": "SEARCH_ALL", "keywords": "GENERATED INTENT TEXT THAT IS NOT A SOURCE" } ],
+    "search_result": [
+      { "title": "大模型备案流程说明", "content": "备案分为安全评估、材料提交与公示三个阶段。", "link": "https://www.example.test/beian", "media": "示例网", "icon": "https://www.example.test/icon.png", "refer": "1", "publish_date": "2026-01-15" },
+      { "title": "备案政策解读", "content": "最新政策对备案材料提出新要求。", "link": "https://policy.example.test/read", "media": "政策网", "icon": "", "refer": "2" },
+      { "title": "无链接", "content": "dropped", "refer": "3" }
+    ]
+  }
+}

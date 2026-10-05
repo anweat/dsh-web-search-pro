@@ -1,0 +1,12 @@
+{
+  "_comment": "LIVE capture: both anonymous requests of the smoke run (2026-10-02) were answered 429 by the shared unauthenticated pool; no success response was recorded, so the success mapping follows the API docs only.",
+  "status": 429,
+  "live": true,
+  "capturedAt": "2026-10-02",
+  "request": "GET https://api.semanticscholar.org/graph/v1/paper/search?query=retrieval+augmented+generation&fields=title,url,abstract,year,venue,publicationDate,citationCount&limit=5",
+  "contentType": "application/json",
+  "body": {
+    "message": "Too Many Requests. Please wait and try again or apply for a key for higher rate limits. https://www.semanticscholar.org/product/api#api-key-form",
+    "code": "429"
+  }
+}

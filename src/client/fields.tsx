@@ -32,7 +32,9 @@ function FieldShell(props: FieldShellProps) {
         ) : null}
       </div>
       {props.children}
-      <p className={css.hint}>{props.state?.invalid ? props.invalidLabel : props.hint}</p>
+      {props.state?.message ? <p className={css.problem} role="alert" data-web-search-pro-problem>{props.state.message}</p> : null}
+      <p className={css.hint}>{props.state?.invalid && !props.state.message ? props.invalidLabel : props.hint}</p>
+      {props.state?.warning ? <p className={css.warning} role="note" data-web-search-pro-warning>{props.state.warning}</p> : null}
     </div>
   )
 }
@@ -47,6 +49,7 @@ export function TextField(props: {
   edit: SettingsCardProps['edit']
   reset: SettingsCardProps['resetField']
   type?: 'text' | 'number'
+  placeholder?: string
 }) {
   const id = `web-search-pro-${props.field}`
   return (
@@ -67,6 +70,7 @@ export function TextField(props: {
         type={props.type ?? 'text'}
         inputMode={props.type === 'number' ? 'decimal' : undefined}
         value={props.state.text}
+        placeholder={props.placeholder}
         disabled={props.disabled}
         aria-invalid={props.state.invalid || undefined}
         onChange={event => { props.edit(props.field, event.currentTarget.value) }}
@@ -113,6 +117,50 @@ export function JsonField(props: {
   )
 }
 
+export function SelectField(props: {
+  field: SettingField
+  state: CardFieldState
+  label: string
+  hint: string
+  disabled: boolean
+  /** `value` is what is stored; an empty value is offered as `emptyLabel` (the default applies). */
+  options: readonly { value: string; label: string }[]
+  emptyLabel?: string
+  t: SettingsCardProps['t']
+  edit: SettingsCardProps['edit']
+  reset: SettingsCardProps['resetField']
+}) {
+  const id = `web-search-pro-${props.field}`
+  // A stored value no option names (a provider id of a settings file the draft no longer defines) stays selectable, so it is never lost silently.
+  const known = props.options.some(option => option.value === props.state.text)
+  return (
+    <FieldShell
+      id={id}
+      label={props.label}
+      hint={props.hint}
+      field={props.field}
+      state={props.state}
+      disabled={props.disabled}
+      resetLabel={props.t('reset')}
+      invalidLabel={props.t('invalid')}
+      onReset={props.reset}
+    >
+      <select
+        id={id}
+        className={`${css.input} ${css.select}`}
+        value={props.state.text}
+        disabled={props.disabled}
+        aria-invalid={props.state.invalid || undefined}
+        onChange={event => { props.edit(props.field, event.currentTarget.value) }}
+      >
+        {props.emptyLabel !== undefined ? <option value="">{props.emptyLabel}</option> : null}
+        {!known && props.state.text !== '' ? <option value={props.state.text}>{props.state.text}</option> : null}
+        {props.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </FieldShell>
+  )
+}
+
 export function ToggleField(props: {
   field: SettingField
   state: CardFieldState
@@ -128,6 +176,7 @@ export function ToggleField(props: {
     <div className={css.toggleField}>
       <label className={css.toggleLabel}>
         <input
+          id={`web-search-pro-${props.field}`}
           className={css.checkbox}
           type="checkbox"
           checked={checked}
@@ -137,6 +186,8 @@ export function ToggleField(props: {
         <span className={css.toggleCopy}>
           <span className={css.label}>{props.label}</span>
           <span className={css.hint}>{props.hint}</span>
+          {props.state.message ? <span className={css.problem} role="alert">{props.state.message}</span> : null}
+          {props.state.warning ? <span className={css.warning} role="note">{props.state.warning}</span> : null}
         </span>
       </label>
       {props.state.overridden ? (

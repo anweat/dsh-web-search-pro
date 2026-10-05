@@ -1,0 +1,8 @@
+{
+  "id": "gate.constraint.v1",
+  "version": "v1",
+  "lang": "zh",
+  "kind": "noul",
+  "description": "逐条语义约束：候选是否满足该约束；材料中看不出时应偏向否定。",
+  "instructions": "候选材料是否满足下面这条约束？只判断这一条约束，不判断其他方面。\n约束：{constraint}\n候选：{candidate}"
+}

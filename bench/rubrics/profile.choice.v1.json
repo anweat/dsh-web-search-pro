@@ -1,0 +1,16 @@
+{
+  "id": "profile.choice.v1",
+  "version": "v1",
+  "lang": "zh",
+  "kind": "choice",
+  "description": "搜索任务属于哪个 profile（六选一）。",
+  "instructions": "下面这个搜索任务属于哪一类？\n任务：{candidate}",
+  "options": {
+    "docs_code": "官方文档、API 用法、源码、版本差异、issue",
+    "news_fact": "新闻与近期事实核查",
+    "academic": "论文、学术方法与综述",
+    "experience": "社区经验、踩坑、讨论与口碑",
+    "compare": "多个方案、产品或技术之间的对比选型",
+    "general": "其他或不确定"
+  }
+}

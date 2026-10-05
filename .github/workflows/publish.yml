@@ -91,6 +91,9 @@ jobs:
       - name: Verify release candidate
         run: pnpm verify
 
+      - name: Verify benchmark utilities
+        run: pnpm bench:typecheck && pnpm bench:test
+
       - name: Pack tarball
         run: pnpm pack --pack-destination dist
 

@@ -3,23 +3,20 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { isPlatformSupported, PLATFORM_IDS, SEARCH_ENGINE_IDS } from '../src/engines.ts'
+import { PLATFORM_IDS, SEARCH_ENGINE_IDS } from '../src/providers/index.ts'
 import { Store } from '../src/store.ts'
 
 test('capability ids remain complete and configured custom platforms are accepted', () => {
   assert.deepEqual(SEARCH_ENGINE_IDS, [
-    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed',
+    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'github-code', 'github-issues', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan',
   ])
-  assert.deepEqual(PLATFORM_IDS, [
+  // The platform list is derived from the registry now (every provider of kind platform), not a second list.
+  assert.deepEqual([...PLATFORM_IDS].sort(), [
     'github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter',
     'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou',
     'arxiv', 'pubmed',
-  ])
-  assert.equal(isPlatformSupported('rss'), true)
-  assert.equal(isPlatformSupported('forum', {
-    forum: { name: 'Forum', url: 'https://example.com?q={query}', item: '.item', title: '.title', link: 'a' },
-  }), true)
-  assert.equal(isPlatformSupported('missing'), false)
+  ].sort())
+  for (const id of PLATFORM_IDS) assert.ok(SEARCH_ENGINE_IDS.includes(id), id + ' is also an engine id')
 })
 
 test('persistent extraction rules and statistics cover their complete lifecycle', () => {

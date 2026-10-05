@@ -1,0 +1,143 @@
+/**
+ * Query compilation (dev-plan §4.1 step 2): turn a TaskSpec into one query per
+ * provider, pushing constraints to the provider natively where it can enforce
+ * them and reporting which constraints are left for local verification.
+ *
+ *  - ddg / bing: `site:`, `-site:` and `-term` operators for HARD site /
+ *    exclude_site / exclude_term constraints (the first hard `site` only: two
+ *    `site:` operators are ANDed into nothing);
+ *  - exa: includeDomains / excludeDomains / startPublishedDate options for HARD
+ *    site / exclude_site / time_window (Exa omits undated pages when a date
+ *    bound is set, hence hard only);
+ *  - bocha: include / exclude (domain lists) for HARD site / exclude_site, and `freshness` as an
+ *    inclusive `start..today` date range for a HARD time_window whose lower bound is understood
+ *    (an exact translation, so it is reported as native);
+ *  - keyed sources (dev-plan M7c): Tavily / Linkup / Baidu Qianfan / Zhipu take domain lists (`options.sites`, capped at what
+ *    each documents) and a date lower bound (`options.since`); Brave / Serper (Google) take `site:` / `-site:` / `-term`
+ *    operators in the query; whatever a source does not document stays for local verification;
+ *  - github*: the natural-language query returns nothing on repository search
+ *    (E1: 0 of 20), so it is replaced by a short keyword query;
+ *  - everything else: the plain query.
+ * Soft constraints are never pushed down (a preference must not shrink recall);
+ * they are verified locally like every constraint the provider cannot express.
+ * The gate re-checks rule-checkable constraints on every candidate regardless,
+ * so a provider silently ignoring an operator costs nothing but precision.
+ * @module web-search-pro/pipeline/compile
+ */
+import type { Constraint, Need, TaskSpec } from './types.ts';
+export interface CompiledExaOptions {
+    includeDomains?: string[];
+    excludeDomains?: string[];
+    startPublishedDate?: string;
+}
+export interface CompiledBochaOptions {
+    /** `YYYY-MM-DD..YYYY-MM-DD` (inclusive), Bocha's date-range form of `freshness`. */
+    freshness?: string;
+    include?: string[];
+    exclude?: string[];
+}
+/** Domain lists compiled from hard site / exclude_site constraints, for the keyed sources that take them as request fields. */
+export interface CompiledSites {
+    include?: string[];
+    exclude?: string[];
+}
+export interface CompiledQuery {
+    providerId: string;
+    /** Text to send to the provider. */
+    query: string;
+    /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some; the anonymous APIs take `since` / `lang`). */
+    options?: {
+        exa?: CompiledExaOptions;
+        bocha?: CompiledBochaOptions;
+        since?: string;
+        lang?: 'zh' | 'en';
+        sites?: CompiledSites;
+    };
+    /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
+    fallbacks?: string[];
+    /** Ids of constraints the provider enforces natively. */
+    native: string[];
+    /** Ids of constraints that still need local verification (the rest of the task's constraints). */
+    local: string[];
+}
+type TaskLike = Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>;
+/**
+ * Lower bound (ISO 8601, UTC) of a time_window value, in the same sense the rule
+ * gate uses: a year ("2025 年以后", "since 2025", "2025") means "published in or
+ * after that year"; relative spans ("最近一周", "past 30 days") count back from
+ * `now`. Upper bounds are not expressed by the constraint vocabulary. Returns
+ * undefined when the value is not understood (the constraint then stays local).
+ */
+export declare function parseTimeWindow(value: string, now?: Date): string | undefined;
+export declare function compileBocha(task: TaskLike, providerId: string, now: Date): CompiledQuery;
+/**
+ * Generic compilation for the API sources that take a publication-date lower bound and / or a language edition
+ * (Hacker News, Stack Exchange, OpenAlex, Semantic Scholar: `since`; Wikipedia, AnySearch: `lang`). A HARD
+ * time_window whose lower bound is understood becomes `options.since` (an exact translation, so native); the
+ * strictest of several bounds wins. Everything else stays local.
+ */
+export declare function compileSince(task: TaskLike, providerId: string, now: Date, opts: {
+    since?: boolean;
+    lang?: boolean; /** The source filters by whole years: only a bound at a year start is an exact translation. */
+    yearOnly?: boolean;
+}): CompiledQuery;
+/** What a keyed source documents it can enforce: domain list sizes (absent = no such field) and a date lower bound. */
+export interface KeyedCaps {
+    /** Most `include` domains the request takes. */
+    include?: number;
+    /** Most `exclude` domains the request takes. */
+    exclude?: number;
+    /** A hard time_window with an understood lower bound becomes `options.since` and counts as native. */
+    since?: boolean;
+    /** `site:` / `-site:` / `-term` operators in the query text (Google-style engines) instead of request fields. */
+    operators?: boolean;
+}
+/** Hard time_window constraints with their lower bound (ISO, in the past), strictest first. */
+export declare function hardWindows(task: TaskLike, now: Date): {
+    c: Constraint;
+    start: string;
+}[];
+/**
+ * Compilation for the keyed sources: HARD site / exclude_site constraints become domain lists (only as many as the source
+ * documents; the rest stays local), a HARD time_window becomes `options.since` (the strictest lower bound), operator-style
+ * sources get `site:` / `-site:` / `-term` in the query. Soft constraints are never pushed down.
+ */
+export declare function compileKeyed(task: TaskLike, providerId: string, now: Date, caps: KeyedCaps): CompiledQuery;
+export declare const GITHUB_MAX_TERMS = 5;
+/**
+ * Short keyword query for repository search: entities, then must_terms, then a
+ * few salient Latin tokens of the query; Chinese terms only from entities /
+ * must_terms, or from the query when fewer than two terms were found. At most
+ * {@link GITHUB_MAX_TERMS} terms, version-like numbers dropped.
+ */
+export declare function githubKeywordTerms(task: TaskLike): string[];
+export declare function githubKeywordQuery(task: TaskLike): string;
+/** Repository search ANDs every keyword, so one rare token empties the result: retry with the leading 3 and 2 terms. */
+export declare const GITHUB_FALLBACK_TERM_COUNTS: readonly number[];
+/**
+ * Sources whose search ANDs every word (Hacker News, Stack Exchange, Wikipedia, and the like) return nothing for a
+ * keyword-stuffed query (live check, 2026-10-02: 6 of 6 task queries empty). They get the short keyword query of
+ * {@link githubKeywordTerms} (at most `terms` of them) plus broader retries with fewer terms; with fewer than two
+ * keywords the query is sent as it is. `since` / `lang` are compiled as in {@link compileSince}.
+ */
+export declare function compileKeywords(task: TaskLike, providerId: string, now: Date, opts: {
+    terms: number;
+    since?: boolean;
+    lang?: boolean;
+    yearOnly?: boolean;
+}): CompiledQuery;
+/** Compile the task for one provider id (`ddg`, `bing`, `exa`, `bocha`, `github*`; anything else gets the plain query). */
+export declare function compileQuery(task: TaskLike, providerId: string, now?: Date): CompiledQuery;
+export declare function compileQueries(task: TaskLike, providerIds: readonly string[], now?: Date): CompiledQuery[];
+/** Identifier-like tokens (`node:sqlite`, `DatabaseSync`, `busy_timeout`, `v22.5`): the entities of a query worth repeating in a follow-up. */
+export declare function keyTokens(text: string): string[];
+/** Longest follow-up query (characters); search engines gain nothing from more. */
+export declare const GAP_QUERY_MAX_CHARS = 200;
+/**
+ * Query for a follow-up round targeted at one unsupported need: the need text plus the task's key entities
+ * (entity / must_term / version constraints, then identifier-like tokens of the original query) that the
+ * need does not already mention. Provider-specific shaping (site: operators, Exa options, GitHub keywords)
+ * is left to {@link compileQuery} over a task whose `query` is this text.
+ */
+export declare function gapQueryText(task: Pick<TaskSpec, 'query' | 'constraints'>, need: Pick<Need, 'text'>): string;
+export {};

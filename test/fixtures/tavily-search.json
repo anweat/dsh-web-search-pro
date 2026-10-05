@@ -1,0 +1,18 @@
+{
+  "_comment": "NOT a live capture: constructed from the Tavily API reference (https://docs.tavily.com/documentation/api-reference/endpoint/search): results[] of title/url/content/score/published_date, answer, response_time, request_id. No key was available, so there is no recorded response.",
+  "live": false,
+  "status": 200,
+  "body": {
+    "query": "postgres logical replication slot lag",
+    "answer": "A GENERATED ANSWER THAT MUST NEVER BECOME A SOURCE",
+    "images": [],
+    "results": [
+      { "title": "Logical replication slots - PostgreSQL docs", "url": "https://www.postgresql.org/docs/current/logicaldecoding-explanation.html", "content": "A logical slot represents a stream of changes that can be replayed to a client in the order they were made on the origin server.", "score": 0.91, "published_date": "2026-03-01" },
+      { "title": "Monitoring replication slot lag", "url": "https://blog.example.test/replication-slot-lag", "content": "Use pg_replication_slots and pg_stat_replication to see how far a slot is behind.", "score": 0.77 },
+      { "title": "No usable link", "content": "dropped: no url", "score": 0.5 },
+      { "title": "Not http", "url": "ftp://files.example.test/x", "content": "dropped: not http(s)", "score": 0.4 }
+    ],
+    "response_time": 0.87,
+    "request_id": "00000000-0000-4000-8000-000000000001"
+  }
+}

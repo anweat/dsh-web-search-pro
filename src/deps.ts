@@ -1,8 +1,10 @@
 /**
  * External dependency detection and install for the CLI/platform backends.
  * Most backends shell out to tools installed outside DSH (bili, yt-dlp,
- * agent-reach, and mcporter). This module reports which are
- * present and how to install them; the web_deps tool exposes it to the model.
+ * twitter, and mcporter). This module reports which are present and how to
+ * install them; the sources.deps / sources.install actions expose it to the model. Each entry probes
+ * the command the backend actually executes (the twitter backend runs
+ * `twitter`, so finding `agent-reach` on PATH says nothing about it).
  *
  * Install is intentionally a MODEL-FACING TOOL, not a browser settings button:
  * a browser button running winget/pip/npm would be arbitrary command execution
@@ -28,6 +30,8 @@ export interface DepInfo {
   version?: string
   /** Why a command found on PATH is not compatible. */
   diagnostic?: string
+  /** No backend of this plugin executes it; it is only an install helper, so its absence is not a gap. */
+  optional?: boolean
   installs: { installer: string; command: string }[]
 }
 
@@ -89,6 +93,27 @@ async function probeBiliCli(bin: string): Promise<DepProbeResult> {
   return evaluateBiliCli(version.stdout + version.stderr, help.stdout + help.stderr)
 }
 
+/**
+ * The twitter backend runs `twitter search <query> -n N` (twitter-cli). Another program that happens to be
+ * called `twitter` must not pass: require a successful `search --help` that actually describes a search command.
+ */
+export function evaluateTwitterCli(searchHelpOutput: string, exitCode: number): DepProbeResult {
+  if (exitCode !== 0) return { available: false, diagnostic: `twitter search --help failed with exit ${exitCode}` }
+  if (!/search/i.test(searchHelpOutput)) return { available: false, diagnostic: 'twitter search --help does not describe a search command (not twitter-cli?)' }
+  return { available: true }
+}
+
+async function probeTwitterCli(bin: string): Promise<DepProbeResult> {
+  const help = await runCli(bin, ['search', '--help'], { timeoutMs: 8_000, signal: undefined, env: { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, maxOutput: 128 * 1024 })
+  return evaluateTwitterCli(help.stdout + help.stderr, help.code)
+}
+
+export const TWITTER_CLI_INSTALLS = [
+  { installer: 'uv', command: 'uv tool install twitter-cli' },
+  { installer: 'pipx', command: 'pipx install twitter-cli' },
+  { installer: 'pip', command: 'pip install twitter-cli' },
+]
+
 /** One external tool the plugin may shell out to. */
 const DEPS: DepSpec[] = [
   {
@@ -106,7 +131,14 @@ const DEPS: DepSpec[] = [
     ],
   },
   {
-    id: 'agent-reach', label: 'Agent-Reach', usedBy: 'agent-reach 后端',
+    id: 'twitter', label: 'twitter-cli', usedBy: 'twitter 平台后端（agentreach-twitter，执行 `twitter search`；另需 TWITTER_AUTH_TOKEN 与 TWITTER_CT0）',
+    source: 'twitter-cli (PyPI twitter-cli; command `twitter`)',
+    installs: TWITTER_CLI_INSTALLS,
+    probe: probeTwitterCli,
+  },
+  {
+    id: 'agent-reach', label: 'Agent-Reach', usedBy: '安装助手（可顺带装 twitter-cli 等渠道；本插件不直接执行它，twitter 搜索看 twitter 项）',
+    optional: true,
     installs: [
       { installer: 'uv', command: 'uv tool install agent-reach' },
       { installer: 'pip', command: 'pip install agent-reach' },
@@ -120,7 +152,7 @@ const DEPS: DepSpec[] = [
   },
   // opencli and playwright are NOT listed here: they are bundled (plugin-local
   // node_modules, with global reuse fallback) in the dsh-browser plugin, which
-  // this plugin injects via the `browser` service.
+  // this plugin uses optionally via the `browser` service.
 ]
 
 /** Resolve a command on PATH (win32: where.exe; posix: sh -c command -v). */

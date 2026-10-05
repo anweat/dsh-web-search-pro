@@ -1,0 +1,102 @@
+{
+  "_comment": "LIVE capture, sanitized: no key, request headers omitted, log_id replaced, only the first 3 of 5 web pages and 1 image kept, summary fields cut to 150 characters (marked with an ellipsis). POST https://api.bocha.cn/v1/web-search, 2026-10-04.",
+  "live": true,
+  "capturedAt": "2026-10-04",
+  "baseUrl": "https://api.bocha.cn",
+  "request": {
+    "query": "Redis Cluster 哈希槽 迁移 原理",
+    "count": 5,
+    "summary": true
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": {
+    "code": 200,
+    "log_id": "<log_id>",
+    "msg": null,
+    "data": {
+      "_type": "SearchResponse",
+      "queryContext": {
+        "originalQuery": "Redis Cluster 哈希槽 迁移 原理"
+      },
+      "webPages": {
+        "webSearchUrl": "https://bochaai.com/search?q=Redis Cluster 哈希槽 迁移 原理",
+        "totalEstimatedMatches": 10000000,
+        "value": [
+          {
+            "id": "https://api.bochaai.com/v1/#WebPages.0",
+            "name": "Redis Cluster 数据分布模型:哈希槽的静态划分-CSDN博客",
+            "url": "https://blog.csdn.net/qq_41840843/article/details/163136425",
+            "displayUrl": "https://blog.csdn.net/qq_41840843/article/details/163136425",
+            "snippet": "1.\nRedis\nCluster\n数据分布模型:哈希槽的静态划分\nRedis\nCluster\n没有使用一致性哈希,而是采用了一种更可控的方案:哈希槽。整个集群将键空间逻辑划分为\n16384\n个固定槽位",
+            "summary": "1.\nRedis\nCluster\n数据分布模型:哈希槽的静态划分\nRedis\nCluster\n没有使用一致性哈希,而是采用了一种更可控的方案:哈希槽。整个集群将键空间逻辑划分为\n16384\n个固定槽位。这个数字\n16384\n是精心选择的,既能保证足够的分布粒度,又不会因为心跳包过大而影响网络开销。\n…",
+            "siteName": "CSDN",
+            "siteIcon": "https://th.bochaai.com/favicon?domain_url=https://blog.csdn.net/qq_41840843/article/details/163136425",
+            "datePublished": "2026-07-23T15:48:29+08:00",
+            "dateLastCrawled": "2026-07-23T15:48:29Z",
+            "cachedPageUrl": null,
+            "language": null,
+            "isFamilyFriendly": null,
+            "isNavigational": null
+          },
+          {
+            "id": "https://api.bochaai.com/v1/#WebPages.1",
+            "name": "深入了解redis的哈希槽的知识_redis哈希槽-CSDN博客",
+            "url": "https://dyclt.blog.csdn.net/article/details/148104826",
+            "displayUrl": "https://dyclt.blog.csdn.net/article/details/148104826",
+            "snippet": "目录\n1、哈希算法分类\n1.1、简单哈希算法\n1.2、一致性哈希算法\n2.\n哈希槽\n2.1、介绍\n2.2、哈希槽16384大小\n2.3、作用\n2.4、与一致性哈希的区别\n2.5、使用场景\n3.\n哈希槽",
+            "summary": "目录\n1、哈希算法分类\n1.1、简单哈希算法\n1.2、一致性哈希算法\n2.\n哈希槽\n2.1、介绍\n2.2、哈希槽16384大小\n2.3、作用\n2.4、与一致性哈希的区别\n2.5、使用场景\n3.\n哈希槽的分配与迁移\n3.1、初始分配\n3.2、迁移过程\n3.3、原理\n3.4、执行流程\n3.5、哈希标签(…",
+            "siteName": "CSDN",
+            "siteIcon": "https://th.bochaai.com/favicon?domain_url=https://dyclt.blog.csdn.net/article/details/148104826",
+            "datePublished": "2025-09-28T14:13:20+08:00",
+            "dateLastCrawled": "2025-09-28T14:13:20Z",
+            "cachedPageUrl": null,
+            "language": null,
+            "isFamilyFriendly": null,
+            "isNavigational": null
+          },
+          {
+            "id": "https://api.bochaai.com/v1/#WebPages.2",
+            "name": "Redis 集群模式 Redis Cluster 怎么通过哈希槽划分数据-java教程-PHP中文网",
+            "url": "https://www.php.cn/faq/3106505.html",
+            "displayUrl": "https://www.php.cn/faq/3106505.html",
+            "snippet": "Redis\nCluster选用哈希槽而非一致性哈希,因其通过“先定槽、再定节点”解耦数据分布与节点拓扑,支持手动按性能分配16384个固定槽位,扩缩容仅迁移槽归属、不重哈希全量数据,且保障多key操作",
+            "summary": "Redis\nCluster选用哈希槽而非一致性哈希,因其通过“先定槽、再定节点”解耦数据分布与节点拓扑,支持手动按性能分配16384个固定槽位,扩缩容仅迁移槽归属、不重哈希全量数据,且保障多key操作的原子性与负载均衡。\nRedis\nCluster\n通过哈希槽(Hash\nSlot)实现数据划分,本质…",
+            "siteName": "php中文网",
+            "siteIcon": "https://th.bochaai.com/favicon?domain_url=https://www.php.cn/faq/3106505.html",
+            "datePublished": "2026-09-08T14:00:57+08:00",
+            "dateLastCrawled": "2026-09-08T14:00:57Z",
+            "cachedPageUrl": null,
+            "language": null,
+            "isFamilyFriendly": null,
+            "isNavigational": null
+          }
+        ],
+        "someResultsRemoved": true
+      },
+      "images": {
+        "id": null,
+        "readLink": null,
+        "webSearchUrl": null,
+        "value": [
+          {
+            "webSearchUrl": null,
+            "name": null,
+            "thumbnailUrl": "https://g.csdnimg.cn/static/logo/favicon32.ico",
+            "datePublished": null,
+            "contentUrl": "https://g.csdnimg.cn/static/logo/favicon32.ico",
+            "hostPageUrl": "https://dyclt.blog.csdn.net/article/details/148104826",
+            "contentSize": null,
+            "encodingFormat": null,
+            "hostPageDisplayUrl": "https://dyclt.blog.csdn.net/article/details/148104826",
+            "width": 0,
+            "height": 0,
+            "thumbnail": null
+          }
+        ],
+        "isFamilyFriendly": null
+      },
+      "videos": null
+    }
+  }
+}

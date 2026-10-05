@@ -12,6 +12,7 @@ import { assertResolvedPublicUrl, assertSafePublicUrl } from '../src/safe-http.t
 import { Store } from '../src/store.ts'
 import { resolveConfig } from '../src/config.ts'
 import { SearchRouter } from '../src/router.ts'
+import { BROWSER_020 } from './browser-stub.ts'
 
 test('RSS platform search filters all feed items by the requested query before applying count', async () => {
   const originalLookup = dns.lookup
@@ -194,6 +195,7 @@ test('fetch memory cache respects maxChars and does not cross persist semantics'
   const store = new Store(path.join(dir, 'store.db'))
   let renders = 0
   const browser = {
+    ...BROWSER_020,
     async render(_url: string, _rules: unknown, opts: { maxChars?: number }) {
       renders++
       const maxChars = opts.maxChars ?? 200_000
@@ -253,7 +255,7 @@ test('router accepts a legacy RSS feed URL in query without treating it as a fil
     <rss><channel><item><title>Visible item</title><link>https://example.com/item</link></item></channel></rss>
   `, { status: 200 })) as typeof fetch
   try {
-    const result = await router.platformSearch('rss', 'https://feed.example/rss', undefined, 5, { fresh: true })
+    const result = await router.search({ query: 'https://feed.example/rss', count: 5, fresh: true, multi: false, signal: undefined, platform: { id: 'rss' } })
     assert.equal(result.sources[0]?.title, 'Visible item')
   } finally {
     dns.lookup = originalLookup
@@ -352,4 +354,36 @@ test('proxy fake-IP DNS answers require an explicit opt-in and never permit lite
     /public addresses/,
   )
   assert.throws(() => assertSafePublicUrl('http://198.18.0.42/private'), /private or local/)
+})
+
+test('TUN fake-IP answers in 2001:2::/48 are non-public, allowed only with the opt-in, and the error names the fix', async () => {
+  const tunLookup = async () => [
+    { address: '198.18.0.67', family: 4 },
+    { address: '2001:2::40', family: 6 },
+  ]
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: tunLookup }),
+    /proxy fake-IP 198\.18\.0\.67.*allowProxyFakeIp/,
+  )
+  await assert.doesNotReject(
+    () => assertResolvedPublicUrl('https://public.example/path', { allowProxyFakeIp: true, lookup: tunLookup }),
+  )
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: async () => [{ address: '2001:2::40', family: 6 }] }),
+    /allowProxyFakeIp/,
+  )
+  // Real private answers never get the fake-IP hint, and a mix with them is refused even with the opt-in.
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: async () => [{ address: '10.0.0.5', family: 4 }] }),
+    (error: Error) => /public addresses$/.test(error.message),
+  )
+  await assert.rejects(
+    () => assertResolvedPublicUrl('https://public.example/path', { allowProxyFakeIp: true, lookup: async () => [{ address: '198.18.0.1', family: 4 }, { address: '192.168.1.1', family: 4 }] }),
+    /public addresses/,
+  )
+  // Ordinary global IPv6 stays public; literal benchmarking addresses stay blocked.
+  await assert.doesNotReject(
+    () => assertResolvedPublicUrl('https://public.example/path', { lookup: async () => [{ address: '2001:4860:4860::8888', family: 6 }] }),
+  )
+  assert.throws(() => assertSafePublicUrl('http://[2001:2::40]/x'), /private or local/)
 })

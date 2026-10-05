@@ -1,8 +1,10 @@
 /**
  * External dependency detection and install for the CLI/platform backends.
  * Most backends shell out to tools installed outside DSH (bili, yt-dlp,
- * agent-reach, and mcporter). This module reports which are
- * present and how to install them; the web_deps tool exposes it to the model.
+ * twitter, and mcporter). This module reports which are present and how to
+ * install them; the sources.deps / sources.install actions expose it to the model. Each entry probes
+ * the command the backend actually executes (the twitter backend runs
+ * `twitter`, so finding `agent-reach` on PATH says nothing about it).
  *
  * Install is intentionally a MODEL-FACING TOOL, not a browser settings button:
  * a browser button running winget/pip/npm would be arbitrary command execution
@@ -25,6 +27,8 @@ export interface DepInfo {
     version?: string;
     /** Why a command found on PATH is not compatible. */
     diagnostic?: string;
+    /** No backend of this plugin executes it; it is only an install helper, so its absence is not a gap. */
+    optional?: boolean;
     installs: {
         installer: string;
         command: string;
@@ -44,6 +48,15 @@ interface DepProbeResult {
 }
 /** Validate the public-clis bili command rather than trusting an ambiguous package name. */
 export declare function evaluateBiliCli(versionOutput: string, searchHelpOutput: string): DepProbeResult;
+/**
+ * The twitter backend runs `twitter search <query> -n N` (twitter-cli). Another program that happens to be
+ * called `twitter` must not pass: require a successful `search --help` that actually describes a search command.
+ */
+export declare function evaluateTwitterCli(searchHelpOutput: string, exitCode: number): DepProbeResult;
+export declare const TWITTER_CLI_INSTALLS: {
+    installer: string;
+    command: string;
+}[];
 /** Detect all backends. */
 export declare function detectDeps(): Promise<DepInfo[]>;
 /** Run the install command for one backend + installer. */

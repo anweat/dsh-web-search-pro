@@ -1,6 +1,6 @@
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 import type { Context } from './context-types.ts';
-import { type CredentialId, type SettingField, type WebSearchCardState } from './form.ts';
+import { type CredentialId, type RubricTextKey, type SettingField, type WebSearchCardState } from './form.ts';
 export declare const name = "web-search-pro-client";
 export declare const inject: string[];
 export declare const NS = "web-search-pro.card";
@@ -10,6 +10,9 @@ export type SettingsCardProps = PropsLocale<typeof NS> & {
     edit: (field: SettingField, text: string) => void;
     resetField: (field: SettingField) => void;
     editCredential: (id: CredentialId, text: string) => void;
+    editRubric: (id: string, key: RubricTextKey, text: string) => void;
+    startRubric: (id: string) => void;
+    restoreRubric: (id: string) => void;
     save: () => void;
     discard: () => void;
     refreshCredentials: () => void;

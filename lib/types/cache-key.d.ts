@@ -11,6 +11,11 @@ export interface SearchCacheInput {
     count: number;
     multi: boolean;
     exa?: Record<string, unknown>;
+    /** Auth profile / rule pack bindings of the platform providers in `engines` (absent when none applies, so existing keys are unchanged). */
+    browser?: Record<string, {
+        authProfile?: string;
+        rulePack?: string;
+    }>;
 }
 export interface PlatformCacheInput {
     platform: string;
