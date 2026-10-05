@@ -134,7 +134,10 @@ test('search provider (auto): a pipeline failure falls back to the plain result'
   } finally { h.cleanup() }
 })
 
-test('search provider (auto): a pipeline that never finishes is cut at deadline + guard and the plain result is returned', async () => {
+test('search provider (auto): a pipeline that never finishes is cut at deadline + guard and the plain result is returned', async t => {
+  // The hung mock has no socket; keep the loop alive for unref'ed deadline timers.
+  const keepAlive = setInterval(() => {}, 1_000)
+  t.after(() => clearInterval(keepAlive))
   const h = setup({ provider: { evidence: 'auto', deadlineMs: 100 } })
   let seenDeadline: number | undefined
   let seenSignal: AbortSignal | undefined
@@ -149,7 +152,10 @@ test('search provider (auto): a pipeline that never finishes is cut at deadline 
   } finally { h.cleanup() }
 })
 
-test('search provider (auto): the pipeline deadline yields a PARTIAL pack, not a failure', async () => {
+test('search provider (auto): the pipeline deadline yields a PARTIAL pack, not a failure', async t => {
+  // The hung mock has no socket; keep the loop alive for unref'ed deadline timers.
+  const keepAlive = setInterval(() => {}, 1_000)
+  t.after(() => clearInterval(keepAlive))
   const h = setup({ provider: { evidence: 'auto', deadlineMs: 100 } })
   try {
     const slowFetch = { fetchPage: (_url: string, opts: { signal?: AbortSignal }) => new Promise<never>((_, reject) => { opts.signal?.addEventListener('abort', () => reject(opts.signal!.reason), { once: true }) }) }

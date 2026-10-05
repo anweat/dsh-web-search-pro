@@ -197,7 +197,10 @@ test('pipeline: identical page text under two URLs is read once', async () => {
   assert.equal(pack.stats.fetched, 1)
 })
 
-test('pipeline: the deadline cuts slow stages and returns a partial pack; the caller signal rethrows', async () => {
+test('pipeline: the deadline cuts slow stages and returns a partial pack; the caller signal rethrows', async t => {
+  // The hung mock has no socket; keep the loop alive for unref'ed deadline timers.
+  const keepAlive = setInterval(() => {}, 1_000)
+  t.after(() => clearInterval(keepAlive))
   const slow = harness({ search: () => okSources('https://docs.test/busy', 'https://docs.test/wal') })
   slow.deps.fetchPage = (_url, signal) => new Promise((_resolve, reject) => { signal.addEventListener('abort', () => reject(signal.reason)) })
   const started = Date.now()

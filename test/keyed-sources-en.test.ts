@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import dns from 'node:dns/promises'
 import { SearchRouter } from '../src/router.ts'
 import { resolveConfig } from '../src/config.ts'
 import { Store } from '../src/store.ts'
@@ -14,7 +15,7 @@ import { braveAdapter, braveParams, braveFreshness, parseBrave, braveFailure } f
 import { linkupAdapter, linkupBody, parseLinkup, linkupFailure } from '../src/providers/linkup.ts'
 import { serperAdapter, serperBody, parseSerper, serperFailure } from '../src/providers/serper.ts'
 import type { Constraint } from '../src/pipeline/types.ts'
-import { fixture, fails, harness, reply, assertNoKey } from './keyed-harness.ts'
+import { fixture, fails, harness, reply, assertNoKey, PUBLIC } from './keyed-harness.ts'
 
 const NOW = new Date('2026-10-02T00:00:00Z')
 const hard = (id: string, kind: Constraint['kind'], value: string, strength: Constraint['strength'] = 'hard'): Constraint => ({ id, kind, value, strength, origin: 'param' })
@@ -283,7 +284,9 @@ test('compile: Tavily / Linkup take domain lists and a date bound natively; Brav
 
 // ── router wiring ────────────────────────────────────────────────────────────
 
-test('router: keys resolve config literal -> credentials ref -> environment into executable providers; counted in the usage ledger; no key = credential missing', async () => {
+test('router: keys resolve config literal -> credentials ref -> environment into executable providers; counted in the usage ledger; no key = credential missing', async t => {
+  // Fetch is mocked below; DNS must also be isolated from the machine/proxy.
+  t.mock.method(dns, 'lookup', PUBLIC)
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-keyed-en-'))
   const realFetch = globalThis.fetch
   const saved = Object.fromEntries(['TAVILY_API_KEY', 'BRAVE_API_KEY', 'LINKUP_API_KEY', 'SERPER_API_KEY', 'MY_TAVILY'].map(n => [n, process.env[n]]))
