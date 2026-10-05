@@ -156,3 +156,28 @@ test('fixture: a >100-block page repeating DatabaseSync pre-ranks and selects th
   assert.ok(!/^(JS|COPY|CJS|MJS)$/m.test(hit.excerpt), hit.excerpt)
   assert.ok(pack.coveredNeeds.includes('n1'))
 })
+
+
+test('pipeline: separate windows of one source block have distinct persistent evidence IDs', async () => {
+  const url = 'https://docs.test/sqlite-options'
+  const text = 'The busy timeout is set with PRAGMA busy_timeout = 5000. '
+    + 'Unrelated configuration details are described here. '.repeat(20)
+    + 'WAL mode is enabled with PRAGMA journal_mode=WAL.'
+  const task: TaskSpec = { goal: 'SQLite configuration', query: 'busy timeout WAL mode', profile: 'docs_code',
+    needs: [{ id: 'n1', text: 'busy timeout', critical: true }, { id: 'n2', text: 'WAL mode', critical: true }], constraints: [], budget: {} }
+  const deps: PipelineDeps = {
+    providerStatus: async ids => new Map(ids.map(id => [id, { state: 'ready' as const }])),
+    searchProvider: async () => ({ state: 'ok', sources: [{ url, title: 'SQLite configuration', snippet: 'busy timeout WAL mode' }] }),
+    fetchPage: async () => ({ url, text }),
+    scorers: {}, configuredEngines: ['ddg'],
+    fusion: { k: 60, freshnessBoost: 0, freshnessDays: 30, authorityBoost: 0, authorityDomains: [] },
+    newId: () => 'r_windows',
+  }
+  const { pack, evidenceBlocks } = await runPipeline(task, deps, { engines: ['ddg'], select: { maxExcerptChars: 140 } })
+  assert.deepEqual(pack.coveredNeeds, ['n1', 'n2'])
+  assert.equal(pack.evidence.length, 2)
+  assert.equal(new Set(pack.evidence.map(e => e.blockId)).size, 1)
+  assert.equal(new Set(pack.evidence.map(e => e.evidenceId)).size, 2)
+  assert.deepEqual(evidenceBlocks.map(b => b.evidenceId), pack.evidence.map(e => e.evidenceId))
+  assert.ok(evidenceBlocks.every(b => b.text === text))
+})

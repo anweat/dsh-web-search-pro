@@ -107,6 +107,35 @@ test('select: a block supporting several needs lists them best first and covers 
   assert.equal(res.selected[0]!.grade, 3)
 })
 
+test('select: separate support windows of one block survive as distinct excerpts', () => {
+  const text = 'The busy timeout is set with PRAGMA busy_timeout = 5000. '
+    + 'Unrelated configuration details are described here. '.repeat(20)
+    + 'WAL mode is enabled with PRAGMA journal_mode=WAL.'
+  const both = sb('https://both.test/doc', text, { n1: 3, n2: 3 })
+  const selected = selectEvidence(task, [both], { maxExcerptChars: 140, charBudget: 400 }).selected
+  assert.equal(selected.length, 2)
+  assert.ok(selected.some(s => s.needIds.includes('n1') && s.excerpt.includes('busy_timeout = 5000')))
+  assert.ok(selected.some(s => s.needIds.includes('n2') && s.excerpt.includes('journal_mode=WAL')))
+  for (const s of selected) {
+    if (!s.excerpt.includes('journal_mode=WAL')) assert.ok(!s.needIds.includes('n2'))
+    if (!s.excerpt.includes('busy_timeout = 5000')) assert.ok(!s.needIds.includes('n1'))
+  }
+  assert.deepEqual(computeCoverage({ needs: needs.slice(0, 2), selected, scored: [both], keptCandidates: 1, pagesRead: 1 }).covered, ['n1', 'n2'])
+})
+
+test('coverage: a second support window excluded by budget remains a gap', () => {
+  const text = 'The busy timeout is set with PRAGMA busy_timeout = 5000. '
+    + 'Unrelated configuration details are described here. '.repeat(20)
+    + 'WAL mode is enabled with PRAGMA journal_mode=WAL.'
+  const both = sb('https://both.test/doc', text, { n1: 3, n2: 3 })
+  const selected = selectEvidence(task, [both], { maxExcerptChars: 140, maxItems: 1 }).selected
+  const coverage = computeCoverage({ needs: needs.slice(0, 2), selected, scored: [both], keptCandidates: 1, pagesRead: 1 })
+  assert.equal(coverage.covered.length, 1)
+  assert.equal(coverage.gaps.length, 1)
+  assert.equal(coverage.gaps[0]!.reason, 'budget')
+  assert.ok(!selected[0]!.needIds.includes(coverage.gaps[0]!.needId))
+})
+
 test('coverage: covered needs need a selected block of grade>=2; gaps say why', () => {
   const strong = sb('https://s.test/', 'busy timeout answer', { n1: 3, n2: 1.2, n3: 0 })
   const left = sb('https://l.test/', 'wal answer left out by budget', { n2: 2.6 })
@@ -120,4 +149,11 @@ test('coverage: covered needs need a selected block of grade>=2; gaps say why', 
   assert.deepEqual(computeCoverage({ needs, selected: [], scored: [], keptCandidates: 3, pagesRead: 0 }).gaps.map(g => g.reason), ['no_page_content', 'no_page_content', 'no_page_content'])
   assert.equal(computeCoverage({ needs, selected: [], scored: [], keptCandidates: 3, pagesRead: 0 }).gaps[0]!.bestGrade, undefined)
   assert.equal(DEFAULT_SELECT_OPTIONS.coverGrade, 2)
+})
+
+
+test('select: near-duplicate wording must not discard support for a different need', () => {
+  const a = sb('https://a.test/', 'Database connection configuration busy timeout WAL mode uses these documented SQLite options.', { n1: 3 })
+  const b = sb('https://b.test/', 'Database connection configuration busy timeout WAL mode uses these documented SQLite options safely.', { n2: 3 })
+  assert.equal(selectEvidence(task, [a, b]).selected.length, 2)
 })

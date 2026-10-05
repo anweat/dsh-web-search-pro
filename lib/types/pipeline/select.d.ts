@@ -2,7 +2,7 @@
  * S7 budgeted selection and S8 coverage (dev-plan §4.3, design §6.4).
  *
  * S7 is deterministic: every block gets an excerpt (an intact run of sentences
- * of at most `maxExcerptChars`, chosen for the best need), then blocks are
+ * of at most `maxExcerptChars`, chosen per supported need), then excerpts are
  * picked in two phases under a total excerpt-character budget:
  *   A. reservation - each critical need that any block supports at grade >= 2
  *      gets its best block first (so a greedy fill cannot starve it);
@@ -24,9 +24,13 @@ export interface SelectOptions {
     charBudget: number;
     /** Excerpt length cap (default 600). */
     maxExcerptChars: number;
-    /** Blocks from one URL (default 2). */
+    /** Excerpts from one URL (default 4), or distinct blocks with perUrlUnit='block'. */
     maxPerUrl: number;
-    /** Hard cap on evidence items (default 10). */
+    /** Counting unit for the source-diversity cap. Default preserves excerpt counting. */
+    perUrlUnit: 'excerpt' | 'block';
+    /** Windows per original block when perUrlUnit='block' (default 2). */
+    maxWindowsPerBlock: number;
+    /** Hard cap on evidence items (default 12). */
     maxItems: number;
     /** Lowest grade that can make a block eligible at all (default 1). */
     minGrade: number;
@@ -34,6 +38,13 @@ export interface SelectOptions {
     coverGrade: number;
     /** Per-item rendering overhead (title, URL, heading) counted in the efficiency denominator. */
     overheadChars: number;
+    /** Experimental: anchor each window on its own need before using the full query as a tie-breaker. */
+    anchorNeedFirst?: boolean;
+    /** Optional full-output budget. The caller supplies a pure, model-specific rendered-output counter. */
+    tokenBudget?: {
+        maxTokens: number;
+        countTokens: (selected: readonly SelectedBlock[]) => number;
+    };
 }
 export declare const DEFAULT_SELECT_OPTIONS: SelectOptions;
 /** Ranges of sentences (and lines) of `text`, in order; whitespace between them is not part of any range. */
@@ -49,7 +60,7 @@ export declare function sentenceRanges(text: string): {
  * over-long single sentence is cut at a clause boundary. `…` marks the side(s)
  * that were cut. Empty when the block is nothing but UI labels.
  */
-export declare function excerptOf(text: string, parts: readonly QueryPart[], max: number): string;
+export declare function excerptOf(text: string, parts: readonly QueryPart[], max: number, anchorPart?: QueryPart): string;
 export interface SelectedBlock {
     block: ScoredBlock;
     excerpt: string;
@@ -63,6 +74,8 @@ export interface SelectionResult {
     selected: SelectedBlock[];
     /** Excerpt characters in use. */
     usedChars: number;
+    /** Full rendered-output count, present only when tokenBudget was supplied. */
+    usedTokens?: number;
 }
 type TaskLike = {
     query: string;

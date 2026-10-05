@@ -611,7 +611,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
   const evidence: EvidenceItem[] = []
   const evidenceBlocks: PipelineResult['evidenceBlocks'] = []
   for (const s of selection.selected) {
-    const evidenceId = 'e_' + crypto.createHash('sha1').update(resultId + ':' + s.block.block.blockId).digest('hex').slice(0, 10)
+    const evidenceId = 'e_' + crypto.createHash('sha1').update(resultId + ':' + s.block.url + ':' + s.block.block.blockId + ':' + s.excerpt).digest('hex').slice(0, 10)
     const heading = s.block.block.heading
     const scorer = scorerByBlock.get(s.block.block.blockId + '|' + s.block.url) ?? scorerUsed
     evidence.push({

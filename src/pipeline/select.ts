@@ -2,7 +2,7 @@
  * S7 budgeted selection and S8 coverage (dev-plan §4.3, design §6.4).
  *
  * S7 is deterministic: every block gets an excerpt (an intact run of sentences
- * of at most `maxExcerptChars`, chosen for the best need), then blocks are
+ * of at most `maxExcerptChars`, chosen per supported need), then excerpts are
  * picked in two phases under a total excerpt-character budget:
  *   A. reservation - each critical need that any block supports at grade >= 2
  *      gets its best block first (so a greedy fill cannot starve it);
@@ -27,9 +27,13 @@ export interface SelectOptions {
   charBudget: number
   /** Excerpt length cap (default 600). */
   maxExcerptChars: number
-  /** Blocks from one URL (default 2). */
+  /** Excerpts from one URL (default 4), or distinct blocks with perUrlUnit='block'. */
   maxPerUrl: number
-  /** Hard cap on evidence items (default 10). */
+  /** Counting unit for the source-diversity cap. Default preserves excerpt counting. */
+  perUrlUnit: 'excerpt' | 'block'
+  /** Windows per original block when perUrlUnit='block' (default 2). */
+  maxWindowsPerBlock: number
+  /** Hard cap on evidence items (default 12). */
   maxItems: number
   /** Lowest grade that can make a block eligible at all (default 1). */
   minGrade: number
@@ -37,10 +41,14 @@ export interface SelectOptions {
   coverGrade: number
   /** Per-item rendering overhead (title, URL, heading) counted in the efficiency denominator. */
   overheadChars: number
+  /** Experimental: anchor each window on its own need before using the full query as a tie-breaker. */
+  anchorNeedFirst?: boolean
+  /** Optional full-output budget. The caller supplies a pure, model-specific rendered-output counter. */
+  tokenBudget?: { maxTokens: number; countTokens: (selected: readonly SelectedBlock[]) => number }
 }
 
 export const DEFAULT_SELECT_OPTIONS: SelectOptions = {
-  charBudget: 6000, maxExcerptChars: 600, maxPerUrl: 4, maxItems: 12, minGrade: 1, coverGrade: 2, overheadChars: 80,
+  charBudget: 6000, maxExcerptChars: 600, maxPerUrl: 4, perUrlUnit: 'excerpt', maxWindowsPerBlock: 2, maxItems: 12, minGrade: 1, coverGrade: 2, overheadChars: 80,
 }
 
 // ── excerpts ────────────────────────────────────────────────────────────────
@@ -104,13 +112,14 @@ function cutSentence(text: string, max: number): string {
  * over-long single sentence is cut at a clause boundary. `…` marks the side(s)
  * that were cut. Empty when the block is nothing but UI labels.
  */
-export function excerptOf(text: string, parts: readonly QueryPart[], max: number): string {
+export function excerptOf(text: string, parts: readonly QueryPart[], max: number, anchorPart?: QueryPart): string {
   const clean = stripUiNoise(text)
   if (clean.length <= max) return clean
   const ranges = sentenceRanges(clean)
   const scores = ranges.map(r => weightedOverlap(parts, clean.slice(r.start, r.end)))
+  const primary = anchorPart ? ranges.map(r => weightedOverlap([anchorPart], clean.slice(r.start, r.end))) : scores
   let anchor = 0
-  for (let i = 1; i < ranges.length; i++) if (scores[i]! > scores[anchor]! + 1e-12) anchor = i
+  for (let i = 1; i < ranges.length; i++) if (primary[i]! > primary[anchor]! + 1e-12 || (Math.abs(primary[i]! - primary[anchor]!) <= 1e-12 && scores[i]! > scores[anchor]! + 1e-12)) anchor = i
   const r0 = ranges[anchor] ?? { start: 0, end: clean.length }
   if (r0.end - r0.start > max) return (r0.start > 0 ? '…' : '') + cutSentence(clean.slice(r0.start, r0.end), max - 1) + '…'
   let i = anchor
@@ -145,6 +154,8 @@ export interface SelectionResult {
   selected: SelectedBlock[]
   /** Excerpt characters in use. */
   usedChars: number
+  /** Full rendered-output count, present only when tokenBudget was supplied. */
+  usedTokens?: number
 }
 
 interface Entry {
@@ -161,44 +172,68 @@ type TaskLike = { query: string; needs: readonly Need[] }
 
 export function selectEvidence(task: TaskLike, blocks: readonly ScoredBlock[], options: Partial<SelectOptions> = {}): SelectionResult {
   const opt: SelectOptions = { ...DEFAULT_SELECT_OPTIONS, ...options }
+  if (opt.tokenBudget && (!Number.isSafeInteger(opt.tokenBudget.maxTokens) || opt.tokenBudget.maxTokens < 0)) throw new RangeError('tokenBudget.maxTokens must be a non-negative safe integer')
+  if (opt.perUrlUnit !== 'excerpt' && opt.perUrlUnit !== 'block') throw new TypeError('perUrlUnit must be excerpt or block')
+  if (opt.perUrlUnit === 'block' && (!Number.isSafeInteger(opt.maxWindowsPerBlock) || opt.maxWindowsPerBlock < 1)) throw new RangeError('maxWindowsPerBlock must be a positive safe integer')
   const order = new Map(task.needs.map((n, i) => [n.id, i]))
   const entries: Entry[] = []
-  const seenHash = new Map<string, Entry>()
+  const bestOf = (block: ScoredBlock): number => Math.max(-1, ...task.needs.map(n => block.grades.get(n.id)?.grade ?? -1))
+  const canonical = new Map<string, ScoredBlock>()
   for (const block of blocks) {
-    const grades = new Map<string, number>()
-    let best = -1
-    let bestNeed: Need | undefined
-    let rank = 0
+    const twin = canonical.get(block.block.hash)
+    // Mirror / repost: keep the better-graded copy before creating windows.
+    if (!twin || bestOf(block) > bestOf(twin)) canonical.set(block.block.hash, block)
+  }
+  for (const block of canonical.values()) {
+    const windows = new Map<string, Entry>()
     for (const need of task.needs) {
       const g = block.grades.get(need.id)
-      if (!g) continue
-      grades.set(need.id, g.grade)
-      if (g.grade > best || (g.grade === best && need.critical && !bestNeed?.critical)) { best = g.grade; bestNeed = need; rank = g.rank ?? g.grade }
+      if (!g || g.grade < opt.minGrade) continue
+      const parts: QueryPart[] = [{ text: need.text, weight: 1.6 }, { text: task.query, weight: 1 }]
+      const excerpt = excerptOf(block.block.text, parts, opt.maxExcerptChars, opt.anchorNeedFirst ? parts[0] : undefined)
+      if (!excerpt) continue
+      let entry = windows.get(excerpt)
+      if (!entry) {
+        entry = { block, excerpt, grades: new Map(), best: -1, rank: 0, needIds: [], cost: excerpt.length + opt.overheadChars }
+        windows.set(excerpt, entry)
+      }
+      entry.grades.set(need.id, g.grade)
+      if (g.grade > entry.best) { entry.best = g.grade; entry.rank = g.rank ?? g.grade }
     }
-    if (!bestNeed || best < opt.minGrade) continue
-    const parts: QueryPart[] = [{ text: bestNeed.text, weight: 1.6 }, { text: task.query, weight: 1 }]
-    const excerpt = excerptOf(block.block.text, parts, opt.maxExcerptChars)
-    if (!excerpt) continue
-    const needIds = [...grades].filter(([, g]) => g >= opt.minGrade).sort((a, b) => b[1] - a[1] || (order.get(a[0]) ?? 0) - (order.get(b[0]) ?? 0)).map(([id]) => id)
-    const entry: Entry = { block, excerpt, grades, best, rank, needIds, cost: excerpt.length + opt.overheadChars }
-    const twin = seenHash.get(block.block.hash)
-    if (twin) {
-      // Mirror / repost: keep the better-graded copy only.
-      if (entry.best > twin.best) { entries[entries.indexOf(twin)] = entry; seenHash.set(block.block.hash, entry) }
-      continue
+    for (const entry of windows.values()) {
+      entry.needIds = [...entry.grades].sort((a, b) => b[1] - a[1] || (order.get(a[0]) ?? 0) - (order.get(b[0]) ?? 0)).map(([id]) => id)
+      entries.push(entry)
     }
-    seenHash.set(block.block.hash, entry)
-    entries.push(entry)
   }
 
   const selected: SelectedBlock[] = []
   const chosen = new Set<Entry>()
   const perUrl = new Map<string, number>()
+  const perUrlBlocks = new Map<string, Set<string>>()
+  const perBlockWindows = new Map<string, number>()
   const covered = new Set<string>()
   let used = 0
-
-  const fits = (e: Entry): boolean => !chosen.has(e) && selected.length < opt.maxItems && used + e.excerpt.length <= opt.charBudget && (perUrl.get(e.block.url) ?? 0) < opt.maxPerUrl
+  const asSelected = (e: Entry, reason: SelectedBlock['reason'] = 'greedy'): SelectedBlock => ({ block: e.block, excerpt: e.excerpt, needIds: e.needIds, grade: e.best, reason })
+  const countTokens = (items: readonly SelectedBlock[]): number => {
+    const count = opt.tokenBudget!.countTokens(items)
+    if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('tokenBudget counter must return a non-negative safe integer')
+    return count
+  }
+  let usedTokens = opt.tokenBudget ? countTokens(selected) : undefined
+  if (opt.tokenBudget && usedTokens! > opt.tokenBudget.maxTokens) throw new RangeError('tokenBudget is smaller than the fixed rendered-output overhead')
+  const blockKey = (e: Entry): string => JSON.stringify([e.block.url, e.block.block.blockId])
+  const proposedTokens = (e: Entry, reason: SelectedBlock['reason'] = 'greedy'): number => countTokens([...selected, asSelected(e, reason)])
+  const costOf = (e: Entry, reason: SelectedBlock['reason'] = 'greedy'): number => opt.tokenBudget ? Math.max(1, proposedTokens(e, reason) - usedTokens!) : e.cost
+  const fits = (e: Entry, reason: SelectedBlock['reason'] = 'greedy'): boolean => {
+    if (chosen.has(e) || selected.length >= opt.maxItems || used + e.excerpt.length > opt.charBudget) return false
+    const alreadySelectedBlock = perUrlBlocks.get(e.block.url)?.has(e.block.block.blockId) ?? false
+    if (!(opt.perUrlUnit === 'block' && alreadySelectedBlock) && (perUrl.get(e.block.url) ?? 0) >= opt.maxPerUrl) return false
+    if (opt.perUrlUnit === 'block' && (perBlockWindows.get(blockKey(e)) ?? 0) >= opt.maxWindowsPerBlock) return false
+    return !opt.tokenBudget || proposedTokens(e, reason) <= opt.tokenBudget.maxTokens
+  }
   const duplicate = (e: Entry): boolean => {
+    // Similar wording must not suppress evidence for a still-missing need.
+    if (e.needIds.some(id => !selected.some(s => s.needIds.includes(id) && (s.block.grades.get(id)?.grade ?? 0) >= (e.grades.get(id) ?? 0)))) return false
     const terms = termsOf(e.excerpt)
     if (!terms.size) return false
     for (const s of selected) {
@@ -212,8 +247,13 @@ export function selectEvidence(task: TaskLike, blocks: readonly ScoredBlock[], o
   const take = (e: Entry, reason: SelectedBlock['reason']): void => {
     chosen.add(e)
     used += e.excerpt.length
-    perUrl.set(e.block.url, (perUrl.get(e.block.url) ?? 0) + 1)
-    selected.push({ block: e.block, excerpt: e.excerpt, needIds: e.needIds, grade: e.best, reason })
+    let blocksOfUrl = perUrlBlocks.get(e.block.url)
+    if (!blocksOfUrl) { blocksOfUrl = new Set(); perUrlBlocks.set(e.block.url, blocksOfUrl) }
+    if (opt.perUrlUnit === 'excerpt' || !blocksOfUrl.has(e.block.block.blockId)) perUrl.set(e.block.url, (perUrl.get(e.block.url) ?? 0) + 1)
+    blocksOfUrl.add(e.block.block.blockId)
+    perBlockWindows.set(blockKey(e), (perBlockWindows.get(blockKey(e)) ?? 0) + 1)
+    selected.push(asSelected(e, reason))
+    if (opt.tokenBudget) usedTokens = countTokens(selected)
     for (const [needId, g] of e.grades) if (g >= opt.coverGrade) covered.add(needId)
   }
   const gainOf = (e: Entry): number => {
@@ -234,10 +274,10 @@ export function selectEvidence(task: TaskLike, blocks: readonly ScoredBlock[], o
     if (!need.critical || covered.has(need.id)) continue
     const uncoveredCritical = task.needs.filter(n => n.critical && !covered.has(n.id))
     const pool = entries
-      .filter(e => (e.grades.get(need.id) ?? 0) >= opt.coverGrade && fits(e))
+      .filter(e => (e.grades.get(need.id) ?? 0) >= opt.coverGrade && fits(e, 'reserved'))
       .sort((a, b) => (b.grades.get(need.id)! - a.grades.get(need.id)!)
         || (uncoveredCritical.filter(n => (b.grades.get(n.id) ?? 0) >= opt.coverGrade).length - uncoveredCritical.filter(n => (a.grades.get(n.id) ?? 0) >= opt.coverGrade).length)
-        || (b.rank - a.rank) || (a.cost - b.cost))
+        || (b.rank - a.rank) || (costOf(a, 'reserved') - costOf(b, 'reserved')))
     const pick = pool.find(e => !duplicate(e))
     if (pick) take(pick, 'reserved')
   }
@@ -250,13 +290,13 @@ export function selectEvidence(task: TaskLike, blocks: readonly ScoredBlock[], o
       if (!fits(e)) continue
       const gain = gainOf(e)
       if (gain <= 0) continue
-      const eff = gain / e.cost
+      const eff = gain / costOf(e)
       if (eff > bestEff + 1e-12 && !duplicate(e)) { bestEntry = e; bestEff = eff }
     }
     if (!bestEntry) break
     take(bestEntry, 'greedy')
   }
-  return { selected, usedChars: used }
+  return { selected, usedChars: used, ...usedTokens !== undefined ? { usedTokens } : {} }
 }
 
 // ── S8 coverage ─────────────────────────────────────────────────────────────
@@ -279,7 +319,7 @@ export function computeCoverage(input: CoverageInput): Coverage {
   const covered: string[] = []
   const gaps: Gap[] = []
   for (const need of input.needs) {
-    if (input.selected.some(s => (s.block.grades.get(need.id)?.grade ?? 0) >= cover)) { covered.push(need.id); continue }
+    if (input.selected.some(s => s.needIds.includes(need.id) && (s.block.grades.get(need.id)?.grade ?? 0) >= cover)) { covered.push(need.id); continue }
     const bestGrade = Math.max(0, ...input.scored.map(b => b.grades.get(need.id)?.grade ?? 0))
     let reason: GapReason
     if (!input.keptCandidates) reason = 'no_candidates'
