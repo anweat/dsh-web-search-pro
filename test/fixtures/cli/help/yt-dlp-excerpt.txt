@@ -1,0 +1,5 @@
+Usage: yt-dlp [OPTIONS] URL [URL...]
+    --flat-playlist                 Do not extract a playlist's URL result
+    --no-warnings                   Ignore warnings
+    --skip-download                 Do not download the video but write all
+    -O, --print [WHEN:]TEMPLATE     Field name or output template to print to

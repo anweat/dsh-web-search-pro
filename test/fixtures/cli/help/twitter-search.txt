@@ -1,0 +1,37 @@
+Usage: twitter search [OPTIONS] [QUERY]
+
+  Search tweets by QUERY string with optional advanced filters.
+
+  QUERY is the search keywords (optional when using advanced filters).
+
+  Advanced search examples:
+
+    twitter search "python" --from elonmusk
+    twitter search "AI" --lang en --since 2026-01-01
+    twitter search "rust" --has links --min-likes 100
+    twitter search --from bbc --exclude retweets
+
+Options:
+  -t, --type [top|latest|photos|videos]
+                                  Search tab: Top, Latest, Photos, or Videos.
+  --from TEXT                     Only tweets from this user.
+  --to TEXT                       Only tweets directed at this user.
+  --lang TEXT                     Filter by language (ISO code, e.g. en, fr,
+                                  ja).
+  --since TEXT                    Tweets since date (YYYY-MM-DD).
+  --until TEXT                    Tweets until date (YYYY-MM-DD).
+  --has [links|images|videos|media]
+                                  Require content type (links, images, videos,
+                                  media). Repeatable.
+  --exclude [retweets|replies|links]
+                                  Exclude content type (retweets, replies,
+                                  links). Repeatable.
+  --min-likes INTEGER RANGE       Minimum number of likes.  [x>=0]
+  --min-retweets INTEGER RANGE    Minimum number of retweets.  [x>=0]
+  -n, --max INTEGER               Max number of tweets to fetch.
+  --json                          Output as JSON.
+  --yaml                          Output as YAML.
+  -o, --output TEXT               Save tweets to JSON file.
+  --filter                        Enable score-based filtering.
+  --full-text                     Show full tweet text in table output.
+  --help                          Show this message and exit.

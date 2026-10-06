@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "schema_version": "1",
+  "error": {
+    "code": "not_authenticated",
+    "message": "No 'a1' cookie found for xiaohongshu.com in any installed browser."
+  }
+}

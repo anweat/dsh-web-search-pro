@@ -1,0 +1,13 @@
+Usage: omnireach search [OPTIONS] QUERY
+
+  运行一次搜索.
+
+Options:
+  --on, --sources TEXT      只用这些源, 逗号分隔. 例: --on hackernews,web
+  --mode [auto|quick|deep]
+  --limit INTEGER           每个源最多返回多少条
+  --timeout FLOAT RANGE     显式覆盖所有源的 timeout (秒); heavy 源默认 60 秒  [1<=x<=120]
+  --profile TEXT            选择 OpenCLI Browser Bridge profile (透传为
+                            OPENCLI_PROFILE)
+  --json                    输出 JSON, 适合下游 pipe
+  --help                    Show this message and exit.

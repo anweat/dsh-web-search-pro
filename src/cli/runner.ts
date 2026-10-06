@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { WebSearchSource } from '@deepseek-ai/dsh-web'
-import { capText, jsYaml, runCli, stripTags, type CliResult } from '../util.ts'
+import { capText, htmlDecode, jsYaml, runCli, stripTags, type CliResult } from '../util.ts'
 import { EngineError } from '../engine-error.ts'
 import {
   searchSpecFor, type CliAdapterSpec, type CliErrorCode, type CliOutputSpec, type CliSearchSpec, type FieldSource, type JoinPart, type TemplateSource,
@@ -192,10 +192,18 @@ export function payloadError(output: CliOutputSpec, stdout: string): string | un
   } catch { return undefined }
 }
 
+/**
+ * Strip markup from a field. Highlight tags (`<em>备案</em>`) vanish without leaving a space (Chinese words must not be split),
+ * block-level tags become a space, entities are decoded.
+ */
+export function stripMarkup(input: string): string {
+  return htmlDecode(input.replace(/<\/?(?:p|div|br|li|ul|ol|tr|td|th|h[1-6]|section|article|blockquote)\b[^>]*>/gi, ' ').replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim()
+}
+
 /** Map parsed items to sources by the output spec: http(s) URLs only, snippets and titles capped, tags stripped when asked. */
 export function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number): WebSearchSource[] {
   const empty = new Set(output.emptyValues ?? [])
-  const clean = (text: string | undefined): string | undefined => (text === undefined ? undefined : output.stripTags ? stripTags(text) : text)
+  const clean = (text: string | undefined): string | undefined => (text === undefined ? undefined : output.stripTags ? stripMarkup(text) : text)
   const sources: WebSearchSource[] = []
   for (const item of items) {
     if (!isObject(item)) continue

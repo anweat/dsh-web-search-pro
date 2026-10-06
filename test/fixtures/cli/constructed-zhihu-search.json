@@ -1,0 +1,47 @@
+{
+  "data": [
+    {
+      "type": "search_result",
+      "object": {
+        "id": "333",
+        "type": "answer",
+        "excerpt": "<em>备案</em>流程分三步",
+        "question": {
+          "id": "111",
+          "name": "大模型备案怎么做？"
+        },
+        "created_time": 1790000000
+      }
+    },
+    {
+      "type": "search_result",
+      "object": {
+        "id": "222",
+        "type": "article",
+        "title": "<em>大模型</em>备案指南",
+        "excerpt": "全文梳理",
+        "created_time": 1790000100
+      }
+    },
+    {
+      "type": "search_result",
+      "object": {
+        "id": "444",
+        "type": "question",
+        "title": "如何评价备案新规？",
+        "excerpt": ""
+      }
+    },
+    {
+      "type": "search_result",
+      "object": {
+        "id": "555",
+        "type": "topic",
+        "name": "备案"
+      }
+    }
+  ],
+  "paging": {
+    "is_end": false
+  }
+}

@@ -1,0 +1,12 @@
+Usage: xhs search [OPTIONS] KEYWORD
+
+  Search notes by keyword.
+
+Options:
+  --sort [general|popular|latest]
+                                  Sort order
+  --type [all|video|image]        Note type
+  --page INTEGER                  Page number
+  --json                          Output as JSON.
+  --yaml                          Output as YAML.
+  --help                          Show this message and exit.

@@ -1,0 +1,11 @@
+Usage: bili search [OPTIONS] KEYWORD
+
+  搜索用户或视频。
+
+Options:
+  --type [user|video]      搜索类型 (默认 user)。
+  --page INTEGER RANGE     页码 (默认 1，最小 1)。  [x>=1]
+  -n, --max INTEGER RANGE  显示数量 (默认 20，最小 1)。  [x>=1]
+  --json                   输出 JSON。
+  --yaml                   输出 YAML，推荐给 AI Agent。
+  --help                   Show this message and exit.

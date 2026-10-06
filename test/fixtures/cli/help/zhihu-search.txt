@@ -1,0 +1,11 @@
+Usage: zhihu search [OPTIONS] QUERY
+
+  Search Zhihu content.
+
+Options:
+  -t, --type [general|people|topic]
+                                  Search scope
+  -l, --limit INTEGER             Max results  [default: 10]
+  -a, --answers INTEGER           Answers per question (0=hide)  [default: 3]
+  --json                          Output raw JSON
+  --help                          Show this message and exit.

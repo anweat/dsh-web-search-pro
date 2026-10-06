@@ -1,0 +1,1178 @@
+[
+ {
+  "command": "douyin/login",
+  "site": "douyin",
+  "name": "login",
+  "aliases": [],
+  "access": "write",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "timeout",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 300,
+    "help": "Maximum seconds to wait for the user to finish login"
+   }
+  ],
+  "columns": [
+   "status",
+   "logged_in",
+   "site",
+   "id",
+   "username",
+   "followers"
+  ],
+  "domain": "creator.douyin.com",
+  "defaultFormat": null,
+  "siteSession": "persistent"
+ },
+ {
+  "command": "douyin/search",
+  "site": "douyin",
+  "name": "search",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "query",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "搜索关键词"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 10,
+    "help": "结果数量 (1-30)"
+   }
+  ],
+  "columns": [
+   "rank",
+   "desc",
+   "author",
+   "url",
+   "plays",
+   "likes",
+   "comments",
+   "shares"
+  ],
+  "domain": "www.douyin.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "hackernews/search",
+  "site": "hackernews",
+  "name": "search",
+  "aliases": [],
+  "access": "read",
+  "strategy": "public",
+  "browser": false,
+  "args": [
+   {
+    "name": "query",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Search query"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "Number of results"
+   },
+   {
+    "name": "sort",
+    "type": "str",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "relevance",
+     "date"
+    ],
+    "default": "relevance",
+    "help": "Sort by relevance or date"
+   }
+  ],
+  "columns": [
+   "rank",
+   "id",
+   "title",
+   "score",
+   "author",
+   "comments",
+   "url"
+  ],
+  "domain": "news.ycombinator.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "hackernews/user",
+  "site": "hackernews",
+  "name": "user",
+  "aliases": [],
+  "access": "read",
+  "strategy": "public",
+  "browser": false,
+  "args": [
+   {
+    "name": "username",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "HN username"
+   }
+  ],
+  "columns": [
+   "username",
+   "karma",
+   "created",
+   "about"
+  ],
+  "domain": "news.ycombinator.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "reddit/hot",
+  "site": "reddit",
+  "name": "hot",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "subreddit",
+    "type": "str",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": "",
+    "help": "Subreddit name (e.g. programming). Empty for frontpage"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "Number of posts"
+   }
+  ],
+  "columns": [
+   "rank",
+   "title",
+   "subreddit",
+   "score",
+   "comments",
+   "postId",
+   "author",
+   "url",
+   "post_hint",
+   "url_overridden_by_dest",
+   "preview_image_url",
+   "gallery_urls"
+  ],
+  "domain": "www.reddit.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "reddit/login",
+  "site": "reddit",
+  "name": "login",
+  "aliases": [],
+  "access": "write",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "timeout",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 300,
+    "help": "Maximum seconds to wait for the user to finish login"
+   }
+  ],
+  "columns": [
+   "status",
+   "logged_in",
+   "site",
+   "username",
+   "id"
+  ],
+  "domain": "reddit.com",
+  "defaultFormat": null,
+  "siteSession": "persistent"
+ },
+ {
+  "command": "reddit/search",
+  "site": "reddit",
+  "name": "search",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "query",
+    "type": "string",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Reddit search query"
+   },
+   {
+    "name": "subreddit",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": "",
+    "help": "Search within a specific subreddit"
+   },
+   {
+    "name": "sort",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": "relevance",
+    "help": "Sort order: relevance, hot, top, new, comments"
+   },
+   {
+    "name": "time",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": "all",
+    "help": "Time filter: hour, day, week, month, year, all"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 15,
+    "help": ""
+   }
+  ],
+  "columns": [
+   "id",
+   "title",
+   "subreddit",
+   "author",
+   "score",
+   "comments",
+   "url",
+   "created_utc",
+   "selftext",
+   "post_hint",
+   "url_overridden_by_dest",
+   "preview_image_url",
+   "gallery_urls"
+  ],
+  "domain": "reddit.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "reddit/user",
+  "site": "reddit",
+  "name": "user",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "username",
+    "type": "string",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Reddit username (no `u/` prefix needed)"
+   }
+  ],
+  "columns": [
+   "field",
+   "value"
+  ],
+  "domain": "reddit.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "twitter/login",
+  "site": "twitter",
+  "name": "login",
+  "aliases": [],
+  "access": "write",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "timeout",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 300,
+    "help": "Maximum seconds to wait for the user to finish login"
+   }
+  ],
+  "columns": [
+   "status",
+   "logged_in",
+   "site",
+   "username",
+   "url"
+  ],
+  "domain": "x.com",
+  "defaultFormat": null,
+  "siteSession": "persistent"
+ },
+ {
+  "command": "twitter/post",
+  "site": "twitter",
+  "name": "post",
+  "aliases": [],
+  "access": "write",
+  "strategy": "ui",
+  "browser": true,
+  "args": [
+   {
+    "name": "text",
+    "type": "string",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "The text content of the tweet"
+   },
+   {
+    "name": "images",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": null,
+    "help": "Image paths, comma-separated, max 4 (jpg/png/gif/webp)"
+   }
+  ],
+  "columns": [
+   "status",
+   "message",
+   "text",
+   "id",
+   "url"
+  ],
+  "domain": "x.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "twitter/search",
+  "site": "twitter",
+  "name": "search",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "query",
+    "type": "string",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Search query. Raw X operators (e.g. \"exact phrase\", #tag, OR, lang:en, since:YYYY-MM-DD, from:, since:) are passed through unchanged."
+   },
+   {
+    "name": "filter",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "top",
+     "live"
+    ],
+    "default": "top",
+    "help": "Legacy alias for --product. Kept for backwards compatibility; if --product is set it wins."
+   },
+   {
+    "name": "product",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "top",
+     "live",
+     "photos",
+     "videos"
+    ],
+    "default": null,
+    "help": "Which X search tab to read: top (default), live (Latest), photos, videos. Maps to the f= URL param."
+   },
+   {
+    "name": "from",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": null,
+    "help": "Restrict to tweets authored by <user>. Leading @ is stripped. Equivalent to appending `from:<user>` to the query."
+   },
+   {
+    "name": "has",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "media",
+     "images",
+     "videos",
+     "links",
+     "replies"
+    ],
+    "default": null,
+    "help": "Restrict to tweets that have media|images|videos|links|replies. Maps to X's `filter:<has>` operator."
+   },
+   {
+    "name": "exclude",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "replies",
+     "retweets",
+     "media",
+     "links"
+    ],
+    "default": null,
+    "help": "Exclude tweets matching <type>: replies|retweets|media|links. Maps to X's `-filter:<x>` operator (retweets → -filter:nativeretweets)."
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 15,
+    "help": "Maximum number of tweets to return (default 15). Result count after server-side filtering."
+   },
+   {
+    "name": "top-by-engagement",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 0,
+    "help": "When set to N>0, re-rank the results by weighted engagement (likes×1 + retweets×3 + replies×2 + bookmarks×5 + log10(views+1)×0.5) and return the top N. Default 0 keeps X's native ordering."
+   }
+  ],
+  "columns": [
+   "id",
+   "author",
+   "bio",
+   "text",
+   "created_at",
+   "likes",
+   "views",
+   "url",
+   "has_media",
+   "media_urls",
+   "media_posters",
+   "card",
+   "quoted_tweet"
+  ],
+  "domain": "x.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "v2ex/hot",
+  "site": "v2ex",
+  "name": "hot",
+  "aliases": [],
+  "access": "read",
+  "strategy": "public",
+  "browser": false,
+  "args": [
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "Number of topics"
+   }
+  ],
+  "columns": [
+   "id",
+   "rank",
+   "title",
+   "node",
+   "replies",
+   "url"
+  ],
+  "domain": "www.v2ex.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "v2ex/latest",
+  "site": "v2ex",
+  "name": "latest",
+  "aliases": [],
+  "access": "read",
+  "strategy": "public",
+  "browser": false,
+  "args": [
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "Number of topics"
+   }
+  ],
+  "columns": [
+   "id",
+   "rank",
+   "title",
+   "node",
+   "replies",
+   "url"
+  ],
+  "domain": "www.v2ex.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "v2ex/login",
+  "site": "v2ex",
+  "name": "login",
+  "aliases": [],
+  "access": "write",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "timeout",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 300,
+    "help": "Maximum seconds to wait for the user to finish login"
+   }
+  ],
+  "columns": [
+   "status",
+   "logged_in",
+   "site",
+   "username"
+  ],
+  "domain": "v2ex.com",
+  "defaultFormat": null,
+  "siteSession": "persistent"
+ },
+ {
+  "command": "v2ex/topic",
+  "site": "v2ex",
+  "name": "topic",
+  "aliases": [],
+  "access": "read",
+  "strategy": "public",
+  "browser": false,
+  "args": [
+   {
+    "name": "id",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Topic ID"
+   }
+  ],
+  "columns": [
+   "id",
+   "title",
+   "content",
+   "member",
+   "created",
+   "node",
+   "replies",
+   "url"
+  ],
+  "domain": "www.v2ex.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "v2ex/user",
+  "site": "v2ex",
+  "name": "user",
+  "aliases": [],
+  "access": "read",
+  "strategy": "public",
+  "browser": false,
+  "args": [
+   {
+    "name": "username",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Username"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 10,
+    "help": "Number of topics (API returns max 20)"
+   }
+  ],
+  "columns": [
+   "rank",
+   "title",
+   "node",
+   "replies",
+   "url"
+  ],
+  "domain": "www.v2ex.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "weixin/search",
+  "site": "weixin",
+  "name": "search",
+  "aliases": [],
+  "access": "read",
+  "strategy": "public",
+  "browser": true,
+  "args": [
+   {
+    "name": "query",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "搜索关键词；如需正文 Markdown，请使用 weixin download 处理公众号文章链接"
+   },
+   {
+    "name": "page",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 1,
+    "help": "结果页码，从 1 开始"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 10,
+    "help": "返回条数，最大 10"
+   }
+  ],
+  "columns": [
+   "rank",
+   "page",
+   "title",
+   "url",
+   "summary",
+   "publish_time"
+  ],
+  "domain": "weixin.sogou.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "xiaohongshu/login",
+  "site": "xiaohongshu",
+  "name": "login",
+  "aliases": [],
+  "access": "write",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "timeout",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 300,
+    "help": "Maximum seconds to wait for the user to finish login"
+   }
+  ],
+  "columns": [
+   "status",
+   "logged_in",
+   "site",
+   "username",
+   "followers"
+  ],
+  "domain": "creator.xiaohongshu.com",
+  "defaultFormat": null,
+  "siteSession": "persistent"
+ },
+ {
+  "command": "xiaohongshu/search",
+  "site": "xiaohongshu",
+  "name": "search",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "query",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Search keyword"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "Number of results"
+   },
+   {
+    "name": "sort",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "comprehensive",
+     "latest",
+     "most-liked",
+     "most-commented",
+     "most-collected"
+    ],
+    "default": "comprehensive",
+    "help": "Sort order"
+   },
+   {
+    "name": "note-type",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "all",
+     "video",
+     "image"
+    ],
+    "default": "all",
+    "help": "Note type"
+   },
+   {
+    "name": "publish-time",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "anytime",
+     "day",
+     "week",
+     "half-year"
+    ],
+    "default": "anytime",
+    "help": "Publish time range"
+   },
+   {
+    "name": "scope",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "all",
+     "seen",
+     "unseen",
+     "following"
+    ],
+    "default": "all",
+    "help": "Search scope"
+   },
+   {
+    "name": "location",
+    "type": "string",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "all",
+     "same-city",
+     "nearby"
+    ],
+    "default": "all",
+    "help": "Location distance"
+   }
+  ],
+  "columns": [
+   "rank",
+   "title",
+   "author",
+   "likes",
+   "published_at",
+   "url"
+  ],
+  "domain": "www.xiaohongshu.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "xiaohongshu/user",
+  "site": "xiaohongshu",
+  "name": "user",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "id",
+    "type": "string",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "User id or profile URL"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 15,
+    "help": "Number of notes to return"
+   }
+  ],
+  "columns": [
+   "id",
+   "title",
+   "type",
+   "likes",
+   "url"
+  ],
+  "domain": "www.xiaohongshu.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "xiaoyuzhou/episode",
+  "site": "xiaoyuzhou",
+  "name": "episode",
+  "aliases": [],
+  "access": "read",
+  "strategy": "local",
+  "browser": false,
+  "args": [
+   {
+    "name": "id",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Episode ID (eid from podcast-episodes output)"
+   }
+  ],
+  "columns": [
+   "title",
+   "podcast",
+   "duration",
+   "plays",
+   "comments",
+   "likes",
+   "date"
+  ],
+  "domain": "www.xiaoyuzhoufm.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "xiaoyuzhou/podcast",
+  "site": "xiaoyuzhou",
+  "name": "podcast",
+  "aliases": [],
+  "access": "read",
+  "strategy": "local",
+  "browser": false,
+  "args": [
+   {
+    "name": "id",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Podcast ID (from xiaoyuzhoufm.com URL)"
+   }
+  ],
+  "columns": [
+   "title",
+   "author",
+   "description",
+   "subscribers",
+   "episodes",
+   "updated"
+  ],
+  "domain": "www.xiaoyuzhoufm.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "zhihu/hot",
+  "site": "zhihu",
+  "name": "hot",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "Number of items to return"
+   }
+  ],
+  "columns": [
+   "rank",
+   "title",
+   "heat",
+   "answers"
+  ],
+  "domain": "www.zhihu.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "zhihu/login",
+  "site": "zhihu",
+  "name": "login",
+  "aliases": [],
+  "access": "write",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "timeout",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 300,
+    "help": "Maximum seconds to wait for the user to finish login"
+   }
+  ],
+  "columns": [
+   "status",
+   "logged_in",
+   "site",
+   "url_token",
+   "name",
+   "uid"
+  ],
+  "domain": "www.zhihu.com",
+  "defaultFormat": null,
+  "siteSession": "persistent"
+ },
+ {
+  "command": "zhihu/search",
+  "site": "zhihu",
+  "name": "search",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "query",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Search query"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 10,
+    "help": "Number of results (max 1000; use normal-sized requests)"
+   },
+   {
+    "name": "type",
+    "type": "str",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "all",
+     "answer",
+     "article",
+     "question"
+    ],
+    "default": "all",
+    "help": "Result type: all, answer, article, or question"
+   }
+  ],
+  "columns": [
+   "rank",
+   "title",
+   "type",
+   "author",
+   "votes",
+   "url"
+  ],
+  "domain": "www.zhihu.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "zhihu/user",
+  "site": "zhihu",
+  "name": "user",
+  "aliases": [],
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "user",
+    "type": "string",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "User url_token or people URL, e.g. wen-jie-16-47"
+   }
+  ],
+  "columns": [
+   "url_token",
+   "name",
+   "headline",
+   "followers",
+   "following",
+   "answers",
+   "articles",
+   "voteup",
+   "url"
+  ],
+  "domain": "www.zhihu.com",
+  "defaultFormat": null,
+  "siteSession": null
+ }
+]
