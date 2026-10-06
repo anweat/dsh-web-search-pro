@@ -419,7 +419,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | `zhihu` | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
 | `rdt`（reddit） | `rdt` | 0.4.2 | contract-only（同上） |
 | 独立 `opencli`（按站点） | `opencli` | 1.8.8 | contract-only：只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json` |
-| `wx-search-cli`（wechat 第二后端） | `wx-search-cli` | 0.1.0 | docs-only：按上游 README / 源码，未安装 |
+| `wx-search-cli`（wechat 第二后端） | `wx-search-cli` | 0.1.0 | contract-only：帮助与版本已在真实安装上探测；输出形状按上游 README / 源码，未运行搜索 |
 | `tanso` | `tanso` | 2.0.2 | docs-only：按上游 README，未安装；只选 `bocha_web` 与 `zhihu_search` |
 
 目录里另有只列条目、没有适配的 `douyin-cli`（它的 README 没写搜索记录的字段）。contract-only 的字段映射来自工具自己的帮助 / 源码，并有标成 “constructed” 的夹具测试；它们在真实登录后的输出上还没被确认。

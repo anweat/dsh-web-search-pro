@@ -3,10 +3,10 @@
  * `--help` (and, where the help does not show the output shape, from the installed package source or the upstream
  * README), and `verification` records how far each was checked:
  *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach/wechat);
- *  - `contract-only`: help and version probed on a real install, output shape taken from the tool's own source or
- *    documented output option, because a search needs the user's login or reads browser cookies (xhs, zhihu, rdt, twitter,
- *    opencli sites, yt-dlp);
- *  - `docs-only`: not installed here; derived from the upstream README / source (wx-search-cli, tanso).
+ *  - `contract-only`: help and version probed on a real install, output shape taken from the tool's own source,
+ *    README or documented output option, because a search needs the user's login or reads browser cookies, or was outside
+ *    the checks allowed (xhs, zhihu, rdt, twitter, opencli sites, yt-dlp, wx-search-cli);
+ *  - `docs-only`: not installed here; derived from the upstream README (tanso).
  * Fixtures for the contract-only and docs-only parsers are marked "constructed from help/docs" in test/fixtures/cli.
  * @module web-search-pro/cli/builtin-specs
  */
@@ -289,7 +289,7 @@ const wxSearchCli: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 45_000,
   maxOutputBytes: 2 * MB,
-  verification: { status: 'docs-only', version: '0.1.0', date: SPEC_CHECK_DATE, note: 'not installed here; from the upstream README and src/index.ts (read with gh api): JSON array of { title, link, real_url, publish_time, page }' },
+  verification: { status: 'contract-only', version: '0.1.0', date: SPEC_CHECK_DATE, note: 'help and version probed on a real install; output shape (JSON array of { title, link, real_url, publish_time, page }) from the upstream README and src/index.ts read with gh api; no search was run' },
 }
 
 const tanso: CliAdapterSpec = {

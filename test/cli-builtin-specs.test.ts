@@ -38,9 +38,9 @@ test('every built-in spec passes the same validation as a user spec, and is read
   }
 })
 
-test('verification records: live only where a real read-only search was run, docs-only where the tool is not installed', () => {
+test('verification records: live only where a real read-only search was run, docs-only where the tool was not available to probe', () => {
   const status = Object.fromEntries(BUILTIN_CLI_SPECS.map(s => [s.id, s.verification!.status]))
-  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'contract-only', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'docs-only', tanso: 'docs-only' })
+  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'contract-only', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'contract-only', tanso: 'docs-only' })
   for (const s of BUILTIN_CLI_SPECS) {
     if (s.verification!.status === 'live') assert.match(s.verification!.date ?? '', /^\d{4}-\d{2}-\d{2}$/)
     assert.ok(s.verification!.version, s.id + ' records the verified version')
@@ -64,6 +64,7 @@ test('contract probes accept the real help and version output captured on 2026-1
   check('omnireach', 'omnireach', 'omnireach-search.txt', 'omnireach-version.txt')
   check('gh', 'gh', 'gh-search-repos.txt', 'gh-version.txt')
   check('yt-dlp', 'yt-dlp', 'yt-dlp-excerpt.txt', 'yt-dlp-version.txt')
+  check('wx-search-cli', 'wx-search-cli', 'wx-search-cli.txt', 'wx-search-cli-version.txt')
   // The standalone OpenCLI is probed by its own probe subject.
   const opencli = { probe: { versionArgs: ['--version'], minVersion: '1.8.0', helpArgs: ['list', '--help'], mustContain: ['--format', 'json'] } }
   assert.equal(evaluateCliContract(opencli, 'opencli', { code: 0, output: help('opencli-version.txt') }, { code: 0, output: help('opencli-list.txt') }).state, 'detected')
@@ -138,7 +139,7 @@ test('xhs / rdt / zhihu / twitter / yt-dlp (constructed from help and installed 
   ])
 })
 
-test('wx-search-cli and tanso (docs-only fixtures): drop captcha rows, keep the documented fields', () => {
+test('wx-search-cli (README fixture) and tanso (docs-only fixture): drop captcha rows, keep the documented fields', () => {
   assert.deepEqual(parse('wx-search-cli', 'constructed-wx-search-cli.json'), [{ url: 'https://mp.weixin.qq.com/s?src=11&abc', title: '人工智能周报', publishedAt: '2026-09-30T08:00:00Z' }])
   assert.deepEqual(parse('tanso', 'constructed-tanso.json'), [{ url: 'https://example.com/article', title: 'Example result title', snippet: 'A normalized summary from the provider response.' }])
   // Tanso never asks for the paid Volcengine answer source.

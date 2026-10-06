@@ -1,0 +1,21 @@
+wx-search-cli v0.1.0
+Search and read WeChat official account (公众号) articles via Sogou WeChat search.
+
+Usage:
+  wx-search-cli search <query> [--page <n>]            Search articles, one page (JSON to stdout)
+  wx-search-cli search-all <query> [--max-pages <n>]   Search with auto pagination (JSON to stdout)
+  wx-search-cli content <real_url> [--referer <url>]   Fetch article body text (plain text to stdout)
+
+Options:
+  --page <n>        Page number for search (default: 1)
+  --max-pages <n>   Max pages for search-all (default: 10)
+  --referer <url>   Referer header for content, typically the "link" field from search results
+  -h, --help        Show this help
+  -v, --version     Show version
+
+Examples:
+  wx-search-cli search "人工智能"
+  wx-search-cli search "人工智能" --page 2
+  wx-search-cli search-all "人工智能" --max-pages 3
+  wx-search-cli content "https://mp.weixin.qq.com/s?src=11&..." --referer "https://weixin.sogou.com/link?..."
+

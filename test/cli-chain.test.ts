@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { registerHooks } from 'node:module'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -13,6 +14,17 @@ import { platformBackendIssues } from '../src/cli/chains-spec.ts'
 import { detectDeps } from '../src/deps.ts'
 import { BROWSER_020 } from './browser-stub.ts'
 import { baseSpec, posix, withCommands } from './cli-helpers.ts'
+import { findAction } from '../src/actions/registry.ts'
+import { checkOutput } from '../src/actions/schema.ts'
+import { callAction, renderResult } from './call-helper.ts'
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '@deepseek-ai/dsh-tools') return { url: 'data:text/javascript,export const defineTool = value => value', shortCircuit: true }
+    return nextResolve(specifier, context)
+  },
+})
+const { registerTools } = await import('../src/tools.ts')
 
 const WX_HELP = 'case "$1" in --version) echo "0.1.0";; *) echo "wx-search-cli v0.1.0 search <query> Sogou";; esac'
 const wxRows = (rows: object[]): string => WX_HELP.replace(';; esac', ';; esac').replace('*) echo', 'search) printf \'%s\' \'' + JSON.stringify(rows) + '\';; *) echo')
@@ -84,7 +96,7 @@ test('a backend that is missing is skipped with the reason and the next one answ
       assert.equal(out.sources[0]!.url, 'https://mp.weixin.qq.com/s?a=1')
       assert.equal(h.store.listQueries({ kind: 'platform' })[0]!.engine, 'wx-search-cli', 'history names the leg')
       const report = await chainReport('wechat', { deps: h.deps(), config: h.config })
-      assert.deepEqual(report.entries.map(e => [e.id, e.state, e.installation, e.verification]), [['omnireach', 'skipped', 'missing', 'live'], ['wx-search-cli', 'ready', 'detected', 'docs-only']])
+      assert.deepEqual(report.entries.map(e => [e.id, e.state, e.installation, e.verification]), [['omnireach', 'skipped', 'missing', 'live'], ['wx-search-cli', 'ready', 'detected', 'contract-only']])
       assert.match(report.entries[0]!.reason!, /omnireach: omnireach not found on PATH.*omnireach/)
       assert.equal(report.available, true)
       assert.equal(report.installation, 'detected')
@@ -175,7 +187,7 @@ test('detectDeps reports every adapter CLI: missing, detected with its version, 
     assert.deepEqual([byId.get('gh')!.installation, byId.get('gh')!.version, byId.get('gh')!.available, byId.get('gh')!.verification], ['detected', '2.101.0', true, 'live'])
     assert.deepEqual([byId.get('rdt')!.installation, byId.get('rdt')!.available], ['incompatible', false])
     assert.deepEqual([byId.get('xhs')!.installation, byId.get('xhs')!.available], ['missing', false])
-    assert.deepEqual([byId.get('tanso')!.verification, byId.get('wx-search-cli')!.verification, byId.get('xhs')!.verification], ['docs-only', 'docs-only', 'contract-only'])
+    assert.deepEqual([byId.get('tanso')!.verification, byId.get('wx-search-cli')!.verification, byId.get('xhs')!.verification], ['docs-only', 'contract-only', 'contract-only'])
     assert.equal(byId.get('custom-cli:demo')!.available, true)
     assert.equal(byId.get('custom-cli:demo')!.verification, undefined, 'user adapters carry no verification')
     assert.ok(byId.get('xhs')!.installs.some(i => i.command === 'uv tool install xiaohongshu-cli'))
@@ -229,4 +241,35 @@ test('sources.status carries the chain of each platform and the adapter diagnost
       assert.ok(h.router.cliAdapterProblems().some(p => /cliAdapters\.bad ignored/.test(p)))
     } finally { h.cleanup() }
   })
+})
+
+test('sources.deps / sources.status / search.recommend agree with the chains: installation, versions, skip reasons, and the closed output schemas', { skip: !posix }, async () => {
+  const omniHelp = omnireach(JSON.stringify({ query: 'q', ts: 't', errors: [], results: [] }))
+  for (const installed of [false, true]) {
+    await withCommands(installed ? { omnireach: omniHelp } : {}, async () => {
+      const h = harness({}, { browser: false })
+      try {
+        const defs = new Map<string, any>()
+        registerTools({ ctx: { tools: { register: (d: any) => defs.set(d.name, d) } } as any, config: h.config, dynamic: () => h.config, store: h.store, router: h.router as any, fetch: {} as any })
+        const status = await callAction(defs, 'sources.status')
+        assert.deepEqual(checkOutput(findAction('sources.status')!.output, status), [])
+        const omni = status.cli.find((c: any) => c.id === 'omnireach')
+        assert.deepEqual([omni.available, omni.installation, omni.version], installed ? [true, 'detected', '0.19.0'] : [false, 'missing', undefined])
+        const wechat = status.providers.find((p: any) => p.route === 'wechat')
+        assert.equal(wechat.readiness.available, installed)
+        assert.equal(wechat.chain[0].state, installed ? 'ready' : 'skipped')
+        assert.match(renderResult('sources.status', status), installed ? /1\. omnireach \[ready 0\.19\.0\] live/ : /1\. omnireach \[skipped\] live — omnireach: omnireach not found on PATH/)
+        const deps = await callAction(defs, 'sources.deps')
+        assert.deepEqual(checkOutput(findAction('sources.deps')!.output, deps), [])
+        assert.equal(deps.backends.find((b: any) => b.id === 'omnireach').installation, installed ? 'detected' : 'missing')
+        const rec = await callAction(defs, 'search.recommend', { task: '公众号 文章 大模型备案', platform: 'wechat' })
+        assert.deepEqual(checkOutput(findAction('search.recommend')!.output, rec), [])
+        const pick = rec.picks.find((p: any) => p.id === 'wechat')
+        assert.ok(pick, rec.picks.map((p: any) => p.id).join())
+        assert.equal(pick.use, 'search.run platform=wechat')
+        assert.equal(pick.status, installed ? 'ready' : 'needs_setup')
+        if (!installed) assert.match(pick.missing.join(' | '), /no usable backend: omnireach: omnireach not found on PATH/)
+      } finally { h.cleanup() }
+    })
+  }
 })
