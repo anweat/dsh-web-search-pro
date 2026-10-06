@@ -5,7 +5,7 @@
  */
 
 import { browserState } from '../browser-access.ts'
-import { detectDeps, installDep } from '../deps.ts'
+import { defaultInstaller, detectDeps, installDep } from '../deps.ts'
 import { judgeStatus, type JudgeStatus } from '../pipeline/judge-status.ts'
 import { resolveAllRubrics } from '../pipeline/rubrics.ts'
 import type { ProviderReport } from '../router.ts'
@@ -29,6 +29,10 @@ const PROVIDER_REPORT_SCHEMA: OutputNode = {
       daily: { type: 'object', additionalProperties: false, properties: { limit: { type: 'number', required: true }, used: { type: 'number', required: true }, remaining: { type: 'number', required: true } } },
     } },
     unverified: { type: 'boolean' },
+    chain: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
+      id: { type: 'string', required: true }, kind: { type: 'string', required: true }, label: { type: 'string', required: true }, order: { type: 'number', required: true }, state: { type: 'string', required: true },
+      installation: { type: 'string' }, version: { type: 'string' }, credential: { type: 'string' }, reason: { type: 'string' }, verification: { type: 'string', required: true },
+    } } },
     readiness: { type: 'object', additionalProperties: false, properties: {
       available: { type: 'boolean', required: true }, installation: { type: 'string' }, credential: { type: 'string' }, health: { type: 'string' }, reason: { type: 'string' }, diagnosticCode: { type: 'string' },
       lastLocalCheck: { type: 'string' }, lastRemoteSuccess: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' },
@@ -66,7 +70,7 @@ const WEB_ROUTE_SCHEMA: OutputNode = {
   properties: { id: { type: 'string', required: true }, registered: { type: 'boolean', required: true }, evidence: { type: 'string', required: true }, search: SELECTION_SCHEMA, fetch: SELECTION_SCHEMA },
 }
 
-const DEP_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, usedBy: { type: 'string', required: true }, available: { type: 'boolean', required: true }, optional: { type: 'boolean' }, path: { type: 'string' }, source: { type: 'string' }, requiredVersion: { type: 'string' }, version: { type: 'string' }, diagnostic: { type: 'string' }, installs: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { installer: { type: 'string', required: true }, command: { type: 'string', required: true } } } } } }
+const DEP_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, usedBy: { type: 'string', required: true }, available: { type: 'boolean', required: true }, optional: { type: 'boolean' }, path: { type: 'string' }, source: { type: 'string' }, requiredVersion: { type: 'string' }, version: { type: 'string' }, diagnostic: { type: 'string' }, installation: { type: 'string' }, verification: { type: 'string' }, installs: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { installer: { type: 'string', required: true }, command: { type: 'string', required: true } } } } } }
 
 /**
  * Whether the twitter platform backend can really run: the `twitter` command works (probed by detectDeps)
@@ -81,17 +85,10 @@ export function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'age
 }
 
 function defaultInstallerFor(backend: string): string {
-  switch (backend) {
-    case 'bili': return 'uv'
-    case 'yt-dlp': return 'uv'
-    case 'agent-reach': return 'uv'
-    case 'twitter': return 'uv'
-    case 'mcporter': return 'npm'
-    default: throw new ActionArgError('unknown backend: ' + backend, 'Backend ids: bili, yt-dlp, twitter, agent-reach, mcporter (sources.deps lists them).')
-  }
+  try { return defaultInstaller(backend) } catch (error) { throw new ActionArgError(error instanceof Error ? error.message : String(error), 'sources.deps lists the backend ids.') }
 }
 
-type Dep = { id: string; label: string; usedBy: string; available: boolean; optional?: boolean; path?: string; source?: string; requiredVersion?: string; version?: string; diagnostic?: string; installs: { installer: string; command: string }[] }
+type Dep = { id: string; label: string; usedBy: string; available: boolean; optional?: boolean; path?: string; source?: string; requiredVersion?: string; version?: string; diagnostic?: string; installation?: string; verification?: string; installs: { installer: string; command: string }[] }
 
 export const SOURCES_ACTIONS: ActionDef[] = [
   {
@@ -105,7 +102,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       properties: {
         engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
         providers: { type: 'array', items: PROVIDER_REPORT_SCHEMA },
-        cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' } } } },
+        cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' }, installation: { type: 'string' }, version: { type: 'string' }, verification: { type: 'string' } } } },
         browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
         webRoute: WEB_ROUTE_SCHEMA,
         notes: { type: 'array', items: { type: 'string' } },
@@ -119,7 +116,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
     async execute(_args, ctx) {
       const { router, store } = ctx
       const cfg = ctx.dynamic()
-      const cli = await detectDeps()
+      const cli = await detectDeps({ config: cfg })
       const availability = new Map(cli.map(value => [value.id, value.available]))
       const ev = cfg.evidence
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
@@ -128,13 +125,14 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       const problems = [
         ...typeof (router as { customPlatformProblems?: unknown }).customPlatformProblems === 'function' ? router.customPlatformProblems() : [],
         ...typeof (router as { sourceDiagnostics?: unknown }).sourceDiagnostics === 'function' ? router.sourceDiagnostics() : [],
+        ...typeof (router as { cliAdapterProblems?: unknown }).cliAdapterProblems === 'function' ? router.cliAdapterProblems() : [],
       ]
       return {
         engines: await router.backendDiagnostics(availability),
         ...typeof (router as { providerReport?: unknown }).providerReport === 'function' ? { providers: await router.providerReport(availability) } : {},
         cli: cli.map(v => {
           const gate = v.id === 'twitter' ? twitterGate(cfg, v) : undefined
-          return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
+          return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...v.installation ? { installation: v.installation } : {}, ...v.version ? { version: v.version } : {}, ...v.verification ? { verification: v.verification } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
         }),
         browser: browserState(ctx.browser()),
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
@@ -144,18 +142,19 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; sources?: { policy: string; priority: string[]; disabled: string[] }; cli: { id: string; available: boolean; path?: string; note?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; sources?: { policy: string; priority: string[]; disabled: string[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
       const lines = v.engines.map(e => (e.available ? '✅ ' : '❌ ') + e.id + ' [' + e.state + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health].filter(Boolean).join(' ')
         lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
+        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + leg.verification + (leg.reason ? ' — ' + leg.reason : ''))
         const b = p.budget
         if (b) lines.push('    request budget ' + p.route + ': ' + [b.total && 'total ' + b.total.used + '/' + b.total.limit + ' (' + b.total.remaining + ' left)', b.daily && 'today ' + b.daily.used + '/' + b.daily.limit + ' (' + b.daily.remaining + ' left)'].filter(Boolean).join(', ') + (b.exhausted ? ' — used up: skipped, the plan falls back to other sources' : ''))
       }
       if (v.sources) lines.push('source strategy: policy=' + v.sources.policy + (v.sources.priority.length ? ', priority: ' + v.sources.priority.join(' > ') : '') + (v.sources.disabled.length ? ', disabled: ' + v.sources.disabled.join(', ') : ''))
       lines.push(...(v.notes ?? []).map(n => '  ⚠ ' + n))
-      lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
+      lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.installation && e.installation !== 'detected' ? ' [' + e.installation + ']' : '') + (e.version ? ' ' + e.version : '') + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
       if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + (v.browser.state === 'legacy' ? 'legacy (unsupported)' : v.browser.state) + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
       if (v.webRoute) lines.push(...renderProviderState(v.webRoute))
       if (v.evidence) {
@@ -179,14 +178,15 @@ export const SOURCES_ACTIONS: ActionDef[] = [
   {
     name: 'sources.deps',
     group: 'sources',
-    summary: 'List the external CLIs this plugin runs (bili, yt-dlp, twitter, mcporter; agent-reach is an optional helper): what is present, versions, and install commands. Playwright and OpenCLI belong to dsh-browser.',
+    summary: 'List the external CLIs the backends run (bili, yt-dlp, twitter, xhs, zhihu, rdt, omnireach, gh, opencli, your cliAdapters, ...): installation (missing / detected / incompatible with the reason), version, how far each adapter was verified, install commands. Local cached probes; never searches or logs in.',
     params: {},
     output: { type: 'object', additionalProperties: false, properties: { backends: { type: 'array', required: true, items: DEP_SCHEMA }, message: { type: 'string' } } },
     approval: 'none', mutating: false, concurrencySafe: true,
     timeoutMs: config => config.timeoutMs + 180_000,
     examples: [{ args: {} }],
-    async execute() {
-      const backends = await detectDeps()
+    async execute(_args, ctx) {
+      // An explicit check re-probes (sources.status and search.recommend reuse the cached probes of the last minute).
+      const backends = await detectDeps({ config: ctx.dynamic(), force: true })
       const allOk = backends.every(b => b.available || b.optional)
       return {
         backends: backends.map(b => ({ ...b, installs: b.installs })),
@@ -199,10 +199,10 @@ export const SOURCES_ACTIONS: ActionDef[] = [
     name: 'sources.install',
     group: 'sources',
     summary: 'Run one install command for a missing CLI dependency. Only when the user asks; it needs approval.',
-    notes: 'Check with sources.deps first. Installers: winget, choco, uv, pipx, pip or npm.',
+    notes: 'Check with sources.deps first. Installers: winget, choco, brew, uv, pipx, pip or npm. Logging in to a tool (`xhs login`, `gh auth login`, ...) is never done here: the user runs it.',
     params: {
-      backend: { type: 'string', required: true, description: 'Dependency id (bili, yt-dlp, twitter, agent-reach, mcporter).' },
-      installer: { type: 'string', description: 'winget, choco, uv, pipx, pip or npm; default per backend.' },
+      backend: { type: 'string', required: true, description: 'Dependency id from sources.deps (bili, yt-dlp, twitter, xhs, zhihu, rdt, omnireach, gh, wx-search-cli, tanso, opencli, agent-reach, mcporter).' },
+      installer: { type: 'string', description: 'winget, choco, brew, uv, pipx, pip or npm; default: the first one listed for the backend.' },
     },
     output: {
       type: 'object', additionalProperties: false,
@@ -227,7 +227,7 @@ function renderDeps(v: { backends: Dep[]; message?: string }): string {
   const parts: string[] = []
   if (v.message) parts.push(v.message)
   for (const b of v.backends) {
-    const details = [b.version ? '版本 ' + b.version : '', b.requiredVersion ? '要求 ' + b.requiredVersion : '', b.source ? '来源 ' + b.source : '', b.path ? b.path : ''].filter(Boolean)
+    const details = [b.installation && b.installation !== 'detected' ? b.installation : '', b.verification ? '适配 ' + b.verification : '', b.version ? '版本 ' + b.version : '', b.requiredVersion ? '要求 ' + b.requiredVersion : '', b.source ? '来源 ' + b.source : '', b.path ? b.path : ''].filter(Boolean)
     parts.push((b.available ? '✅' : b.optional ? '➖' : '❌') + ' ' + b.label + ' (' + b.id + ') — ' + b.usedBy + (details.length ? ' · ' + details.join(' · ') : ''))
     if (b.diagnostic) parts.push('   诊断: ' + b.diagnostic)
     if (!b.available) parts.push('   安装: ' + b.installs.map(i => i.installer + ': ' + i.command).join('   |   '))

@@ -44,7 +44,7 @@ function dummy(id: string, over: Partial<ProviderAdapter['descriptor']> = {}, en
 
 test('registry: built-ins carry namespaced ids with the legacy short ids as aliases; both spellings resolve to one route id', () => {
   const r = createBuiltinRegistry()
-  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'github-code', 'github-issues', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan'])
+  assert.deepEqual(r.searchIds(), ['seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'github-code', 'github-issues', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'wechat', 'omnireach', 'tanso', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan'])
   assert.deepEqual([...SEARCH_ENGINE_IDS], r.searchIds())
   assert.equal(r.resolve('builtin:ddg'), r.resolve('ddg'))
   assert.equal(r.routeId('builtin:bocha'), 'bocha')
@@ -56,14 +56,15 @@ test('registry: built-ins carry namespaced ids with the legacy short ids as alia
     assert.match(d.id, /^(builtin|platform):/)
     assert.deepEqual(d.operations, ['search'])
     assert.equal(routeIdOf(d), d.aliases[0])
-    assert.ok(d.languages.length && d.taskProfiles.length && d.regions.length && d.resultKinds.length, d.id)
+    // omnireach and tanso are addressed only by name: no task profile, so the planner never picks them.
+    assert.ok(d.languages.length && (d.taskProfiles.length || ['platform:omnireach', 'platform:tanso'].includes(d.id)) && d.regions.length && d.resultKinds.length, d.id)
   }
 })
 
 test('registry: validation accepts aliases and full ids, and an unknown id gets a clear error listing the available ones', () => {
   const r = createBuiltinRegistry()
   assert.deepEqual(r.validate(['builtin:ddg', 'bocha', 'ddg']), ['ddg', 'bocha'])
-  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, github-code, github-issues, xiaohongshu, twitter, reddit, instagram, facebook, rss, zhihu, weibo, douban, tieba, douyin, kuaishou, bocha, wikipedia, hackernews, stackexchange, openalex, semanticscholar, anysearch, searxng, tavily, brave, linkup, serper, metaso, zhipu, baidu-qianfan\)/)
+  assert.throws(() => r.validate(['ddg', 'nope', 'other']), /unknown engine: nope, other \(available: seam, exa, ddg, bing, jina, github, bilibili, v2ex, youtube, arxiv, pubmed, github-code, github-issues, xiaohongshu, twitter, reddit, instagram, facebook, rss, zhihu, weibo, douban, tieba, douyin, kuaishou, wechat, omnireach, tanso, bocha, wikipedia, hackernews, stackexchange, openalex, semanticscholar, anysearch, searxng, tavily, brave, linkup, serper, metaso, zhipu, baidu-qianfan\)/)
   assert.throws(() => r.validate(['  ']), /unknown engine/)
 })
 
@@ -74,7 +75,7 @@ test('registry: a duplicate id or a taken alias throws; register returns an unre
   assert.throws(() => r.register(dummy('vendor:x', { aliases: ['same', 'same'] })), /duplicate alias|already used/)
   assert.throws(() => r.register(dummy('Bad Id')), /invalid provider id/)
   assert.throws(() => r.register(dummy('vendor:y', { aliases: ['a b'] })), /invalid provider alias/)
-  assert.equal(r.searchIds().length, 40, 'failed registrations left nothing behind')
+  assert.equal(r.searchIds().length, 43, 'failed registrations left nothing behind')
 
   const before = r.revision
   const off = r.register(dummy('vendor:acme'))

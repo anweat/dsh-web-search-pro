@@ -29,7 +29,7 @@ export type TopField =
   | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright'
   | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant'
   | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains'
-  | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'verbose'
+  | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose'
 
 /** Options inside `evidence` / `provider`, addressed by their dotted config path. */
 export type PathField =
@@ -260,6 +260,8 @@ export const FIELD_SPECS: readonly FieldSpec[] = [
   jsonField('platformRules'),
   jsonField('customPlatforms'),
   jsonField('browserBindings'),
+  jsonField('platformBackends'),
+  jsonField('cliAdapters'),
   booleanField('verbose'),
 ] as const
 

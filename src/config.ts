@@ -228,6 +228,13 @@ export interface Config {
   customPlatforms?: Record<string, CustomPlatformSpec>
   /** Per-platform binding to domain-scoped dsh-browser auth/rule profiles. */
   browserBindings?: Record<string, BrowserBinding>
+  /**
+   * Ordered backend chain per platform (dev-plan M12): backend ids such as `xhs`, `opencli` (standalone OpenCLI), `browser-opencli`
+   * (dsh-browser), `browser-search`, `rest`, `gh`, `custom-cli:<id>`. A platform not listed uses its default chain.
+   */
+  platformBackends?: Record<string, string[]>
+  /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
+  cliAdapters?: Record<string, Record<string, unknown>>
   /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
   playwright: {
     /** Gate the playwright fallback backend in read.fetch. */
@@ -314,6 +321,8 @@ export const Config = z.object({
     authProfile: z.string(),
     rulePack: z.string(),
   })).volatile(),
+  platformBackends: z.dict(z.array(z.string())).volatile(),
+  cliAdapters: z.dict(z.dict(z.any())).volatile(),
   playwright: z.object({
     enabled: z.boolean().default(true).volatile(),
     snapshotDir: z.string(),
@@ -509,6 +518,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
     platformRules: config.platformRules !== undefined ? v(config.platformRules) : undefined,
     customPlatforms: config.customPlatforms !== undefined ? v(config.customPlatforms) : undefined,
     browserBindings: config.browserBindings !== undefined ? v(config.browserBindings) : undefined,
+    platformBackends: config.platformBackends !== undefined ? v(config.platformBackends) : undefined,
+    cliAdapters: config.cliAdapters !== undefined ? v(config.cliAdapters) : undefined,
     playwright: {
       enabled: vOr(pw.enabled, true) as boolean,
       snapshotDir,

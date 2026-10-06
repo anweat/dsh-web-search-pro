@@ -11,7 +11,7 @@ test('settings panel covers every non-secret Web Search Pro configuration field'
     'bochaApiKeyEnv', 'bochaBaseUrl', 'bochaSummary', 'searxngUrl', 'openalexMailto',
     'enableCliBackends', 'opencliEnabled', 'agentReachEnabled', 'providerId', 'registerProvider', 'toolSurface', 'playwright',
     'ttlSeconds', 'memoryCacheEntries', 'rrfConstant', 'freshnessBoost', 'freshnessDays', 'authorityBoost',
-    'authorityDomains', 'dbPath', 'allowProxyFakeIp', 'platformRules', 'customPlatforms', 'browserBindings', 'verbose',
+    'authorityDomains', 'dbPath', 'allowProxyFakeIp', 'platformRules', 'customPlatforms', 'browserBindings', 'platformBackends', 'cliAdapters', 'verbose',
   ])
 })
 

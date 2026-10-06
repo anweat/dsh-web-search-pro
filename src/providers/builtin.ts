@@ -6,12 +6,12 @@
  */
 
 import {
-  seamEngine, exaEngine, ddgEngine, bingEngine, jinaSearchEngine, githubEngine, bilibiliEngine, v2exEngine,
-  youtubeEngine, arxivEngine, pubmedEngine, type Engine, type EngineDeps,
+  seamEngine, exaEngine, ddgEngine, bingEngine, jinaSearchEngine, v2exEngine,
+  arxivEngine, pubmedEngine, type Engine, type EngineDeps,
 } from '../engines.ts'
 import type { ResolvedConfig } from '../config.ts'
 import { bochaAdapter } from './bocha.ts'
-import { platformAdapters } from './platforms.ts'
+import { chainProvider, platformAdapters } from './platforms.ts'
 import { wikipediaAdapter } from './wikipedia.ts'
 import { hackerNewsAdapter } from './hackernews.ts'
 import { stackExchangeAdapter } from './stackexchange.ts'
@@ -46,12 +46,6 @@ function adapter(d: ProviderDescriptor, create: Create, dims: (env: ProbeEnv, av
 }
 
 const noRequirements = (): Omit<Readiness, 'available'> => ({ installation: 'not_required', credential: 'not_required' })
-
-/** A CLI the engine runs: `missing` only when the caller scanned and did not find it. */
-function cliDims(cli: string, available: boolean, env: ProbeEnv): Omit<Readiness, 'available'> {
-  const present = env.cli?.get(cli)
-  return { credential: 'not_required', ...present !== undefined ? { installation: present ? 'detected' as const : 'missing' as const } : {}, ...!available && present === false ? { reason: cli + ' executable not found', diagnosticCode: 'cli_missing' } : {} }
-}
 
 const key = (id: string, env: string[], optional?: boolean, note?: string): Requirement => ({ kind: 'key', id, env, ...optional ? { optional } : {}, ...note ? { note } : {} })
 
@@ -90,23 +84,24 @@ export function builtinAdapters(): ProviderAdapter[] {
       requirements: [key('jina-key', ['JINA_API_KEY'])], costModel: { kind: 'unknown', note: 'search needs a key; every new key comes with 10M free tokens, one time, a search costs at least 10,000 (https://jina.ai/reader/, read 2026-10-04)' }, costTier: 'free-quota',
     }), jinaSearchEngine, (env) => ({ installation: 'not_required', credential: (env.deps.jinaApiKey?.length ?? 0) > 0 ? 'configured' : 'missing' })),
 
-    adapter(descriptor({
+    // GitHub repositories: the REST client first (anonymous works, a token raises the limit), then the gh CLI (dev-plan M12).
+    chainProvider('github', descriptor({
       id: 'builtin:github', label: 'GitHub', kind: 'platform', domains: ['github.com'], taskProfiles: ['docs_code', 'compare'], resultKinds: ['code'], sourceFamily: 'github',
-      requirements: [key('github-token', ['GITHUB_TOKEN', 'GH_TOKEN'], true, 'optional: raises the rate limit')],
-    }), githubEngine, (env) => ({ installation: 'not_required', credential: (env.deps.githubToken?.length ?? 0) > 0 ? 'configured' : 'not_required' })),
+      requirements: [key('github-token', ['GITHUB_TOKEN', 'GH_TOKEN'], true, 'optional: raises the rate limit'), { kind: 'cli', id: 'gh', optional: true, note: 'fallback backend: GitHub CLI (`gh auth login` is yours to run)' }],
+    })),
 
-    adapter(descriptor({
+    chainProvider('bilibili', descriptor({
       id: 'builtin:bilibili', label: 'Bilibili', kind: 'platform', domains: ['bilibili.com'], taskProfiles: ['experience'], languages: ['zh'], regions: ['cn'], resultKinds: ['video'],
       requirements: [{ kind: 'cli', id: 'bili' }],
-    }), bilibiliEngine, (env, ok) => cliDims('bili', ok, env)),
+    })),
 
     adapter(descriptor({ id: 'builtin:v2ex', label: 'V2EX', kind: 'platform', domains: ['v2ex.com'], taskProfiles: ['experience'], languages: ['zh'], regions: ['cn'], resultKinds: ['forum'] }),
       (deps) => v2exEngine(deps.allowProxyFakeIp), noRequirements),
 
-    adapter(descriptor({
+    chainProvider('youtube', descriptor({
       id: 'builtin:youtube', label: 'YouTube', kind: 'platform', domains: ['youtube.com', 'youtu.be'], taskProfiles: ['experience'], resultKinds: ['video'],
       requirements: [{ kind: 'cli', id: 'yt-dlp' }],
-    }), deps => youtubeEngine(deps), (env, ok) => cliDims('yt-dlp', ok, env)),
+    })),
 
     adapter(descriptor({ id: 'builtin:arxiv', label: 'arXiv', kind: 'platform', domains: ['arxiv.org'], taskProfiles: ['academic'], languages: ['en'], resultKinds: ['paper'], sourceFamily: 'arxiv' }),
       (deps) => arxivEngine(deps.allowProxyFakeIp), noRequirements),

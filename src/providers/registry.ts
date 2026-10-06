@@ -18,6 +18,7 @@ import type { BrowserMethod } from '../browser-access.ts'
 import type { ResolvedConfig } from '../config.ts'
 import type { CompiledQuery } from '../pipeline/compile.ts'
 import type { TaskSpec } from '../pipeline/types.ts'
+import type { ChainReport } from '../cli/chain.ts'
 
 export type Operation = 'search'
 
@@ -134,6 +135,8 @@ export interface ProviderAdapter {
   /** Local readiness: declared services, keys, commands. No network, no login, no model call. */
   probeLocal(env: ProbeEnv): Readiness | Promise<Readiness>
   create(deps: EngineDeps, config: ResolvedConfig): Engine
+  /** Platforms with an ordered backend chain (dev-plan M12): the state of every leg for `sources.status`. Local, no search. */
+  chain?(env: ProbeEnv): Promise<ChainReport>
   /** Optional native query compilation (constraints -> provider options); absent = the core compiler's rules / plain query. */
   compile?(task: Pick<TaskSpec, 'goal' | 'query' | 'needs' | 'constraints'>, now: Date): CompiledQuery
 }

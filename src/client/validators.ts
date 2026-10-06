@@ -10,6 +10,8 @@ import { resolveSources, type SourcesInput } from '../pipeline/sources-spec.ts'
 import { CALIBRATED_THRESHOLDS, thresholdKey, thresholdsProblems } from '../pipeline/coverage.ts'
 import { DEFAULT_PROVIDER_ID, PRESETS, resolveProviders, unusableReason, type JudgeSettings } from '../pipeline/judges/providers-spec.ts'
 import { BUILTIN_RUBRIC_IDS, builtinDef, overrideProblems } from '../pipeline/rubrics-spec.ts'
+import { platformBackendIssues } from '../cli/chains-spec.ts'
+import { resolveCliAdapters } from '../cli/spec.ts'
 import { getAt, isRecord, rubricField, type Json, type SettingField } from './form-specs.ts'
 
 /** A problem found in the (draft) evidence settings, attached to the control it concerns. */
@@ -175,4 +177,16 @@ export function sourcesIssues(sources: Json): Issue[] {
 /** Rubric override ids in a settings object that name no built-in rubric (the server ignores them). */
 export function unknownRubricIds(rubrics: unknown): string[] {
   return isRecord(rubrics) ? Object.keys(rubrics).filter(id => !BUILTIN_RUBRIC_IDS.includes(id)) : []
+}
+
+/**
+ * Problems of the CLI adapter settings, from the server's own functions: `cliAdapters` entries the server would ignore
+ * (read-only guard, bad argv, secrets in env) and `platformBackends` that name an unknown platform or a backend that
+ * cannot serve it.
+ */
+export function cliIssues(platformBackends: unknown, cliAdapters: unknown): Issue[] {
+  const issues: Issue[] = []
+  for (const message of resolveCliAdapters(cliAdapters).diagnostics) issues.push({ field: 'cliAdapters', message, level: 'error' })
+  for (const message of platformBackendIssues(platformBackends, cliAdapters)) issues.push({ field: 'platformBackends', message, level: 'error', related: ['cliAdapters'] })
+  return issues
 }

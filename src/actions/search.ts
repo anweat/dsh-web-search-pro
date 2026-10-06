@@ -89,7 +89,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       startPublishedDate: { type: 'string', description: 'Exa only: ISO published-date lower bound.' },
       endPublishedDate: { type: 'string', description: 'Exa only: ISO published-date upper bound.' },
       category: { type: 'string', description: 'Exa only: search category.' },
-      platform: { type: 'string', description: 'Search one platform instead (' + PLATFORM_IDS.join(', ') + ', or a customPlatforms key). Chinese communities and OpenCLI platforms need dsh-browser and a login. With task/profile the platform is the evidence source; if it is unavailable that is an error (allowFallback=true searches the web engines instead).' },
+      platform: { type: 'string', description: 'Search one platform instead (' + PLATFORM_IDS.join(', ') + ', or a customPlatforms key). Each platform runs an ordered backend chain (standalone CLIs, OpenCLI, dsh-browser); logins are yours to do, see sources.status. With task/profile the platform is the evidence source; if it is unavailable that is an error (allowFallback=true searches the web engines instead).' },
       allowFallback: { type: 'boolean', description: 'Evidence mode with an explicit platform: if it is unavailable (no browser, login, CLI or token) search the web engines instead of failing; the pack says so.' },
       url: { type: 'string', description: 'platform=rss only: the feed URL.' },
       authProfile: { type: 'string', description: 'platform only: domain-scoped dsh-browser auth profile.' },
@@ -228,7 +228,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       const language = args.language?.trim().toLowerCase()
       if (language && language !== 'zh' && language !== 'en') throw new ActionArgError('language must be zh or en')
       const { router } = ctx
-      const cli = await detectDeps()
+      const cli = await detectDeps({ config: ctx.dynamic() })
       const availability = new Map(cli.map(value => [value.id, value.available]))
       const catalog = loadCatalog()
       const cfg = ctx.dynamic() as unknown as Record<string, unknown>

@@ -13,7 +13,10 @@ import {
   EngineError,
   type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
 } from './engines.ts'
-import { customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
+import { customCliAdapter, customCliProviderId, customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
+import type { ChainEntryReport } from './cli/chain.ts'
+import { platformBackendIssues } from './cli/chains-spec.ts'
+import { resolveCliAdapters } from './cli/spec.ts'
 import { SourceUnavailableError } from './providers/unavailable.ts'
 import { defaultProviderRegistry, costTierOf, routeIdOf, type CostTier, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
@@ -109,6 +112,8 @@ export interface ProviderReport {
   budget?: RequestBudgetState
   /** Not verified against the live service (descriptor.verification). */
   unverified?: boolean
+  /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
+  chain?: ChainEntryReport[]
   readiness: Readiness & { lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
 }
 
@@ -122,6 +127,9 @@ export class SearchRouter {
   private syncedRevision = -1
   /** Custom platforms (settings `customPlatforms`) this router registered: key -> spec signature + unregister. A key the registry refused stays here with its problem so it is not retried on every call. */
   private readonly custom = new Map<string, { sig: string; off: () => void; problem?: string }>()
+  /** User-defined CLI adapters (settings `cliAdapters`) this router registered as `custom-cli:<id>` platforms, with the diagnostics of the entries it ignored. */
+  private readonly customCli = new Map<string, { sig: string; off: () => void; problem?: string }>()
+  private cliAdapterDiagnostics: string[] = []
   /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
   private readonly readiness = new Map<string, Readiness>()
   /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -166,6 +174,26 @@ export class SearchRouter {
       if (problem) { this.custom.set(key, { sig, off: () => {}, problem }); continue }
       try { this.custom.set(key, { sig, off: this.registry.register(customPlatformAdapter(key, specs[key]!)) }) } catch (error) { this.custom.set(key, { sig, off: () => {}, problem: 'custom platform "' + key + '" was not registered: ' + (error instanceof Error ? error.message : String(error)) }) }
     }
+    this.syncCustomCliAdapters()
+  }
+
+  /** The same for `cliAdapters`: valid specs become `custom-cli:<id>` platforms; an invalid entry is ignored and reported. */
+  private syncCustomCliAdapters(): void {
+    const { specs, diagnostics } = resolveCliAdapters(this.dynamic().cliAdapters)
+    this.cliAdapterDiagnostics = diagnostics
+    const next = new Map([...specs].map(([id, spec]) => [id, JSON.stringify(spec)] as const))
+    for (const [id, entry] of [...this.customCli]) if (next.get(id) !== entry.sig) { entry.off(); this.customCli.delete(id) }
+    for (const [id, sig] of next) {
+      if (this.customCli.has(id)) continue
+      try { this.customCli.set(id, { sig, off: this.registry.register(customCliAdapter(id, specs.get(id)!)) }) } catch (error) { this.customCli.set(id, { sig, off: () => {}, problem: 'cliAdapters.' + id + ' was not registered as ' + customCliProviderId(id) + ': ' + (error instanceof Error ? error.message : String(error)) }) }
+    }
+  }
+
+  /** Configuration problems of the CLI adapter layer for `sources.status`: ignored `cliAdapters` entries and `platformBackends` that name nothing usable. */
+  cliAdapterProblems(): string[] {
+    this.syncCustomPlatforms()
+    const cfg = this.dynamic()
+    return [...this.cliAdapterDiagnostics, ...[...this.customCli.values()].flatMap(entry => (entry.problem ? [entry.problem] : [])), ...platformBackendIssues(cfg.platformBackends, cfg.cliAdapters)]
   }
 
   /** Custom platforms the registry could not take (key clash, bad key), for `sources.status`. */
@@ -178,6 +206,8 @@ export class SearchRouter {
   dispose(): void {
     for (const entry of this.custom.values()) entry.off()
     this.custom.clear()
+    for (const entry of this.customCli.values()) entry.off()
+    this.customCli.clear()
   }
 
   private backendFor(id: string): Backend<SearchInput, SearchOutcome> {
@@ -293,10 +323,9 @@ export class SearchRouter {
 
     const cfg = this.dynamic()
     const exaKey = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
+    // Platform providers (bilibili, youtube, ...) report their own chain readiness (src/cli/chain.ts); only Exa's MCP route is overruled here.
     const requiredCli = new Map<string, string>([
       ...exaKey ? [] : [['exa', 'mcporter'] as const],
-      ['bilibili', 'bili'],
-      ['youtube', 'yt-dlp'],
     ])
     return diagnostics.map(diagnostic => {
       const dependency = requiredCli.get(diagnostic.id)
@@ -578,12 +607,15 @@ export class SearchRouter {
       const health = cooling ? 'cooldown' as const : last ? (last.ok ? 'ready' as const : 'error' as const) : 'unknown' as const
       const credential = last?.code === 'ENGINE_AUTH' ? 'rejected' as const : local.credential
       const reason = !available ? (diag?.reason ?? local.reason) : undefined
+      let chain: ChainEntryReport[] | undefined
+      if (adapter.chain) { try { chain = (await adapter.chain(env)).entries } catch { chain = undefined } }
       out.push({
         id: d.id, route, aliases: [...d.aliases], label: d.label, kind: d.kind ?? 'web', ...d.domains?.length ? { domains: [...d.domains] } : {}, ...d.needsBrowser ? { needsBrowser: d.needsBrowser } : {}, operations: [...d.operations], taskProfiles: [...d.taskProfiles],
         languages: [...d.languages], regions: [...d.regions], resultKinds: [...d.resultKinds],
         ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
         requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel }, costTier: local.costTier ?? costTierOf(d),
         ...d.verification?.live ? {} : { unverified: true },
+        ...chain ? { chain } : {},
         ...this.requestBudgetOf(route) ? { budget: this.requestBudgetOf(route)! } : {},
         readiness: {
           available,

@@ -26,6 +26,9 @@ export interface CliProbeResult {
   checkedAt: number
 }
 
+/** What a probe needs of a spec: where the command is, how it is checked, and the environment it runs in. */
+export type ProbeSubject = Pick<CliAdapterSpec, 'id' | 'bins' | 'probe' | 'packageNote' | 'env'>
+
 export interface CliProbeOptions {
   run?: typeof runCli
   /** Cache lifetime; default 60 s. */
@@ -62,10 +65,10 @@ export function findOnPath(cmd: string, env: NodeJS.ProcessEnv = process.env): s
   return undefined
 }
 
-const keyOf = (spec: Pick<CliAdapterSpec, 'id' | 'bins' | 'probe'>): string => [spec.id, spec.bins.join(','), JSON.stringify(spec.probe), process.env.PATH ?? ''].join('\u0000')
+const keyOf = (spec: ProbeSubject): string => [spec.id, spec.bins.join(','), JSON.stringify(spec.probe), process.env.PATH ?? ''].join('\u0000')
 
 /** The cached probe of a spec, when one is fresh (no spawn: `Engine.available()` is synchronous). */
-export function cachedProbe(spec: Pick<CliAdapterSpec, 'id' | 'bins' | 'probe'>, ttlMs = DEFAULT_TTL_MS, now: () => number = Date.now): CliProbeResult | undefined {
+export function cachedProbe(spec: ProbeSubject, ttlMs = DEFAULT_TTL_MS, now: () => number = Date.now): CliProbeResult | undefined {
   const hit = cache.get(keyOf(spec))
   return hit && now() - hit.at <= ttlMs ? hit.result : undefined
 }
@@ -102,7 +105,7 @@ export function evaluateCliContract(
   return { state: 'detected', ...withVersion }
 }
 
-async function probeUncached(spec: CliAdapterSpec, options: CliProbeOptions): Promise<CliProbeResult> {
+async function probeUncached(spec: ProbeSubject, options: CliProbeOptions): Promise<CliProbeResult> {
   const run = options.run ?? runCli
   const now = options.now ?? Date.now
   const env = buildCliEnv(spec)
@@ -125,7 +128,7 @@ async function probeUncached(spec: CliAdapterSpec, options: CliProbeOptions): Pr
 }
 
 /** Probe one spec (cached; concurrent calls for the same spec share one run). */
-export async function probeCli(spec: CliAdapterSpec, options: CliProbeOptions = {}): Promise<CliProbeResult> {
+export async function probeCli(spec: ProbeSubject, options: CliProbeOptions = {}): Promise<CliProbeResult> {
   const key = keyOf(spec)
   const now = options.now ?? Date.now
   if (!options.force) {
@@ -140,7 +143,7 @@ export async function probeCli(spec: CliAdapterSpec, options: CliProbeOptions = 
 }
 
 /** Probe many specs with a small concurrency bound (a settings refresh must not spawn dozens of processes at once). */
-export async function probeAll(specs: readonly CliAdapterSpec[], options: CliProbeOptions = {}, concurrency = 4): Promise<Map<string, CliProbeResult>> {
+export async function probeAll(specs: readonly ProbeSubject[], options: CliProbeOptions = {}, concurrency = 4): Promise<Map<string, CliProbeResult>> {
   const out = new Map<string, CliProbeResult>()
   let next = 0
   const worker = async (): Promise<void> => {
