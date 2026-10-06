@@ -72,6 +72,10 @@ export declare const zh: {
     readonly platformRulesHint: "按平台设置 item/title/link/text 选择器。";
     readonly customPlatforms: "自定义平台（JSON）";
     readonly customPlatformsHint: "按平台定义搜索 URL 与选择器；登录态请通过浏览器绑定引用 AuthProfile。";
+    readonly platformBackends: "平台后端顺序（JSON）";
+    readonly platformBackendsHint: "每个平台依次尝试的后端，如 {\"xiaohongshu\": [\"xhs\", \"opencli\", \"browser-opencli\"]}。id：各 CLI（xhs、rdt、zhihu、twitter、bili、yt-dlp、omnireach、wx-search-cli、gh、tanso）、opencli、browser-opencli、browser-search、rest、custom-cli:<id>。缺失或未登录的后端会被跳过并说明原因。";
+    readonly cliAdapters: "自定义 CLI 适配（JSON）";
+    readonly cliAdaptersHint: "按 id 定义只读 CLI 适配规格（argv 数组、输出字段、探测契约、allowedSubcommands）。写操作和读取浏览器 Cookie 的参数会被拒绝；无效条目被忽略并在 sources.status 说明。登录始终由你自己运行 CLI。";
     readonly browserBindings: "浏览器绑定（JSON）";
     readonly browserBindingsHint: "把平台绑定到 dsh-browser AuthProfile 与 RulePack。";
     readonly verbose: "详细诊断日志";

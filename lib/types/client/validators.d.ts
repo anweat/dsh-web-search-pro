@@ -48,3 +48,9 @@ export declare function evidenceIssues(ev: Json): Issue[];
 export declare function sourcesIssues(sources: Json): Issue[];
 /** Rubric override ids in a settings object that name no built-in rubric (the server ignores them). */
 export declare function unknownRubricIds(rubrics: unknown): string[];
+/**
+ * Problems of the CLI adapter settings, from the server's own functions: `cliAdapters` entries the server would ignore
+ * (read-only guard, bad argv, secrets in env) and `platformBackends` that name an unknown platform or a backend that
+ * cannot serve it.
+ */
+export declare function cliIssues(platformBackends: unknown, cliAdapters: unknown): Issue[];

@@ -214,6 +214,13 @@ export interface Config {
     customPlatforms?: Record<string, CustomPlatformSpec>;
     /** Per-platform binding to domain-scoped dsh-browser auth/rule profiles. */
     browserBindings?: Record<string, BrowserBinding>;
+    /**
+     * Ordered backend chain per platform (dev-plan M12): backend ids such as `xhs`, `opencli` (standalone OpenCLI), `browser-opencli`
+     * (dsh-browser), `browser-search`, `rest`, `gh`, `custom-cli:<id>`. A platform not listed uses its default chain.
+     */
+    platformBackends?: Record<string, string[]>;
+    /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
+    cliAdapters?: Record<string, Record<string, unknown>>;
     /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
     playwright: {
         /** Gate the playwright fallback backend in read.fetch. */
@@ -313,6 +320,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         authProfile: z<string, string, "plain">;
         rulePack: z<string, string, "plain">;
     }>>, string>>, "volatile">;
+    platformBackends: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+    cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
     playwright: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
         snapshotDir: z<string, string, "plain">;
@@ -771,6 +780,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         authProfile: z<string, string, "plain">;
         rulePack: z<string, string, "plain">;
     }>>, string>>, "volatile">;
+    platformBackends: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+    cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
     playwright: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
         snapshotDir: z<string, string, "plain">;

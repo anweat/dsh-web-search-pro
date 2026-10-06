@@ -10,6 +10,7 @@ import type { BrowserService } from './browser-service.ts';
 import { type BrowserMethod } from './browser-access.ts';
 import type { CustomPlatformSpec } from './config.ts';
 import { type ExaSearchRequest } from './exa-client.ts';
+import { EngineError } from './engine-error.ts';
 export interface SearchOutcome {
     /** Provider-generated answer/summary text, when any. */
     content?: string;
@@ -50,13 +51,7 @@ export interface EngineSearchOptions {
     /** Feed URL of the `rss` platform (it has no fixed endpoint). */
     url?: string;
 }
-export declare class EngineError extends Error {
-    readonly code: string;
-    readonly retryable: boolean;
-    readonly retryAfterMs?: number | undefined;
-    /** `retryAfterMs`: the service's own wait hint (Retry-After); the router uses it as the cooldown. */
-    constructor(message: string, code: string, retryable?: boolean, retryAfterMs?: number | undefined);
-}
+export { EngineError };
 /** One metered request of a non-model provider (Bocha search): counted in the usage ledger, tokens n/a, price unknown. */
 export interface UsageRecorder {
     record(entry: {
@@ -140,13 +135,19 @@ export declare function githubEngine(deps: EngineDeps): Engine;
 export declare function githubCodeEngine(deps: EngineDeps): Engine;
 export declare function githubIssuesEngine(deps: EngineDeps): Engine;
 export declare function bilibiliEngine(deps: EngineDeps): Engine;
-/** Exact argv contract supported by public-clis/bilibili-cli v0.6.2+. */
+/** Exact argv contract supported by public-clis/bilibili-cli v0.6.2+ (the `bili` spec). */
 export declare function biliSearchArgs(query: string, count: number): string[];
-/** Parse and validate bili-cli's versioned JSON envelope. */
+/** Parse and validate bili-cli's versioned JSON envelope (the `bili` spec). */
 export declare function parseBilibiliSearchOutput(output: string): WebSearchSource[];
 export declare function v2exEngine(allowProxyFakeIp?: boolean): Engine;
 export declare function youtubeEngine(deps: EngineDeps, cli?: typeof runCli): Engine;
+/** Platforms the dsh-browser OpenCLI bridge has a site adapter for (platform -> adapter name). */
+export declare const OPENCLI_PLATFORMS: Record<string, string>;
 export declare function opencliEngine(platform: string, deps: EngineDeps): Engine;
+/**
+ * The legacy `agentreach-twitter` engine, now a thin view of the `twitter` CLI spec (the platform chain uses the spec
+ * directly; this keeps the old engine id and its install message). Credentials are checked by `available()`.
+ */
 export declare function agentReachEngine(platform: string, deps: EngineDeps): Engine;
 export declare function arxivEngine(allowProxyFakeIp?: boolean): Engine;
 export declare function pubmedEngine(allowProxyFakeIp?: boolean): Engine;

@@ -8,6 +8,7 @@ import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
 import { type EngineSearchOptions } from './engines.ts';
+import type { ChainEntryReport } from './cli/chain.ts';
 import { type CostTier, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
 import { type RequestBudgetState } from './pipeline/ledger.ts';
 import { LruCache } from './memory-cache.ts';
@@ -92,6 +93,8 @@ export interface ProviderReport {
     budget?: RequestBudgetState;
     /** Not verified against the live service (descriptor.verification). */
     unverified?: boolean;
+    /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
+    chain?: ChainEntryReport[];
     readiness: Readiness & {
         lastLocalCheck: string;
         lastRemoteSuccess?: string;
@@ -115,6 +118,9 @@ export declare class SearchRouter {
     private syncedRevision;
     /** Custom platforms (settings `customPlatforms`) this router registered: key -> spec signature + unregister. A key the registry refused stays here with its problem so it is not retried on every call. */
     private readonly custom;
+    /** User-defined CLI adapters (settings `cliAdapters`) this router registered as `custom-cli:<id>` platforms, with the diagnostics of the entries it ignored. */
+    private readonly customCli;
+    private cliAdapterDiagnostics;
     /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
     private readonly readiness;
     /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -128,6 +134,10 @@ export declare class SearchRouter {
      * with a provider already registered is not registered (a user platform never replaces a built-in source); see {@link customPlatformProblems}.
      */
     private syncCustomPlatforms;
+    /** The same for `cliAdapters`: valid specs become `custom-cli:<id>` platforms; an invalid entry is ignored and reported. */
+    private syncCustomCliAdapters;
+    /** Configuration problems of the CLI adapter layer for `sources.status`: ignored `cliAdapters` entries and `platformBackends` that name nothing usable. */
+    cliAdapterProblems(): string[];
     /** Custom platforms the registry could not take (key clash, bad key), for `sources.status`. */
     customPlatformProblems(): string[];
     /** Unregister what this router put into the registry (plugin unload). */
