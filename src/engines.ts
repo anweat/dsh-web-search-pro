@@ -12,6 +12,7 @@ import { browserGap, requireBrowser, type BrowserMethod } from './browser-access
 import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } from './platform-search.ts'
 import type { CustomPlatformSpec } from './config.ts'
 import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
+import { EngineError } from './engine-error.ts'
 
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
@@ -46,13 +47,7 @@ export interface EngineSearchOptions {
   url?: string
 }
 
-export class EngineError extends Error {
-  /** `retryAfterMs`: the service's own wait hint (Retry-After); the router uses it as the cooldown. */
-  constructor(message: string, readonly code: string, readonly retryable = true, readonly retryAfterMs?: number) {
-    super(message)
-    this.name = 'EngineError'
-  }
-}
+export { EngineError }
 
 /** One metered request of a non-model provider (Bocha search): counted in the usage ledger, tokens n/a, price unknown. */
 export interface UsageRecorder {

@@ -35,7 +35,7 @@
   "scripts": {
     "build": "node scripts/clean-lib.mjs && tsc -p tsconfig.json && tsdown",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --experimental-transform-types test/*.test.ts",
+    "test": "node --import ./test/isolate-path.mjs --test --experimental-transform-types test/*.test.ts",
     "test:client-bundle": "node scripts/check-client-bundle.mjs",
     "verify": "pnpm run typecheck && pnpm run test:peers && pnpm run build && pnpm test && pnpm run test:client-bundle",
     "prepublishOnly": "pnpm run verify",
