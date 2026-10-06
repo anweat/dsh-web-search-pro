@@ -80,6 +80,8 @@ dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.0
 "DeepSeek Harness community feedback"，指定 exa、fresh=true、返回 8 条来源。
 ```
 
+**开箱默认值（不改任何设置）**：默认关闭 Jev（`evidence.jevMode: off`，证据评分用本地规则，不调用任何模型，也不需要任何模型 Key）；只有配置了博查 Key（`bochaApiKey` / `BOCHA_SEARCH_API_KEY` 或凭据引用）才会使用博查，没配置时博查不在引擎列表里，也不会被自动规划选中。默认引擎是 `seam`、`exa`、`ddg`、`bing`、`jina`（Exa 可走无 Key 的 MCP 回退，ddg / bing 免 Key）。**Defaults out of the box:** Jev is off by default (`evidence.jevMode: off`; evidence scoring uses the local rules and no model is called, no model key is needed); Bocha is used only when you configure a key (`bochaApiKey` / `BOCHA_SEARCH_API_KEY` / a credentials ref) — without one it is not in the engine list and never planned.
+
 模型通常不需要先翻目录：`web_index()` 根目录直接给出搜索与读取两个最常用调用，随包的 skill `dsh-web-search-pro` 带有证据模式的工作示例；没有 skill 服务时根目录附一段精简指南。
 
 | 情形 | 推荐入口 | 说明 |
@@ -97,7 +99,7 @@ dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.0
 
 ### 平台来源
 
-每个平台（GitHub、GitHub 代码 / Issues、B站、YouTube、V2EX、arXiv、PubMed、小红书、Twitter / X、Reddit、Instagram、Facebook、RSS、知乎、微博、豆瓣、贴吧、抖音、快手，以及你的 `customPlatforms`）都是来源注册表里 `kind: platform` 的 provider：有描述符（语言、任务类型、站点域名、所需浏览器能力 / 登录 / CLI / Token）和适配器，与网页引擎走同一条路径（探测、冷却、并发合并、`shapeSources`、重试说明、历史）。Twitter 是**一个** provider，内部按原顺序依次尝试 OpenCLI 与 twitter-cli。`sources.status` 在同一张列表里按维度报告它们的就绪状态（浏览器安装、已绑定登录、设置开关）；目录条目用 `provider` 指向同名 id。
+每个平台（GitHub、GitHub 代码 / Issues、B站、YouTube、V2EX、arXiv、PubMed、小红书、Twitter / X、Reddit、Instagram、Facebook、RSS、知乎、微博、豆瓣、贴吧、抖音、快手，以及你的 `customPlatforms`）都是来源注册表里 `kind: platform` 的 provider：有描述符（语言、任务类型、站点域名、所需浏览器能力 / 登录 / CLI / Token）和适配器，与网页引擎走同一条路径（探测、冷却、并发合并、`shapeSources`、重试说明、历史）。每个平台是**一个** provider，内部是一条有序的**后端链**（独立 CLI → 独立 OpenCLI → dsh-browser 的 OpenCLI / 搜索页），顺序可用 `platformBackends` 改，详见下面的 [CLI 适配](#cli-适配--cli-adapters)。`sources.status` 在同一张列表里按维度报告它们的就绪状态（浏览器安装、已绑定登录、设置开关）；目录条目用 `provider` 指向同名 id。
 
 - `search.run platform=zhihu query=…` 只搜这个平台，历史类型仍为 `platform`；`engines=zhihu` 在经典搜索里同样可用。`url`（RSS）、`authProfile`、`rulePack` 随 `platform` 传，`browserBindings` 补全后两者。
 - **证据模式**：`platform` 可与 `task` / `profile` / `needs` / `constraints` 同用——该平台成为 S1 / S2 的显式来源，之后门限、读取前几页（有 Browser 时自动升级）、评分、证据包照常。
@@ -394,9 +396,74 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | 评分模型 | `evidence.judge.mode`（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer` 保持一致）、`hybridBorderline`、provider 下拉（内置预设 + 自定义 id）、`maxJevQuestions`、`allowLlm`；覆盖判定 `evidence.coverage` 的模式、provider、阈值；用量上限 `evidence.budget`（单次 / 每日 / 时区 / 按 provider）；自定义 provider JSON（与服务端同一套校验，拒绝在定义里放密钥，只放 `keyRef` 名） |
 | 提示词（rubric） | 列出内置 rubric 与生效版本；逐个覆盖（版本、模板、等级、字符上限），按 `rubrics.ts` 的规则校验（未知变量、必需变量、等级数、版本必须不同于内置）；“恢复默认”删除覆盖 |
 | 来源 | 来源策略（`evidence.sourcePolicy`、`sources.priority`、`sources.disabled`）、博查（Key 引用名、接口地址、长摘要）、七个需 Key 的来源（Key 引用名、写入式密钥、接口地址）、每个来源的请求额度（`sources.budget.<id>.total` / `daily`，已用 / 剩余见 `web_call sources.status`）、`searxngUrl`、`openalexMailto`，以及匿名来源参考表；各来源的实时就绪状态由 `web_call sources.status` 显示 |
-| 服务凭据 / 运行时与后端 / 高级 | Exa、Jina、GitHub 凭据引用与密钥；CLI、OpenCLI、Agent Reach、Playwright；缓存、排序加权、平台规则、自定义平台、浏览器绑定 |
+| 服务凭据 / 运行时与后端 / 高级 | Exa、Jina、GitHub 凭据引用与密钥；CLI、OpenCLI、Agent Reach、Playwright、**平台后端顺序 `platformBackends`、自定义 CLI 适配 `cliAdapters`（JSON，校验与服务端共用）**；缓存、排序加权、平台规则、自定义平台、浏览器绑定 |
 
 校验与服务端共用同一批纯函数（`pipeline/rubrics-spec.ts`、`judges/providers-spec.ts`、`judges/calibration-spec.ts`、`coverage.ts`、`budget-spec.ts`），它们不引入 Node 模块，客户端 bundle 仍只依赖宿主模块表里的少数模块（`pnpm run test:client-bundle` 检查）。
+
+## CLI 适配 / CLI adapters
+
+**中文**　平台不再几乎只靠 dsh-browser 内置的 OpenCLI：本插件有一层声明式的 CLI 适配（`src/cli/`）。一个适配规格 `CliAdapterSpec` 写明：命令名（`bins`，包名可与命令名不同，记在 `packageNote`）、探测契约（`probe`：`--version`、最低版本、`--help` 里必须出现的子命令 / 参数）、搜索命令（`search.argv` 是**数组**，只有 `{query}`、`{count}` 两个占位符，永不经过 shell）、输出格式（`json` / `ndjson` / `yaml` / `text`）与字段映射、`emptyWhen` / `notLoggedInPatterns`、环境变量白名单（`env.required` / `passthrough`，只写名字）、超时与输出上限。执行器按 UTF-8 解码，超时 / 取消 / 输出超限都有结构化错误：`CLI_NOT_FOUND`、`CLI_CONTRACT_MISMATCH`、`CLI_NOT_LOGGED_IN`（提示“请自行运行 `<cli> login`”）、`ENGINE_EMPTY`、`CLI_FAILED`；错误文字里不会出现环境变量的值。
+
+**只读保证**（内置和用户自定义规格同样适用）：规格必须声明 `allowedSubcommands`，argv 里用到的子命令都得在其中，且不得命中全局拒绝表（`login`、`logout`、`post`、`comment`、`delete*`、`like`、`follow`、`favorite`、`upvote`、`save`、`subscribe`、`publish`、`ask`、`article`、`pin`、`setup`、`init`、`install`、`update` 等）；会读取浏览器 Cookie 或把凭据放进参数的 flag（`--cookie-source`、`--cookies-from-browser`、`--token`、`--password`……）一律拒绝。插件**永不运行任何登录命令**，也不代用户登录：需要登录的 CLI 由你自己运行它的 `login`；没有已保存登录的 xhs / rdt / zhihu 不会被运行（它们在没有登录时会自己去读浏览器 Cookie）。子进程只拿到最小环境（PATH、HOME、代理、证书，加规格点名的变量），不继承你整个环境。
+
+**探测**只在本地：找命令、跑 `--version` 和规格里的 `--help`，检查版本与契约，缓存 60 秒；**不搜索、不登录**。同名但契约不同的程序（如 PyPI 上另一个 `bili-cli`）报 `incompatible` 并写明原因，不会被当成可用。`sources.deps` 显示每个 CLI 的 `installation`（missing / detected / incompatible）、版本、适配验证程度；`sources.status` 的每个平台带 `chain`：每条后端的顺序、状态、被跳过的原因。
+
+| 内置规格 | 命令 | 已验证版本（2026-10-06） | 验证程度 |
+|---|---|---|---|
+| `bili`（bilibili） | `bili` | 0.6.2 | **live**：真实只读搜索并解析 |
+| `gh`（github / github-issues / github-code 的回退） | `gh` | 2.101.0 | **live**（仓库搜索）；issues / code 按帮助页字段，未运行 |
+| `omnireach`（`wechat` 与多源 `omnireach`） | `omnireach` | 0.19.0-alpha | **live**（`--on wechat`）；多源命令未运行 |
+| `yt-dlp`（youtube） | `yt-dlp` | 2026.08.19 | contract-only：帮助与版本，未运行搜索 |
+| `twitter` | `twitter` | 0.8.5 | contract-only：需要你的 Token，未运行搜索 |
+| `xhs`（xiaohongshu） | `xhs` | 0.6.4 | contract-only：帮助 + 已装包源码里的输出形状；搜索需要你的登录 |
+| `zhihu` | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
+| `rdt`（reddit） | `rdt` | 0.4.2 | contract-only（同上） |
+| 独立 `opencli`（按站点） | `opencli` | 1.8.8 | contract-only：只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json` |
+| `wx-search-cli`（wechat 第二后端） | `wx-search-cli` | 0.1.0 | docs-only：按上游 README / 源码，未安装 |
+| `tanso` | `tanso` | 2.0.2 | docs-only：按上游 README，未安装；只选 `bocha_web` 与 `zhihu_search` |
+
+目录里另有只列条目、没有适配的 `douyin-cli`（它的 README 没写搜索记录的字段）。contract-only 的字段映射来自工具自己的帮助 / 源码，并有标成 “constructed” 的夹具测试；它们在真实登录后的输出上还没被确认。
+
+**默认后端链**（`platformBackends` 可改，未列出的平台用默认顺序）：
+
+| 平台 | 默认链 |
+|---|---|
+| xiaohongshu | `opencli`（独立）→ `xhs` → `browser-opencli`（dsh-browser） |
+| reddit | `rdt` → `opencli` → `browser-opencli` |
+| zhihu | `zhihu` → `browser-search`（dsh-browser 搜索页） |
+| twitter | `twitter` → `opencli` → `browser-opencli` |
+| bilibili / youtube | `bili` / `yt-dlp` |
+| github、github-issues、github-code | `rest`（现有 REST）→ `gh` |
+| wechat（公众号，新） | `omnireach` → `wx-search-cli` |
+| omnireach（多源，不自动选入） | `omnireach` |
+| instagram / facebook | `browser-opencli`；weibo、douban、tieba、douyin、kuaishou：`browser-search` |
+
+链上缺失、不兼容或未登录的后端被跳过并记下原因；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
+
+**启用一个 CLI**：按 `sources.deps` 给出的命令安装（`sources.install` 需要你的审批），再**自己**运行它的登录命令（`xhs login`、`rdt login`、`zhihu login`、`gh auth login`；twitter 用环境变量 `TWITTER_AUTH_TOKEN` / `TWITTER_CT0`）。想优先用它，就改链序：
+
+    web-search-pro:
+      platformBackends:
+        xiaohongshu: [xhs, opencli, browser-opencli]
+      cliAdapters:                     # 自定义只读适配（同样的校验），注册为平台 custom-cli:mytool
+        mytool:
+          bins: [mytool]
+          packageNote: 'mytool (npm i -g mytool)'
+          platforms: [mytool]
+          probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['--json'] }
+          allowedSubcommands: [search]
+          search:
+            argv: [search, '{query}', '--limit', '{count}', '--json']
+            maxCount: 10
+            output: { format: json, itemsPath: data, fields: { url: url, title: title, snippet: summary } }
+          env: {}
+          needsLogin: false
+          timeoutMs: 30000
+          maxOutputBytes: 1048576
+
+无效的 `cliAdapters` 条目被忽略，原因出现在 `sources.status` 的 `notes`；设置面板里两项都有 JSON 编辑器，校验与服务端是同一批函数。
+
+**English**　Platforms no longer depend almost entirely on dsh-browser's bundled OpenCLI. A declarative adapter layer (`src/cli/`) describes each standalone CLI: `bins` (the package name may differ from the command, see `packageNote`), a contract `probe` (version floor, subcommands / flags that must appear in `--help`), a `search.argv` ARRAY with `{query}` / `{count}` placeholders (never a shell string), the output format and field mapping, `env.required` / `passthrough` NAMES only, timeout and output cap. The runner decodes UTF-8 and maps failures to `CLI_NOT_FOUND`, `CLI_CONTRACT_MISMATCH`, `CLI_NOT_LOGGED_IN` (hint: run `<cli> login` yourself), `ENGINE_EMPTY`, `CLI_FAILED`; environment values never appear in errors. **Read-only guarantee** for built-in and user specs alike: every command word must be in the spec's `allowedSubcommands` and none may match the global deny-list (login, logout, post, comment, delete*, like, follow, favorite, upvote, save, subscribe, publish, ask, article, pin, setup, init, ...); flags that read browser cookies or carry credentials are rejected. The plugin never runs a login and never logs in for you; xhs / rdt / zhihu are not run without a saved login (without one they read your browser cookies themselves). Children get a minimal environment. Probes are local (version + help, cached 60 s), never search or log in; a same-named program with another contract is `incompatible`. The table above lists each built-in spec with the verified version and how far it was checked (live / contract-only / docs-only). Each platform has an ordered backend chain (table above, configurable with `platformBackends`); skipped backends show their reason in `sources.status` (`providers[].chain`) and in the error when the whole chain is down. Your own adapters go in `cliAdapters` (validated by the same rules; registered as `custom-cli:<id>`).
 
 ## 外部依赖（按需）
 
@@ -406,7 +473,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 |---|---|---|
 | bili-cli `0.6.2` | B站后端 | `uv tool install --force git+https://github.com/public-clis/bilibili-cli@489607468f967e0e11f3cdff6efc022d011e982a` |
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
-| opencli | 小红书/Twitter/Reddit/IG/FB | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
+| opencli（dsh-browser 内置） | 小红书/Twitter/Reddit/IG/FB 的 `browser-opencli` 后端 | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
+| 其余适配 CLI（独立 `opencli`、`xhs`、`zhihu`、`rdt`、`omnireach`、`gh`、`wx-search-cli`、`tanso`） | 见上面的 [CLI 适配](#cli-适配--cli-adapters) | `sources.deps` 列出安装命令；登录由你自己完成 |
 | twitter-cli（命令 `twitter`） | Twitter 平台的 CLI 回退（执行 `twitter search`，另需环境变量 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
 | agent-reach（可选） | 仅作安装助手，本插件不直接执行它；装了它**不代表** Twitter 搜索可用 | `uv tool install agent-reach` / `pip install agent-reach` |
 | mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |

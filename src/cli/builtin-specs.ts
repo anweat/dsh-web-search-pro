@@ -173,7 +173,7 @@ const zhihu: CliAdapterSpec = {
 const rdt: CliAdapterSpec = {
   id: 'rdt',
   bins: ['rdt'],
-  packageNote: 'rdt-cli (PyPI rdt-cli; the command is `rdt`)',
+  packageNote: 'rdt-cli (public-clis/rdt-cli; the command is `rdt`)',
   platforms: ['reddit'],
   probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['query', '--json', '--compact', '--limit'] },
   allowedSubcommands: ['search'],

@@ -1,5 +1,12 @@
 # 更新记录
 
+## 未发布（M12）
+
+- 新增声明式 CLI 适配层（`src/cli/`）：规格校验（只读保证：子命令白名单 + 全局拒绝表 + 拒绝读取 Cookie / 带凭据的 flag）、不经 shell 的执行器（最小环境、UTF-8、超时 / 取消 / 输出上限、结构化错误）、本地带缓存的契约探测（同名但契约不同的程序报 `incompatible`）。
+- 内置规格：bili、yt-dlp、twitter 迁到规格执行器；新增 xhs、zhihu、rdt、omnireach、独立 opencli（按 `opencli list` 的 search 命令）、gh，以及按文档的 wx-search-cli、tanso；每个规格记录已验证版本与验证程度（live / contract-only / docs-only）。
+- 每个平台是一条有序后端链（独立 CLI → 独立 OpenCLI → dsh-browser），新增 `platformBackends`、`cliAdapters` 设置；新增平台 `wechat`（公众号）与多源 `omnireach`、`tanso`；`sources.deps` / `sources.status` 显示每个 CLI 的安装状态与每条后端的就绪 / 跳过原因。
+- 默认值写入 README 快速使用并有测试固定：Jev 默认关闭，博查只在配置了 Key 时使用。
+
 ## 0.2.0（2026-10-05）
 
 正式发布 0.2.0 基线。继承下方 rc.1 的工具面、来源、证据管线与兼容范围；真实验证的宿主仍为 DSH 0.2.0-rc.2，可选 Browser 0.2.0。

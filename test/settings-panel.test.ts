@@ -153,3 +153,32 @@ test('settings panel closes a rejected Host write and keeps the draft retryable'
   assert.equal(controller.snapshot().fields.searchMaxResults.text, '12')
   controller.dispose()
 })
+
+test('platformBackends and cliAdapters: shared validation blocks what the server would ignore, and valid values round-trip', async () => {
+  const { scope, controller } = fixture()
+  // An unknown backend, then a backend that cannot serve the platform: the field shows the server\'s own message and does not save.
+  controller.edit('platformBackends', '{"xiaohongshu":["nope"]}')
+  assert.equal(controller.snapshot().invalid, true)
+  assert.match(controller.snapshot().fields.platformBackends.message ?? '', /"nope" is not a known backend/)
+  controller.edit('platformBackends', '{"xiaohongshu":["rdt"]}')
+  assert.match(controller.snapshot().fields.platformBackends.message ?? '', /"rdt" does not serve platform xiaohongshu/)
+  await controller.save()
+  assert.deepEqual(scope.writes, [])
+  // A user adapter with a write command is rejected exactly as the server does.
+  const evil = { id: 'evil', bins: ['evil-cli'], packageNote: 'x', platforms: ['evil'], probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['x'] }, allowedSubcommands: ['search', 'delete'], search: { argv: ['delete', '{query}'], output: { format: 'json', fields: { url: 'url' } } }, env: {}, needsLogin: false, timeoutMs: 5000, maxOutputBytes: 65536 }
+  controller.edit('platformBackends', '')
+  controller.edit('cliAdapters', JSON.stringify({ evil }))
+  assert.equal(controller.snapshot().invalid, true)
+  assert.match(controller.snapshot().fields.cliAdapters.message ?? '', /cliAdapters\.evil ignored.*write \/ login command/)
+  await controller.save()
+  assert.deepEqual(scope.writes, [])
+  // A valid adapter and a chain that uses it save, and the chain check knows the custom id.
+  const good = { ...evil, id: 'good', bins: ['good-cli'], allowedSubcommands: ['search'], search: { argv: ['search', '{query}'], output: { format: 'json', fields: { url: 'url' } } } }
+  controller.edit('cliAdapters', JSON.stringify({ good }))
+  controller.edit('platformBackends', '{"twitter":["custom-cli:good","browser-opencli"]}')
+  assert.equal(controller.snapshot().invalid, false, controller.snapshot().fields.platformBackends.message ?? '')
+  await controller.save()
+  assert.deepEqual(scope.getSnapshot().user?.platformBackends, { twitter: ['custom-cli:good', 'browser-opencli'] })
+  assert.deepEqual((scope.getSnapshot().user?.cliAdapters as Record<string, unknown>).good, good)
+  controller.dispose()
+})

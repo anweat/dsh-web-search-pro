@@ -259,7 +259,7 @@ export const customCliProviderId = (id: string): string => 'custom-cli:' + id
 export function customCliAdapter(id: string, spec: CliAdapterSpec): ProviderAdapter {
   const route = customCliProviderId(id)
   return chainProvider(route, descriptor({
-    id: route, aliases: [route], label: spec.bins[0] + ' (自定义 CLI)', kind: 'platform', taskProfiles: ['experience'], languages: ['*'], regions: ['global'], resultKinds: ['web'],
+    id: route, aliases: [], label: spec.bins[0] + ' (自定义 CLI)', kind: 'platform', taskProfiles: ['experience'], languages: ['*'], regions: ['global'], resultKinds: ['web'],
     requirements: [cliReq(spec.bins[0]!, 'user-defined adapter ' + id + ': ' + spec.packageNote)],
     costModel: { kind: 'free', note: 'user-defined adapter (settings cliAdapters)' }, costTier: spec.needsLogin ? 'free-quota' : 'anonymous',
     verification: { live: false, note: 'user-defined (settings cliAdapters); unverified' },

@@ -244,3 +244,15 @@ test('default chains: the order the plan fixes', () => {
   assert.deepEqual(DEFAULT_CHAINS.wechat, ['omnireach', 'wx-search-cli'])
   assert.deepEqual(DEFAULT_CHAINS.omnireach, ['omnireach'])
 })
+
+test('docs do not drift: README and the skill name every built-in spec, every default chain platform and the verification of each', () => {
+  const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8')
+  const skill = fs.readFileSync(new URL('../assets/skills/dsh-web-search-pro/references/sources.md', import.meta.url), 'utf8')
+  for (const s of BUILTIN_CLI_SPECS) {
+    assert.ok(readme.includes('`' + s.bins[0] + '`'), 'README names ' + s.bins[0])
+    assert.ok(skill.includes('`' + s.id + '`') || skill.includes(s.id), 'skill names ' + s.id)
+    assert.match(readme, new RegExp('\\| [^\\n]*`' + s.bins[0]!.replace(/[-]/g, '\\-') + '`[^\\n]*\\| ' + s.verification!.version!.replace(/\./g, '\\.') + ' \\|'), 'README table row of ' + s.id + ' carries the verified version')
+  }
+  for (const platform of CHAIN_PLATFORMS) assert.ok(skill.includes(platform), 'skill names platform ' + platform)
+  for (const id of ['platformBackends', 'cliAdapters']) { assert.ok(readme.includes(id)); assert.ok(skill.includes(id)) }
+})

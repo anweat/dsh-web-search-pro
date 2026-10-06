@@ -62,7 +62,7 @@ Name sources only when you have a reason:
 ```
 
 - `engines` takes ids from `search.recommend` / `sources.status` (aliases like `ddg` work; an unknown id lists the valid ones). Explicit engines are tried in order.
-- `platform` searches one site (`github`, `v2ex`, `bilibili`, `rss` with `url`, `zhihu`, `xiaohongshu`, `twitter`, ...). With `task`/`profile` it is the evidence source (gate, page reads and scoring as usual). If it is unavailable the call fails with what is missing: tell the user, or pass `allowFallback:true` to search the web engines instead. Browser and login platforms need dsh-browser (`references/sources.md`).
+- `platform` searches one site (`github`, `v2ex`, `bilibili`, `rss` with `url`, `zhihu`, `xiaohongshu`, `twitter`, ...). With `task`/`profile` it is the evidence source (gate, page reads and scoring as usual). If it is unavailable the call fails with what is missing: tell the user, or pass `allowFallback:true` to search the web engines instead. Platforms run a backend chain; logins are the user's job (`references/sources.md`).
 - **来源策略**: nothing configured = anonymous / free sources (English: Exa's keyless route, then ddg / bing; Chinese: ddg / bing). Sources the user configured a key for are promoted for their language; the user's settings `sources: {priority, disabled, budget}` are rankings and caps (a used-up source is skipped, never an error). `engines` always wins. Tiers: `references/sources.md`.
 
 ## 4. Constraints
