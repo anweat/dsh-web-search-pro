@@ -1,10 +1,10 @@
 /**
  * External dependency detection and install for the CLI/platform backends.
- * Most backends shell out to tools installed outside DSH (bili, yt-dlp,
- * twitter, and mcporter). This module reports which are present and how to
- * install them; the sources.deps / sources.install actions expose it to the model. Each entry probes
- * the command the backend actually executes (the twitter backend runs
- * `twitter`, so finding `agent-reach` on PATH says nothing about it).
+ * Backends shell out to tools installed outside DSH: the built-in CLI adapter specs (bili, yt-dlp, twitter, xhs, zhihu,
+ * rdt, omnireach, gh, wx-search-cli, tanso, the standalone opencli) plus the user's own `cliAdapters`, and mcporter. This
+ * module reports which are present, whether the command on PATH really has the contract the adapter needs (a same-named
+ * program with another contract is `incompatible`, never `detected`), and how to install them; the sources.deps /
+ * sources.install actions expose it to the model. Probes are local, cached with a TTL, and never run a search or a login.
  *
  * Install is intentionally a MODEL-FACING TOOL, not a browser settings button:
  * a browser button running winget/pip/npm would be arbitrary command execution
@@ -14,6 +14,12 @@
  */
 
 import { runCli } from './util.ts'
+import { BILI_CLI_INSTALLS, BILI_CLI_REVISION, BILI_CLI_SOURCE, BILI_CLI_VERSION, BUILTIN_CLI_SPECS, TWITTER_CLI_INSTALLS, builtinSpecById } from './cli/builtin-specs.ts'
+import { OPENCLI_PROBE } from './cli/opencli.ts'
+import { evaluateCliContract, findOnPath, probeAll, type CliInstallation, type ProbeSubject } from './cli/probe.ts'
+import { resolveCliAdapters, type CliAdapterSpec } from './cli/spec.ts'
+
+export { BILI_CLI_INSTALLS, BILI_CLI_REVISION, BILI_CLI_SOURCE, BILI_CLI_VERSION, TWITTER_CLI_INSTALLS }
 
 export interface DepInfo {
   id: string
@@ -30,112 +36,82 @@ export interface DepInfo {
   version?: string
   /** Why a command found on PATH is not compatible. */
   diagnostic?: string
+  /** `missing` (not on PATH), `detected` (present with the contract the adapter needs), `incompatible` (present, wrong contract or too old). */
+  installation?: CliInstallation
+  /** How far the adapter was checked against the real tool: `live`, `contract-only`, `docs-only` (absent: user-defined or not a CLI adapter). */
+  verification?: string
   /** No backend of this plugin executes it; it is only an install helper, so its absence is not a gap. */
   optional?: boolean
   installs: { installer: string; command: string }[]
 }
 
-const IS_WIN = process.platform === 'win32'
+type Install = { installer: string; command: string }
 
-export const BILI_CLI_VERSION = '0.6.2'
-export const BILI_CLI_REVISION = '489607468f967e0e11f3cdff6efc022d011e982a'
-export const BILI_CLI_SOURCE = `git+https://github.com/public-clis/bilibili-cli@${BILI_CLI_REVISION}`
-export const BILI_CLI_INSTALLS = [
-  { installer: 'uv', command: `uv tool install --force ${BILI_CLI_SOURCE}` },
-  { installer: 'pipx', command: `pipx install --force ${BILI_CLI_SOURCE}` },
-  { installer: 'pip', command: `pip install --force-reinstall ${BILI_CLI_SOURCE}` },
+const py = (pkg: string): Install[] => [
+  { installer: 'uv', command: 'uv tool install ' + pkg },
+  { installer: 'pipx', command: 'pipx install ' + pkg },
+  { installer: 'pip', command: 'pip install ' + pkg },
 ]
 
-interface DepProbeResult {
+/** Install commands of the spec-backed CLIs (a user-defined adapter has none: it names its own package in packageNote). */
+const SPEC_INSTALLS: Readonly<Record<string, Install[]>> = {
+  bili: BILI_CLI_INSTALLS,
+  'yt-dlp': [{ installer: 'uv', command: 'uv tool install yt-dlp' }, { installer: 'pip', command: 'pip install yt-dlp' }],
+  twitter: TWITTER_CLI_INSTALLS,
+  xhs: py('xiaohongshu-cli'),
+  zhihu: py('pyzhihu-cli'),
+  rdt: py('git+https://github.com/public-clis/rdt-cli'),
+  omnireach: py('omnireach'),
+  gh: [{ installer: 'brew', command: 'brew install gh' }, { installer: 'winget', command: 'winget install GitHub.cli' }],
+  'wx-search-cli': [{ installer: 'npm', command: 'npm i -g wx-search-cli' }],
+  tanso: [{ installer: 'npm', command: 'npm i -g @geekjourneyx/tanso' }],
+  opencli: [{ installer: 'npm', command: 'npm i -g @jackwener/opencli' }],
+}
+
+const USED_BY: Readonly<Record<string, string>> = {
+  bili: 'bilibili 平台后端',
+  'yt-dlp': 'youtube 平台后端',
+  twitter: 'twitter 平台后端（第一后端，执行 `twitter search`；另需 TWITTER_AUTH_TOKEN 与 TWITTER_CT0）',
+  xhs: 'xiaohongshu 平台后端（只读 `xhs search`；需用户自行 `xhs login`）',
+  zhihu: 'zhihu 平台后端（只读 `zhihu search`；需用户自行 `zhihu login`）',
+  rdt: 'reddit 平台后端（只读 `rdt search`；需用户自行 `rdt login`）',
+  omnireach: 'wechat 平台后端与 omnireach 多源平台（只读 `omnireach search`）',
+  gh: 'github / github-issues / github-code 的 gh 回退后端（只读 `gh search`；需用户自行 `gh auth login`）',
+  'wx-search-cli': 'wechat 平台第二后端（只读 `wx-search-cli search`；按上游文档，未实测）',
+  tanso: 'tanso 平台后端（只读；按上游文档，未实测）',
+  opencli: '独立 OpenCLI：xiaohongshu / reddit / twitter 等站点的搜索后端（按 `opencli list` 的 search 命令，使用用户自己的 Chrome）',
+}
+
+const LABELS: Readonly<Record<string, string>> = {
+  bili: 'bili-cli', 'yt-dlp': 'yt-dlp', twitter: 'twitter-cli', xhs: 'xhs (xiaohongshu-cli)', zhihu: 'zhihu-cli', rdt: 'rdt-cli', omnireach: 'OmniReach', gh: 'GitHub CLI',
+  'wx-search-cli': 'wx-search-cli', tanso: 'Tanso', opencli: 'OpenCLI (standalone)',
+}
+
+interface ProbeResult {
   available: boolean
   version?: string
   diagnostic?: string
 }
 
-interface DepSpec extends Omit<DepInfo, 'available' | 'path' | 'version' | 'diagnostic'> {
-  probe?: (bin: string) => Promise<DepProbeResult>
-}
-
-function compareVersions(left: string, right: string): number {
-  const a = left.split('.').map(Number)
-  const b = right.split('.').map(Number)
-  for (let index = 0; index < Math.max(a.length, b.length); index++) {
-    const delta = (a[index] ?? 0) - (b[index] ?? 0)
-    if (delta !== 0) return delta
-  }
-  return 0
-}
-
 /** Validate the public-clis bili command rather than trusting an ambiguous package name. */
-export function evaluateBiliCli(versionOutput: string, searchHelpOutput: string): DepProbeResult {
-  const version = /\b(\d+\.\d+\.\d+)\b/.exec(versionOutput)?.[1]
-  if (!version) return { available: false, diagnostic: 'bili --version returned no semantic version' }
-  if (compareVersions(version, BILI_CLI_VERSION) < 0) {
-    return { available: false, version, diagnostic: `bili ${version} is older than required ${BILI_CLI_VERSION}` }
-  }
-  const missing = ['--type', '--max', '--json'].filter(option => !searchHelpOutput.includes(option))
-  if (missing.length) {
-    return { available: false, version, diagnostic: `bili search contract missing ${missing.join(', ')}` }
-  }
-  return { available: true, version }
-}
-
-async function probeBiliCli(bin: string): Promise<DepProbeResult> {
-  const env = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
-  const version = await runCli(bin, ['--version'], { timeoutMs: 8_000, signal: undefined, env, maxOutput: 64 * 1024 })
-  if (version.code !== 0) {
-    return { available: false, diagnostic: `bili --version failed with exit ${version.code}` }
-  }
-  const help = await runCli(bin, ['search', '--help'], { timeoutMs: 8_000, signal: undefined, env, maxOutput: 128 * 1024 })
-  if (help.code !== 0) {
-    return { available: false, diagnostic: `bili search --help failed with exit ${help.code}` }
-  }
-  return evaluateBiliCli(version.stdout + version.stderr, help.stdout + help.stderr)
+export function evaluateBiliCli(versionOutput: string, searchHelpOutput: string): ProbeResult {
+  const verdict = evaluateCliContract(builtinSpecById('bili')!, 'bili', { code: 0, output: versionOutput }, { code: 0, output: searchHelpOutput })
+  if (verdict.state === 'detected') return { available: true, ...verdict.version ? { version: verdict.version } : {} }
+  return { available: false, ...verdict.version ? { version: verdict.version } : {}, diagnostic: (verdict.reason ?? '').replace(/ \(a different program with the same name\?\)$/, '') }
 }
 
 /**
  * The twitter backend runs `twitter search <query> -n N` (twitter-cli). Another program that happens to be
  * called `twitter` must not pass: require a successful `search --help` that actually describes a search command.
  */
-export function evaluateTwitterCli(searchHelpOutput: string, exitCode: number): DepProbeResult {
+export function evaluateTwitterCli(searchHelpOutput: string, exitCode: number): ProbeResult {
   if (exitCode !== 0) return { available: false, diagnostic: `twitter search --help failed with exit ${exitCode}` }
   if (!/search/i.test(searchHelpOutput)) return { available: false, diagnostic: 'twitter search --help does not describe a search command (not twitter-cli?)' }
   return { available: true }
 }
 
-async function probeTwitterCli(bin: string): Promise<DepProbeResult> {
-  const help = await runCli(bin, ['search', '--help'], { timeoutMs: 8_000, signal: undefined, env: { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, maxOutput: 128 * 1024 })
-  return evaluateTwitterCli(help.stdout + help.stderr, help.code)
-}
-
-export const TWITTER_CLI_INSTALLS = [
-  { installer: 'uv', command: 'uv tool install twitter-cli' },
-  { installer: 'pipx', command: 'pipx install twitter-cli' },
-  { installer: 'pip', command: 'pip install twitter-cli' },
-]
-
-/** One external tool the plugin may shell out to. */
-const DEPS: DepSpec[] = [
-  {
-    id: 'bili', label: 'bili-cli', usedBy: 'bilibili 后端',
-    source: `public-clis/bilibili-cli v${BILI_CLI_VERSION} (${BILI_CLI_REVISION.slice(0, 12)})`,
-    requiredVersion: `>=${BILI_CLI_VERSION}`,
-    installs: BILI_CLI_INSTALLS,
-    probe: probeBiliCli,
-  },
-  {
-    id: 'yt-dlp', label: 'yt-dlp', usedBy: 'youtube 后端',
-    installs: [
-      { installer: 'uv', command: 'uv tool install yt-dlp' },
-      { installer: 'pip', command: 'pip install yt-dlp' },
-    ],
-  },
-  {
-    id: 'twitter', label: 'twitter-cli', usedBy: 'twitter 平台后端（agentreach-twitter，执行 `twitter search`；另需 TWITTER_AUTH_TOKEN 与 TWITTER_CT0）',
-    source: 'twitter-cli (PyPI twitter-cli; command `twitter`)',
-    installs: TWITTER_CLI_INSTALLS,
-    probe: probeTwitterCli,
-  },
+/** Non-spec tools: Exa's MCP fallback and the optional Agent-Reach installer helper. */
+const EXTRA_DEPS: (Omit<DepInfo, 'available' | 'path' | 'version' | 'diagnostic' | 'installation'>)[] = [
   {
     id: 'agent-reach', label: 'Agent-Reach', usedBy: '安装助手（可顺带装 twitter-cli 等渠道；本插件不直接执行它，twitter 搜索看 twitter 项）',
     optional: true,
@@ -150,42 +126,66 @@ const DEPS: DepSpec[] = [
       { installer: 'npm', command: 'npm i -g mcporter' },
     ],
   },
-  // opencli and playwright are NOT listed here: they are bundled (plugin-local
-  // node_modules, with global reuse fallback) in the dsh-browser plugin, which
-  // this plugin uses optionally via the `browser` service.
+  // playwright is NOT listed here: it is bundled in the dsh-browser plugin, which this plugin uses optionally via the
+  // `browser` service. The dsh-browser OpenCLI is a backend of the platform chains, not a CLI of this list; the
+  // standalone `opencli` below is the user's own install.
 ]
 
-/** Resolve a command on PATH (win32: where.exe; posix: sh -c command -v). */
-async function resolveCmd(cmd: string): Promise<{ found: boolean; path?: string }> {
-  const res = await runCli(
-    IS_WIN ? 'where' : 'sh',
-    IS_WIN ? [cmd] : ['-c', 'command -v ' + cmd],
-    { timeoutMs: 8_000, signal: undefined, maxOutput: 64 * 1024 },
-  )
-  if (res.code !== 0) return { found: false }
-  const first = res.stdout.split(/\r?\n/).find(line => line.trim().length > 0)
-  return first ? { found: true, path: first.trim() } : { found: false }
+const infoOf = (subject: ProbeSubject, spec: CliAdapterSpec | undefined, usedBy: string, label: string, installs: Install[]): Omit<DepInfo, 'available' | 'path' | 'version' | 'diagnostic' | 'installation'> => ({
+  id: subject.id,
+  label,
+  usedBy,
+  source: subject.packageNote,
+  ...subject.probe.minVersion ? { requiredVersion: '>=' + subject.probe.minVersion } : {},
+  ...spec?.verification ? { verification: spec.verification.status } : {},
+  installs,
+})
+
+/** The built-in specs (one entry per CLI; a CLI serving several platforms is one entry) and the standalone opencli. */
+function builtinDeps(): { subject: ProbeSubject; info: Omit<DepInfo, 'available' | 'path' | 'version' | 'diagnostic' | 'installation'> }[] {
+  const out = BUILTIN_CLI_SPECS.map(spec => ({ subject: spec as ProbeSubject, info: infoOf(spec, spec, USED_BY[spec.id] ?? spec.platforms.join(' / ') + ' 后端', LABELS[spec.id] ?? spec.bins[0]!, SPEC_INSTALLS[spec.id] ?? []) }))
+  out.push({ subject: OPENCLI_PROBE, info: { ...infoOf(OPENCLI_PROBE, undefined, USED_BY.opencli!, LABELS.opencli!, SPEC_INSTALLS.opencli!), verification: 'contract-only' } })
+  return out
 }
 
-/** Detect all backends. */
-export async function detectDeps(): Promise<DepInfo[]> {
-  const out: DepInfo[] = []
-  for (const dep of DEPS) {
-    const { probe, ...info } = dep
-    const resolved = await resolveCmd(dep.id)
-    if (!resolved.found) {
-      out.push({ ...info, available: false })
-      continue
-    }
-    const probed = probe ? await probe(resolved.path ?? dep.id) : { available: true }
-    out.push({ ...info, ...probed, ...resolved.path ? { path: resolved.path } : {} })
+/** Order the plugin has always listed them in, then the new adapters, then the user's. */
+const ORDER = ['bili', 'yt-dlp', 'twitter', 'agent-reach', 'mcporter']
+
+export const DEP_IDS: readonly string[] = [...new Set([...ORDER, ...BUILTIN_CLI_SPECS.map(s => s.id), 'opencli', ...EXTRA_DEPS.map(d => d.id)])]
+
+/** Detect every dependency: the spec-backed CLIs through their cached contract probes, the rest by presence on PATH. */
+export async function detectDeps(options: { config?: { cliAdapters?: unknown }; force?: boolean } = {}): Promise<DepInfo[]> {
+  const specs = builtinDeps()
+  const user = resolveCliAdapters(options.config?.cliAdapters).specs
+  const userDeps = [...user].map(([id, spec]) => ({
+    subject: { ...spec, id: 'custom-cli:' + id } as ProbeSubject,
+    info: { id: 'custom-cli:' + id, label: spec.bins[0] + ' (自定义)', usedBy: 'custom-cli:' + id + ' 平台后端（用户定义，未验证）', source: spec.packageNote, ...spec.probe.minVersion ? { requiredVersion: '>=' + spec.probe.minVersion } : {}, installs: [] as Install[] },
+  }))
+  const all = [...specs, ...userDeps]
+  const probes = await probeAll(all.map(a => a.subject), { ...options.force ? { force: true } : {} })
+  const found = new Map<string, DepInfo>()
+  for (const { subject, info } of all) {
+    const probe = probes.get(subject.id)!
+    found.set(subject.id, {
+      ...info,
+      available: probe.state === 'detected',
+      installation: probe.state,
+      ...probe.path ? { path: probe.path } : {},
+      ...probe.version ? { version: probe.version } : {},
+      ...probe.state === 'incompatible' && probe.reason ? { diagnostic: probe.reason } : {},
+    })
   }
-  return out
+  for (const extra of EXTRA_DEPS) {
+    const path = findOnPath(extra.id)
+    found.set(extra.id, { ...extra, available: !!path, installation: path ? 'detected' : 'missing', ...path ? { path } : {} })
+  }
+  const order = [...ORDER, ...BUILTIN_CLI_SPECS.map(s => s.id), 'opencli', ...EXTRA_DEPS.map(d => d.id), ...userDeps.map(d => d.info.id)]
+  return [...new Set(order)].map(id => found.get(id)).filter((d): d is DepInfo => d !== undefined)
 }
 
 /** Run the install command for one backend + installer. */
 export async function installDep(id: string, installer: string): Promise<{ code: number; stdout: string; stderr: string; timedOut: boolean }> {
-  const dep = DEPS.find(d => d.id === id)
+  const dep = [...builtinDeps().map(b => ({ id: b.info.id, installs: b.info.installs })), ...EXTRA_DEPS].find(d => d.id === id)
   if (!dep) throw new Error('unknown dependency: ' + id)
   const target = dep.installs.find(i => i.installer === installer)
   if (!target) throw new Error('unknown installer ' + installer + ' for ' + id + '; try: ' + dep.installs.map(i => i.installer).join(', '))
@@ -199,4 +199,11 @@ async function runCompound(command: string, timeoutMs: number): Promise<{ code: 
   return runCli(bin, parts, { timeoutMs, signal: undefined, maxOutput: 256 * 1024 })
 }
 
-export const DEP_IDS = DEPS.map(d => d.id)
+/** The installer `sources.install` uses when none is named: the first one listed for the dependency. */
+export function defaultInstaller(id: string): string {
+  const dep = [...builtinDeps().map(b => ({ id: b.info.id, installs: b.info.installs })), ...EXTRA_DEPS].find(d => d.id === id)
+  if (!dep) throw new Error('unknown backend: ' + id + ' (sources.deps lists them: ' + DEP_IDS.join(', ') + ')')
+  const first = dep.installs[0]
+  if (!first) throw new Error(id + ' has no install command here: see its source in sources.deps')
+  return first.installer
+}

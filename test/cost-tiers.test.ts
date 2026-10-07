@@ -18,6 +18,7 @@ const EXPECTED: Record<string, string> = {
   'github-issues': 'anonymous', rss: 'anonymous', wikipedia: 'anonymous', hackernews: 'anonymous', stackexchange: 'anonymous', openalex: 'anonymous', semanticscholar: 'anonymous', anysearch: 'anonymous', searxng: 'anonymous',
   jina: 'free-quota', 'github-code': 'free-quota', tavily: 'free-quota', brave: 'free-quota', linkup: 'free-quota', serper: 'free-quota', 'baidu-qianfan': 'free-quota',
   xiaohongshu: 'free-quota', twitter: 'free-quota', reddit: 'free-quota', instagram: 'free-quota', facebook: 'free-quota', zhihu: 'free-quota', weibo: 'free-quota', douban: 'free-quota', tieba: 'free-quota', douyin: 'free-quota', kuaishou: 'free-quota',
+  wechat: 'anonymous', omnireach: 'anonymous', tanso: 'paid',
   bocha: 'paid', metaso: 'paid', zhipu: 'paid',
 }
 

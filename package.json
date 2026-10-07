@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-search-pro",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Enhanced, persistent web search plugin for DeepSeek Harness — multi-engine routing (DeepSeek/Exa/DDG/Bing/Jina + GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/RSS), SQLite+LRU cache, userscript-style extraction, and Playwright rendering.",
   "license": "MIT",
   "type": "module",
@@ -35,7 +35,7 @@
   "scripts": {
     "build": "node scripts/clean-lib.mjs && tsc -p tsconfig.json && tsdown",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --experimental-transform-types test/*.test.ts",
+    "test": "node --import ./test/isolate-path.mjs --test --experimental-transform-types test/*.test.ts",
     "test:client-bundle": "node scripts/check-client-bundle.mjs",
     "verify": "pnpm run typecheck && pnpm run test:peers && pnpm run build && pnpm test && pnpm run test:client-bundle",
     "prepublishOnly": "pnpm run verify",

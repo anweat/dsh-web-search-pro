@@ -114,6 +114,8 @@ declare const _default: {
             authProfile: import("@deepseek-ai/schemastery").default<string, string, "plain">;
             rulePack: import("@deepseek-ai/schemastery").default<string, string, "plain">;
         }>>, string>>, "volatile">;
+        platformBackends: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+        cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
         playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
@@ -572,6 +574,8 @@ declare const _default: {
             authProfile: import("@deepseek-ai/schemastery").default<string, string, "plain">;
             rulePack: import("@deepseek-ai/schemastery").default<string, string, "plain">;
         }>>, string>>, "volatile">;
+        platformBackends: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+        cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
         playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
             snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;

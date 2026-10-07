@@ -7,7 +7,7 @@ import {
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
-import { evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
+import { cliIssues, evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
 export type { CredentialId, SettingField }
@@ -444,11 +444,20 @@ export class WebSearchSettingsController {
     const base = (this.scope.getSnapshot().base as Record<string, unknown> | undefined)?.evidence
     const evidence = deepMerge(isRecord(base) ? base : {}, candidates.get('evidence')) as Json
     const baseSources = (this.scope.getSnapshot().base as Record<string, unknown> | undefined)?.sources
-    const issues = [...evidenceIssues(evidence), ...sourcesIssues(deepMerge(isRecord(baseSources) ? baseSources : {}, candidates.get('sources')) as Json)]
+    // The CLI adapter settings are top-level fields: the draft value when staged, else what the Host section holds.
+    const topValue = (field: 'platformBackends' | 'cliAdapters'): unknown => {
+      const draft = this.staged.get(field)
+      if (draft === undefined) return this.sectionValue(field)
+      if (draft.clear) return undefined
+      const write = this.spec(field).parse(draft.text)
+      return write?.kind === 'set' ? write.value : undefined
+    }
+    const issues = [...evidenceIssues(evidence), ...sourcesIssues(deepMerge(isRecord(baseSources) ? baseSources : {}, candidates.get('sources')) as Json), ...cliIssues(topValue('platformBackends'), topValue('cliAdapters'))]
     // An error blocks the save when the person is editing what it is about; otherwise it is shown as it stands.
     const blocked = new Set<SettingField>()
+    const touched = (field: SettingField): boolean => staged.has(field) || this.staged.has(field)
     for (const issue of issues) {
-      if (issue.level === 'error' && (staged.has(issue.field) || (issue.related ?? []).some(related => staged.has(related)))) blocked.add(issue.field)
+      if (issue.level === 'error' && (touched(issue.field) || (issue.related ?? []).some(related => touched(related)))) blocked.add(issue.field)
     }
     return { settings, issues, blocked, evidence }
   }

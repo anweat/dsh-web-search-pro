@@ -202,6 +202,10 @@ export interface CliResult {
   stdout: string
   stderr: string
   timedOut: boolean
+  /** The command could not be started at all (not on PATH, not executable). */
+  spawnFailed?: boolean
+  /** Output went past `maxOutput` and the rest was dropped. */
+  truncated?: boolean
 }
 
 /**
@@ -212,7 +216,7 @@ export interface CliResult {
 export function runCli(
   bin: string,
   args: string[],
-  opts: { timeoutMs?: number; signal: AbortSignal | undefined; env?: Record<string, string>; cwd?: string; maxOutput?: number; outputEncoding?: string } = { signal: undefined },
+  opts: { timeoutMs?: number; signal: AbortSignal | undefined; env?: Record<string, string>; /** Run with exactly this environment instead of extending the process environment (credentials are not inherited). */ cleanEnv?: boolean; cwd?: string; maxOutput?: number; outputEncoding?: string } = { signal: undefined },
 ): Promise<CliResult> {
   return new Promise((resolve) => {
     const maxOutput = opts.maxOutput ?? 4 * 1024 * 1024
@@ -222,6 +226,8 @@ export function runCli(
     let stderrBytes = 0
     let child: ChildProcess
     let settled = false
+    let spawnFailed = false
+    let truncated = false
     const finish = (code: number, timedOut: boolean) => {
       if (settled) return
       settled = true
@@ -231,7 +237,7 @@ export function runCli(
       const encoding = opts.outputEncoding ?? 'utf-8'
       const stdout = new TextDecoder(encoding).decode(Buffer.concat(stdoutChunks, stdoutBytes))
       const stderr = new TextDecoder(encoding).decode(Buffer.concat(stderrChunks, stderrBytes))
-      resolve({ code, stdout, stderr, timedOut })
+      resolve({ code, stdout, stderr, timedOut, ...spawnFailed ? { spawnFailed } : {}, ...truncated ? { truncated } : {} })
     }
     const timer = opts.timeoutMs ? setTimeout(() => finish(-1, true), opts.timeoutMs) : undefined
     const onAbort = () => {
@@ -239,12 +245,13 @@ export function runCli(
       finish(-1, false)
     }
     child = crossSpawn(bin, args, {
-      env: { ...process.env, ...opts.env },
+      env: opts.cleanEnv ? { ...opts.env } : { ...process.env, ...opts.env },
       cwd: opts.cwd,
       windowsHide: process.platform === 'win32',
     })
     child.stdout?.on('data', (d: Buffer) => {
       const remaining = maxOutput - stdoutBytes
+      if (d.length > remaining) truncated = true
       if (remaining <= 0) return
       const chunk = d.length <= remaining ? d : d.subarray(0, remaining)
       stdoutChunks.push(chunk)
@@ -257,7 +264,7 @@ export function runCli(
       stderrChunks.push(chunk)
       stderrBytes += chunk.length
     })
-    child.on('error', () => finish(-1, false))
+    child.on('error', () => { spawnFailed = true; finish(-1, false) })
     child.on('close', (code) => finish(code ?? -1, false))
     if (opts.signal?.aborted) onAbort()
     else opts.signal?.addEventListener('abort', onAbort)

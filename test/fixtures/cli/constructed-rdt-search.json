@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "schema_version": "1",
+  "data": [
+    {
+      "id": "1abc123",
+      "name": "t3_1abc123",
+      "title": "Rust vs Go for async services",
+      "subreddit": "programming",
+      "author": "u1",
+      "score": 842,
+      "num_comments": 211,
+      "created_utc": 1790000000.0,
+      "permalink": "/r/programming/comments/1abc123/rust_vs_go_for_async_services/",
+      "url": "https://www.reddit.com/r/programming/comments/1abc123/rust_vs_go_for_async_services/",
+      "selftext": "I have been comparing both for a year.",
+      "is_self": true,
+      "over_18": false,
+      "is_video": false,
+      "stickied": false
+    }
+  ]
+}

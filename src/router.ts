@@ -13,7 +13,10 @@ import {
   EngineError,
   type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
 } from './engines.ts'
-import { customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
+import { customCliAdapter, customCliProviderId, customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
+import type { ChainEntryReport, ChainReport } from './cli/chain.ts'
+import { platformBackendIssues } from './cli/chains-spec.ts'
+import { resolveCliAdapters } from './cli/spec.ts'
 import { SourceUnavailableError } from './providers/unavailable.ts'
 import { defaultProviderRegistry, costTierOf, routeIdOf, type CostTier, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
@@ -77,6 +80,8 @@ export interface RouterSearchResult {
   availableCount?: number
   /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
   fallbackNote?: string
+  /** Platform search: the backend of its chain that answered (`bili`, `browser-opencli`). */
+  backend?: string
 }
 
 type SearchInput = { query: string; count: number; signal?: AbortSignal; skipSeam: boolean; options?: EngineSearchOptions }
@@ -109,7 +114,9 @@ export interface ProviderReport {
   budget?: RequestBudgetState
   /** Not verified against the live service (descriptor.verification). */
   unverified?: boolean
-  readiness: Readiness & { lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
+  /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
+  chain?: ChainEntryReport[]
+  readiness: Readiness & { state?: ChainReport['state']; lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
 }
 
 export class SearchRouter {
@@ -122,6 +129,9 @@ export class SearchRouter {
   private syncedRevision = -1
   /** Custom platforms (settings `customPlatforms`) this router registered: key -> spec signature + unregister. A key the registry refused stays here with its problem so it is not retried on every call. */
   private readonly custom = new Map<string, { sig: string; off: () => void; problem?: string }>()
+  /** User-defined CLI adapters (settings `cliAdapters`) this router registered as `custom-cli:<id>` platforms, with the diagnostics of the entries it ignored. */
+  private readonly customCli = new Map<string, { sig: string; off: () => void; problem?: string }>()
+  private cliAdapterDiagnostics: string[] = []
   /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
   private readonly readiness = new Map<string, Readiness>()
   /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -166,6 +176,26 @@ export class SearchRouter {
       if (problem) { this.custom.set(key, { sig, off: () => {}, problem }); continue }
       try { this.custom.set(key, { sig, off: this.registry.register(customPlatformAdapter(key, specs[key]!)) }) } catch (error) { this.custom.set(key, { sig, off: () => {}, problem: 'custom platform "' + key + '" was not registered: ' + (error instanceof Error ? error.message : String(error)) }) }
     }
+    this.syncCustomCliAdapters()
+  }
+
+  /** The same for `cliAdapters`: valid specs become `custom-cli:<id>` platforms; an invalid entry is ignored and reported. */
+  private syncCustomCliAdapters(): void {
+    const { specs, diagnostics } = resolveCliAdapters(this.dynamic().cliAdapters)
+    this.cliAdapterDiagnostics = diagnostics
+    const next = new Map([...specs].map(([id, spec]) => [id, JSON.stringify(spec)] as const))
+    for (const [id, entry] of [...this.customCli]) if (next.get(id) !== entry.sig) { entry.off(); this.customCli.delete(id) }
+    for (const [id, sig] of next) {
+      if (this.customCli.has(id)) continue
+      try { this.customCli.set(id, { sig, off: this.registry.register(customCliAdapter(id, specs.get(id)!)) }) } catch (error) { this.customCli.set(id, { sig, off: () => {}, problem: 'cliAdapters.' + id + ' was not registered as ' + customCliProviderId(id) + ': ' + (error instanceof Error ? error.message : String(error)) }) }
+    }
+  }
+
+  /** Configuration problems of the CLI adapter layer for `sources.status`: ignored `cliAdapters` entries and `platformBackends` that name nothing usable. */
+  cliAdapterProblems(): string[] {
+    this.syncCustomPlatforms()
+    const cfg = this.dynamic()
+    return [...this.cliAdapterDiagnostics, ...[...this.customCli.values()].flatMap(entry => (entry.problem ? [entry.problem] : [])), ...platformBackendIssues(cfg.platformBackends, cfg.cliAdapters)]
   }
 
   /** Custom platforms the registry could not take (key clash, bad key), for `sources.status`. */
@@ -178,6 +208,8 @@ export class SearchRouter {
   dispose(): void {
     for (const entry of this.custom.values()) entry.off()
     this.custom.clear()
+    for (const entry of this.customCli.values()) entry.off()
+    this.customCli.clear()
   }
 
   private backendFor(id: string): Backend<SearchInput, SearchOutcome> {
@@ -293,10 +325,9 @@ export class SearchRouter {
 
     const cfg = this.dynamic()
     const exaKey = await this.resolveKey(cfg.exaApiKeyEnv, cfg.exaApiKey)
+    // Platform providers (bilibili, youtube, ...) report their own chain readiness (src/cli/chain.ts); only Exa's MCP route is overruled here.
     const requiredCli = new Map<string, string>([
       ...exaKey ? [] : [['exa', 'mcporter'] as const],
-      ['bilibili', 'bili'],
-      ['youtube', 'yt-dlp'],
     ])
     return diagnostics.map(diagnostic => {
       const dependency = requiredCli.get(diagnostic.id)
@@ -361,7 +392,7 @@ export class SearchRouter {
         { preferred: this.canonicalIds([call.id]), signal: call.signal },
       )
       const sources = selected.value.sources
-      return sources.length ? { state: 'ok', sources } : { state: 'empty' }
+      return sources.length ? { state: 'ok', sources, ...selected.value.backend ? { backend: selected.value.backend } : {} } : { state: 'empty' }
     } catch (error) {
       if (call.signal.aborted) throw error
       if (error instanceof NoBackendError) {
@@ -578,19 +609,24 @@ export class SearchRouter {
       const health = cooling ? 'cooldown' as const : last ? (last.ok ? 'ready' as const : 'error' as const) : 'unknown' as const
       const credential = last?.code === 'ENGINE_AUTH' ? 'rejected' as const : local.credential
       const reason = !available ? (diag?.reason ?? local.reason) : undefined
+      let chain: ChainEntryReport[] | undefined
+      let chainReport: ChainReport | undefined
+      if (adapter.chain) { try { chainReport = await adapter.chain(env); chain = chainReport.entries } catch { chain = undefined } }
       out.push({
         id: d.id, route, aliases: [...d.aliases], label: d.label, kind: d.kind ?? 'web', ...d.domains?.length ? { domains: [...d.domains] } : {}, ...d.needsBrowser ? { needsBrowser: d.needsBrowser } : {}, operations: [...d.operations], taskProfiles: [...d.taskProfiles],
         languages: [...d.languages], regions: [...d.regions], resultKinds: [...d.resultKinds],
         ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
         requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel }, costTier: local.costTier ?? costTierOf(d),
         ...d.verification?.live ? {} : { unverified: true },
+        ...chain ? { chain } : {},
         ...this.requestBudgetOf(route) ? { budget: this.requestBudgetOf(route)! } : {},
         readiness: {
           available,
+          ...chainReport ? { state: chainReport.state } : {},
           ...local.installation ? { installation: local.installation } : {},
           ...credential ? { credential } : {},
           health,
-          ...reason ? { reason } : {},
+          ...reason ? { reason } : chainReport?.state === 'login_unverified' && chainReport.reason ? { reason: chainReport.reason } : {},
           ...local.diagnosticCode ? { diagnosticCode: local.diagnosticCode } : {},
           lastLocalCheck: now,
           ...last?.ok ? { lastRemoteSuccess: last.at } : {},
@@ -656,7 +692,7 @@ export class SearchRouter {
         return hit ? { hit, rows: this.store.resultsForQuery(hit.id) } : undefined
       })
       if (cached?.rows.length) {
-        let detail: { content?: string; engine?: string; enginesTried?: string[]; requestedCount?: number; fallbackNote?: string } | undefined
+        let detail: { content?: string; engine?: string; backend?: string; enginesTried?: string[]; requestedCount?: number; fallbackNote?: string } | undefined
         if (cached.hit.detail) { try { detail = JSON.parse(cached.hit.detail) } catch { /* ignore */ } }
         if (detail?.requestedCount === undefined || detail.requestedCount >= count) {
           const result: RouterSearchResult = {
@@ -666,6 +702,7 @@ export class SearchRouter {
             enginesTried: detail?.enginesTried ?? ids,
             fromCache: true,
             availableCount: cached.rows.length,
+            ...detail?.backend ? { backend: detail.backend } : {},
             ...detail?.fallbackNote ? { fallbackNote: detail.fallbackNote } : {},
           }
           this.memory.set(memoryKey, result)
@@ -682,6 +719,7 @@ export class SearchRouter {
     let fallbackNote: string | undefined
     let availableCount: number | undefined
     let persistExtras: string[] | undefined
+    let backendId: string | undefined
 
     if (multi) {
       // Every engine goes through the registry (probe, cooldown, quality gate,
@@ -734,6 +772,7 @@ export class SearchRouter {
         outcome = selected.value
         usedId = platform ? platform.id : selected.id
         viaId = selected.value.via ?? selected.id
+        if (platform) backendId = selected.value.backend ?? viaId
         enginesTried.push(...ids.slice(0, Math.max(ids.indexOf(selected.id) + 1, 1)))
         // P1-1: explain the fallback (e.g. ddg returned results but none had snippets). A single platform has nothing to fall back to.
         const lowQualityAttempts = platform ? [] : selected.attempts.filter(a => a.outcome === 'low-quality')
@@ -746,6 +785,9 @@ export class SearchRouter {
         // A source whose request budget is used up was skipped: say so, the answer came from the next engine.
         const spent = selected.attempts.filter(a => a.outcome === 'skipped' && /request budget used up/.test(a.detail ?? ''))
         if (spent.length) fallbackNote = (fallbackNote ? fallbackNote + '\n' : '') + 'skipped: ' + spent.map(a => a.id + ': ' + a.detail).join('; ')
+        // Notes of the engine itself: chain legs passed over (with reasons), results dropped for lack of a link.
+        const engineNotes = selected.value.notes ?? []
+        if (engineNotes.length) fallbackNote = (fallbackNote ? fallbackNote + '\n' : '') + engineNotes.join('\n')
       } catch (error) {
         if (signal?.aborted) throw error
         enginesTried.push(...ids)
@@ -772,7 +814,7 @@ export class SearchRouter {
       engine: platform ? viaId ?? finalId : finalId,
       status: 'ok',
       cacheKey,
-      detail: JSON.stringify({ ...finalOutcome.content ? { content: finalOutcome.content } : {}, engine: finalId, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
+      detail: JSON.stringify({ ...finalOutcome.content ? { content: finalOutcome.content } : {}, engine: finalId, ...backendId ? { backend: backendId } : {}, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
     }, persistExtras ? finalOutcome.sources.map((source, i) => ({ ...source, extra: persistExtras![i]! })) : finalOutcome.sources, platform ? 'platform-' + platform.id : finalId))
 
     const result: RouterSearchResult = {
@@ -782,6 +824,7 @@ export class SearchRouter {
       enginesTried,
       fromCache: false,
       availableCount,
+      ...backendId ? { backend: backendId } : {},
       ...fallbackNote ? { fallbackNote } : {},
     }
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).

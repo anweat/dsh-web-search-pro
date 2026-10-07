@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "schema_version": "1",
+  "data": {
+    "items": [
+      {
+        "id": "66f0aa0000000000",
+        "model_type": "note",
+        "xsec_token": "ABtoken1=",
+        "note_card": {
+          "display_title": "新手露营装备清单",
+          "type": "normal",
+          "user": {
+            "nickname": "露营小王"
+          },
+          "interact_info": {
+            "liked_count": "1234"
+          }
+        }
+      },
+      {
+        "id": "",
+        "model_type": "rec_query",
+        "rec_query": {
+          "queries": [
+            {
+              "name": "露营装备"
+            }
+          ]
+        }
+      }
+    ],
+    "has_more": true
+  }
+}

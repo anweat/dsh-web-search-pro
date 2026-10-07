@@ -136,7 +136,8 @@ test('judgeStatus: provider usability, key presence, today\'s usage and caps; no
     assert.deepEqual([fresh.usage!.requests, fresh.usage!.inputTokens, fresh.usage!.estimated, fresh.usage!.amountKnown, fresh.usage!.byProvider], [0, 0, false, true, []])
 
     const { UsageLedger, resolveBudget } = await import('../src/pipeline/ledger.ts')
-    const ledger = new UsageLedger(store, resolveBudget().caps)
+    // Same time zone as the status read below: "today" must mean the same day on both sides at any hour.
+    const ledger = new UsageLedger(store, resolveBudget({ timezone: 'Asia/Tokyo' }).caps)
     ledger.forSearch().meterFor(PRESETS['bocha-jev']!).reserve({ inputTokens: 900 }).settle({ inputTokens: 700, outputTokens: 2 })
     ledger.forSearch().meterFor(PRESETS['laya-local']!).reserve({ inputTokens: 90 }).settle({})
     const cfg = resolveConfig({ evidence: { judge: { provider: 'jina-rerank' }, budget: { perSearchInputTokens: 123, timezone: 'Asia/Tokyo', providers: { x: { dailyInputTokens: -1 } } } } } as never).evidence

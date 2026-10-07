@@ -76,6 +76,10 @@ export interface CliResult {
     stdout: string;
     stderr: string;
     timedOut: boolean;
+    /** The command could not be started at all (not on PATH, not executable). */
+    spawnFailed?: boolean;
+    /** Output went past `maxOutput` and the rest was dropped. */
+    truncated?: boolean;
 }
 /**
  * Run an external CLI (opencli / bili / yt-dlp / agent-reach / npm).
@@ -85,7 +89,8 @@ export interface CliResult {
 export declare function runCli(bin: string, args: string[], opts?: {
     timeoutMs?: number;
     signal: AbortSignal | undefined;
-    env?: Record<string, string>;
+    env?: Record<string, string>; /** Run with exactly this environment instead of extending the process environment (credentials are not inherited). */
+    cleanEnv?: boolean;
     cwd?: string;
     maxOutput?: number;
     outputEncoding?: string;

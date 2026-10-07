@@ -1,0 +1,8 @@
+Usage: opencli list [options]
+
+List all available CLI commands
+
+Options:
+  -f, --format <fmt>  Output format: table, json, yaml, md, csv (default:
+                      "table")
+  -h, --help          display help for command

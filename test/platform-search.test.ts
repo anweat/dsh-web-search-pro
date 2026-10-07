@@ -62,7 +62,7 @@ test('a platform runs through the registry: persisted as kind platform with the 
 test('an unavailable platform is an error that says what is missing; it never cools down or falls back', async () => {
   const h = harness({}, { browser: false })
   try {
-    for (let i = 0; i < 3; i++) await assert.rejects(h.search('x', { id: 'zhihu' }), /platform zhihu unavailable \(tried: zhihu\): platform zhihu requires the optional dsh-browser plugin/)
+    for (let i = 0; i < 3; i++) await assert.rejects(h.search('x', { id: 'zhihu' }), /platform zhihu unavailable \(tried: zhihu\): no usable backend: zhihu: zhihu not found on PATH.*; browser-search: platform zhihu requires the optional dsh-browser plugin/)
     const status = await h.router.providerStatuses(['zhihu'])
     assert.equal(status.get('zhihu')!.state, 'unavailable', 'a probe failure is not a cooldown')
     assert.equal(h.store.listQueries({ kind: 'platform' }).length, 0)
@@ -103,12 +103,12 @@ test('twitter: one provider, the OpenCLI leg answers and history names it', asyn
     assert.equal(out.engine, 'twitter')
     assert.deepEqual(h.calls.opencli[0]!.args.slice(0, 3), ['twitter', 'search', 'release notes'])
     assert.equal(h.store.listQueries({ kind: 'platform' })[0]!.engine, 'opencli-twitter')
-    // Without the browser and without twitter-cli credentials nothing is left to try, and both legs are named.
+    // Without the browser and without any CLI nothing is left to try, and every leg is named with what to install.
     const none = harness({ agentReachEnabled: true }, { browser: false })
     const savedTokens = [process.env.TWITTER_AUTH_TOKEN, process.env.TWITTER_CT0]
     delete process.env.TWITTER_AUTH_TOKEN
     delete process.env.TWITTER_CT0
-    try { await assert.rejects(none.search('x', { id: 'twitter' }), /platform twitter unavailable.*dsh-browser.*twitter-cli: TWITTER_AUTH_TOKEN/) } finally {
+    try { await assert.rejects(none.search('x', { id: 'twitter' }), /platform twitter unavailable.*twitter: twitter not found on PATH.*opencli: opencli not found on PATH.*browser-opencli: platform twitter requires the optional dsh-browser/) } finally {
       if (savedTokens[0] !== undefined) process.env.TWITTER_AUTH_TOKEN = savedTokens[0]
       if (savedTokens[1] !== undefined) process.env.TWITTER_CT0 = savedTokens[1]
       none.cleanup()

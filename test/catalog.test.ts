@@ -51,7 +51,8 @@ test('catalog: covers the built-in engines and platforms, the anonymous and paid
   }
   assert.match(byId('opencli-douyin').notFor.join(' '), /no `search` command/)
   assert.ok(byId('opencli-zhihu').operations.includes('search'))
-  assert.ok(byId('xiaohongshu').requires?.browser, 'needs the browser plugin')
+  // Since M12 a platform is a chain of backends; each standalone CLI has its own catalog entry.
+  for (const [id, cli] of [['xhs', 'xhs'], ['rdt', 'rdt'], ['zhihu-cli', 'zhihu'], ['opencli', 'opencli'], ['gh', 'gh'], ['tanso', 'tanso'], ['wx-search-cli', 'wx-search-cli'], ['omnireach', 'omnireach'], ['douyin-cli', 'douyin']]) assert.equal(byId(id)?.requires?.cli, cli, id)
   assert.equal(byId('xiaohongshu').auth, 'login')
 })
 
@@ -213,7 +214,7 @@ test('recommend: platform hint narrows to that source; login-based and browser-b
   const xhs = recommendSources({ task: '小红书 上的口碑', platform: 'xiaohongshu' }, ctx())
   assert.deepEqual(xhs.picks.map(p => p.id), ['xiaohongshu'])
   assert.equal(xhs.picks[0]!.status, 'needs_setup')
-  assert.ok(xhs.picks[0]!.missing!.includes('dsh-browser plugin'))
+  assert.ok(xhs.picks[0]!.missing!.includes('platform xiaohongshu requires the optional dsh-browser plugin'), 'the chain provider\'s own reason is the setup text')
   assert.equal(xhs.picks[0]!.use, 'search.run platform=xiaohongshu')
   const withBrowser = recommendSources({ platform: 'xiaohongshu' }, ctx({ browser: true, providers: providersOf({ xiaohongshu: READY }) })).picks[0]!
   assert.equal(withBrowser.status, 'limited', 'runnable, but the login cannot be checked')

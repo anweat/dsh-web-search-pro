@@ -8,13 +8,13 @@ import { Store } from '../src/store.ts'
 
 test('capability ids remain complete and configured custom platforms are accepted', () => {
   assert.deepEqual(SEARCH_ENGINE_IDS, [
-    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'github-code', 'github-issues', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan',
+    'seam', 'exa', 'ddg', 'bing', 'jina', 'github', 'bilibili', 'v2ex', 'youtube', 'arxiv', 'pubmed', 'github-code', 'github-issues', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'wechat', 'omnireach', 'tanso', 'bocha', 'wikipedia', 'hackernews', 'stackexchange', 'openalex', 'semanticscholar', 'anysearch', 'searxng', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan',
   ])
   // The platform list is derived from the registry now (every provider of kind platform), not a second list.
   assert.deepEqual([...PLATFORM_IDS].sort(), [
     'github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter',
     'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou',
-    'arxiv', 'pubmed',
+    'wechat', 'omnireach', 'tanso', 'arxiv', 'pubmed',
   ].sort())
   for (const id of PLATFORM_IDS) assert.ok(SEARCH_ENGINE_IDS.includes(id), id + ' is also an engine id')
 })

@@ -1,0 +1,31 @@
+{
+  "version": "2.0.2",
+  "query": {
+    "text": "AI Agent 商业化",
+    "mode": "search",
+    "sources": [
+      "bocha_web"
+    ],
+    "limit": 10
+  },
+  "status": "ok",
+  "results": [
+    {
+      "source": "bocha_web",
+      "title": "Example result title",
+      "url": "https://example.com/article",
+      "snippet": "A normalized summary from the provider response."
+    }
+  ],
+  "source_status": [
+    {
+      "source": "bocha_web",
+      "status": "ok",
+      "results": 1,
+      "effective_limit": 10,
+      "duration_ms": 842,
+      "error": null
+    }
+  ],
+  "errors": []
+}

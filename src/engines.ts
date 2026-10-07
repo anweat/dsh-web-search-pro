@@ -12,6 +12,10 @@ import { browserGap, requireBrowser, type BrowserMethod } from './browser-access
 import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } from './platform-search.ts'
 import type { CustomPlatformSpec } from './config.ts'
 import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
+import { EngineError } from './engine-error.ts'
+import { cliSpecEngine } from './cli/engine.ts'
+import { builtinSpecById } from './cli/builtin-specs.ts'
+import { buildArgv, parseCliOutput } from './cli/runner.ts'
 
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
@@ -19,11 +23,17 @@ export interface SearchOutcome {
   sources: WebSearchSource[]
   /** Id of the concrete backend that answered (a platform provider with a fallback chain names the leg that ran). */
   via?: string
+  /** The backend id of the platform chain that answered (`bili`, `browser-opencli`), for display and history. */
+  backend?: string
+  /** Short notes for the caller: backends skipped on the way, results dropped. */
+  notes?: string[]
 }
 
 export interface Engine {
   id: string
   label: string
+  /** Backend id in a platform chain (`xhs`, `browser-opencli`); absent for plain engines. */
+  backend?: string
   /** Cheap local availability check; must not do network I/O. */
   available(): boolean
   /** Browser-service method this engine depends on (dsh-browser is optional). */
@@ -46,13 +56,7 @@ export interface EngineSearchOptions {
   url?: string
 }
 
-export class EngineError extends Error {
-  /** `retryAfterMs`: the service's own wait hint (Retry-After); the router uses it as the cooldown. */
-  constructor(message: string, readonly code: string, readonly retryable = true, readonly retryAfterMs?: number) {
-    super(message)
-    this.name = 'EngineError'
-  }
-}
+export { EngineError }
 
 /** One metered request of a non-model provider (Bocha search): counted in the usage ledger, tokens n/a, price unknown. */
 export interface UsageRecorder {
@@ -453,65 +457,24 @@ export function githubIssuesEngine(deps: EngineDeps): Engine {
   }
 }
 
-// ── Bilibili (bili CLI) ─────────────────────────────────────────────────────
+// ── Bilibili (bili CLI, through the CLI adapter spec) ──────────────────────
+
+const biliSpec = builtinSpecById('bili')!
+const ytDlpSpec = builtinSpecById('yt-dlp')!
+const twitterSpec = builtinSpecById('twitter')!
 
 export function bilibiliEngine(deps: EngineDeps): Engine {
-  return {
-    id: 'bilibili',
-    label: 'B站 (bili-cli)',
-    available: () => deps.enableCli,
-    async search(query, count, signal) {
-      const res = await runCli('bili', biliSearchArgs(query, count), {
-        timeoutMs: 30_000,
-        signal,
-        outputEncoding: 'utf-8',
-        env: { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
-      })
-      if (res.code !== 0) throw new EngineError('bili search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
-      return { sources: parseBilibiliSearchOutput(res.stdout) }
-    },
-  }
+  return cliSpecEngine(biliSpec, 'bilibili', deps, { id: 'bilibili', label: 'B站 (bili-cli)' })
 }
 
-/** Exact argv contract supported by public-clis/bilibili-cli v0.6.2+. */
+/** Exact argv contract supported by public-clis/bilibili-cli v0.6.2+ (the `bili` spec). */
 export function biliSearchArgs(query: string, count: number): string[] {
-  return ['search', query, '--type', 'video', '--max', String(Math.min(Math.max(count, 1), 10)), '--json']
+  return buildArgv(biliSpec.search, { query, count })
 }
 
-/** Parse and validate bili-cli's versioned JSON envelope. */
+/** Parse and validate bili-cli's versioned JSON envelope (the `bili` spec). */
 export function parseBilibiliSearchOutput(output: string): WebSearchSource[] {
-  let envelope: {
-    ok?: boolean
-    schema_version?: string
-    data?: { bvid?: unknown; title?: unknown; author?: unknown; play?: unknown; duration?: unknown }[]
-    error?: unknown
-    message?: unknown
-  }
-  try {
-    envelope = JSON.parse(output) as typeof envelope
-  } catch {
-    throw new EngineError('bili output is not valid UTF-8 JSON', 'ENGINE_ERROR')
-  }
-  if (envelope.ok !== true || envelope.schema_version !== '1' || !Array.isArray(envelope.data)) {
-    const detail = typeof envelope.message === 'string'
-      ? envelope.message
-      : typeof envelope.error === 'string' ? envelope.error : 'unexpected response envelope'
-    throw new EngineError('bili search failed: ' + capText(detail, 200), 'ENGINE_ERROR')
-  }
-  return envelope.data
-    .filter(item => typeof item.bvid === 'string' && item.bvid.length > 0)
-    .map(item => {
-      const title = typeof item.title === 'string' ? stripTags(item.title) : undefined
-      const author = typeof item.author === 'string' ? item.author : undefined
-      const duration = typeof item.duration === 'string' ? item.duration : undefined
-      const play = typeof item.play === 'number' || typeof item.play === 'string' ? item.play : undefined
-      const meta = [author ? 'UP: ' + author : undefined, play !== undefined ? '播放: ' + play : undefined, duration].filter(Boolean)
-      return {
-        url: 'https://www.bilibili.com/video/' + item.bvid,
-        ...title ? { title } : {},
-        ...meta.length ? { snippet: capText(meta.join(' | '), 300) } : {},
-      }
-    })
+  return parseCliOutput(biliSpec, biliSpec.search, output, 1_000)
 }
 
 // ── V2EX (sov2ex community search API) ──────────────────────────────────────
@@ -552,41 +515,16 @@ export function v2exEngine(allowProxyFakeIp = false): Engine {
   }
 }
 
-// ── YouTube (yt-dlp search) ─────────────────────────────────────────────────
+// ── YouTube (yt-dlp search, through the CLI adapter spec) ───────────────────
 
 export function youtubeEngine(deps: EngineDeps, cli: typeof runCli = runCli): Engine {
-  return {
-    id: 'youtube',
-    label: 'YouTube (yt-dlp)',
-    available: () => deps.enableCli,
-    async search(query, count, signal) {
-      const n = Math.min(count, 10)
-      const res = await cli('yt-dlp', ['ytsearch' + n + ':' + query, '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration_string)s'], { timeoutMs: 60_000, signal, outputEncoding: 'utf-8' })
-      if (res.code !== 0) throw new EngineError('yt-dlp failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
-      const sources: WebSearchSource[] = []
-      for (const line of res.stdout.split(/\r?\n/)) {
-        const [id, title, channel, views, duration] = line.split('\t')
-        if (!id || !title) continue
-        const meta: string[] = []
-        if (channel) meta.push(channel)
-        if (views && views !== 'None') meta.push(views + ' views')
-        if (duration) meta.push(duration)
-        sources.push({
-          url: 'https://www.youtube.com/watch?v=' + id,
-          title,
-          ...meta.length ? { snippet: meta.join(' | ') } : {},
-        })
-        if (sources.length >= n) break
-      }
-      if (!sources.length) throw new EngineError('yt-dlp returned no results', 'ENGINE_EMPTY', true)
-      return { sources }
-    },
-  }
+  return cliSpecEngine(ytDlpSpec, 'youtube', deps, { id: 'youtube', label: 'YouTube (yt-dlp)', ...cli !== runCli ? { run: cli } : {} })
 }
 
 // ── OpenCLI platform search (reuses the user's logged-in browser session) ───
 
-const OPENCLI_PLATFORMS: Record<string, string> = {
+/** Platforms the dsh-browser OpenCLI bridge has a site adapter for (platform -> adapter name). */
+export const OPENCLI_PLATFORMS: Record<string, string> = {
   xiaohongshu: 'xiaohongshu',
   twitter: 'twitter',
   reddit: 'reddit',
@@ -629,26 +567,24 @@ export function opencliEngine(platform: string, deps: EngineDeps): Engine {
 
 // ── agent-reach CLI backends (twitter etc.) ─────────────────────────────────
 
+/**
+ * The legacy `agentreach-twitter` engine, now a thin view of the `twitter` CLI spec (the platform chain uses the spec
+ * directly; this keeps the old engine id and its install message). Credentials are checked by `available()`.
+ */
 export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
   if (platform === 'twitter') {
+    const leg = cliSpecEngine(twitterSpec, 'twitter', deps, { id: 'agentreach-twitter', label: 'agent-reach twitter-cli', skipCredentialGate: true })
     return {
       id: 'agentreach-twitter',
       label: 'agent-reach twitter-cli',
       available: () => deps.enableCli && deps.agentReachEnabled && !!process.env.TWITTER_AUTH_TOKEN && !!process.env.TWITTER_CT0,
-      async search(query, count, signal) {
-        const res = await runCli('twitter', ['search', query, '-n', String(Math.min(count, 10))], { timeoutMs: 45_000, signal })
-        // Spawn failure (no `twitter` on PATH) comes back as exit -1 with no output: say what is missing.
-        if (res.code === -1 && !res.timedOut && !res.stderr.trim() && !res.stdout.trim()) throw new EngineError('the twitter command could not be started: install twitter-cli (sources.install backend=twitter); Agent-Reach alone does not provide it', 'ENGINE_UNAVAILABLE', false)
-        if (res.code !== 0) throw new EngineError('twitter search failed: ' + (res.stderr.trim() || res.stdout.trim() || 'exit ' + res.code).slice(0, 200), 'ENGINE_ERROR')
-        const sources: WebSearchSource[] = []
-        for (const line of res.stdout.split(/\r?\n/)) {
-          const m = /(https?:\/\/[^\s]+)/.exec(line)
-          if (!m) continue
-          const title = stripTags(line).replace(m[1]!, '').trim()
-          if (title) sources.push({ url: m[1]!, title: capText(title, 200) })
-          if (sources.length >= count) break
+      async search(query, count, signal, options) {
+        try {
+          return await leg.search(query, count, signal, options)
+        } catch (error) {
+          if ((error as { code?: unknown } | null)?.code === 'CLI_NOT_FOUND') throw new EngineError('the twitter command could not be started: install twitter-cli (sources.install backend=twitter); Agent-Reach alone does not provide it', 'ENGINE_UNAVAILABLE', false)
+          throw error
         }
-        return { sources }
       },
     }
   }

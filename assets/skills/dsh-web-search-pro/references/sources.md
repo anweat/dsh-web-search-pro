@@ -31,8 +31,17 @@ Order of precedence for the automatic plan: (1) `engines` / `platform` in the ca
 | `jina` | any | `JINA_API_KEY` |
 
 - **Self-hosted**: `searxng` needs `searxngUrl` in settings (no public instance is built in).
-- **CLI** (`sources.deps` lists them, `sources.install` installs one when the user asks): `bili`, `yt-dlp`, `twitter` (also needs `TWITTER_AUTH_TOKEN` and `TWITTER_CT0`), `mcporter`, `agent-reach` (optional helper).
-- **Browser-based** (need dsh-browser and a saved login): `zhihu`, `weibo`, `douban`, `tieba`, `douyin`, `kuaishou`, and OpenCLI platforms (`reddit`, `xiaohongshu`, `instagram`, `facebook`). `twitter` is one source with two backends tried in order: the OpenCLI bridge (dsh-browser), then twitter-cli.
+- **CLI** (`sources.deps` lists them with `installation`: missing / detected / incompatible; `sources.install` installs one when the user asks): `bili`, `yt-dlp`, `twitter` (also needs `TWITTER_AUTH_TOKEN` and `TWITTER_CT0`), `xhs`, `zhihu`, `rdt`, `omnireach`, `gh`, `wx-search-cli`, `tanso`, standalone `opencli`, the user's own `cliAdapters`, `mcporter`, `agent-reach` (optional helper). See "Backend chains" below.
+- **Browser-based** (need dsh-browser and a saved login): `weibo`, `douban`, `tieba`, `douyin`, `kuaishou`, and the dsh-browser OpenCLI legs of `instagram` / `facebook` (and the last legs of `xiaohongshu`, `reddit`, `twitter`, `zhihu`).
+
+## Backend chains (CLI adapters)
+
+Every platform is ONE source with an ordered chain of backends; the first usable one answers, empty or failing ones fall through. `sources.status` shows each platform's `chain` (order, state, why a backend is skipped). Defaults: `xiaohongshu`: opencli (standalone) > xhs > browser-opencli; `reddit`: rdt > opencli > browser-opencli; `zhihu`: zhihu > browser-search; `twitter`: twitter > opencli > browser-opencli; `bilibili`: bili; `youtube`: yt-dlp; `github`, `github-issues`, `github-code`: rest > gh; `wechat` (公众号): omnireach > wx-search-cli; `omnireach` (multi-source, never planned on its own). The user can reorder with `platformBackends: { <platform>: [ids] }` and add read-only adapters in `cliAdapters` (platform `custom-cli:<id>`); an invalid entry is ignored and explained in `sources.status` `notes`.
+
+- A backend that is not installed, has another contract (`incompatible`, with the reason) or is not logged in is skipped. When the whole chain is down the error names every backend and what to install or run. Report it; do not retry.
+- **Login is the user's job.** Never run `xhs login`, `rdt login`, `zhihu login`, `gh auth login` or anything like them, and never pass cookie options. Tell the user to run the CLI's own login. xhs, rdt and zhihu are not run until a saved login exists (without one they read browser cookies themselves).
+- Verification differs per adapter (`sources.deps` shows it): `live` (bili, gh repos, omnireach wechat), `contract-only` (help probed, no login-bound search run: xhs, zhihu, rdt, twitter, yt-dlp, wx-search-cli, standalone opencli), `docs-only` (tanso, from upstream docs). Treat contract-only and docs-only results as experimental.
+- The plugin only ever runs read commands (search); posting, liking, following and the like are refused by the adapter spec itself.
 
 ## Platforms (one site or community)
 

@@ -233,6 +233,8 @@ export function SettingsCard(props: SettingsCardProps) {
               {toggle('opencliEnabled', 'opencliEnabled', 'opencliEnabledHint')}
               {toggle('agentReachEnabled', 'agentReachEnabled', 'agentReachEnabledHint')}
               {json('playwright', 'playwright', 'playwrightHint', 4)}
+              {json('platformBackends', 'platformBackends', 'platformBackendsHint', 7)}
+              {json('cliAdapters', 'cliAdapters', 'cliAdaptersHint', 12)}
             </div>
           </Section>
 

@@ -101,6 +101,6 @@ test('recommend: ready platforms are suggested for experience tasks, still at mo
   }))
   for (const p of down.picks.filter(p => p.id === 'zhihu' || p.id === 'xiaohongshu')) {
     assert.equal(p.executable, false)
-    assert.ok(p.missing!.includes('dsh-browser plugin'))
+    assert.ok(p.missing!.some(m => /dsh-browser plugin/.test(m)), p.id + ': ' + p.missing!.join(' | '))
   }
 })

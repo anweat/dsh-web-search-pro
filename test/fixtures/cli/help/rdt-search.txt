@@ -1,0 +1,22 @@
+Usage: rdt search [OPTIONS] QUERY
+
+  Search Reddit posts
+
+  Examples:   rdt search "python async"   rdt search "rust vs go" -r
+  programming --sort top --time year
+
+Options:
+  -r, --subreddit TEXT            Search within subreddit
+  -s, --sort [relevance|hot|top|new|comments]
+                                  Sort order
+  -t, --time [hour|day|week|month|year|all]
+                                  Time filter
+  -n, --limit INTEGER             Number of results
+  --after TEXT                    Pagination cursor
+  --json                          Output as JSON
+  --yaml                          Output as YAML
+  -o, --output TEXT               Save structured output to file (JSON/YAML)
+  --full-text                     Show full title/text without truncation
+  -c, --compact                   Compact output (fewer fields, agent-
+                                  friendly)
+  --help                          Show this message and exit.

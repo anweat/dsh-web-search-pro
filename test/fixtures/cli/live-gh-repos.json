@@ -1,0 +1,20 @@
+[
+  {
+    "description": "Enhanced, persistent web search plugin for DeepSeek Harness (multi-engine search, SQLite+LRU cache, platform backends, Playwright rendering)",
+    "forksCount": 7,
+    "fullName": "anweat/dsh-web-search-pro",
+    "language": "TypeScript",
+    "stargazersCount": 74,
+    "updatedAt": "2026-10-06T01:07:59Z",
+    "url": "https://github.com/anweat/dsh-web-search-pro"
+  },
+  {
+    "description": "面向 DeepSeek Harness 的免费 Web Search 插件，支持 Tavily、Exa、Brave 等九个引擎按可配置顺序自动 fallback",
+    "forksCount": 2,
+    "fullName": "MochiNek0/dsh-web-search-free",
+    "language": "TypeScript",
+    "stargazersCount": 16,
+    "updatedAt": "2026-10-06T03:37:30Z",
+    "url": "https://github.com/MochiNek0/dsh-web-search-free"
+  }
+]

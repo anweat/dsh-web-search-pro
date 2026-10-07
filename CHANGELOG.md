@@ -1,5 +1,20 @@
 # 更新记录
 
+## 0.2.1（2026-10-07）
+
+独立 CLI 适配层。兼容范围与 0.2.0 相同（DSH `>=0.2.0-rc.2 <0.2.1-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更。
+
+
+- 新增声明式 CLI 适配层（`src/cli/`）：规格校验（只读保证：子命令白名单 + 全局拒绝表 + 拒绝读取 Cookie / 带凭据的 flag）、不经 shell 的执行器（最小环境、UTF-8、超时 / 取消 / 输出上限、结构化错误）、本地带缓存的契约探测（同名但契约不同的程序报 `incompatible`）。
+- 内置规格：bili、yt-dlp、twitter 迁到规格执行器；新增 xhs、zhihu、rdt、omnireach、独立 opencli（按 `opencli list` 的 search 命令）、gh，以及按文档的 wx-search-cli、tanso；每个规格记录已验证版本与验证程度（live / contract-only / docs-only）。
+- 每个平台是一条有序后端链（独立 CLI → 独立 OpenCLI → dsh-browser），新增 `platformBackends`、`cliAdapters` 设置；新增平台 `wechat`（公众号）与多源 `omnireach`、`tanso`；`sources.deps` / `sources.status` 显示每个 CLI 的安装状态与每条后端的就绪 / 跳过原因。
+- 默认值写入 README 快速使用并有测试固定：Jev 默认关闭，博查只在配置了 Key 时使用。
+- 平台搜索结果标明实际使用的后端（`Platform: bilibili (via bili)`，输出新增可选字段 `backend`，历史与证据包同样记录）；后端链顺延时在说明里列出被跳过的后端与原因。
+- `sources.status` 的平台摘要按后端链的真实状态显示：`ready`（有后端现在就能运行）、`login unverified`（只能依赖你自己的浏览器会话，本地无法确认）、`needs login`、`unavailable`，并给出下一步（例如自行运行 `xhs login`）。
+- `bili` 返回的无视频号条目改用条目自带的链接；没有任何链接的条目跳过并在说明里注明数量。
+- 需要登录的 CLI（xhs、zhihu、rdt）只在本地已有保存的登录信息时才运行（只检查文件是否存在）；插件不会触发登录，也不会让 CLI 读取浏览器 Cookie。
+- 验证：774 项插件测试、94 项 bench 测试、类型检查、peer 范围、构建与客户端 bundle 检查通过；真实宿主（DSH 0.2.0-rc.2）上全默认配置可用，`bili` 与 `omnireach` 两条后端实测通过。xhs、zhihu、rdt、twitter、独立 opencli 的搜索只核对了命令契约，未用真实登录态验证。
+
 ## 0.2.0（2026-10-05）
 
 正式发布 0.2.0 基线。继承下方 rc.1 的工具面、来源、证据管线与兼容范围；真实验证的宿主仍为 DSH 0.2.0-rc.2，可选 Browser 0.2.0。
