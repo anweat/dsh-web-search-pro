@@ -17,6 +17,8 @@ export interface ProviderSource {
 /** One provider's ordered result list for one query (index 0 = rank 1). */
 export interface ProviderOutput {
     providerId: string;
+    /** The backend of a platform chain that answered (display only). */
+    backend?: string;
     query: string;
     sources: readonly ProviderSource[];
 }

@@ -8,7 +8,7 @@ import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
 import { type EngineSearchOptions } from './engines.ts';
-import type { ChainEntryReport } from './cli/chain.ts';
+import type { ChainEntryReport, ChainReport } from './cli/chain.ts';
 import { type CostTier, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
 import { type RequestBudgetState } from './pipeline/ledger.ts';
 import { LruCache } from './memory-cache.ts';
@@ -62,6 +62,8 @@ export interface RouterSearchResult {
     availableCount?: number;
     /** Human-readable explanation of why the router fell back to `engine` (P1-1). */
     fallbackNote?: string;
+    /** Platform search: the backend of its chain that answered (`bili`, `browser-opencli`). */
+    backend?: string;
 }
 /** One provider as `sources.status` reports it: the registry descriptor plus local readiness by dimension. */
 export interface ProviderReport {
@@ -96,6 +98,7 @@ export interface ProviderReport {
     /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
     chain?: ChainEntryReport[];
     readiness: Readiness & {
+        state?: ChainReport['state'];
         lastLocalCheck: string;
         lastRemoteSuccess?: string;
         lastError?: string;

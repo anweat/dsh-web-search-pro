@@ -60,9 +60,17 @@ export interface ChainEntryReport {
     reason?: string;
     verification: string;
 }
+/**
+ * What a chain can do right now, one word for the text and the structured fields alike:
+ * `ready` (a backend can run and its login is satisfied or not needed), `login_unverified` (a backend can run but its login
+ * cannot be checked locally: a browser session, a keyring), `needs_login` (nothing can run and at least one backend lacks its
+ * login or credential), `unavailable` (nothing can run: not installed, incompatible, disabled).
+ */
+export type ChainState = 'ready' | 'login_unverified' | 'needs_login' | 'unavailable';
 export interface ChainReport {
     entries: ChainEntryReport[];
     available: boolean;
+    state: ChainState;
     /** The first ready leg, or the best state among the skipped ones. */
     installation: 'missing' | 'detected' | 'incompatible' | 'not_required';
     credential?: 'not_required' | 'missing' | 'configured';

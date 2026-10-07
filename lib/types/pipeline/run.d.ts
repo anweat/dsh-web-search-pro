@@ -43,7 +43,8 @@ export interface ProviderCall {
 }
 export type ProviderOutcome = {
     state: 'ok';
-    sources: readonly ProviderSource[];
+    sources: readonly ProviderSource[]; /** The backend of a platform chain that answered. */
+    backend?: string;
 }
 /** `detail` carries the provider's own explanation of an empty answer (e.g. a login hint), when it gave one. */
  | {

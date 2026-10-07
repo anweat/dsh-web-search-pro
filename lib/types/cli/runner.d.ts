@@ -38,7 +38,14 @@ export declare function payloadError(output: CliOutputSpec, stdout: string): str
  * block-level tags become a space, entities are decoded.
  */
 export declare function stripMarkup(input: string): string;
-/** Map parsed items to sources by the output spec: http(s) URLs only, snippets and titles capped, tags stripped when asked. */
+/**
+ * Map parsed items to sources by the output spec: http(s) URLs only, snippets and titles capped, tags stripped when asked.
+ * `skipped` counts the items (objects) that had no usable link, so the caller can say so instead of silently returning fewer.
+ */
+export declare function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unknown[], count: number): {
+    sources: WebSearchSource[];
+    skipped: number;
+};
 export declare function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number): WebSearchSource[];
 /** Parse and map in one go (what the fixtures tests call). */
 export declare function parseCliOutput(spec: Pick<CliAdapterSpec, 'bins'>, search: CliSearchSpec, stdout: string, count?: number): WebSearchSource[];
@@ -73,3 +80,8 @@ export interface CliRunOptions {
  * abort reason when the caller's signal fires. Nothing is run when the spec's credentials are missing.
  */
 export declare function runCliSearch(spec: CliAdapterSpec, input: CliRunInput, options?: CliRunOptions): Promise<WebSearchSource[]>;
+/** {@link runCliSearch} that also reports how many results had no usable link and were skipped. */
+export declare function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunInput, options?: CliRunOptions): Promise<{
+    sources: WebSearchSource[];
+    skipped: number;
+}>;
