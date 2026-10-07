@@ -12,6 +12,7 @@
 | `0.1.15` | `dsh-v0.1.7-rc.2` + Browser `0.1.15` | 精确锁定该宿主版本；**仍停留在 DSH 0.1.x 宿主或 dsh-browser 0.1.x 的用户请使用这一版**（后续不再更新） |
 | `0.1.17` | `dsh-v0.1.7-rc.2` ~ `dsh-v0.2.0-rc.2` + Browser `0.1.17` | 过渡版本，已不再演进；新功能不会回到这条线 |
 | `0.2.0`（正式版） | **只支持 `dsh-v0.2.0-rc.2` 这一条线**（peer `>=0.2.0-rc.2 <0.2.1-0`）+ 可选 `@anweat/dsh-browser ^0.2.0` | 第一个 0.2.0 线版本，**破坏性变更**（见 [CHANGELOG.md](./CHANGELOG.md)）；711 项单元测试、94 项 bench 测试，`pnpm run test:peers` 两种解析模式检查，真实 Host（DSH 0.2.0-rc.2）验收 |
+| `0.2.1` | 同 `0.2.0`（peer `>=0.2.0-rc.2 <0.2.1-0` + 可选 `@anweat/dsh-browser ^0.2.0`） | 独立 CLI 适配层与平台后端链，无破坏性变更（见 [CHANGELOG.md](./CHANGELOG.md)）；774 项单元测试、94 项 bench 测试，真实 Host（DSH 0.2.0-rc.2）验收 |
 
 **支持范围**：DSH `>=0.2.0-rc.2 <0.2.1-0`，可选配套浏览器插件 `@anweat/dsh-browser ^0.2.0`（即 0.2.x，不含 0.3）。
 
@@ -34,9 +35,9 @@
 
 ```bash
 # 默认安装（面向 dsh-v0.2.0-rc.2 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
-dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.0
+dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.1
 # 不需要浏览器能力时，只装本插件即可：
-dsh plugin --profile web add dsh-web-search-pro@0.2.0
+dsh plugin --profile web add dsh-web-search-pro@0.2.1
 # 或本地目录 / tarball：
 dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
@@ -54,7 +55,7 @@ dsh --profile web
 先确认宿主是 `dsh-v0.2.0-rc.2`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.0`；两者都需要作为 profile 的直接依赖。
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.0
+dsh plugin --profile web add @anweat/dsh-browser@0.2.0 dsh-web-search-pro@0.2.1
 ```
 
 > **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级，停留在 `dsh-web-search-pro@0.1.15`。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回上面的 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。
