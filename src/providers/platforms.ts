@@ -29,10 +29,12 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
       const errors: unknown[] = []
       const notes: string[] = []
       for (const engine of chain) {
-        if (!engine.available()) continue
+        if (!engine.available()) { notes.push(engine.id + ': unavailable'); continue }
         try {
           const outcome = await engine.search(query, count, signal, options)
-          return { ...outcome, via: outcome.via ?? engine.id }
+          // The legs that were passed over are named with their reasons, so a fall-through is never silent.
+          const passed = notes.length ? ['skipped backends: ' + notes.join('; ')] : []
+          return { ...outcome, via: outcome.via ?? engine.id, backend: outcome.backend ?? engine.backend ?? engine.id, ...passed.length || outcome.notes?.length ? { notes: [...passed, ...outcome.notes ?? []] } : {} }
         } catch (error) {
           if (signal?.aborted) throw error
           errors.push(error)
@@ -44,7 +46,7 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
       const code = (error: unknown): unknown => (error as { code?: unknown } | null)?.code
       if (errors.every(error => code(error) === 'ENGINE_EMPTY')) throw new EngineError(notes.join('; '), 'ENGINE_EMPTY', false)
       throw new EngineError(notes.join('; '), 'ENGINE_ERROR', errors.some(error => (error as { retryable?: unknown } | null)?.retryable !== false))
-    },
+    }
   }
 }
 

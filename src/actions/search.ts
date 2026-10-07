@@ -103,6 +103,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
         platform: { type: 'string' },
         sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, lowConfidence: { type: 'boolean' } } } },
         engine: { type: 'string', required: true },
+        backend: { type: 'string' },
         enginesTried: { type: 'array', items: { type: 'string' } },
         fromCache: { type: 'boolean', required: true },
         fallbackNote: { type: 'string' },
@@ -153,7 +154,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
           return runEvidence(query, { platform: { id: resolved.id, ...resolved.url ? { url: resolved.url } : {}, ...resolved.authProfile ? { authProfile: resolved.authProfile } : {}, ...resolved.rulePack ? { rulePack: resolved.rulePack } : {} } })
         }
         const result = await ctx.router.search({ query: args.query ?? '', count: args.count ?? 8, fresh: args.fresh ?? false, multi: false, signal: ctx.signal, platform: request })
-        return { platform: args.platform, sources: result.sources, engine: result.engine, ...result.enginesTried ? { enginesTried: result.enginesTried } : {}, fromCache: result.fromCache, ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {} }
+        return { platform: args.platform, sources: result.sources, engine: result.engine, ...result.backend ? { backend: result.backend } : {}, ...result.enginesTried ? { enginesTried: result.enginesTried } : {}, fromCache: result.fromCache, ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {} }
       }
       for (const key of ['url', 'authProfile', 'rulePack'] as const) if (args[key] !== undefined) throw new ActionArgError(key + ' only applies together with platform')
       if (!args.query) throw new ActionArgError('query is required', 'Pass query, or platform=rss with url.')
@@ -187,8 +188,8 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       }
     },
     render(value) {
-      const v = value as { content?: string; platform?: string; sources: SourceRow[]; engine: string; enginesTried?: string[]; fromCache: boolean; fallbackNote?: string }
-      if (v.platform !== undefined) return 'Platform: ' + v.platform + ' (via ' + v.engine + (v.fromCache ? ', cached' : '') + ')\n\n' + formatSources(v.sources) + (v.fallbackNote ? '\n\n' + v.fallbackNote : '')
+      const v = value as { content?: string; platform?: string; sources: SourceRow[]; engine: string; backend?: string; enginesTried?: string[]; fromCache: boolean; fallbackNote?: string }
+      if (v.platform !== undefined) return 'Platform: ' + v.platform + ' (via ' + (v.backend ?? v.engine) + (v.fromCache ? ', cached' : '') + ')\n\n' + formatSources(v.sources) + (v.fallbackNote ? '\n\n' + v.fallbackNote : '')
       const tried = v.enginesTried ?? []
       const pack = value as unknown as Partial<EvidenceOutput>
       if (pack.resultId !== undefined && pack.evidence && pack.needs && pack.coveredNeeds && pack.gaps && pack.verification) {

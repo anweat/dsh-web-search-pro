@@ -23,11 +23,17 @@ export interface SearchOutcome {
   sources: WebSearchSource[]
   /** Id of the concrete backend that answered (a platform provider with a fallback chain names the leg that ran). */
   via?: string
+  /** The backend id of the platform chain that answered (`bili`, `browser-opencli`), for display and history. */
+  backend?: string
+  /** Short notes for the caller: backends skipped on the way, results dropped. */
+  notes?: string[]
 }
 
 export interface Engine {
   id: string
   label: string
+  /** Backend id in a platform chain (`xhs`, `browser-opencli`); absent for plain engines. */
+  backend?: string
   /** Cheap local availability check; must not do network I/O. */
   available(): boolean
   /** Browser-service method this engine depends on (dsh-browser is optional). */

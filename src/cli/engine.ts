@@ -6,7 +6,7 @@
  */
 
 import type { Engine, EngineDeps } from '../engines.ts'
-import { CliAdapterError, loginHint, missingEnv, runCliSearch, savedLoginPresent, type CliRunOptions } from './runner.ts'
+import { CliAdapterError, loginHint, missingEnv, runCliSearchDetailed, savedLoginPresent, type CliRunOptions } from './runner.ts'
 import { cachedProbe, probeCli, type CliProbeResult } from './probe.ts'
 import type { CliAdapterSpec } from './spec.ts'
 import type { runCli } from '../util.ts'
@@ -45,6 +45,7 @@ export function probeError(spec: Pick<CliAdapterSpec, 'bins' | 'packageNote'>, p
 export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled'>, options: CliLegOptions = {}): Engine {
   return {
     id: options.id ?? spec.id,
+    backend: options.id ?? spec.id,
     label: options.label ?? spec.bins[0]!,
     available: () => {
       if (disabledBySettings(spec, deps)) return false
@@ -68,8 +69,8 @@ export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick
         ...options.home ? { home: options.home } : {},
         ...options.skipCredentialGate ? { skipCredentialGate: true } : {},
       }
-      const sources = await runCliSearch(spec, { query, count, signal }, runOptions)
-      return { sources, via: options.id ?? spec.id }
+      const { sources, skipped } = await runCliSearchDetailed(spec, { query, count, signal }, runOptions)
+      return { sources, via: options.id ?? spec.id, backend: options.id ?? spec.id, ...skipped ? { notes: [skipped + ' result' + (skipped === 1 ? '' : 's') + ' without a link skipped'] } : {} }
     },
   }
 }

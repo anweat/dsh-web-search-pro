@@ -19,7 +19,7 @@ import { backendServes, CHAIN_PLATFORMS, DEFAULT_CHAINS, OPENCLI_SITE_OF } from 
 import { cliSpecEngine, disabledBySettings, probeError, specReadiness, type SpecReadiness } from './engine.ts'
 import { listOpencliSites, OPENCLI_PROBE, opencliSearchSpec } from './opencli.ts'
 import { cachedProbe, probeCli } from './probe.ts'
-import { CliAdapterError, runCliSearch } from './runner.ts'
+import { CliAdapterError, runCliSearchDetailed } from './runner.ts'
 import { resolveCliAdapters, type CliAdapterSpec } from './spec.ts'
 
 export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'custom-cli'
@@ -84,6 +84,7 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
   const site = OPENCLI_SITE_OF[platform]!
   const engine: Engine = {
     id: 'opencli',
+    backend: 'opencli',
     label: 'OpenCLI (standalone)',
     available: () => !disabledBySettings({ id: 'opencli' }, ctx.deps) && (cachedProbe(OPENCLI_PROBE)?.state ?? 'detected') === 'detected',
     async search(query, count, signal) {
@@ -97,7 +98,8 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
       if (!entry) throw new CliAdapterError(listed.problem ?? 'opencli has no read `search` command for the site ' + site + ' (opencli list)', 'CLI_CONTRACT_MISMATCH', 'run `opencli list` to see the sites your version supports')
       const spec = opencliSearchSpec(platform, entry)
       if (!spec) throw new CliAdapterError('opencli site ' + site + ' cannot be used by this adapter', 'CLI_CONTRACT_MISMATCH')
-      return { sources: await runCliSearch(spec, { query, count, signal }, { platform, bin: probe.path ?? 'opencli' }), via: 'opencli' }
+      const { sources, skipped } = await runCliSearchDetailed(spec, { query, count, signal }, { platform, bin: probe.path ?? 'opencli' })
+      return { sources, via: 'opencli', backend: 'opencli', ...skipped ? { notes: [skipped + ' result' + (skipped === 1 ? '' : 's') + ' without a link skipped'] } : {} }
     },
   }
   return {
@@ -116,7 +118,7 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
 }
 
 function browserOpencliLeg(platform: string, ctx: ChainContext): ChainLeg {
-  const engine = opencliEngine(platform, ctx.deps)
+  const engine: Engine = { ...opencliEngine(platform, ctx.deps), backend: 'browser-opencli' }
   return {
     id: 'browser-opencli', kind: 'browser-opencli', label: 'dsh-browser OpenCLI', engine, verification: 'unverified',
     async readiness() {
@@ -130,7 +132,7 @@ function browserOpencliLeg(platform: string, ctx: ChainContext): ChainLeg {
 }
 
 function browserSearchLeg(platform: string, ctx: ChainContext): ChainLeg {
-  const engine = playwrightPlatformEngine(platform, ctx.deps)
+  const engine: Engine = { ...playwrightPlatformEngine(platform, ctx.deps), backend: 'browser-search' }
   return {
     id: 'browser-search', kind: 'browser-search', label: 'dsh-browser search page', engine, verification: 'unverified',
     async readiness() {
@@ -146,7 +148,7 @@ function browserSearchLeg(platform: string, ctx: ChainContext): ChainLeg {
 const REST_ENGINES: Readonly<Record<string, (deps: EngineDeps) => Engine>> = { github: githubEngine, 'github-issues': githubIssuesEngine, 'github-code': githubCodeEngine }
 
 function restLeg(platform: string, ctx: ChainContext): ChainLeg {
-  const engine = REST_ENGINES[platform]!(ctx.deps)
+  const engine: Engine = { ...REST_ENGINES[platform]!(ctx.deps), backend: 'rest' }
   return {
     id: 'rest', kind: 'rest', label: 'GitHub REST API', engine, verification: 'live',
     async readiness() {
@@ -193,9 +195,18 @@ export interface ChainEntryReport {
   verification: string
 }
 
+/**
+ * What a chain can do right now, one word for the text and the structured fields alike:
+ * `ready` (a backend can run and its login is satisfied or not needed), `login_unverified` (a backend can run but its login
+ * cannot be checked locally: a browser session, a keyring), `needs_login` (nothing can run and at least one backend lacks its
+ * login or credential), `unavailable` (nothing can run: not installed, incompatible, disabled).
+ */
+export type ChainState = 'ready' | 'login_unverified' | 'needs_login' | 'unavailable'
+
 export interface ChainReport {
   entries: ChainEntryReport[]
   available: boolean
+  state: ChainState
   /** The first ready leg, or the best state among the skipped ones. */
   installation: 'missing' | 'detected' | 'incompatible' | 'not_required'
   credential?: 'not_required' | 'missing' | 'configured'
@@ -224,9 +235,13 @@ export async function chainReport(platform: string, ctx: ChainContext): Promise<
   const best = checked.map(c => c.r).sort((a, b) => rank[b.installation] - rank[a.installation])[0]
   const credentials = checked.map(c => c.r.credential)
   const skipped = checked.filter(c => !c.r.ready)
+  const confirmed = checked.find(c => c.r.ready && (c.r.credential === 'configured' || c.r.credential === 'not_required'))
+  const state: ChainState = confirmed ? 'ready' : firstReady ? 'login_unverified' : skipped.some(c => c.r.credential === 'missing') ? 'needs_login' : 'unavailable'
+  const unverified = checked.filter(c => c.r.ready && c.r.credential === undefined)
   return {
     entries,
     available: !!firstReady,
+    state,
     installation: firstReady ? firstReady.r.installation : best?.installation ?? 'missing',
     ...credentialOf(firstReady?.r.credential, credentials) ? { credential: credentialOf(firstReady?.r.credential, credentials)! } : {},
     ...!firstReady ? {
@@ -234,7 +249,10 @@ export async function chainReport(platform: string, ctx: ChainContext): Promise<
         ? 'no usable backend: ' + skipped.map(c => c.r.reason ?? c.leg.id + ' unavailable').join('; ')
         : 'no usable backend: ' + (diagnostics.join('; ') || 'the chain is empty'),
       diagnosticCode: skipped[0]?.r.code ?? 'no_backend',
-    } : { diagnosticCode: ['browser-opencli', 'browser-search', 'opencli'].includes(firstReady.leg.kind) || (firstReady.r.credential === undefined && firstReady.leg.kind !== 'rest') ? 'login_unverified' : 'ok' },
+    } : {
+      ...state === 'login_unverified' ? { reason: 'login not verified: ' + unverified.map(c => c.leg.id).join(', ') + ' will use your own session, which cannot be checked locally' + (skipped.length ? '; skipped: ' + skipped.map(c => c.r.reason ?? c.leg.id + ' unavailable').join('; ') : '') } : {},
+      diagnosticCode: ['browser-opencli', 'browser-search', 'opencli'].includes(firstReady.leg.kind) || (firstReady.r.credential === undefined && firstReady.leg.kind !== 'rest') ? 'login_unverified' : 'ok',
+    },
     diagnostics,
   }
 }

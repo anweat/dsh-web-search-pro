@@ -45,7 +45,7 @@ export interface ProviderCall {
 }
 
 export type ProviderOutcome =
-  | { state: 'ok'; sources: readonly ProviderSource[] }
+  | { state: 'ok'; sources: readonly ProviderSource[]; /** The backend of a platform chain that answered. */ backend?: string }
   /** `detail` carries the provider's own explanation of an empty answer (e.g. a login hint), when it gave one. */
   | { state: 'empty'; detail?: string }
   | { state: 'skipped'; reason: string }
@@ -243,7 +243,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
         sink.push(id + ': ' + (error instanceof Error ? error.message : String(error)))
         return undefined
       }
-      if (outcome.state === 'ok' && outcome.sources.length) { emptyDetails.delete(id); return { providerId: id, query, sources: outcome.sources } }
+      if (outcome.state === 'ok' && outcome.sources.length) { emptyDetails.delete(id); return { providerId: id, query, sources: outcome.sources, ...outcome.backend ? { backend: outcome.backend } : {} } }
       if (outcome.state === 'empty' || outcome.state === 'ok') {
         // Keep the provider's reason (login hint, selector hint) so an empty pack says why.
         if (outcome.state === 'empty' && outcome.detail) emptyDetails.set(id, outcome.detail)
@@ -627,7 +627,9 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
   }
 
   const sourcesCount = options.sourcesCount ?? 8
-  const used = [...answered]
+  // A platform names the backend that served it (`bilibili/bili`); plain engines keep their id.
+  const backendOf = new Map(allOutputs.filter(o => o.backend).map(o => [o.providerId, o.backend!] as const))
+  const used = [...answered].map(id => (backendOf.has(id) && backendOf.get(id) !== id ? id + '/' + backendOf.get(id) : id))
   const pack: EvidencePack = {
     resultId,
     profile: ctx.plan.profile,
