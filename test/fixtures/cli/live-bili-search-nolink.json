@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "schema_version": "1",
+  "data": [
+    {
+      "id": "BV1PiNaeTEjn",
+      "bvid": "BV1PiNaeTEjn",
+      "title": "全网最简单的Deepseek本地部署方法，谁都可以照抄！",
+      "author": "我是阿众",
+      "play": 1421322,
+      "duration": "3:47"
+    },
+    {
+      "id": "BV1BAVH6oE2Y",
+      "bvid": "BV1BAVH6oE2Y",
+      "title": "【喂饭教程】手把手教你搭建一个纯本地+可联网+带本地知识库的私人DeepSeek！隐私安全+零门槛部署，全程干货，小白看完直呼太简单！建议码住！",
+      "author": "AI智能体搭建-",
+      "play": 147385,
+      "duration": "16:43"
+    },
+    {
+      "id": "",
+      "bvid": "",
+      "title": "DeepSeekHarness企业落地实战",
+      "author": "老崔说AI",
+      "play": 1891,
+      "duration": ""
+    }
+  ]
+}

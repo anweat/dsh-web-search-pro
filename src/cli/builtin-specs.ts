@@ -51,7 +51,8 @@ const bili: CliAdapterSpec = {
     output: {
       format: 'json', itemsPath: 'data', expect: ENVELOPE, errorPaths: ['message', 'error'], stripTags: true, snippetMax: 300,
       fields: {
-        url: { template: 'https://www.bilibili.com/video/{bvid}' },
+        // Entries without a bvid (courses, series) carry no link in the JSON: the item's own link field is used when the tool gives one, else it is skipped and reported.
+        url: [{ template: 'https://www.bilibili.com/video/{bvid}' }, 'url', 'link', 'arcurl'],
         title: 'title',
         snippet: { join: [{ path: 'author', prefix: 'UP: ' }, { path: 'play', prefix: '播放: ' }, 'duration'] },
       },

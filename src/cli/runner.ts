@@ -200,15 +200,19 @@ export function stripMarkup(input: string): string {
   return htmlDecode(input.replace(/<\/?(?:p|div|br|li|ul|ol|tr|td|th|h[1-6]|section|article|blockquote)\b[^>]*>/gi, ' ').replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim()
 }
 
-/** Map parsed items to sources by the output spec: http(s) URLs only, snippets and titles capped, tags stripped when asked. */
-export function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number): WebSearchSource[] {
+/**
+ * Map parsed items to sources by the output spec: http(s) URLs only, snippets and titles capped, tags stripped when asked.
+ * `skipped` counts the items (objects) that had no usable link, so the caller can say so instead of silently returning fewer.
+ */
+export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unknown[], count: number): { sources: WebSearchSource[]; skipped: number } {
   const empty = new Set(output.emptyValues ?? [])
   const clean = (text: string | undefined): string | undefined => (text === undefined ? undefined : output.stripTags ? stripMarkup(text) : text)
   const sources: WebSearchSource[] = []
+  let skipped = 0
   for (const item of items) {
     if (!isObject(item)) continue
     const url = resolveField(output.fields.url, item, empty)
-    if (!url || !/^https?:\/\//i.test(url)) continue
+    if (!url || !/^https?:\/\//i.test(url)) { skipped++; continue }
     const rawTitle = clean(resolveField(output.fields.title, item, empty))
     const title = rawTitle ? capText(rawTitle, output.titleMax ?? 300) : undefined
     if (output.requireTitle && !title) continue
@@ -222,7 +226,11 @@ export function mapCliItems(output: CliOutputSpec, items: readonly unknown[], co
     })
     if (sources.length >= count) break
   }
-  return sources
+  return { sources, skipped }
+}
+
+export function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number): WebSearchSource[] {
+  return mapCliItemsDetailed(output, items, count).sources
 }
 
 /** Parse and map in one go (what the fixtures tests call). */
@@ -283,6 +291,11 @@ const includesAny = (text: string, fragments: readonly string[] | undefined): bo
  * abort reason when the caller's signal fires. Nothing is run when the spec's credentials are missing.
  */
 export async function runCliSearch(spec: CliAdapterSpec, input: CliRunInput, options: CliRunOptions = {}): Promise<WebSearchSource[]> {
+  return (await runCliSearchDetailed(spec, input, options)).sources
+}
+
+/** {@link runCliSearch} that also reports how many results had no usable link and were skipped. */
+export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunInput, options: CliRunOptions = {}): Promise<{ sources: WebSearchSource[]; skipped: number }> {
   const operation = options.operation ?? 'search'
   const search = operation === 'read' ? spec.read : searchSpecFor(spec, options.platform ?? spec.platforms[0] ?? '')
   const label = labelOf(spec)
@@ -325,9 +338,10 @@ export async function runCliSearch(spec: CliAdapterSpec, input: CliRunInput, opt
   }
 
   let sources: WebSearchSource[]
+  let skipped = 0
   try {
     const items = parseCliItems(spec, search.output, result.stdout)
-    sources = mapCliItems(search.output, items, Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? input.count))
+    ;({ sources, skipped } = mapCliItemsDetailed(search.output, items, Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? input.count)))
   } catch (error) {
     if (error instanceof CliAdapterError && error.code === 'CLI_FAILED' && includesAny(combined, search.notLoggedInPatterns)) throw notLoggedIn()
     if (error instanceof CliAdapterError) throw new CliAdapterError(redact(error.message), error.code as CliErrorCode, error.hint, error.retryable)
@@ -341,5 +355,5 @@ export async function runCliSearch(spec: CliAdapterSpec, input: CliRunInput, opt
     if (detail) throw new CliAdapterError(label + ' ' + operation + ' failed: ' + redact(capText(detail, 200)), 'CLI_FAILED', undefined, true)
     throw new EngineError(label + ' returned no results', 'ENGINE_EMPTY', false)
   }
-  return sources
+  return { sources, skipped }
 }
