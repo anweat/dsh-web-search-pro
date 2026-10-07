@@ -115,6 +115,11 @@ test('local probes by dimension: browser platforms say dsh-browser is missing, a
   const hadToken = [process.env.GITHUB_TOKEN, process.env.GH_TOKEN]
   delete process.env.GITHUB_TOKEN
   delete process.env.GH_TOKEN
+  // "/usr/bin" holds a real `gh` on some machines (GitHub's runners): this case needs a PATH without one.
+  const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-no-gh-'))
+  const hadPath = process.env.PATH
+  process.env.PATH = emptyBin
+  clearProbeCache()
   try {
     // Without a token and without gh the code search has nothing to run on; the reason names both.
     const bare = await registry.resolve('github-code')!.probeLocal(env()) as any
@@ -124,6 +129,9 @@ test('local probes by dimension: browser platforms say dsh-browser is missing, a
     assert.match(bare.reason, /gh: gh not found on PATH/)
     assert.equal((await registry.resolve('github-code')!.probeLocal(env({ deps: { githubToken: 't' } })) as any).credential, 'configured')
   } finally {
+    process.env.PATH = hadPath
+    clearProbeCache()
+    fs.rmSync(emptyBin, { recursive: true, force: true })
     if (hadToken[0] !== undefined) process.env.GITHUB_TOKEN = hadToken[0]
     if (hadToken[1] !== undefined) process.env.GH_TOKEN = hadToken[1]
   }
