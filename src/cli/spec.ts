@@ -22,8 +22,8 @@ export type CliVerification = typeof CLI_VERIFICATIONS[number]
 export const CLI_ERROR_CODES = ['CLI_NOT_FOUND', 'CLI_CONTRACT_MISMATCH', 'CLI_NOT_LOGGED_IN', 'ENGINE_EMPTY', 'CLI_FAILED'] as const
 export type CliErrorCode = typeof CLI_ERROR_CODES[number]
 
-/** One piece of a joined field: a path, optionally with text put before / after the value. */
-export type JoinPart = string | { path: string; prefix?: string; suffix?: string }
+/** One piece of a joined field: a path, optionally with text put before / after the value, or a `{ template }` over the item (dropped when a placeholder is empty). */
+export type JoinPart = string | { path: string; prefix?: string; suffix?: string } | { template: string }
 
 /** `{ template }` fills `{path}` placeholders from the item and yields nothing when one is empty; `when` makes it apply to one kind of item. */
 export interface TemplateSource { template: string; when?: { path: string; equals: string | number | boolean } }
@@ -86,6 +86,8 @@ export interface CliProbeSpec {
   helpArgs: readonly string[]
   /** Fragments the help output must contain: the subcommands and flags that prove this is the tool the spec describes. */
   mustContain: readonly string[]
+  /** Appended to the reason when `mustContain` is not met (which version is known to have the contract, for example). */
+  contractHint?: string
 }
 
 export interface CliLoginSpec {
@@ -189,7 +191,7 @@ const MAX_TIMEOUT_MS = 180_000
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
 const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
-const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain'])
+const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'output', 'emptyWhen', 'notLoggedInPatterns'])
 const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
@@ -238,7 +240,10 @@ function checkFieldSource(value: unknown, where: string, errors: string[]): void
     if (!value.join.length || value.join.length > 8) errors.push(where + '.join needs 1..8 parts')
     for (const part of value.join) {
       if (typeof part === 'string') { if (!PATH_RE.test(part)) errors.push(where + '.join: "' + part + '" is not a dotted path') }
-      else if (isObject(part) && typeof part.path === 'string' && PATH_RE.test(part.path) && Object.keys(part).every(k => ['path', 'prefix', 'suffix'].includes(k))) {
+      else if (isObject(part) && typeof part.template === 'string' && Object.keys(part).length === 1) {
+        if (!isStr(part.template, 300)) errors.push(where + '.join: a template part must be a string')
+        else templateProblems(part.template, where + '.join.template', undefined, errors)
+      } else if (isObject(part) && typeof part.path === 'string' && PATH_RE.test(part.path) && Object.keys(part).every(k => ['path', 'prefix', 'suffix'].includes(k))) {
         for (const k of ['prefix', 'suffix']) if (part[k] !== undefined && !(typeof part[k] === 'string' && (part[k] as string).length <= 40)) errors.push(where + '.join.' + k + ' must be a short string')
       } else errors.push(where + '.join: each part is a path or { path, prefix?, suffix? }')
     }
@@ -335,6 +340,7 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
     if (!(Array.isArray(p.helpArgs) && p.helpArgs.length)) errors.push(at + '.probe.helpArgs must not be empty')
     if (p.minVersion !== undefined && !(typeof p.minVersion === 'string' && VERSION_RE.test(p.minVersion))) errors.push(at + '.probe.minVersion must look like 1.2.3')
     if (!strList(p.mustContain, 12, 80)) errors.push(at + '.probe.mustContain must be a list of short strings (the subcommands / flags that prove the contract)')
+    if (p.contractHint !== undefined && !isStr(p.contractHint, 200)) errors.push(at + '.probe.contractHint must be a short string')
   }
 
   const searchWhere = (key: string): string => at + '.' + key

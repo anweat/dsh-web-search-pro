@@ -129,8 +129,17 @@ test('xhs / rdt / zhihu / twitter / yt-dlp (constructed from help and installed 
   assert.equal(zhihu[0]!.snippet, '备案流程分三步', 'tags stripped')
   assert.equal(zhihu[1]!.title, '大模型备案指南')
 
-  const tw = parse('twitter', 'constructed-twitter-search.txt')
-  assert.deepEqual(tw.map(s => [s.url, s.title]), [['https://x.com/alice/status/1001', '1 @alice Shipping v2 today'], ['https://x.com/carol/status/1002', '3 @carol Thread on caching  ♥ 12']])
+  const tw = parse('twitter', 'constructed-twitter-search.json')
+  assert.deepEqual(tw, [
+    { url: 'https://x.com/alice/status/1900000000000000001', title: 'Shipping v2 today. Changelog and migration notes: https://t.co/AbCdEfGhIj', snippet: 'Alice Dev (@alice) · likes 1234 · retweets 56 · views 98765 · 2026-10-07T18:05:04+00:00', publishedAt: '2026-10-07T18:05:04+00:00' },
+    { url: 'https://x.com/bob_cn/status/1900000000000000002', title: 'Bob 中文 (@bob_cn)', snippet: 'Bob 中文 (@bob_cn) · likes 0 · retweets 0 · views 0 · 2026-10-06T09:00:00+00:00', publishedAt: '2026-10-06T09:00:00+00:00' },
+    { url: 'https://x.com/dave/status/1900000000000000003', title: 'RT @carol: Thread on caching strategies for LLM agents (1/5)', snippet: 'Dave (@dave) · likes 3 · retweets 1 · views 410 · 2026-10-05T12:30:00+00:00', publishedAt: '2026-10-05T12:30:00+00:00' },
+  ])
+  // No avatar, video or t.co link of the payload is ever a result.
+  assert.ok(!tw.some(s => /twimg\.com|t\.co\//.test(s.url)))
+  assert.deepEqual(spec('twitter').search.argv, ['search', '{query}', '-n', '{count}', '--json'])
+  // The tool's own failure payload is quoted by its message (CLI_FAILED), not parsed as results.
+  assert.throws(() => parseCliOutput(spec('twitter'), spec('twitter').search, read('constructed-twitter-error.json')), (e: any) => e instanceof CliAdapterError && e.code === 'CLI_FAILED' && /No Twitter cookies found/.test(e.message))
 
   const yt = parse('yt-dlp', 'constructed-yt-dlp-search.tsv')
   assert.deepEqual(yt, [
@@ -193,10 +202,10 @@ test('runner on built-in specs: a tool that keeps a saved login is not run witho
     const saved = [process.env.TWITTER_AUTH_TOKEN, process.env.TWITTER_CT0]
     delete process.env.TWITTER_AUTH_TOKEN; delete process.env.TWITTER_CT0
     try {
-      await withCommands({ twitter: emit('constructed-twitter-search.txt') }, async () => {
+      await withCommands({ twitter: emit('constructed-twitter-search.json') }, async () => {
         await assert.rejects(runCliSearch(spec('twitter'), { query: 'q', count: 3 }), (e: any) => e.code === 'CLI_NOT_LOGGED_IN' && /TWITTER_AUTH_TOKEN \/ TWITTER_CT0/.test(e.message))
         process.env.TWITTER_AUTH_TOKEN = 'tok-aaaaaaaa'; process.env.TWITTER_CT0 = 'ct0-bbbbbbbb'
-        assert.equal((await runCliSearch(spec('twitter'), { query: 'q', count: 3 })).length, 2)
+        assert.equal((await runCliSearch(spec('twitter'), { query: 'q', count: 3 })).length, 3)
       })
     } finally {
       if (saved[0] === undefined) delete process.env.TWITTER_AUTH_TOKEN; else process.env.TWITTER_AUTH_TOKEN = saved[0]

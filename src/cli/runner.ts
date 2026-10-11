@@ -88,6 +88,7 @@ function asText(value: unknown, empty: ReadonlySet<string>): string | undefined 
 }
 
 function joinPart(part: JoinPart, item: unknown, empty: ReadonlySet<string>): string | undefined {
+  if (typeof part === 'object' && 'template' in part) return fillTemplate(part, item, empty)
   const p = typeof part === 'string' ? { path: part } as { path: string; prefix?: string; suffix?: string } : part
   const text = asText(getPath(item, p.path), empty)
   return text === undefined ? undefined : (p.prefix ?? '') + text + (p.suffix ?? '')
@@ -134,6 +135,24 @@ function firstArray(value: unknown): unknown[] | undefined {
 /** The label of a spec in messages (`bili`). */
 const labelOf = (spec: Pick<CliAdapterSpec, 'bins'>): string => spec.bins[0]!
 
+/** A title that is only a YAML-style field name (`profileImageUrl:`). */
+const KEY_LABEL = /^[A-Za-z_][\w.-]*:$/
+const YAML_LINE = /^\s*(- )?[A-Za-z_][\w.-]*:(\s|$)/
+
+/**
+ * Whether the whole stdout of a text-mode command is a JSON object / array or a YAML mapping / sequence document: the tool then
+ * printed a structured format the text parsers must not guess at (twitter-cli prints YAML when piped, issue #38).
+ */
+export function structuredKind(text: string): 'JSON' | 'YAML' | undefined {
+  const trimmed = text.trim()
+  if (/^[[{]/.test(trimmed)) {
+    try { const value: unknown = JSON.parse(trimmed); if (value !== null && typeof value === 'object') return 'JSON' } catch { /* not JSON */ }
+  }
+  const lines = trimmed.split(/\r?\n/).filter(line => line.trim() && !/^\s*#/.test(line))
+  if (lines.length >= 3 && lines.filter(line => YAML_LINE.test(line)).length * 2 > lines.length) return 'YAML'
+  return undefined
+}
+
 /**
  * Parse a tool's stdout into the items its output spec describes. A broken payload is CLI_CONTRACT_MISMATCH (the tool is not
  * what the spec says); a payload that says it failed (`expect` not met) is CLI_FAILED with the tool's own message.
@@ -142,6 +161,10 @@ export function parseCliItems(spec: Pick<CliAdapterSpec, 'bins'>, output: CliOut
   const label = labelOf(spec)
   const text = stdout.replace(/^﻿/, '')
   if (output.format === 'text') {
+    const structured = structuredKind(text)
+    if (structured) {
+      throw new CliAdapterError(label + ' printed ' + structured + ' output, but this adapter reads plain text lines: use format json / yaml with the tool\'s explicit output flag instead', 'CLI_CONTRACT_MISMATCH', 'the tool\'s default output differs from what the adapter parses (a tool often prints YAML or JSON when piped): ask it for json explicitly, e.g. --json')
+    }
     const lines = text.split(/\r?\n/)
     if (output.lines?.mode === 'url-lines') {
       const items: unknown[] = []
@@ -149,12 +172,14 @@ export function parseCliItems(spec: Pick<CliAdapterSpec, 'bins'>, output: CliOut
         const m = /(https?:\/\/[^\s]+)/.exec(line)
         if (!m) continue
         const title = stripTags(line).replace(m[1]!, '').trim()
-        if (title) items.push({ url: m[1], title })
+        // A bare `key:` label is a field name of a structured dump, not a result.
+        if (title && !KEY_LABEL.test(title)) items.push({ url: m[1], title })
       }
       return items
     }
     const columns = output.lines?.mode === 'tsv' ? output.lines.columns : []
-    return lines.filter(line => line.length > 0).map(line => Object.fromEntries(line.split('\t').map((cell, index) => [columns[index] ?? 'c' + index, cell])))
+    // A record has at least two cells; a notice or progress line on stdout (no tab) is not one.
+    return lines.filter(line => line.includes('\t')).map(line => Object.fromEntries(line.split('\t').map((cell, index) => [columns[index] ?? 'c' + index, cell])))
   }
   let parsed: unknown
   if (output.format === 'ndjson') {
@@ -213,7 +238,8 @@ export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unkno
     if (!isObject(item)) continue
     const url = resolveField(output.fields.url, item, empty)
     if (!url || !/^https?:\/\//i.test(url)) { skipped++; continue }
-    const rawTitle = clean(resolveField(output.fields.title, item, empty))
+    // A title is one line: a multi-line body (a tweet) is folded.
+    const rawTitle = clean(resolveField(output.fields.title, item, empty))?.replace(/\s+/g, ' ').trim()
     const title = rawTitle ? capText(rawTitle, output.titleMax ?? 300) : undefined
     if (output.requireTitle && !title) continue
     const snippet = clean(resolveField(output.fields.snippet, item, empty))
@@ -334,7 +360,9 @@ export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunIn
   if (result.code !== 0) {
     if (includesAny(combined, search.notLoggedInPatterns)) throw notLoggedIn()
     if (includesAny(combined, search.emptyWhen)) throw new EngineError(label + ' returned no results', 'ENGINE_EMPTY', false)
-    throw new CliAdapterError(label + ' ' + operation + ' failed: ' + redact(capText((result.stderr.trim() || result.stdout.trim() || 'exit ' + result.code), 200)), 'CLI_FAILED', undefined, true)
+    // A tool that answers failures in its machine-readable format (`{ ok: false, error: { message } }`) is quoted by that message, not by the raw payload.
+    const own = payloadError(search.output, result.stdout)
+    throw new CliAdapterError(label + ' ' + operation + ' failed: ' + redact(capText((own ?? (result.stderr.trim() || result.stdout.trim() || 'exit ' + result.code)), 200)), 'CLI_FAILED', undefined, true)
   }
 
   let sources: WebSearchSource[]

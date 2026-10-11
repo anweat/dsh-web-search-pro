@@ -38,7 +38,7 @@ async function withCommands<T>(commands: Record<string, string>, fn: () => Promi
     fs.rmSync(dir, { recursive: true, force: true })
   }
 }
-const TWITTER_OK = 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY"; echo "  -n, --max INTEGER";; *) echo "twitter-cli";; esac'
+const TWITTER_OK = 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY"; echo "  -n, --max INTEGER"; echo "  --json   Output as JSON.";; *) echo "twitter-cli";; esac'
 
 test('twitter is its own dependency entry; agent-reach stays as an optional install helper', () => {
   assert.ok(DEP_IDS.includes('twitter'))

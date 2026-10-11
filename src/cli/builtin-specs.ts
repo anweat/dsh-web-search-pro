@@ -96,19 +96,30 @@ const twitter: CliAdapterSpec = {
   bins: ['twitter'],
   packageNote: 'twitter-cli (PyPI twitter-cli; the command is `twitter`; Agent-Reach alone does not provide it)',
   platforms: ['twitter'],
-  probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['search'] },
+  // Without --json the tool prints YAML when stdout is not a terminal (twitter_cli/output.py), so the flag must exist.
+  probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['--json', '--max'], contractHint: 'twitter-cli 0.8.5 is the oldest version known to offer --json on search' },
   allowedSubcommands: ['search'],
   search: {
-    argv: ['search', '{query}', '-n', '{count}'],
+    argv: ['search', '{query}', '-n', '{count}', '--json'],
     maxCount: 10,
-    output: { format: 'text', lines: { mode: 'url-lines' }, titleMax: 200, requireTitle: true, fields: { url: 'url', title: 'title' } },
-    notLoggedInPatterns: ['not authenticated', 'unauthorized', 'no twitter cookies', 'auth_token', 'ct0'],
+    output: {
+      // `{ ok, schema_version, data: [tweet] }`; a failure is `{ ok: false, error: { code, message } }`. A tweet has no permalink: it is built from the author and the id.
+      format: 'json', itemsPath: 'data', expect: ENVELOPE, errorPaths: ['error.message'], titleMax: 200,
+      fields: {
+        url: { template: 'https://x.com/{author.screenName}/status/{id}' },
+        title: ['text', { template: '{author.name} (@{author.screenName})' }],
+        snippet: { join: [{ template: '{author.name} (@{author.screenName})' }, { path: 'metrics.likes', prefix: 'likes ' }, { path: 'metrics.retweets', prefix: 'retweets ' }, { path: 'metrics.views', prefix: 'views ' }, 'createdAtISO'], sep: ' · ' },
+        publishedAt: 'createdAtISO',
+      },
+    },
+    // The tool's own error codes and messages (exceptions.py, auth.py): code not_authenticated, "No Twitter cookies found.", "Cookie expired or invalid (HTTP 401)".
+    notLoggedInPatterns: ['not_authenticated', 'not authenticated', 'no twitter cookies', 'cookie expired or invalid'],
   },
   env: { required: ['TWITTER_AUTH_TOKEN', 'TWITTER_CT0'] },
   needsLogin: true,
   timeoutMs: 45_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'contract-only', version: '0.8.5', date: SPEC_CHECK_DATE, note: 'help probed; the plain-text output (`search QUERY -n N`) is the one the plugin has used since 0.1; the tool also offers --json, not used here; no search was run (needs your tokens)' },
+  verification: { status: 'contract-only', version: '0.8.5', date: '2026-10-11', note: 'contract from the installed twitter-cli 0.8.5 source (`--json` envelope, tweet_to_dict fields, error payload) plus the real output reported in issue #38; the plugin itself has not run a search (it needs your tokens). Before 0.2.2 the spec parsed the default output, which is YAML when piped (issue #38)' },
 }
 
 const xhs: CliAdapterSpec = {
