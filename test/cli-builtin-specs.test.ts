@@ -266,3 +266,57 @@ test('docs do not drift: README and the skill name every built-in spec, every de
   for (const platform of CHAIN_PLATFORMS) assert.ok(skill.includes(platform), 'skill names platform ' + platform)
   for (const id of ['platformBackends', 'cliAdapters']) { assert.ok(readme.includes(id)); assert.ok(skill.includes(id)) }
 })
+
+// ── guards against the class of bug of issue #38: a parser tied to a tool's default (human / TTY-dependent) output ──
+
+/** Flags that ask a tool for a machine-readable output, by the format the spec then parses. */
+function explicitFormat(argv: readonly string[]): 'json' | 'yaml' | 'print' | undefined {
+  if (argv.includes('--json')) return 'json'
+  if (argv.includes('--yaml')) return 'yaml'
+  if (argv.includes('--print')) return 'print'
+  for (const flag of ['-f', '--format', '--output-format']) {
+    const value = argv[argv.indexOf(flag) + 1]
+    if (argv.includes(flag) && (value === 'json' || value === 'yaml')) return value
+  }
+  return undefined
+}
+
+/** Tools whose only output IS the machine-readable one (no flag exists), each backed by the captured help text. */
+const MACHINE_ONLY: Readonly<Record<string, { help: string; proof: RegExp }>> = {
+  'wx-search-cli': { help: 'help/wx-search-cli.txt', proof: /search <query>[^\n]*\(JSON to stdout\)/ },
+}
+
+/** Problems of one search command with respect to the rule (empty = fine). */
+function outputRuleProblems(where: string, command: CliAdapterSpec['search'], machineOnly: { help: string; proof: RegExp } | undefined): string[] {
+  const problems: string[] = []
+  const output = command.output
+  if (output.lines?.mode === 'url-lines') problems.push(where + ': url-lines parses whatever the tool prints')
+  const flag = explicitFormat(command.argv)
+  if (!flag) {
+    if (!machineOnly) problems.push(where + ': argv has no explicit machine-readable output flag (' + command.argv.join(' ') + ')')
+    else assert.match(read(machineOnly.help), machineOnly.proof, where + ' is exempt only because its help says its output is JSON')
+  } else if (output.format === 'json' || output.format === 'yaml') {
+    // The flag and the parser agree (JSON is YAML, so a `--json` command may be read as yaml; not the other way round).
+    if (flag !== output.format && !(flag === 'json' && output.format === 'yaml')) problems.push(where + ': argv asks for ' + flag + ' but the output is parsed as ' + output.format)
+  } else if (output.format === 'text' && flag !== 'print') problems.push(where + ': text output is only allowed with an explicit --print template (' + flag + ')')
+  return problems
+}
+
+test('guard: no built-in spec parses a tool\'s default output - url-lines is not used, and every command asks for json / yaml / --print explicitly', () => {
+  const opencliSites = parseOpencliList(read('opencli-list.json'))
+  const generated = [...opencliSites].flatMap(([site, entry]) => { const s = opencliSearchSpec(site, entry); return s ? [s] : [] })
+  assert.ok(generated.length >= 5, 'the generated opencli specs are covered too')
+  const failures: string[] = []
+  for (const s of [...BUILTIN_CLI_SPECS, ...generated]) {
+    const commands: [string, CliAdapterSpec['search']][] = [['search', s.search], ...Object.entries(s.searches ?? {}), ...s.read ? [['read', s.read] as [string, CliAdapterSpec['search']]] : []]
+    for (const [name, command] of commands) failures.push(...outputRuleProblems(s.id + '.' + name, command, MACHINE_ONLY[s.id]))
+  }
+  assert.deepEqual(failures, [])
+  // The rule has teeth: the 0.2.1 twitter spec (default output, url-lines) fails it, and so do a mismatched flag and an unproven exemption.
+  const old = { argv: ['search', '{query}', '-n', '{count}'], output: { format: 'text', lines: { mode: 'url-lines' }, fields: { url: 'url' } } } as unknown as CliAdapterSpec['search']
+  assert.deepEqual(outputRuleProblems('twitter-0.2.1', old, undefined).length, 2)
+  assert.equal(outputRuleProblems('x', { argv: ['x', '--json'], output: { format: 'text', lines: { mode: 'tsv', columns: ['a', 'b'] }, fields: { url: 'a' } } }, undefined).length, 1)
+  assert.deepEqual(outputRuleProblems('x', { argv: ['x', '-f', 'json'], output: { format: 'json', fields: { url: 'url' } } }, undefined), [])
+  assert.equal(explicitFormat(['x', '-f', 'table']), undefined)
+  assert.throws(() => outputRuleProblems('x', { argv: ['x'], output: { format: 'json', fields: { url: 'url' } } }, { help: 'help/bili-search.txt', proof: /JSON to stdout/ }))
+})
