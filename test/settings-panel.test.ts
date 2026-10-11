@@ -7,7 +7,7 @@ test('settings panel covers every non-secret Web Search Pro configuration field'
   assert.deepEqual(FIELD_SPECS.map(spec => spec.field), [
     'engines', 'parallelEngines', 'searchMaxResults', 'timeoutMs',
     'fetchDefaultChars', 'exaContentsPerUrlChars', 'exaContentsTotalChars',
-    'exaApiKeyEnv', 'jinaApiKeyEnv', 'githubTokenEnv',
+    'exaApiKeyEnv', 'jinaApiKeyEnv', 'githubTokenEnv', 'twitterAuthTokenEnv', 'twitterCt0Env',
     'bochaApiKeyEnv', 'bochaBaseUrl', 'bochaSummary', 'searxngUrl', 'openalexMailto',
     'enableCliBackends', 'opencliEnabled', 'agentReachEnabled', 'providerId', 'registerProvider', 'toolSurface', 'playwright',
     'ttlSeconds', 'memoryCacheEntries', 'rrfConstant', 'freshnessBoost', 'freshnessDays', 'authorityBoost',

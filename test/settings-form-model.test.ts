@@ -64,6 +64,8 @@ test('the defaults the card shows are the defaults of the schema', () => {
   assert.equal(resolved.bochaApiKeyEnv, DEFAULTS.bochaApiKeyEnv)
   assert.equal(resolved.bochaBaseUrl, DEFAULTS.bochaBaseUrl)
   assert.equal(resolved.bochaSummary, DEFAULTS.bochaSummary)
+  assert.equal(resolved.twitterAuthTokenEnv, DEFAULTS.twitterAuthTokenEnv)
+  assert.equal(resolved.twitterCt0Env, DEFAULTS.twitterCt0Env)
 })
 
 // ── round trips: load -> edit -> save -> the payload is what the schema and the server read ──────────────────────
@@ -96,6 +98,8 @@ const CASES: Case[] = [
   { field: 'toolSurface', before: 'indexed', text: 'flat', payload: 'flat' },
   { field: 'bochaApiKeyEnv', before: '', text: 'MY_BOCHA', payload: 'MY_BOCHA' },
   { field: 'bochaBaseUrl', before: '', text: 'https://api.bocha.cn', payload: 'https://api.bocha.cn' },
+  { field: 'twitterAuthTokenEnv', before: '', text: 'MY_TW_AUTH', payload: 'MY_TW_AUTH' },
+  { field: 'twitterCt0Env', before: '', text: 'MY_TW_CT0', payload: 'MY_TW_CT0' },
   { field: 'bochaSummary', before: 'true', text: 'false', payload: false },
   { field: 'searxngUrl', before: '', text: 'http://127.0.0.1:8080', payload: 'http://127.0.0.1:8080' },
   { field: 'openalexMailto', before: '', text: 'me@example.com', payload: 'me@example.com' },
@@ -253,7 +257,7 @@ test('values outside what a control accepts block the save', async () => {
   for (const [field, text] of [
     ['evidence.maxRounds', '0'], ['evidence.maxRounds', '1.5'], ['provider.evidence', 'maybe'], ['provider.deadlineMs', '50'],
     ['toolSurface', 'wide'], ['bochaBaseUrl', 'not a url'], ['bochaBaseUrl', 'https://user:pw@api.example.com'],
-    ['bochaApiKeyEnv', 'has space'], ['keyedSources.tavily.apiKeyEnv', 'tvly sk 123'], ['openalexMailto', 'nobody'],
+    ['bochaApiKeyEnv', 'has space'], ['twitterCt0Env', 'has space'], ['keyedSources.tavily.apiKeyEnv', 'tvly sk 123'], ['openalexMailto', 'nobody'],
     ['evidence.judge.mode', 'always'], ['evidence.coverage.mode', 'hybrid'], ['evidence.budget.perSearchInputTokens', '-1'],
   ] as [SettingField, string][]) {
     controller.edit(field, text)
@@ -284,5 +288,21 @@ test('Bocha and keyed sources get write-only credentials that follow their saved
   assert.equal(controller.snapshot().credentials['keyed:brave'].configured, true)
   assert.equal(controller.snapshot().credentials['keyed:brave'].text, '')
   assert.equal(JSON.stringify(scope.user).includes('secret-for-test'), false, 'no key value reaches the settings')
+  controller.dispose()
+})
+
+test('the twitter-cli tokens are write-only credentials that follow their saved references, and never reach the settings', async () => {
+  const { scope, credentialValues, described, controller } = harness(BASE)
+  const refs = new Set(described.flat())
+  for (const ref of ['TWITTER_AUTH_TOKEN', 'TWITTER_CT0']) assert.ok(refs.has(ref), ref)
+  controller.edit('twitterAuthTokenEnv', 'MY_TW_AUTH')
+  controller.editCredential('twitter-auth-token', 'twitter-auth-secret-for-test')
+  controller.editCredential('twitter-ct0', 'twitter-ct0-secret-for-test')
+  await controller.save()
+  assert.equal(credentialValues.get('MY_TW_AUTH'), 'twitter-auth-secret-for-test')
+  assert.equal(credentialValues.get('TWITTER_CT0'), 'twitter-ct0-secret-for-test')
+  assert.equal(controller.snapshot().credentials['twitter-ct0'].configured, true)
+  assert.equal(controller.snapshot().credentials['twitter-ct0'].text, '')
+  assert.equal(JSON.stringify(scope.user).includes('secret-for-test'), false, 'no token value reaches the settings')
   controller.dispose()
 })

@@ -90,7 +90,7 @@ test('twitterGate: executable command AND settings AND credentials decide availa
     delete process.env.TWITTER_CT0
     const missing = twitterGate(on, { available: true })
     assert.equal(missing.available, false)
-    assert.match(missing.note!, /TWITTER_AUTH_TOKEN \/ TWITTER_CT0/)
+    assert.match(missing.note!, /TWITTER_CT0 is not set \(looked in/)
   } finally {
     for (const [key, value] of [['TWITTER_AUTH_TOKEN', env.a], ['TWITTER_CT0', env.b]] as const) { if (value === undefined) delete process.env[key]; else process.env[key] = value }
   }

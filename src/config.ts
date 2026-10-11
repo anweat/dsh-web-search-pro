@@ -210,6 +210,14 @@ export interface Config {
   githubToken?: string
   /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
   githubTokenEnv?: string
+  /** twitter-cli `auth_token` cookie (falls back to the credentials ref / $TWITTER_AUTH_TOKEN). Handed to the twitter command only through its environment. */
+  twitterAuthToken?: string
+  /** Credential/env reference for the twitter auth token; defaults to TWITTER_AUTH_TOKEN. */
+  twitterAuthTokenEnv?: string
+  /** twitter-cli `ct0` cookie (falls back to the credentials ref / $TWITTER_CT0). */
+  twitterCt0?: string
+  /** Credential/env reference for the twitter ct0 cookie; defaults to TWITTER_CT0. */
+  twitterCt0Env?: string
   /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
   enableCliBackends: boolean
   /** Allow opencli browser-session backends. */
@@ -293,6 +301,10 @@ export const Config = z.object({
   })).volatile(),
   githubToken: z.string().role('secret').volatile(),
   githubTokenEnv: z.string().default('GITHUB_TOKEN').volatile(),
+  twitterAuthToken: z.string().role('secret').volatile(),
+  twitterAuthTokenEnv: z.string().default('TWITTER_AUTH_TOKEN').volatile(),
+  twitterCt0: z.string().role('secret').volatile(),
+  twitterCt0Env: z.string().default('TWITTER_CT0').volatile(),
   enableCliBackends: z.boolean().default(true).volatile(),
   opencliEnabled: z.boolean().default(true).volatile(),
   agentReachEnabled: z.boolean().default(true).volatile(),
@@ -390,6 +402,10 @@ export interface ResolvedConfig extends Config {
   jinaApiKey?: string
   jinaApiKeyEnv: string
   githubTokenEnv: string
+  twitterAuthToken?: string
+  twitterAuthTokenEnv: string
+  twitterCt0?: string
+  twitterCt0Env: string
   bochaApiKey?: string
   bochaApiKeyEnv: string
   bochaBaseUrl: string
@@ -506,6 +522,10 @@ export function resolveConfig(config: Config): ResolvedConfig {
     keyedSources: config.keyedSources !== undefined ? v(config.keyedSources) : undefined,
     githubToken: config.githubToken !== undefined ? v(config.githubToken) : undefined,
     githubTokenEnv: vOr(config.githubTokenEnv, 'GITHUB_TOKEN') as string,
+    twitterAuthToken: config.twitterAuthToken !== undefined ? v(config.twitterAuthToken) : undefined,
+    twitterAuthTokenEnv: vOr(config.twitterAuthTokenEnv, 'TWITTER_AUTH_TOKEN') as string,
+    twitterCt0: config.twitterCt0 !== undefined ? v(config.twitterCt0) : undefined,
+    twitterCt0Env: vOr(config.twitterCt0Env, 'TWITTER_CT0') as string,
     enableCliBackends: vOr(config.enableCliBackends, true) as boolean,
     opencliEnabled: vOr(config.opencliEnabled, true) as boolean,
     agentReachEnabled: vOr(config.agentReachEnabled, true) as boolean,

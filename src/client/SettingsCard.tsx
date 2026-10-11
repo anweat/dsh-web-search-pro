@@ -225,6 +225,14 @@ export function SettingsCard(props: SettingsCardProps) {
               {text('githubTokenEnv', 'githubTokenEnv', 'credentialRefHint')}
               {credential('github', 'githubToken')}
             </div>
+            <h4 className={css.subheading}>{t('twitterGroup')}</h4>
+            <p className={css.hint} data-web-search-pro-twitter-tokens>{t('twitterGroupHint')}</p>
+            <div className={css.grid}>
+              {text('twitterAuthTokenEnv', 'twitterAuthTokenEnv', 'twitterTokenRefHint', 'text', 'TWITTER_AUTH_TOKEN')}
+              {credential('twitter-auth-token', 'twitterAuthToken')}
+              {text('twitterCt0Env', 'twitterCt0Env', 'twitterTokenRefHint', 'text', 'TWITTER_CT0')}
+              {credential('twitter-ct0', 'twitterCt0')}
+            </div>
           </Section>
 
           <Section id="runtime" title={t('runtimeSection')} hint={t('runtimeSectionHint')} defaultOpen>

@@ -13,9 +13,9 @@ import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } fro
 import type { CustomPlatformSpec } from './config.ts'
 import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
 import { EngineError } from './engine-error.ts'
-import { cliSpecEngine } from './cli/engine.ts'
+import { cliSpecEngine, specEnv } from './cli/engine.ts'
 import { builtinSpecById } from './cli/builtin-specs.ts'
-import { buildArgv, parseCliOutput } from './cli/runner.ts'
+import { buildArgv, missingEnv, parseCliOutput } from './cli/runner.ts'
 
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
@@ -93,6 +93,11 @@ export interface EngineDeps {
   anysearchApiKey?: string
   /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
   githubToken?: string
+  /**
+   * Credential variables of the CLI adapters by the name the tool reads (`TWITTER_AUTH_TOKEN`, `TWITTER_CT0`), resolved by the router:
+   * config literal -> credentials ref -> process environment. Handed to a command only through its environment, never in argv.
+   */
+  cliEnv?: Readonly<Record<string, string>>
   enableCli: boolean
   opencliEnabled: boolean
   agentReachEnabled: boolean
@@ -577,7 +582,7 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
     return {
       id: 'agentreach-twitter',
       label: 'agent-reach twitter-cli',
-      available: () => deps.enableCli && deps.agentReachEnabled && !!process.env.TWITTER_AUTH_TOKEN && !!process.env.TWITTER_CT0,
+      available: () => deps.enableCli && deps.agentReachEnabled && missingEnv(twitterSpec, specEnv(deps)).length === 0,
       async search(query, count, signal, options) {
         try {
           return await leg.search(query, count, signal, options)

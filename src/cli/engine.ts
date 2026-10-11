@@ -23,6 +23,14 @@ export function disabledBySettings(spec: Pick<CliAdapterSpec, 'id'>, deps: Pick<
   return gate && !deps[gate.key] ? gate.label : undefined
 }
 
+/**
+ * The environment a spec's credential variables are read from: the process environment overlaid with the values the router
+ * resolved (settings literal -> DSH credentials -> process environment). Undefined = the process environment as it is.
+ */
+export function specEnv(deps: Pick<EngineDeps, 'cliEnv'>): NodeJS.ProcessEnv | undefined {
+  return deps.cliEnv && Object.keys(deps.cliEnv).length ? { ...process.env, ...deps.cliEnv } : undefined
+}
+
 export interface CliLegOptions {
   /** Engine id (default: the spec id). */
   id?: string
@@ -42,7 +50,7 @@ export function probeError(spec: Pick<CliAdapterSpec, 'bins' | 'packageNote'>, p
   return new CliAdapterError(spec.bins[0] + ' is installed but does not match this adapter: ' + (probe.reason ?? 'contract mismatch'), 'CLI_CONTRACT_MISMATCH', 'a different program with the same name, or a version the adapter does not know: check `sources.deps`')
 }
 
-export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled'>, options: CliLegOptions = {}): Engine {
+export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled' | 'cliEnv'>, options: CliLegOptions = {}): Engine {
   return {
     id: options.id ?? spec.id,
     backend: options.id ?? spec.id,
@@ -65,7 +73,7 @@ export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick
       const runOptions: CliRunOptions = {
         platform, bin,
         ...options.run ? { run: options.run } : {},
-        ...options.env ? { env: options.env } : {},
+        ...(options.env ?? specEnv(deps)) ? { env: (options.env ?? specEnv(deps))! } : {},
         ...options.home ? { home: options.home } : {},
         ...options.skipCredentialGate ? { skipCredentialGate: true } : {},
       }
@@ -88,14 +96,14 @@ export interface SpecReadiness {
 }
 
 /** Local readiness of one spec: settings, contract probe, then the credentials it needs. Never runs a search. */
-export async function specReadiness(spec: CliAdapterSpec, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled'>, options: { env?: NodeJS.ProcessEnv; home?: string } = {}): Promise<SpecReadiness> {
+export async function specReadiness(spec: CliAdapterSpec, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled' | 'cliEnv'>, options: { env?: NodeJS.ProcessEnv; home?: string } = {}): Promise<SpecReadiness> {
   const off = disabledBySettings(spec, deps)
   if (off) return { ready: false, installation: 'missing', credential: 'not_required', reason: spec.id + ': ' + off, code: 'disabled' }
   const probe = await probeCli(spec)
   const base = { installation: probe.state, ...probe.version ? { version: probe.version } : {}, ...probe.path ? { path: probe.path } : {} }
   if (probe.state === 'missing') return { ...base, ready: false, installation: 'missing', credential: 'not_required', reason: spec.id + ': ' + (probe.reason ?? 'not installed'), code: 'cli_missing' }
   if (probe.state === 'incompatible') return { ...base, ready: false, installation: 'incompatible', credential: 'not_required', reason: spec.id + ': ' + (probe.reason ?? 'contract mismatch'), code: 'cli_incompatible' }
-  const missing = missingEnv(spec, options.env)
+  const missing = missingEnv(spec, options.env ?? specEnv(deps))
   if (missing.length) return { ...base, ready: false, installation: 'detected', credential: 'missing', reason: spec.id + ': ' + missing.join(' / ') + ' not set (' + loginHint(spec) + ')', code: 'not_logged_in' }
   const saved = savedLoginPresent(spec, options)
   if (saved === false) return { ...base, ready: false, installation: 'detected', credential: 'missing', reason: spec.id + ': no saved login (' + loginHint(spec) + ')', code: 'not_logged_in' }

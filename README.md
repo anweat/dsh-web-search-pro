@@ -350,6 +350,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
      exaApiKeyEnv: EXA_API_KEY # 推荐：运行环境或凭据服务，不把密钥写入配置
      jinaApiKeyEnv: JINA_API_KEY
      bochaApiKeyEnv: BOCHA_SEARCH_API_KEY # 博查 Key 的凭据 / 环境变量名；缺省再试 BOCHA_JEV_API_KEY
+     # twitterAuthTokenEnv: TWITTER_AUTH_TOKEN # twitter-cli 的两个 Cookie 值：凭据 / 环境变量名（默认如左）；也可在设置面板写入 DSH Credentials
+     # twitterCt0Env: TWITTER_CT0
      # keyedSources: # 付费来源（可选，见“付费 / 需 Key 的来源”）：tavily / brave / linkup / serper / metaso / zhipu / baidu-qianfan
      #   tavily: { apiKeyEnv: TAVILY_API_KEY }   # 或 apiKey（字面量，不推荐）/ baseUrl；没有 Key 的来源保持不可用
      engines: [ddg, bing, exa, seam, jina]
@@ -441,7 +443,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 链上缺失、不兼容或未登录的后端被跳过并记下原因；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
 
-**启用一个 CLI**：按 `sources.deps` 给出的命令安装（`sources.install` 需要你的审批），再**自己**运行它的登录命令（`xhs login`、`rdt login`、`zhihu login`、`gh auth login`；twitter 用环境变量 `TWITTER_AUTH_TOKEN` / `TWITTER_CT0`）。想优先用它，就改链序：
+**启用一个 CLI**：按 `sources.deps` 给出的命令安装（`sources.install` 需要你的审批），再**自己**运行它的登录命令（`xhs login`、`rdt login`、`zhihu login`、`gh auth login`；twitter 要 `TWITTER_AUTH_TOKEN` / `TWITTER_CT0`：在设置面板写入 DSH Credentials，或设在**宿主进程**的环境变量里，只写进 shell 配置文件（`~/.zshrc` 等）不够，宿主进程读不到。解析顺序同插件其他密钥：设置里的字面量 `twitterAuthToken` / `twitterCt0` → 凭据引用 `twitterAuthTokenEnv` / `twitterCt0Env` → 进程环境变量；值只通过子进程的环境变量交给 `twitter`，不进命令行、日志或错误信息，`sources.status` 缺失时会写明查过哪里）。想优先用它，就改链序：
 
     web-search-pro:
       platformBackends:
@@ -476,7 +478,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
 | opencli（dsh-browser 内置） | 小红书/Twitter/Reddit/IG/FB 的 `browser-opencli` 后端 | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
 | 其余适配 CLI（独立 `opencli`、`xhs`、`zhihu`、`rdt`、`omnireach`、`gh`、`wx-search-cli`、`tanso`） | 见上面的 [CLI 适配](#cli-适配--cli-adapters) | `sources.deps` 列出安装命令；登录由你自己完成 |
-| twitter-cli（命令 `twitter`） | Twitter 平台的 CLI 回退（执行 `twitter search`，另需环境变量 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
+| twitter-cli（命令 `twitter`） | Twitter 平台的首选后端（执行 `twitter search … --json`，需要 0.8.5 或更新；另需 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`，见上） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
 | agent-reach（可选） | 仅作安装助手，本插件不直接执行它；装了它**不代表** Twitter 搜索可用 | `uv tool install agent-reach` / `pip install agent-reach` |
 | mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |
 | playwright / patchright | 渲染/截图后端 | 由 dsh-browser 内置；默认 Playwright，兼容场景可显式切 Patchright；缺 Chromium 时调用 `runtime.install`（`browser_call`） |

@@ -31,7 +31,7 @@ Order of precedence for the automatic plan: (1) `engines` / `platform` in the ca
 | `jina` | any | `JINA_API_KEY` |
 
 - **Self-hosted**: `searxng` needs `searxngUrl` in settings (no public instance is built in).
-- **CLI** (`sources.deps` lists them with `installation`: missing / detected / incompatible; `sources.install` installs one when the user asks): `bili`, `yt-dlp`, `twitter` (also needs `TWITTER_AUTH_TOKEN` and `TWITTER_CT0`), `xhs`, `zhihu`, `rdt`, `omnireach`, `gh`, `wx-search-cli`, `tanso`, standalone `opencli`, the user's own `cliAdapters`, `mcporter`, `agent-reach` (optional helper). See "Backend chains" below.
+- **CLI** (`sources.deps` lists them with `installation`: missing / detected / incompatible; `sources.install` installs one when the user asks): `bili`, `yt-dlp`, `twitter` (twitter-cli; also needs `TWITTER_AUTH_TOKEN` and `TWITTER_CT0` in DSH credentials or the Host process environment, not just a shell profile), `xhs`, `zhihu`, `rdt`, `omnireach`, `gh`, `wx-search-cli`, `tanso`, standalone `opencli`, the user's own `cliAdapters`, `mcporter`, `agent-reach` (optional helper). See "Backend chains" below.
 - **Browser-based** (need dsh-browser and a saved login): `weibo`, `douban`, `tieba`, `douyin`, `kuaishou`, and the dsh-browser OpenCLI legs of `instagram` / `facebook` (and the last legs of `xiaohongshu`, `reddit`, `twitter`, `zhihu`).
 
 ## Backend chains (CLI adapters)

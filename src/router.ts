@@ -408,6 +408,31 @@ export class SearchRouter {
     }
   }
 
+  /**
+   * The credential variables of the CLI adapters under the names the tools read, each resolved like the plugin's other secrets:
+   * settings literal -> DSH credentials ref (`twitterAuthTokenEnv`) -> process environment. Values only ever reach a command's environment.
+   */
+  async cliEnv(): Promise<Record<string, string>> {
+    const cfg = this.dynamic()
+    const out: Record<string, string> = {}
+    const authToken = await this.resolveKey(cfg.twitterAuthTokenEnv ?? 'TWITTER_AUTH_TOKEN', cfg.twitterAuthToken)
+    const ct0 = await this.resolveKey(cfg.twitterCt0Env ?? 'TWITTER_CT0', cfg.twitterCt0)
+    if (authToken) out.TWITTER_AUTH_TOKEN = authToken
+    if (ct0) out.TWITTER_CT0 = ct0
+    return out
+  }
+
+  /** Sync twin of {@link cliEnv} for `available()` checks: settings literal and process environment only. */
+  private cliEnvSync(): Record<string, string> {
+    const cfg = this.dynamic()
+    const out: Record<string, string> = {}
+    const authToken = cfg.twitterAuthToken || process.env[cfg.twitterAuthTokenEnv ?? 'TWITTER_AUTH_TOKEN']
+    const ct0 = cfg.twitterCt0 || process.env[cfg.twitterCt0Env ?? 'TWITTER_CT0']
+    if (authToken) out.TWITTER_AUTH_TOKEN = authToken
+    if (ct0) out.TWITTER_CT0 = ct0
+    return out
+  }
+
   /** Resolve a key through credentials first, then process env. */
   private async resolveKey(ref: string, literal?: string): Promise<string | undefined> {
     if (literal && literal.length > 0) return literal
@@ -435,8 +460,10 @@ export class SearchRouter {
     const semanticScholarApiKey = await this.resolveKey(SEMANTICSCHOLAR_KEY_ENV)
     const anysearchApiKey = await this.resolveKey(ANYSEARCH_KEY_ENV)
     const keyed = await this.keyedSources(cfg, (ref, literal) => this.resolveKey(ref, literal))
+    const cliEnv = await this.cliEnv()
     return {
       ...keyed,
+      ...Object.keys(cliEnv).length ? { cliEnv } : {},
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
       ...anysearchApiKey ? { anysearchApiKey } : {},
@@ -474,8 +501,10 @@ export class SearchRouter {
     const semanticScholarApiKey = process.env[SEMANTICSCHOLAR_KEY_ENV]
     const anysearchApiKey = process.env[ANYSEARCH_KEY_ENV]
     const keyed = this.keyedSourcesSync(cfg)
+    const cliEnv = this.cliEnvSync()
     return {
       ...keyed,
+      ...Object.keys(cliEnv).length ? { cliEnv } : {},
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
       ...anysearchApiKey ? { anysearchApiKey } : {},

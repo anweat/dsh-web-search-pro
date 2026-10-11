@@ -23,7 +23,7 @@ export type Json = Record<string, unknown>
 export type TopField =
   | 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs'
   | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars'
-  | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv'
+  | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env'
   | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'searxngUrl' | 'openalexMailto'
   | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled'
   | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright'
@@ -218,6 +218,8 @@ export const DEFAULTS = {
   budget: { ...DEFAULT_BUDGET },
   toolSurface: 'indexed',
   bochaApiKeyEnv: 'BOCHA_SEARCH_API_KEY',
+  twitterAuthTokenEnv: 'TWITTER_AUTH_TOKEN',
+  twitterCt0Env: 'TWITTER_CT0',
   bochaBaseUrl: 'https://api.bocha.cn',
   bochaSummary: true,
 } as const
@@ -236,6 +238,8 @@ export const FIELD_SPECS: readonly FieldSpec[] = [
   textField('exaApiKeyEnv', { required: true }),
   textField('jinaApiKeyEnv', { required: true }),
   textField('githubTokenEnv', { required: true }),
+  textField('twitterAuthTokenEnv', { pattern: KEY_REF_PATTERN }),
+  textField('twitterCt0Env', { pattern: KEY_REF_PATTERN }),
   textField('bochaApiKeyEnv', { pattern: KEY_REF_PATTERN }),
   textField('bochaBaseUrl', { url: true }),
   booleanField('bochaSummary', true),
@@ -337,7 +341,7 @@ export const rubricSpec = (id: string): PathSpec => path(jsonField(`evidence.rub
 export const rubricField = (id: string): RubricField => `evidence.rubrics.${id}`
 
 /** Fields that a Host write can never take as text (credentials go through the credentials remote). */
-export const CREDENTIAL_IDS = ['exa', 'jina', 'github', 'bocha', ...KEYED_SOURCE_IDS.map(id => `keyed:${id}` as const)] as const
+export const CREDENTIAL_IDS = ['exa', 'jina', 'github', 'bocha', 'twitter-auth-token', 'twitter-ct0', ...KEYED_SOURCE_IDS.map(id => `keyed:${id}` as const)] as const
 export type CredentialId = typeof CREDENTIAL_IDS[number]
 
 /** The settings field holding the credentials ref / environment variable name of each credential, and its default name. */
@@ -347,6 +351,8 @@ export function credentialRef(id: CredentialId): { field: SettingField; default:
     case 'jina': return { field: 'jinaApiKeyEnv', default: 'JINA_API_KEY' }
     case 'github': return { field: 'githubTokenEnv', default: 'GITHUB_TOKEN' }
     case 'bocha': return { field: 'bochaApiKeyEnv', default: DEFAULTS.bochaApiKeyEnv }
+    case 'twitter-auth-token': return { field: 'twitterAuthTokenEnv', default: DEFAULTS.twitterAuthTokenEnv }
+    case 'twitter-ct0': return { field: 'twitterCt0Env', default: DEFAULTS.twitterCt0Env }
     default: {
       const source = id.slice('keyed:'.length)
       return { field: `keyedSources.${source}.apiKeyEnv`, default: KEYED_SOURCE_ENVS[source]![0]! }

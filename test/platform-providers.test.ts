@@ -152,10 +152,10 @@ test('twitter probe: the chain is twitter-cli, standalone OpenCLI, dsh-browser O
     })
     // twitter-cli installed but its tokens are not set: skipped with the variables named; setting them makes the first leg ready.
     clearProbeCache()
-    await withCommands({ twitter: 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY";; *) echo "twitter, version 0.8.5";; esac' }, async () => {
+    await withCommands({ twitter: 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY"; echo "  -n, --max INTEGER"; echo "  --json  Output as JSON.";; *) echo "twitter, version 0.8.5";; esac' }, async () => {
       const noTokens = await registry.resolve('twitter')!.probeLocal(env()) as any
       assert.equal(noTokens.available, false)
-      assert.match(noTokens.reason, /twitter: TWITTER_AUTH_TOKEN \/ TWITTER_CT0 not set \(set TWITTER_AUTH_TOKEN \/ TWITTER_CT0 in your environment/)
+      assert.match(noTokens.reason, /twitter: TWITTER_AUTH_TOKEN \/ TWITTER_CT0 not set \(set TWITTER_AUTH_TOKEN \/ TWITTER_CT0 in DSH credentials \(plugin settings twitterAuthToken \/ twitterCt0\) or in the Host process environment; a shell profile alone is not enough\)/)
       process.env.TWITTER_AUTH_TOKEN = 'a'
       process.env.TWITTER_CT0 = 'b'
       const viaCli = await registry.resolve('twitter')!.probeLocal(env()) as any

@@ -71,7 +71,7 @@ const SPEC_INSTALLS: Readonly<Record<string, Install[]>> = {
 const USED_BY: Readonly<Record<string, string>> = {
   bili: 'bilibili 平台后端',
   'yt-dlp': 'youtube 平台后端',
-  twitter: 'twitter 平台后端（第一后端，执行 `twitter search`；另需 TWITTER_AUTH_TOKEN 与 TWITTER_CT0）',
+  twitter: 'twitter 平台后端（第一后端，执行 `twitter search --json`；另需 TWITTER_AUTH_TOKEN 与 TWITTER_CT0，放在 DSH 凭据或宿主进程环境里）',
   xhs: 'xiaohongshu 平台后端（只读 `xhs search`；需用户自行 `xhs login`）',
   zhihu: 'zhihu 平台后端（只读 `zhihu search`；需用户自行 `zhihu login`）',
   rdt: 'reddit 平台后端（只读 `rdt search`；需用户自行 `rdt login`）',

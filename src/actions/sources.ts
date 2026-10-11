@@ -74,13 +74,17 @@ const DEP_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, pr
 
 /**
  * Whether the twitter platform backend can really run: the `twitter` command works (probed by detectDeps)
- * AND the backend is enabled in settings AND its credentials are in the environment (same gates as the engine).
+ * AND the backend is enabled in settings AND its credentials are available (same gates as the engine). `env` holds the values
+ * the router resolved (settings literal -> DSH credentials -> process environment); without it only the process environment is read.
  */
-export function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: { available: boolean; diagnostic?: string }): { available: boolean; note?: string } {
+export function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: { available: boolean; diagnostic?: string }, env: Readonly<Record<string, string | undefined>> = process.env): { available: boolean; note?: string } {
   if (!dep.available) return { available: false, note: dep.diagnostic ?? 'twitter command not found (install twitter-cli; Agent-Reach alone does not provide it)' }
   if (!cfg.enableCliBackends) return { available: false, note: 'CLI backends are disabled in settings (enableCliBackends)' }
   if (!cfg.agentReachEnabled) return { available: false, note: 'disabled in settings (agentReachEnabled)' }
-  if (!process.env.TWITTER_AUTH_TOKEN || !process.env.TWITTER_CT0) return { available: false, note: 'twitter command found, but TWITTER_AUTH_TOKEN / TWITTER_CT0 are not set' }
+  if (!env.TWITTER_AUTH_TOKEN || !env.TWITTER_CT0) {
+    const missing = ['TWITTER_AUTH_TOKEN', 'TWITTER_CT0'].filter(name => !env[name])
+    return { available: false, note: 'twitter command found, but ' + missing.join(' / ') + ' ' + (missing.length > 1 ? 'are' : 'is') + ' not set (looked in the plugin settings twitterAuthToken / twitterCt0, the DSH credentials refs twitterAuthTokenEnv / twitterCt0Env and the process environment): set them in DSH credentials or in the Host process environment; a shell profile alone is not enough' }
+  }
   return { available: true }
 }
 
@@ -117,6 +121,8 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       const { router, store } = ctx
       const cfg = ctx.dynamic()
       const cli = await detectDeps({ config: cfg })
+      // Tokens as the search resolves them (settings literal -> DSH credentials -> process environment); a stub router has none: the process environment.
+      const cliEnv = typeof (router as { cliEnv?: unknown }).cliEnv === 'function' ? { ...process.env, ...await router.cliEnv() } : process.env
       const availability = new Map(cli.map(value => [value.id, value.available]))
       const ev = cfg.evidence
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
@@ -140,7 +146,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         engines,
         ...providers ? { providers } : {},
         cli: cli.map(v => {
-          const gate = v.id === 'twitter' ? twitterGate(cfg, v) : undefined
+          const gate = v.id === 'twitter' ? twitterGate(cfg, v, cliEnv) : undefined
           return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...v.installation ? { installation: v.installation } : {}, ...v.version ? { version: v.version } : {}, ...v.verification ? { verification: v.verification } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
         }),
         browser: browserState(ctx.browser()),

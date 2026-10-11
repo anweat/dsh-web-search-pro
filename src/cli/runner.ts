@@ -58,10 +58,18 @@ export function savedLoginPresent(spec: Pick<CliAdapterSpec, 'login'>, opts: { h
   return files.some(file => exists(path.join(home, file.replace(/^~\//, ''))))
 }
 
+/** Credential variables the plugin also resolves from its own settings / DSH credentials (config literal -> credentials ref -> environment). */
+export const SETTINGS_BACKED_ENV: Readonly<Record<string, string>> = { TWITTER_AUTH_TOKEN: 'twitterAuthToken', TWITTER_CT0: 'twitterCt0' }
+
 /** What the user must do to log in: the tool's own command run by them, or the environment variables they set. Never run by the plugin. */
 export function loginHint(spec: Pick<CliAdapterSpec, 'bins' | 'login' | 'env'>): string {
-  if (spec.login?.command) return 'run `' + spec.login.command + '` yourself' + (spec.env.required?.length ? ' (or set ' + spec.env.required.join(' / ') + ')' : '')
-  if (spec.env.required?.length) return 'set ' + spec.env.required.join(' / ') + ' in your environment (and run `' + spec.bins[0] + ' login` yourself if the tool has one)'
+  const required = spec.env.required ?? []
+  // A Host process does not read a shell profile, so say where the values are looked up.
+  const where = required.length && required.every(name => SETTINGS_BACKED_ENV[name])
+    ? 'in DSH credentials (plugin settings ' + required.map(name => SETTINGS_BACKED_ENV[name]).join(' / ') + ') or in the Host process environment; a shell profile alone is not enough'
+    : 'in the Host process environment (a shell profile alone is not enough)'
+  if (spec.login?.command) return 'run `' + spec.login.command + '` yourself' + (required.length ? ' (or set ' + required.join(' / ') + ' ' + where + ')' : '')
+  if (required.length) return 'set ' + required.join(' / ') + ' ' + where
   return 'run `' + spec.bins[0] + ' login` yourself'
 }
 

@@ -239,6 +239,8 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       const present = new Set<string>()
       if (typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function') await Promise.all(envNames.map(async n => { if (await router.resolveSecret(n)) present.add(n) }))
       else for (const n of envNames) if (process.env[n]) present.add(n)
+      // The CLI credentials as the search resolves them (settings literal / custom ref / DSH credentials), under the names the tools read.
+      if (typeof (router as { cliEnv?: unknown }).cliEnv === 'function') for (const n of Object.keys(await router.cliEnv())) present.add(n)
       const routeOf = (id: string): string => (router as { registry?: { routeId(id: string): string | undefined } }).registry?.routeId(id) ?? id
       return recommendSources({
         ...args.task?.trim() ? { task: args.task.trim() } : {}, ...args.query?.trim() ? { query: args.query.trim() } : {},
