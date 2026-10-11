@@ -6,6 +6,7 @@
 
 import { browserState } from '../browser-access.ts'
 import { defaultInstaller, detectDeps, installDep } from '../deps.ts'
+import { verificationTag } from '../cli/spec.ts'
 import { judgeStatus, type JudgeStatus } from '../pipeline/judge-status.ts'
 import { resolveAllRubrics } from '../pipeline/rubrics.ts'
 import type { ProviderReport } from '../router.ts'
@@ -164,7 +165,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health, r.state && 'state=' + r.state].filter(Boolean).join(' ')
         lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
-        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + leg.verification + (leg.reason ? ' — ' + leg.reason : ''))
+        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + (verificationTag(leg.verification) ?? leg.verification) + (leg.reason ? ' — ' + leg.reason : ''))
         const b = p.budget
         if (b) lines.push('    request budget ' + p.route + ': ' + [b.total && 'total ' + b.total.used + '/' + b.total.limit + ' (' + b.total.remaining + ' left)', b.daily && 'today ' + b.daily.used + '/' + b.daily.limit + ' (' + b.daily.remaining + ' left)'].filter(Boolean).join(', ') + (b.exhausted ? ' — used up: skipped, the plan falls back to other sources' : ''))
       }

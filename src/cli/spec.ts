@@ -19,6 +19,16 @@ export type OutputFormat = typeof OUTPUT_FORMATS[number]
 export const CLI_VERIFICATIONS = ['live', 'contract-only', 'docs-only'] as const
 export type CliVerification = typeof CLI_VERIFICATIONS[number]
 
+/**
+ * The short honest tag shown next to a backend that was not verified with a real search ("detected and configured" is not "works"),
+ * or undefined for `live` and for backends that are not CLI specs.
+ */
+export function verificationTag(status: string): string | undefined {
+  if (status === 'contract-only') return 'contract-only — output parser not verified with a real search'
+  if (status === 'docs-only') return 'docs-only — written from upstream docs, tool not run here'
+  return undefined
+}
+
 export const CLI_ERROR_CODES = ['CLI_NOT_FOUND', 'CLI_CONTRACT_MISMATCH', 'CLI_NOT_LOGGED_IN', 'ENGINE_EMPTY', 'CLI_FAILED'] as const
 export type CliErrorCode = typeof CLI_ERROR_CODES[number]
 

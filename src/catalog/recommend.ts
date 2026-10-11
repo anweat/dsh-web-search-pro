@@ -9,6 +9,8 @@
 
 import { inferProfile, taskLanguage, type ProviderStatus } from '../pipeline/plan.ts'
 import { PROFILES, type Profile } from '../pipeline/types.ts'
+import { cliVerificationOf } from '../cli/builtin-specs.ts'
+import { verificationTag } from '../cli/spec.ts'
 import type { CatalogEntry, CostTier, SourceCatalog } from './schema.ts'
 
 /** Most suggestions one call returns. */
@@ -67,6 +69,8 @@ export interface Suggestion {
   /** First counter-example of the entry. */
   notFor?: string
   verified: boolean
+  /** The CLI backend this source runs through, when its adapter was not verified with a real search (`twitter: contract-only — …`). */
+  backend?: string
   sourceFamily?: string
 }
 
@@ -162,12 +166,14 @@ function score(e: CatalogEntry, profile: Profile, language: 'zh' | 'en' | undefi
 function toSuggestion(a: Assessed): Suggestion {
   const e = a.entry
   const executable = a.status === 'ready' || a.status === 'limited'
+  const tag = e.requires?.cli ? verificationTag(cliVerificationOf(e.requires.cli) ?? '') : undefined
   return {
     id: e.id, label: e.label, kind: e.kind, costTier: a.costTier, status: a.status, executable, use: a.use,
     why: e.recommendedFor[0] ?? e.label,
     ...a.missing.length ? { missing: a.missing, setup: e.install } : {},
     ...e.notFor[0] ? { notFor: e.notFor[0] } : {},
     verified: e.verification.status === 'verified',
+    ...tag ? { backend: e.requires!.cli + ': ' + tag } : {},
     ...e.sourceFamily ? { sourceFamily: e.sourceFamily } : {},
   }
 }
@@ -237,7 +243,7 @@ export function renderRecommendation(r: Recommendation): string {
   const lines = ['Recommended sources for profile ' + r.profile + (r.profileInferred ? ' (inferred)' : '') + (r.language ? ', language ' + r.language : '') + ':']
   r.picks.forEach((p, i) => {
     lines.push((i + 1) + '. ' + p.label + ' [' + p.id + '] ' + p.status + ', ' + p.costTier + (p.verified ? '' : ', unverified') + ' — ' + p.why)
-    lines.push('   use: ' + p.use + (p.missing?.length ? ' | missing: ' + p.missing.join('; ') : '') + (p.setup && p.missing?.length ? ' | setup: ' + p.setup : ''))
+    lines.push('   use: ' + p.use + (p.missing?.length ? ' | missing: ' + p.missing.join('; ') : '') + (p.setup && p.missing?.length ? ' | setup: ' + p.setup : '') + (p.backend ? ' | backend ' + p.backend : ''))
     if (p.notFor) lines.push('   not for: ' + p.notFor)
   })
   lines.push(...r.notes.map(n => 'note: ' + n))

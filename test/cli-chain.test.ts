@@ -273,3 +273,25 @@ test('sources.deps / sources.status / search.recommend agree with the chains: in
     })
   }
 })
+
+test('sources.status and search.recommend tag a backend whose adapter was never verified with a real search; live ones carry no tag', { skip: !posix }, async () => {
+  await withCommands({ 'wx-search-cli': WX_HELP }, async () => {
+    const h = harness({}, { browser: false })
+    try {
+      const defs = new Map<string, any>()
+      registerTools({ ctx: { tools: { register: (d: any) => defs.set(d.name, d) } } as any, config: h.config, dynamic: () => h.config, store: h.store, router: h.router as any, fetch: {} as any })
+      const status = await callAction(defs, 'sources.status')
+      const text = renderResult('sources.status', status)
+      assert.match(text, /2\. wx-search-cli \[ready 0\.1\.0\] contract-only — output parser not verified with a real search/)
+      assert.match(text, /1\. omnireach \[skipped\] live — /, 'a live adapter keeps the plain word')
+      assert.equal(status.providers.find((p: any) => p.route === 'wechat').chain[1].verification, 'contract-only', 'the structured field stays the status word')
+      const tw = await callAction(defs, 'search.recommend', { task: 'what do people say on twitter about deepseek', platform: 'twitter' })
+      assert.deepEqual(checkOutput(findAction('search.recommend')!.output, tw), [])
+      const pick = tw.picks.find((p: any) => p.id === 'twitter')
+      assert.equal(pick.backend, 'twitter: contract-only — output parser not verified with a real search')
+      assert.match(renderResult('search.recommend', tw), / \| backend twitter: contract-only — output parser not verified with a real search/)
+      const wechat = await callAction(defs, 'search.recommend', { task: '公众号 文章', platform: 'wechat' })
+      assert.equal(wechat.picks.find((p: any) => p.id === 'wechat').backend, undefined, 'omnireach is live')
+    } finally { h.cleanup() }
+  })
+})

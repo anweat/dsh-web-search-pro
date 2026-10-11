@@ -333,6 +333,11 @@ for (const spec of BUILTIN_CLI_SPECS) {
   if (!result.ok) throw new Error('built-in CLI spec ' + spec.id + ' is invalid: ' + result.errors.join('; '))
 }
 
+/** How far the adapter of a command (by its first bin name) was verified: a built-in spec's own record, `contract-only` for the standalone OpenCLI. */
+export function cliVerificationOf(bin: string): string | undefined {
+  return BUILTIN_CLI_SPECS.find(spec => spec.bins[0] === bin)?.verification?.status ?? (bin === 'opencli' ? 'contract-only' : undefined)
+}
+
 export const builtinSpecById = (id: string): CliAdapterSpec | undefined => BUILTIN_CLI_SPECS.find(spec => spec.id === id)
 
 export type { CliSearchSpec }
