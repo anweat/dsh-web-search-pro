@@ -411,13 +411,13 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 **探测**只在本地：找命令、跑 `--version` 和规格里的 `--help`，检查版本与契约，缓存 60 秒；**不搜索、不登录**。同名但契约不同的程序（如 PyPI 上另一个 `bili-cli`）报 `incompatible` 并写明原因，不会被当成可用。`sources.deps` 显示每个 CLI 的 `installation`（missing / detected / incompatible）、版本、适配验证程度；`sources.status` 的每个平台带 `chain`：每条后端的顺序、状态、被跳过的原因。
 
-| 内置规格 | 命令 | 已验证版本（2026-10-06） | 验证程度 |
+| 内置规格 | 命令 | 已验证版本（2026-10-06；yt-dlp 与 twitter 为 2026-10-11） | 验证程度 |
 |---|---|---|---|
 | `bili`（bilibili） | `bili` | 0.6.2 | **live**：真实只读搜索并解析 |
 | `gh`（github / github-issues / github-code 的回退） | `gh` | 2.101.0 | **live**（仓库搜索）；issues / code 按帮助页字段，未运行 |
 | `omnireach`（`wechat` 与多源 `omnireach`） | `omnireach` | 0.19.0-alpha | **live**（`--on wechat`）；多源命令未运行 |
-| `yt-dlp`（youtube） | `yt-dlp` | 2026.08.19 | contract-only：帮助与版本，未运行搜索 |
-| `twitter` | `twitter` | 0.8.5 | contract-only：需要你的 Token，未运行搜索 |
+| `yt-dlp`（youtube） | `yt-dlp` | 2026.08.19 | **live**：真实运行 `ytsearch2:` 搜索并解析（2026-10-11） |
+| `twitter` | `twitter` | 0.8.5 | contract-only：`--json` 信封与字段来自已装 0.8.5 的源码和 issue #38 里的真实输出；需要你的 Token，我们没运行过搜索 |
 | `xhs`（xiaohongshu） | `xhs` | 0.6.4 | contract-only：帮助 + 已装包源码里的输出形状；搜索需要你的登录 |
 | `zhihu` | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
 | `rdt`（reddit） | `rdt` | 0.4.2 | contract-only（同上） |

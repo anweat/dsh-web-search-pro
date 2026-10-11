@@ -2,10 +2,10 @@
  * The built-in CLI adapter specs (dev-plan M12). Every argv, flag and output field was derived from the tool's own
  * `--help` (and, where the help does not show the output shape, from the installed package source or the upstream
  * README), and `verification` records how far each was checked:
- *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach/wechat);
+ *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach/wechat, yt-dlp);
  *  - `contract-only`: help and version probed on a real install, output shape taken from the tool's own source,
  *    README or documented output option, because a search needs the user's login or reads browser cookies, or was outside
- *    the checks allowed (xhs, zhihu, rdt, twitter, opencli sites, yt-dlp, wx-search-cli);
+ *    the checks allowed (xhs, zhihu, rdt, twitter, opencli sites, wx-search-cli);
  *  - `docs-only`: not installed here; derived from the upstream README (tanso).
  * Fixtures for the contract-only and docs-only parsers are marked "constructed from help/docs" in test/fixtures/cli.
  * @module web-search-pro/cli/builtin-specs
@@ -88,7 +88,7 @@ const ytDlp: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 60_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'contract-only', version: '2026.08.19', date: SPEC_CHECK_DATE, note: 'help and version probed; flags from `yt-dlp --help`; the print template is the one the plugin has used since 0.1; no search was run' },
+  verification: { status: 'live', version: '2026.08.19', date: '2026-10-11', note: '`yt-dlp ytsearch2:"DeepSeek local deployment tutorial" --flat-playlist --skip-download --no-warnings --print <template>` parsed (fixture live-yt-dlp-search.txt); stdout held only the two records, the Python 3.10 deprecation notice went to stderr' },
 }
 
 const twitter: CliAdapterSpec = {

@@ -40,7 +40,7 @@ test('every built-in spec passes the same validation as a user spec, and is read
 
 test('verification records: live only where a real read-only search was run, docs-only where the tool was not available to probe', () => {
   const status = Object.fromEntries(BUILTIN_CLI_SPECS.map(s => [s.id, s.verification!.status]))
-  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'contract-only', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'contract-only', tanso: 'docs-only' })
+  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'live', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'contract-only', tanso: 'docs-only' })
   for (const s of BUILTIN_CLI_SPECS) {
     if (s.verification!.status === 'live') assert.match(s.verification!.date ?? '', /^\d{4}-\d{2}-\d{2}$/)
     assert.ok(s.verification!.version, s.id + ' records the verified version')
@@ -141,11 +141,27 @@ test('xhs / rdt / zhihu / twitter / yt-dlp (constructed from help and installed 
   // The tool's own failure payload is quoted by its message (CLI_FAILED), not parsed as results.
   assert.throws(() => parseCliOutput(spec('twitter'), spec('twitter').search, read('constructed-twitter-error.json')), (e: any) => e instanceof CliAdapterError && e.code === 'CLI_FAILED' && /No Twitter cookies found/.test(e.message))
 
+  // The `None` placeholders of yt-dlp's print template (constructed fixture; the live capture is tested below).
   const yt = parse('yt-dlp', 'constructed-yt-dlp-search.tsv')
   assert.deepEqual(yt, [
     { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Rust async explained', snippet: 'Some Channel | 1234567 views | 10:21' },
     { url: 'https://www.youtube.com/watch?v=abc123def45', title: 'No views video', snippet: '01:00' },
   ])
+})
+
+test('yt-dlp (live fixture 2026-10-11): the print template records parse; notices on stdout and a structured dump are not rows', () => {
+  const yt = spec('yt-dlp')
+  assert.deepEqual(yt.search.argv.slice(0, 1), ['ytsearch{count}:{query}'])
+  const out = parse('yt-dlp', 'live-yt-dlp-search.txt')
+  assert.deepEqual(out, [
+    { url: 'https://www.youtube.com/watch?v=nt1SzojVy38', title: 'How to actually run DeepSeek locally', snippet: 'Bog | 351134 views | 4:05' },
+    { url: 'https://www.youtube.com/watch?v=DG0vTg25OCY', title: 'Deploy DeepSeek R1 + Dify Locally｜ The Easiest Tutorial', snippet: 'Dify | 5906 views | 5:27' },
+  ])
+  // yt-dlp wrote its Python 3.10 deprecation notice to stderr; if a version prints one to stdout instead, it is not a record.
+  const noisy = 'Deprecated Feature: Support for Python version 3.10 has been deprecated. Please update to Python 3.11 or above\n' + read('live-yt-dlp-search.txt') + 'WARNING: [youtube] something\n'
+  assert.deepEqual(parseCliOutput(yt, yt.search, noisy, 20), out)
+  // A search with no hits prints nothing: no rows, and the runner turns that into an empty answer.
+  assert.deepEqual(parseCliOutput(yt, yt.search, '', 20), [])
 })
 
 test('wx-search-cli (README fixture) and tanso (docs-only fixture): drop captcha rows, keep the documented fields', () => {
