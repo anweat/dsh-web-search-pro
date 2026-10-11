@@ -22,10 +22,17 @@ export declare function savedLoginPresent(spec: Pick<CliAdapterSpec, 'login'>, o
     home?: string;
     exists?: (file: string) => boolean;
 }): boolean | undefined;
+/** Credential variables the plugin also resolves from its own settings / DSH credentials (config literal -> credentials ref -> environment). */
+export declare const SETTINGS_BACKED_ENV: Readonly<Record<string, string>>;
 /** What the user must do to log in: the tool's own command run by them, or the environment variables they set. Never run by the plugin. */
 export declare function loginHint(spec: Pick<CliAdapterSpec, 'bins' | 'login' | 'env'>): string;
 export declare function getPath(root: unknown, dotted: string): unknown;
 export declare function resolveField(source: FieldSource | undefined, item: unknown, empty?: ReadonlySet<string>): string | undefined;
+/**
+ * Whether the whole stdout of a text-mode command is a JSON object / array or a YAML mapping / sequence document: the tool then
+ * printed a structured format the text parsers must not guess at (twitter-cli prints YAML when piped, issue #38).
+ */
+export declare function structuredKind(text: string): 'JSON' | 'YAML' | undefined;
 /**
  * Parse a tool's stdout into the items its output spec describes. A broken payload is CLI_CONTRACT_MISMATCH (the tool is not
  * what the spec says); a payload that says it failed (`expect` not met) is CLI_FAILED with the tool's own message.

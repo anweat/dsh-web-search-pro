@@ -7,12 +7,13 @@ import type { ResolvedConfig } from '../config.ts';
 import { type ActionDef } from './types.ts';
 /**
  * Whether the twitter platform backend can really run: the `twitter` command works (probed by detectDeps)
- * AND the backend is enabled in settings AND its credentials are in the environment (same gates as the engine).
+ * AND the backend is enabled in settings AND its credentials are available (same gates as the engine). `env` holds the values
+ * the router resolved (settings literal -> DSH credentials -> process environment); without it only the process environment is read.
  */
 export declare function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: {
     available: boolean;
     diagnostic?: string;
-}): {
+}, env?: Readonly<Record<string, string | undefined>>): {
     available: boolean;
     note?: string;
 };

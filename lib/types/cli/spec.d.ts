@@ -16,13 +16,20 @@ export type OutputFormat = typeof OUTPUT_FORMATS[number];
 /** How far a spec has been checked against the real tool (recorded in the spec and shown in `sources.status`). */
 export declare const CLI_VERIFICATIONS: readonly ["live", "contract-only", "docs-only"];
 export type CliVerification = typeof CLI_VERIFICATIONS[number];
+/**
+ * The short honest tag shown next to a backend that was not verified with a real search ("detected and configured" is not "works"),
+ * or undefined for `live` and for backends that are not CLI specs.
+ */
+export declare function verificationTag(status: string): string | undefined;
 export declare const CLI_ERROR_CODES: readonly ["CLI_NOT_FOUND", "CLI_CONTRACT_MISMATCH", "CLI_NOT_LOGGED_IN", "ENGINE_EMPTY", "CLI_FAILED"];
 export type CliErrorCode = typeof CLI_ERROR_CODES[number];
-/** One piece of a joined field: a path, optionally with text put before / after the value. */
+/** One piece of a joined field: a path, optionally with text put before / after the value, or a `{ template }` over the item (dropped when a placeholder is empty). */
 export type JoinPart = string | {
     path: string;
     prefix?: string;
     suffix?: string;
+} | {
+    template: string;
 };
 /** `{ template }` fills `{path}` placeholders from the item and yields nothing when one is empty; `when` makes it apply to one kind of item. */
 export interface TemplateSource {
@@ -101,6 +108,8 @@ export interface CliProbeSpec {
     helpArgs: readonly string[];
     /** Fragments the help output must contain: the subcommands and flags that prove this is the tool the spec describes. */
     mustContain: readonly string[];
+    /** Appended to the reason when `mustContain` is not met (which version is known to have the contract, for example). */
+    contractHint?: string;
 }
 export interface CliLoginSpec {
     /** What the user runs themselves (`xhs login`); never run by the plugin. */

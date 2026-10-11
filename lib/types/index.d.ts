@@ -67,6 +67,10 @@ declare const _default: {
         }>>, string>>, "volatile">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        twitterAuthToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterAuthTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        twitterCt0: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterCt0Env: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         opencliEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
@@ -527,6 +531,10 @@ declare const _default: {
         }>>, string>>, "volatile">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        twitterAuthToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterAuthTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        twitterCt0: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterCt0Env: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         opencliEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;

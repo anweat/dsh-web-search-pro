@@ -176,6 +176,13 @@ export declare class SearchRouter {
     runProvider(call: ProviderCall, opts?: {
         skipSeam?: boolean;
     }): Promise<ProviderOutcome>;
+    /**
+     * The credential variables of the CLI adapters under the names the tools read, each resolved like the plugin's other secrets:
+     * settings literal -> DSH credentials ref (`twitterAuthTokenEnv`) -> process environment. Values only ever reach a command's environment.
+     */
+    cliEnv(): Promise<Record<string, string>>;
+    /** Sync twin of {@link cliEnv} for `available()` checks: settings literal and process environment only. */
+    private cliEnvSync;
     /** Resolve a key through credentials first, then process env. */
     private resolveKey;
     private deps;

@@ -31,6 +31,13 @@ export declare const zh: {
     readonly exaApiKey: "Exa API Key";
     readonly jinaApiKey: "Jina API Key";
     readonly githubToken: "GitHub Token";
+    readonly twitterGroup: "Twitter / X（twitter-cli）";
+    readonly twitterGroupHint: "twitter-cli 需要 auth_token 与 ct0。读取顺序：此处保存的凭据 → DSH Credentials 引用 → 宿主进程环境变量；只写 shell 配置文件不够。值只通过子进程环境变量传给命令，不进命令行、日志或错误信息。";
+    readonly twitterAuthTokenEnv: "Twitter auth_token 引用名";
+    readonly twitterCt0Env: "Twitter ct0 引用名";
+    readonly twitterTokenRefHint: "DSH Credentials / 环境变量引用名，默认与上方占位符相同。";
+    readonly twitterAuthToken: "Twitter auth_token";
+    readonly twitterCt0: "Twitter ct0";
     readonly credentialWriteOnlyHint: "只写输入；留空不会覆盖已保存密钥。";
     readonly credentialChecking: "正在检查…";
     readonly credentialSet: "已配置";

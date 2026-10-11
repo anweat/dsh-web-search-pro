@@ -191,6 +191,14 @@ export interface Config {
     githubToken?: string;
     /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
     githubTokenEnv?: string;
+    /** twitter-cli `auth_token` cookie (falls back to the credentials ref / $TWITTER_AUTH_TOKEN). Handed to the twitter command only through its environment. */
+    twitterAuthToken?: string;
+    /** Credential/env reference for the twitter auth token; defaults to TWITTER_AUTH_TOKEN. */
+    twitterAuthTokenEnv?: string;
+    /** twitter-cli `ct0` cookie (falls back to the credentials ref / $TWITTER_CT0). */
+    twitterCt0?: string;
+    /** Credential/env reference for the twitter ct0 cookie; defaults to TWITTER_CT0. */
+    twitterCt0Env?: string;
     /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
     enableCliBackends: boolean;
     /** Allow opencli browser-session backends. */
@@ -273,6 +281,10 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     }>>, string>>, "volatile">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
+    twitterAuthToken: z<string, string, "volatile">;
+    twitterAuthTokenEnv: z<string, string, "volatile-defined">;
+    twitterCt0: z<string, string, "volatile">;
+    twitterCt0Env: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
     opencliEnabled: z<boolean, boolean, "volatile-defined">;
     agentReachEnabled: z<boolean, boolean, "volatile-defined">;
@@ -733,6 +745,10 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     }>>, string>>, "volatile">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
+    twitterAuthToken: z<string, string, "volatile">;
+    twitterAuthTokenEnv: z<string, string, "volatile-defined">;
+    twitterCt0: z<string, string, "volatile">;
+    twitterCt0Env: z<string, string, "volatile-defined">;
     enableCliBackends: z<boolean, boolean, "volatile-defined">;
     opencliEnabled: z<boolean, boolean, "volatile-defined">;
     agentReachEnabled: z<boolean, boolean, "volatile-defined">;
@@ -1163,6 +1179,10 @@ export interface ResolvedConfig extends Config {
     jinaApiKey?: string;
     jinaApiKeyEnv: string;
     githubTokenEnv: string;
+    twitterAuthToken?: string;
+    twitterAuthTokenEnv: string;
+    twitterCt0?: string;
+    twitterCt0Env: string;
     bochaApiKey?: string;
     bochaApiKeyEnv: string;
     bochaBaseUrl: string;

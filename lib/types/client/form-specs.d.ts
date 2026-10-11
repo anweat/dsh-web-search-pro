@@ -12,7 +12,7 @@
  */
 export type Json = Record<string, unknown>;
 /** Top-level config fields (one Host write each). */
-export type TopField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'searxngUrl' | 'openalexMailto' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose';
+export type TopField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env' | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'searxngUrl' | 'openalexMailto' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose';
 /** Options inside `evidence` / `provider`, addressed by their dotted config path. */
 export type PathField = 'evidence.autoProviders' | 'evidence.sourcePolicy' | 'evidence.maxRounds' | 'evidence.maxQueries' | 'evidence.judge.mode' | 'evidence.hybridBorderline' | 'evidence.judge.provider' | 'evidence.maxJevQuestions' | 'evidence.judge.allowLlm' | 'evidence.judge.providers' | 'evidence.coverage.mode' | 'evidence.coverage.provider' | 'evidence.coverage.thresholds.weak' | 'evidence.coverage.thresholds.covered' | 'evidence.budget.perSearchInputTokens' | 'evidence.budget.dailyInputTokens' | 'evidence.budget.timezone' | 'evidence.budget.providers' | 'provider.evidence' | 'provider.deadlineMs' | 'sources.priority' | 'sources.disabled';
 /** One rubric override entry (`evidence.rubrics.<id>`) and one keyed-source field. */
@@ -89,6 +89,8 @@ export declare const DEFAULTS: {
     };
     readonly toolSurface: "indexed";
     readonly bochaApiKeyEnv: "BOCHA_SEARCH_API_KEY";
+    readonly twitterAuthTokenEnv: "TWITTER_AUTH_TOKEN";
+    readonly twitterCt0Env: "TWITTER_CT0";
     readonly bochaBaseUrl: "https://api.bocha.cn";
     readonly bochaSummary: true;
 };
@@ -109,7 +111,7 @@ export declare const BUDGET_SPECS: readonly PathSpec[];
 export declare const rubricSpec: (id: string) => PathSpec;
 export declare const rubricField: (id: string) => RubricField;
 /** Fields that a Host write can never take as text (credentials go through the credentials remote). */
-export declare const CREDENTIAL_IDS: readonly ["exa", "jina", "github", "bocha", ...`keyed:${string}`[]];
+export declare const CREDENTIAL_IDS: readonly ["exa", "jina", "github", "bocha", "twitter-auth-token", "twitter-ct0", ...`keyed:${string}`[]];
 export type CredentialId = typeof CREDENTIAL_IDS[number];
 /** The settings field holding the credentials ref / environment variable name of each credential, and its default name. */
 export declare function credentialRef(id: CredentialId): {

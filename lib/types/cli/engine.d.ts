@@ -11,6 +11,11 @@ import type { CliAdapterSpec } from './spec.ts';
 import type { runCli } from '../util.ts';
 /** Why a spec is switched off by settings, or undefined when it may run. */
 export declare function disabledBySettings(spec: Pick<CliAdapterSpec, 'id'>, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled'>): string | undefined;
+/**
+ * The environment a spec's credential variables are read from: the process environment overlaid with the values the router
+ * resolved (settings literal -> DSH credentials -> process environment). Undefined = the process environment as it is.
+ */
+export declare function specEnv(deps: Pick<EngineDeps, 'cliEnv'>): NodeJS.ProcessEnv | undefined;
 export interface CliLegOptions {
     /** Engine id (default: the spec id). */
     id?: string;
@@ -24,7 +29,7 @@ export interface CliLegOptions {
 }
 /** The probe verdict as the structured error a search would raise, or undefined when the command is usable. */
 export declare function probeError(spec: Pick<CliAdapterSpec, 'bins' | 'packageNote'>, probe: CliProbeResult): CliAdapterError | undefined;
-export declare function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled'>, options?: CliLegOptions): Engine;
+export declare function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled' | 'cliEnv'>, options?: CliLegOptions): Engine;
 export interface SpecReadiness {
     ready: boolean;
     installation: 'missing' | 'detected' | 'incompatible';
@@ -37,7 +42,7 @@ export interface SpecReadiness {
     code: 'ok' | 'disabled' | 'cli_missing' | 'cli_incompatible' | 'not_logged_in';
 }
 /** Local readiness of one spec: settings, contract probe, then the credentials it needs. Never runs a search. */
-export declare function specReadiness(spec: CliAdapterSpec, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled'>, options?: {
+export declare function specReadiness(spec: CliAdapterSpec, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled' | 'cliEnv'>, options?: {
     env?: NodeJS.ProcessEnv;
     home?: string;
 }): Promise<SpecReadiness>;

@@ -60,6 +60,8 @@ export interface Suggestion {
     /** First counter-example of the entry. */
     notFor?: string;
     verified: boolean;
+    /** The CLI backend this source runs through, when its adapter was not verified with a real search (`twitter: contract-only — …`). */
+    backend?: string;
     sourceFamily?: string;
 }
 export interface Recommendation {

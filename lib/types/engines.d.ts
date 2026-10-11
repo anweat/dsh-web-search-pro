@@ -100,6 +100,11 @@ export interface EngineDeps {
     anysearchApiKey?: string;
     /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
     githubToken?: string;
+    /**
+     * Credential variables of the CLI adapters by the name the tool reads (`TWITTER_AUTH_TOKEN`, `TWITTER_CT0`), resolved by the router:
+     * config literal -> credentials ref -> process environment. Handed to a command only through its environment, never in argv.
+     */
+    cliEnv?: Readonly<Record<string, string>>;
     enableCli: boolean;
     opencliEnabled: boolean;
     agentReachEnabled: boolean;
