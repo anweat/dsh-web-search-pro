@@ -1,5 +1,16 @@
 # 更新记录
 
+## 0.2.3（2026-10-18）
+
+适配 DSH 0.2.1-rc.2 宿主。没有功能变更，也没有破坏性变更；0.2.2 的配置与数据照常可用。
+
+- peer 基线：所有受管的 `@deepseek-ai/dsh-*` peer 从 `>=0.2.0-rc.2 <0.2.1-0` 移到 `>=0.2.1-rc.2 <0.2.2-0`（单基线策略不变：0.2.0 线整体拒绝，0.2.2 的预发布也被上界挡掉）。`@deepseek-ai/cordis` peer `~4.0.5`、`@deepseek-ai/schemastery` peer `^3.18.5`；可选 Browser peer 仍是 `^0.2.0`。
+- devDependencies：`@deepseek-ai/dsh-*` 全部 → `0.2.1-rc.2`；cordis `^4.0.5`、schemastery `^3.18.5`、cordis-plugin-group `1.0.5`、cordis-plugin-include `1.0.10`、cosmokit `~1.8.6`、`@anweat/dsh-browser` `0.2.1`（最新已发布版；浏览器 0.2.2 与它的 peer 范围更新一起发布）。
+- 随宿主生态调整：`@deepseek-ai/dsh-invariants` 在 0.2.1 线不再发布（最后版本 0.2.0-rc.2），本插件也从未 import 它，从 devDependencies 移除；0.2.1-rc.2 把 `dsh-llm` / `dsh-session` 改成 peer-only，宿主 `autoInstallPeers: false` 不会自动装，故显式加入 devDependencies；新增宿主包 `dsh-working-directory@0.2.1-rc.2`（0.2.0-rc.2 的 `dsh-invariants` peer 位置）。不补这些时，测试在 import `@deepseek-ai/dsh-tools` 时会报 `ERR_MODULE_NOT_FOUND: @deepseek-ai/dsh-llm`。
+- `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 从 `@0.2.0-rc.2` 移到 `@0.2.1-rc.2`（去掉停更的 `dsh-invariants`，加入 `dsh-working-directory`）。
+- `test/compat/check-peer-ranges.js`：受支持基线改为 `0.2.1-rc.2`；行为矩阵覆盖 `0.2.1-rc.2` / `0.2.1` 通过，`0.1.7-rc.2` / `0.2.0-rc.1` / `0.2.0-rc.2` / `0.2.2-alpha.1` 在两种解析模式下都拒绝；`--selftest` 16 条已知行为通过。
+- 验证：790 项插件测试、94 项 bench 测试、类型检查、`test:peers`、构建与客户端 bundle 检查通过。本版没有在真实 0.2.1-rc.2 宿主上做端到端验收（由独立验证者在打包产物上执行）；CLI / 网络相关测试沿用既有 fixture，没有新增 live 依赖。
+
 ## 0.2.2（2026-10-11）
 
 修复 twitter 平台源返回错误结果的问题（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)，感谢 @gogososonono 的报告与根因分析）。兼容范围与 0.2.1 相同，没有破坏性变更。
