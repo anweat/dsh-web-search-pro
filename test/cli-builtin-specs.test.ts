@@ -116,10 +116,27 @@ test('gh (live fixtures 2026-10-26): Chinese repos query, issues and code search
   assert.deepEqual(parseCliOutput(gh, gh.search, '[]\n', 5), [])
 })
 
-test('omnireach (live fixture): the wechat source uses --on wechat, the multi-source command does not', () => {
+test('omnireach (live fixtures): every command names its sources with --on - the tool\'s automatic routing drives the user\'s Chrome', () => {
   const s = spec('omnireach')
   assert.deepEqual(searchSpecFor(s, 'wechat').argv, ['search', '{query}', '--on', 'wechat', '--limit', '{count}', '--json'])
-  assert.deepEqual(searchSpecFor(s, 'omnireach').argv, ['search', '{query}', '--limit', '{count}', '--json'])
+  assert.deepEqual(searchSpecFor(s, 'omnireach').argv, ['search', '{query}', '--on', 'hackernews,youtube,github,wechat,bilibili', '--limit', '{count}', '--json'])
+  // Without --on omnireach 0.19 adds `google` and `twitter` (adapter opencli = the user's logged-in Chrome) whenever `opencli` is on PATH.
+  for (const platform of s.platforms) {
+    const argv = searchSpecFor(s, platform).argv
+    assert.ok(argv[argv.indexOf('--on') + 1], platform + ' passes --on <sources>')
+    const sources = argv[argv.indexOf('--on') + 1]!.split(',')
+    assert.deepEqual(sources.filter(id => ['google', 'twitter', 'reddit', 'xiaohongshu', 'tiktok', 'douyin', 'agy', 'tavily', 'brave', 'perplexity', 'exa'].includes(id)), [], platform + ' names no browser-backed, wip or paid source')
+  }
+  for (const [file, expectSources] of [['live-omnireach-multi-zh.json', ['bilibili', 'github', 'wechat', 'youtube']], ['live-omnireach-multi-en.json', ['bilibili', 'github', 'hackernews', 'wechat', 'youtube']]] as const) {
+    const envelope = JSON.parse(read(file)) as { results: { source: string; adapter: string }[]; errors: unknown[] }
+    assert.deepEqual([...new Set(envelope.results.map(r => r.source))].sort(), expectSources, file + ' holds only the explicit sources')
+    assert.ok(!envelope.results.some(r => r.adapter === 'opencli'), file + ': no result came through opencli')
+    const out = parse('omnireach', file, 'omnireach', 50)
+    assert.equal(out.length, envelope.results.length)
+    assert.ok(out.every(r => /^https?:\/\//.test(r.url) && r.title && r.snippet !== '-'))
+  }
+  assert.equal(parse('omnireach', 'live-omnireach-multi-zh.json', 'omnireach', 3).length, 3, 'the count cuts the ranked list')
+  assert.ok(parse('omnireach', 'live-omnireach-multi-en.json', 'omnireach', 50).some(r => r.publishedAt === '2026-09-27T02:22:52Z'), 'ts becomes publishedAt')
   const out = parse('omnireach', 'live-omnireach-wechat.json', 'wechat')
   assert.equal(out.length, 1)
   assert.match(out[0]!.url, /^https:\/\/mp\.weixin\.qq\.com\/s\?src=11/)

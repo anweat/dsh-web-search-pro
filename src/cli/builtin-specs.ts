@@ -214,9 +214,13 @@ const rdt: CliAdapterSpec = {
 }
 
 const OMNIREACH_OUTPUT = {
-  format: 'json' as const, itemsPath: 'results', errorPaths: ['errors.0.error'], stripTags: true,
+  // The bilibili source writes a lone "-" when a video has no description.
+  format: 'json' as const, itemsPath: 'results', errorPaths: ['errors.0.error'], stripTags: true, emptyValues: ['-'],
   fields: { url: 'url', title: 'title', snippet: 'content', publishedAt: 'ts' },
 }
+
+/** The omnireach sources that need neither a key, a login nor a browser (the others are `heavy` / booster tiers or need a URL query). */
+export const OMNIREACH_KEYLESS_SOURCES = 'hackernews,youtube,github,wechat,bilibili'
 
 const omnireach: CliAdapterSpec = {
   id: 'omnireach',
@@ -225,8 +229,10 @@ const omnireach: CliAdapterSpec = {
   platforms: ['omnireach', 'wechat'],
   probe: { versionArgs: ['--version'], minVersion: '0.19.0', helpArgs: ['search', '--help'], mustContain: ['--on', '--limit', '--json'] },
   allowedSubcommands: ['search'],
-  // The multi-source search: the tool's own default sources (its browser-backed sources are opt-in there, never in the default fan-out).
-  search: { argv: ['search', '{query}', '--limit', '{count}', '--json'], maxCount: 20, output: OMNIREACH_OUTPUT },
+  // The multi-source search. Never the tool's own automatic routing: with `opencli` on PATH (or its Chrome bridge set up) that adds
+  // browser-backed Google and Twitter/X sources, which drive the user's logged-in Chrome (observed live 2026-10-26). `--on` names the
+  // keyless HTTP / CLI sources explicitly, and explicit sources are never augmented.
+  search: { argv: ['search', '{query}', '--on', OMNIREACH_KEYLESS_SOURCES, '--limit', '{count}', '--json'], maxCount: 20, output: OMNIREACH_OUTPUT },
   searches: {
     // WeChat official accounts through Sogou: no key, no login, no browser (the tool prefers Exa when EXA_API_KEY is set, which this adapter never passes).
     wechat: { argv: ['search', '{query}', '--on', 'wechat', '--limit', '{count}', '--json'], maxCount: 10, output: OMNIREACH_OUTPUT },
@@ -235,7 +241,7 @@ const omnireach: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 60_000,
   maxOutputBytes: 8 * MB,
-  verification: { status: 'live', version: '0.19.0-alpha', date: SPEC_CHECK_DATE, note: '`omnireach search 大模型 备案 --on wechat --limit 2 --json` parsed (fixture omnireach-wechat.json); the multi-source command was not run' },
+  verification: { status: 'live', version: '0.19.0-alpha', date: '2026-10-26', note: '`--on wechat` (2026-10-06, fixture omnireach-wechat.json) and the multi-source command with an explicit `--on hackernews,youtube,github,wechat,bilibili` (fixtures live-omnireach-multi-*.json) parsed. Its automatic routing added browser-backed google / twitter sources through opencli (they drive the user\'s Chrome), so the adapter never uses it' },
 }
 
 const GH_REPO_FIELDS = 'fullName,description,url,stargazersCount,language,updatedAt,forksCount'

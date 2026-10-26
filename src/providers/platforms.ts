@@ -198,9 +198,9 @@ export const platformAdapters: readonly ProviderAdapter[] = [
   // OmniReach as its own multi-source provider: addressable (`platform=omnireach`), never planned on its own.
   cliPlatform('omnireach', 'OmniReach (多源)', {
     languages: ['zh', 'en'], regions: ['global', 'cn'], taskProfiles: [], resultKinds: ['web', 'social'],
-    requirements: [cliReq('omnireach', 'OmniReach CLI (its own default sources; browser-backed ones stay opt-in there)')],
-    costModel: { kind: 'free', note: 'the CLI\'s default free sources; keys and the Chrome bridge are not passed' }, costTier: 'anonymous',
-    verification: { live: false, note: 'contract probed and the wechat source run live; the multi-source command was not run' },
+    requirements: [cliReq('omnireach', 'OmniReach CLI (explicit keyless sources: hackernews, youtube, github, wechat, bilibili; never its automatic routing, which adds Chrome-backed google / twitter)')],
+    costModel: { kind: 'free', note: 'five keyless sources named with --on; keys and the Chrome bridge are not passed' }, costTier: 'anonymous',
+    verification: { live: true, note: 'omnireach 0.19.0-alpha: the explicit-source multi-source command and the wechat source parsed live on 2026-10-26' },
   }),
 
   // Tanso (Bocha / Zhihu API CLI): documented contract only.

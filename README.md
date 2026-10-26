@@ -415,8 +415,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | 内置规格 | 命令 | 已验证版本（2026-10-06；yt-dlp 与 twitter 为 2026-10-11） | 验证程度 |
 |---|---|---|---|
 | `bili`（bilibili） | `bili` | 0.6.2 | **live**：真实只读搜索并解析 |
-| `gh`（github / github-issues / github-code 的回退） | `gh` | 2.101.0 | **live**（仓库搜索）；issues / code 按帮助页字段，未运行 |
-| `omnireach`（`wechat` 与多源 `omnireach`） | `omnireach` | 0.19.0-alpha | **live**（`--on wechat`）；多源命令未运行 |
+| `gh`（github / github-issues / github-code 的回退） | `gh` | 2.101.0 | **live**（2026-10-26：仓库、issues、code 搜索均实测；查询按词拆成多个参数，因为 gh 会把单个参数当精确短语） |
+| `omnireach`（`wechat` 与多源 `omnireach`） | `omnireach` | 0.19.0-alpha | **live**（`--on wechat`；多源命令 2026-10-26 实测，显式 `--on hackernews,youtube,github,wechat,bilibili`——工具自带的自动路由在 PATH 上有 `opencli` 时会加入走你 Chrome 的 google / twitter 源，所以从不使用） |
 | `yt-dlp`（youtube） | `yt-dlp` | 2026.08.19 | **live**：真实运行 `ytsearch2:` 搜索并解析（2026-10-11） |
 | `twitter` | `twitter` | 0.8.5 | contract-only：`--json` 信封与字段来自已装 0.8.5 的源码和 issue #38 里的真实输出；需要你的 Token，我们没运行过搜索 |
 | `xhs`（xiaohongshu） | `xhs` | 0.6.4 | contract-only：帮助 + 已装包源码里的输出形状；搜索需要你的登录 |
@@ -439,7 +439,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | bilibili / youtube | `bili` / `yt-dlp` |
 | github、github-issues、github-code | `rest`（现有 REST）→ `gh` |
 | wechat（公众号，新） | `omnireach` → `wx-search-cli` |
-| omnireach（多源，不自动选入） | `omnireach` |
+| omnireach（多源，不自动选入；只用五个免 Key 源） | `omnireach` |
 | instagram / facebook | `browser-opencli`；weibo、douban、tieba、douyin、kuaishou：`browser-search` |
 
 链上缺失、不兼容或未登录的后端被跳过并记下原因；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
