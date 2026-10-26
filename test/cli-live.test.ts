@@ -167,6 +167,15 @@ test('live omnireach: the wechat source, and the multi-source search that must n
   await live('omnireach', [
     { label: 'wechat zh', platform: 'wechat', query: '大模型 备案', count: 3, url: /^https:\/\/mp\.weixin\.qq\.com\/s\?/, may: 'be-empty' },
   ])
+  // The DSH Host runs with NO_PROXY=...,[::1]; omnireach (httpx) fails every source with "Invalid port: ':1]'" unless the entry is bare.
+  const savedNoProxy = [process.env.NO_PROXY, process.env.no_proxy]
+  process.env.NO_PROXY = 'localhost,127.0.0.1,[::1]'
+  process.env.no_proxy = 'localhost,127.0.0.1,[::1]'
+  try {
+    await live('omnireach', [{ label: 'wechat with [::1] in NO_PROXY', platform: 'wechat', query: '大模型 备案', count: 2, url: /^https:\/\/mp\.weixin\.qq\.com\/s\?/ }])
+  } finally {
+    for (const [name, value] of [['NO_PROXY', savedNoProxy[0]], ['no_proxy', savedNoProxy[1]]] as const) { if (value === undefined) delete process.env[name]; else process.env[name] = value }
+  }
   // A stand-in `opencli` first on PATH records any call: omnireach's automatic routing would run it for google / twitter.
   const stub = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-live-opencli-'))
   const marker = path.join(stub, 'called')

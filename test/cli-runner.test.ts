@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  buildArgv, buildCliEnv, CliAdapterError, loginHint, missingEnv, parseCliOutput, resolveField, runCliSearch, savedLoginPresent, splitTerms,
+  buildArgv, buildCliEnv, CliAdapterError, loginHint, missingEnv, normalizeNoProxy, parseCliOutput, resolveField, runCliSearch, savedLoginPresent, splitTerms,
 } from '../src/cli/runner.ts'
 import { baseSpec, posix, withCommands } from './cli-helpers.ts'
 
@@ -43,6 +43,14 @@ test('argv {terms}: the query becomes one token per word (quotes keep a phrase),
   // Without a `--` a word that reads as a flag is neutralised, as for {query}; a query with no word at all stays one token.
   assert.deepEqual(buildArgv({ argv: ['s', '{terms}'] }, { query: '-x y', count: 1 }), ['s', ' -x', 'y'])
   assert.deepEqual(buildArgv({ argv: ['s', '{terms}'] }, { query: '   ', count: 1 }), ['s', '   '])
+})
+
+test('NO_PROXY reaches the child without bracketed IPv6 entries (httpx fails the whole search on "[::1]")', () => {
+  assert.equal(normalizeNoProxy('localhost, 127.0.0.1,[::1],[fe80::1]:8080,::1,.local,'), 'localhost,127.0.0.1,::1,fe80::1,::1,.local')
+  assert.equal(normalizeNoProxy('*'), '*')
+  const env = buildCliEnv(baseSpec(), { PATH: '/bin', NO_PROXY: 'localhost,[::1]', no_proxy: '[::1]', HTTPS_PROXY: 'http://[::1]:7890' })
+  assert.deepEqual([env.NO_PROXY, env.no_proxy], ['localhost,::1', '::1'])
+  assert.equal(env.HTTPS_PROXY, 'http://[::1]:7890', 'proxy URLs keep their brackets')
 })
 
 test('the child gets a minimal environment: the spec\'s own names, UTF-8 for Python, nothing else of the process', () => {

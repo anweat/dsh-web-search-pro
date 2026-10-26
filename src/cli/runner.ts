@@ -34,10 +34,19 @@ const BASE_ENV = [
 /** UTF-8 for Python tools (the Windows console otherwise answers in the system code page; dev issue #28). */
 const UTF8_ENV = { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } as const
 
+/**
+ * A NO_PROXY list with its IPv6 entries written without brackets (`[::1]` / `[::1]:8080` -> `::1`). Python's httpx (omnireach, and
+ * any tool built on it) refuses a bracketed entry with "Invalid port: ':1]'" and the whole search fails; the DSH Host sets
+ * `NO_PROXY` with `[::1]`, which a plain terminal does not (found live 2026-10-26). Every tool that takes NO_PROXY accepts the bare form.
+ */
+export function normalizeNoProxy(list: string): string {
+  return list.split(',').map(entry => entry.trim().replace(/^\[([0-9a-fA-F:.]+)\](?::\d+)?$/, '$1')).filter(entry => entry.length > 0).join(',')
+}
+
 /** The environment a spec's command runs with: the base set, what the spec lists, and the fixed UTF-8 / `env.set` values. */
 export function buildCliEnv(spec: Pick<CliAdapterSpec, 'env'>, source: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const out: Record<string, string> = {}
-  const take = (name: string): void => { const value = source[name]; if (value !== undefined) out[name] = value }
+  const take = (name: string): void => { const value = source[name]; if (value !== undefined) out[name] = name === 'NO_PROXY' || name === 'no_proxy' ? normalizeNoProxy(value) : value }
   for (const name of BASE_ENV) take(name)
   for (const name of spec.env.required ?? []) take(name)
   for (const name of spec.env.passthrough ?? []) take(name)

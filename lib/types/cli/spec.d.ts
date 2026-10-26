@@ -99,6 +99,11 @@ export interface CliSearchSpec {
     argv: readonly string[];
     /** Largest `{count}` sent (the search call's count is clamped to 1..maxCount). */
     maxCount?: number;
+    /**
+     * Extra results asked of the tool beyond the count (`{count}` becomes count + overfetch), for tools whose list can hold entries the
+     * mapper must drop (bili: courses and series without a link). The mapper still returns at most `count`.
+     */
+    overfetch?: number;
     output: CliOutputSpec;
     /** Case-insensitive fragments of the tool's output that mean "no results" rather than a failure. */
     emptyWhen?: readonly string[];
