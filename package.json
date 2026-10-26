@@ -56,6 +56,7 @@
     "@deepseek-ai/dsh-api-remotes": ">=0.2.1-rc.2 <0.2.2-0",
     "@deepseek-ai/dsh-client-locale": ">=0.2.1-rc.2 <0.2.2-0",
     "@deepseek-ai/dsh-client-store": ">=0.2.1-rc.2 <0.2.2-0",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.1-rc.2 <0.2.2-0",
     "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.1-rc.2 <0.2.2-0",
     "@deepseek-ai/dsh-client-ui-settings": ">=0.2.1-rc.2 <0.2.2-0",
     "@deepseek-ai/dsh-client-ui-plugin-manager": ">=0.2.1-rc.2 <0.2.2-0",
@@ -76,6 +77,9 @@
       "optional": true
     },
     "@deepseek-ai/dsh-client-store": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-primitives": {
       "optional": true
     },
     "@deepseek-ai/dsh-client-ui-renderer": {
@@ -122,6 +126,7 @@
     "@deepseek-ai/dsh-app-boot": "0.2.1-rc.3",
     "@deepseek-ai/dsh-client-locale": "0.2.1-rc.3",
     "@deepseek-ai/dsh-client-store": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.3",
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.3",
     "@deepseek-ai/dsh-client-ui-settings": "0.2.1-rc.3",
     "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.1-rc.3",
