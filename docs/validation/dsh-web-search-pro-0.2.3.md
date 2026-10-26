@@ -40,3 +40,29 @@
 - `localization`（不发送）、`need_content: true`（不请求）、`lang:` / `before:` 运算符（没有发送）。
 - 免费窗口：文档写 2026-11-01 前经 Harness 服务端工具的调用免费，没写插件直接调用是否算；本次调用发生在窗口内，**我们不知道它们是否被计费**，插件仍按会计费处理。
 - 没有测多个 URL 的并发、限流（100 / 25 QPS）。
+
+## 真实宿主验收（DSH 0.2.1-rc.3，2026-10-27）
+
+范围：把 `npm pack` 出的 0.2.3（HEAD `648490e`，SHA-256 `bf8fc248…b246b`）经宿主 `dsh plugin add` 装进隔离 home，用 headless 会话（模型 `deepseek-flash`、low）和 Web profile（端口 3396）验收 DeepSeek 搜索路径与设置面板“恢复默认”。执行者仍是开发者本人，不是独立验证。完整报告与原始证据：`environments/websearch-023-verify/REPORT.md`（仓库外，在开发工作区）。
+
+| 项 | 结果 |
+|---|---|
+| 安装闸门（rc.3） | 接受，exit 0；`--dump-config` 391 行无错误 |
+| 默认配置 + 有 key：普通 `search.run` | 先走 `deepseek`（`Engine: deepseek`），结果带 `[rerank 2.26/3, authority 4/4]` 等元数据与 summary 摘录；`sources.status` 列为“常用 (common)”且 `ready` |
+| 证据模式 | `Engine: pipeline(deepseek+exa+ddg)`，10 条摘录里有 deepseek 来源，needs 2/2 覆盖，内容合理；rerank/authority 只用于融合，摘录不显示 |
+| key 只在 DSH 凭据引用里（环境里没有） | 通过（headless 默认禁用凭据服务，需在补丁里 `credentials: disabled: false`） |
+| `sources.disabled: [deepseek]` | 普通搜索 `Engine: ddg`，证据模式 `exa+ddg+github`，无 deepseek |
+| `evidence.sourcePolicy: anonymous-only` | 证据模式与（新查询的）普通搜索都不用 deepseek |
+| 没有 key | `sources.status`：`❌ deepseek [unavailable] — no DeepSeek API key (…)` 与“不在默认链”的配置说明；普通搜索 `Engine: ddg`；显式 `engines:"deepseek"` 给出 `skipped: deepseek (no DeepSeek API key …)` |
+| `deepseekFetch: true` + `mode: deepseek` | `https://example.com/` 取回 Markdown，`Source: deepseek` |
+| `deepseekFetch` 关闭 + `mode: deepseek` | `DeepSeek Fetch is off: it is billed …`；URL 已有 deepseek 缓存快照时返回 `cache:deepseek` 而不是该提示 |
+| 设置面板（rc.3 Web profile） | 改“默认结果数”和“并行融合”并保存 → `cordis.patch.yml` 写出 `searchMaxResults: 10`、`parallelEngines: true`；对结果数点“恢复默认”并保存 → 该键被移除；嵌套键 `evidence.maxRounds` 恢复默认后留下 `evidence: {}`（已知，无害）；JSON 对象弹窗与 Twitter 弹窗可打开，修改只留在草稿里。验收后 patch 与凭据文件已还原 |
+
+直接调用：插件账本里 6 次 Search + 1 次 Fetch 成功，无失败。DeepSeek 余额（CNY）5.03 → 4.88，含模型 token 与搜索，无法拆分。
+
+观察（未改代码）：
+- `keyedSources.deepseek.apiKeyEnv` 是在默认名之外追加的候选，不能用来“关掉 key”。
+- `sources.disabled` 含 `deepseek` 时，`sources.status` 仍写 `✅ deepseek [ready]` 和 “key found, leads the default order …”，只有最后的 `source strategy` 行说明已停用。
+- `engines:"deepseek"` 缺 key 时，输出末尾的“换种写法重试”建议对缺 key 没有帮助（引擎行已写明原因）。
+
+没有验证：真实桌面窗口、面板里写 DeepSeek 密钥、`mode: auto` 的回落顺序、`sources.budget.deepseek`、`sources.priority`、`keyedSources.deepseek.baseUrl`、402/403/429/5xx 与重试路径、与 `@anweat/dsh-browser` 同装。
