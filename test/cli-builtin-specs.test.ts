@@ -40,7 +40,7 @@ test('every built-in spec passes the same validation as a user spec, and is read
 
 test('verification records: live only where a real read-only search was run, docs-only where the tool was not available to probe', () => {
   const status = Object.fromEntries(BUILTIN_CLI_SPECS.map(s => [s.id, s.verification!.status]))
-  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'live', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'contract-only', tanso: 'docs-only' })
+  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'live', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'live', tanso: 'docs-only' })
   for (const s of BUILTIN_CLI_SPECS) {
     if (s.verification!.status === 'live') assert.match(s.verification!.date ?? '', /^\d{4}-\d{2}-\d{2}$/)
     assert.ok(s.verification!.version, s.id + ' records the verified version')
@@ -92,18 +92,51 @@ test('gh (live fixture and documented fields): repos, issues and code each have 
   assert.deepEqual(searchSpecFor(gh, 'github').argv.slice(0, 3), ['search', 'repos', '--json'])
   assert.deepEqual(searchSpecFor(gh, 'github-issues').argv.slice(0, 2), ['search', 'issues'])
   assert.deepEqual(searchSpecFor(gh, 'github-code').argv.slice(0, 2), ['search', 'code'])
-  // The query follows `--`, so a query that starts with a dash cannot become a flag.
-  for (const platform of gh.platforms) assert.deepEqual(searchSpecFor(gh, platform).argv.slice(-2), ['--', '{query}'])
+  // The query follows `--`, so a query that starts with a dash cannot become a flag, and it is handed over as separate words
+  // ({terms}): gh quotes a one-token query as an exact phrase, which found nothing for four-word queries and broke `repo:x some words`.
+  for (const platform of gh.platforms) assert.deepEqual(searchSpecFor(gh, platform).argv.slice(-2), ['--', '{terms}'])
   const issues = parseCliOutput(gh, searchSpecFor(gh, 'github-issues'), JSON.stringify([{ title: 'Crash on start', url: 'https://github.com/o/r/issues/1', state: 'open', repository: { name: 'r', nameWithOwner: 'o/r' }, commentsCount: 3, updatedAt: '2026-10-01T00:00:00Z' }]))
   assert.deepEqual(issues, [{ url: 'https://github.com/o/r/issues/1', title: 'Crash on start', snippet: '[open] · o/r · 3 comments', publishedAt: '2026-10-01' }])
   const code = parseCliOutput(gh, searchSpecFor(gh, 'github-code'), JSON.stringify([{ path: 'src/a.ts', repository: { nameWithOwner: 'o/r' }, url: 'https://github.com/o/r/blob/main/src/a.ts' }]))
   assert.deepEqual(code, [{ url: 'https://github.com/o/r/blob/main/src/a.ts', title: 'o/r / src/a.ts', snippet: '仓库: o/r' }])
 })
 
-test('omnireach (live fixture): the wechat source uses --on wechat, the multi-source command does not', () => {
+test('gh (live fixtures 2026-10-26): Chinese repos query, issues and code searches, the empty answer', () => {
+  const gh = spec('gh')
+  const zh = parse('gh', 'live-gh-repos-zh.json', 'github')
+  assert.equal(zh.length, 4)
+  assert.deepEqual(zh[0], { url: 'https://github.com/KomoriDev/nonebot-plugin-deepseek', title: 'KomoriDev/nonebot-plugin-deepseek', publishedAt: '2026-10-26', snippet: 'NoneBot DeepSeek 插件。接入 DeepSeek 模型，提供智能对话与问答功能 | ⭐178 | [Python] | forks 19' })
+  assert.ok(zh.every(r => /^https:\/\/github\.com\/[^/]+\/[^/]+$/.test(r.url) && r.title === r.url.replace('https://github.com/', '')), 'title is owner/name of the url')
+  const issues = parse('gh', 'live-gh-issues.json', 'github-issues')
+  assert.deepEqual(issues, [{ url: 'https://github.com/anweat/dsh-web-search-pro/issues/38', title: '[Bug] twitter 平台源结果全错：url-lines 解析器套在 twitter-cli 的 YAML 输出上（0.2.1 与 main 均复现）', publishedAt: '2026-10-08', snippet: '[open] · anweat/dsh-web-search-pro · 0 comments' }])
+  const code = parse('gh', 'live-gh-code.json', 'github-code')
+  assert.equal(code.length, 3)
+  assert.deepEqual(code[0], { url: 'https://github.com/anweat/dsh-web-search-pro/blob/9e905c212fac5e891cc0f7ea75e1c276c9e5498e/src/prompt.ts', title: 'anweat/dsh-web-search-pro / src/prompt.ts', snippet: '仓库: anweat/dsh-web-search-pro' })
+  // No hits prints `[]`: nothing parsed, which the runner reports as an empty answer.
+  assert.deepEqual(parseCliOutput(gh, gh.search, '[]\n', 5), [])
+})
+
+test('omnireach (live fixtures): every command names its sources with --on - the tool\'s automatic routing drives the user\'s Chrome', () => {
   const s = spec('omnireach')
   assert.deepEqual(searchSpecFor(s, 'wechat').argv, ['search', '{query}', '--on', 'wechat', '--limit', '{count}', '--json'])
-  assert.deepEqual(searchSpecFor(s, 'omnireach').argv, ['search', '{query}', '--limit', '{count}', '--json'])
+  assert.deepEqual(searchSpecFor(s, 'omnireach').argv, ['search', '{query}', '--on', 'hackernews,youtube,github,wechat,bilibili', '--limit', '{count}', '--json'])
+  // Without --on omnireach 0.19 adds `google` and `twitter` (adapter opencli = the user's logged-in Chrome) whenever `opencli` is on PATH.
+  for (const platform of s.platforms) {
+    const argv = searchSpecFor(s, platform).argv
+    assert.ok(argv[argv.indexOf('--on') + 1], platform + ' passes --on <sources>')
+    const sources = argv[argv.indexOf('--on') + 1]!.split(',')
+    assert.deepEqual(sources.filter(id => ['google', 'twitter', 'reddit', 'xiaohongshu', 'tiktok', 'douyin', 'agy', 'tavily', 'brave', 'perplexity', 'exa'].includes(id)), [], platform + ' names no browser-backed, wip or paid source')
+  }
+  for (const [file, expectSources] of [['live-omnireach-multi-zh.json', ['bilibili', 'github', 'wechat', 'youtube']], ['live-omnireach-multi-en.json', ['bilibili', 'github', 'hackernews', 'wechat', 'youtube']]] as const) {
+    const envelope = JSON.parse(read(file)) as { results: { source: string; adapter: string }[]; errors: unknown[] }
+    assert.deepEqual([...new Set(envelope.results.map(r => r.source))].sort(), expectSources, file + ' holds only the explicit sources')
+    assert.ok(!envelope.results.some(r => r.adapter === 'opencli'), file + ': no result came through opencli')
+    const out = parse('omnireach', file, 'omnireach', 50)
+    assert.equal(out.length, envelope.results.length)
+    assert.ok(out.every(r => /^https?:\/\//.test(r.url) && r.title && r.snippet !== '-'))
+  }
+  assert.equal(parse('omnireach', 'live-omnireach-multi-zh.json', 'omnireach', 3).length, 3, 'the count cuts the ranked list')
+  assert.ok(parse('omnireach', 'live-omnireach-multi-en.json', 'omnireach', 50).some(r => r.publishedAt === '2026-09-27T02:22:52Z'), 'ts becomes publishedAt')
   const out = parse('omnireach', 'live-omnireach-wechat.json', 'wechat')
   assert.equal(out.length, 1)
   assert.match(out[0]!.url, /^https:\/\/mp\.weixin\.qq\.com\/s\?src=11/)
@@ -162,6 +195,39 @@ test('yt-dlp (live fixture 2026-10-11): the print template records parse; notice
   assert.deepEqual(parseCliOutput(yt, yt.search, noisy, 20), out)
   // A search with no hits prints nothing: no rows, and the runner turns that into an empty answer.
   assert.deepEqual(parseCliOutput(yt, yt.search, '', 20), [])
+})
+
+test('yt-dlp (live fixtures 2026-10-26): NA placeholders of live streams are dropped, durations are H:M:S, Chinese and English queries', () => {
+  const live = parse('yt-dlp', 'live-yt-dlp-livestreams.txt')
+  assert.equal(live.length, 10)
+  assert.ok(live.every(r => !/\bNA\b|None/.test(r.snippet ?? '')), 'no placeholder text reaches a snippet')
+  assert.deepEqual(live[0], { url: 'https://www.youtube.com/watch?v=rFZHOHl-L8A', title: 'lofi hip hop radio 📚 beats to relax/study to', snippet: 'Lofi Girl' }, 'a live stream: channel only')
+  assert.equal(live[1]!.snippet, 'Cloud Club Lofi | 647457 views | 07:52:55', 'a finished stream keeps views and duration')
+  const zh = parse('yt-dlp', 'live-yt-dlp-zh.txt')
+  assert.equal(zh.length, 3)
+  assert.deepEqual(zh[0], { url: 'https://www.youtube.com/watch?v=bxKavltsOBo', title: '太牛逼了！12GB 显卡就能跑！DeepSeek-V4.1-Flash-1017 Strata版 AI 大模型本地部署教程｜接入 Harness', snippet: 'X超哥 | 8955 views | 00:24:54' })
+  const en = parse('yt-dlp', 'live-yt-dlp-en.txt')
+  assert.equal(en.length, 4)
+  assert.equal(en[0]!.snippet, 'Rust Dev Lab | 78 views | 00:00:11', 'an 11 second video is 00:00:11, not a bare "11"')
+  assert.ok([...zh, ...en, ...live].every(r => /^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(r.url) && r.title))
+})
+
+test('wx-search-cli (live fixtures 2026-10-26): ten rows per page with a resolved mp.weixin.qq.com link and an ISO time; the adapter cuts to the count', () => {
+  const wx = spec('wx-search-cli')
+  assert.deepEqual(wx.search.argv, ['search', '{query}'])
+  const zh = parse('wx-search-cli', 'live-wx-search-cli-zh.json')
+  assert.equal(zh.length, 10)
+  assert.deepEqual(zh[0], { url: 'https://mp.weixin.qq.com/s?src=11&timestamp=1793030938&ver=7050&signature=REDACTED&new=1', title: '国办发文定调!事关应对AI就业冲击', publishedAt: '2026-10-26T13:39:51.000Z' })
+  assert.equal(parse('wx-search-cli', 'live-wx-search-cli-zh.json', undefined, 3).length, 3)
+  const en = parse('wx-search-cli', 'live-wx-search-cli-en.json')
+  assert.ok(en.length > 0 && en.every(r => r.url.startsWith('https://mp.weixin.qq.com/s?') && r.title && /^\d{4}-\d\d-\d\dT/.test(r.publishedAt ?? '')))
+  assert.ok(![...zh, ...en].some(r => r.url.includes('weixin.sogou.com')), 'the unresolved Sogou redirect link is never a result')
+  // A search with no hits (or an anti-spider page) prints `[]`: nothing parsed, an empty answer.
+  assert.deepEqual(parseCliOutput(wx, wx.search, '[]\n', 5), [])
+  // omnireach\'s wechat source (live 2026-10-26): ISO `ts` becomes publishedAt, snippets keep their Chinese punctuation.
+  const og = parse('omnireach', 'live-omnireach-wechat-zh.json', 'wechat')
+  assert.equal(og.length, 3)
+  assert.ok(og.every(r => r.url.startsWith('https://mp.weixin.qq.com/s?') && r.snippet && /^\d{4}-/.test(r.publishedAt ?? '')))
 })
 
 test('wx-search-cli (README fixture) and tanso (docs-only fixture): drop captcha rows, keep the documented fields', () => {

@@ -91,10 +91,19 @@ export interface CliOutputSpec {
     requireTitle?: boolean;
 }
 export interface CliSearchSpec {
-    /** Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`). */
+    /**
+     * Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`).
+     * A token that is exactly `{terms}` expands to the query split into one argv token per word (double quotes keep a phrase together):
+     * for tools that join their positional arguments themselves and would otherwise quote a one-token query as an exact phrase (`gh search`).
+     */
     argv: readonly string[];
     /** Largest `{count}` sent (the search call's count is clamped to 1..maxCount). */
     maxCount?: number;
+    /**
+     * Extra results asked of the tool beyond the count (`{count}` becomes count + overfetch), for tools whose list can hold entries the
+     * mapper must drop (bili: courses and series without a link). The mapper still returns at most `count`.
+     */
+    overfetch?: number;
     output: CliOutputSpec;
     /** Case-insensitive fragments of the tool's output that mean "no results" rather than a failure. */
     emptyWhen?: readonly string[];

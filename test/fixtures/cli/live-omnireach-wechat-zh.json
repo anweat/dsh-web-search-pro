@@ -1,0 +1,46 @@
+{
+ "query": "大模型 备案",
+ "ts": "2026-10-26T16:19:01.771288Z",
+ "results": [
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "广东195款大模型备案:OPC现身名单,大模型创业不再只属于大厂",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031541&ver=7050&signature=REDACTED&new=1",
+   "content": "《广东省备案大模型观察报告(2026)》发布,一组数据勾勒出广东AI产业的真实面貌:截至9月,广东累计备案大模型195款,约占...",
+   "author": "永腾向上丨梦飞致远",
+   "ts": "2026-10-18T12:00:34Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.73
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "国内首个安全大模型备案通过",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031541&ver=7050&signature=REDACTED&new=1",
+   "content": "首个安全大模型的备案通过,也标志着我国生成式人工智能在网络安全领域的发展与实践应用又进了一步.微步情报智脑XGPT自2023...",
+   "author": "微步在线",
+   "ts": "2024-01-22T06:30:13Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.3585878165678156
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "中国第二批大模型备案获批",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031541&ver=7050&signature=REDACTED&new=1",
+   "content": "教育大模型今日通过相关备案,该大模型及其应用产品将对公众开放.据介绍,基于“子曰”教育大模型的一系列新产品、新应用也将...",
+   "author": "数据观",
+   "ts": "2023-11-06T06:47:08Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.33
+  }
+ ],
+ "errors": []
+}

@@ -67,6 +67,19 @@
 - `sources.status` 与 `search.recommend` 对未经真实搜索验证的后端加一句标注（`contract-only — output parser not verified with a real search`），“已检测 + 已配置”不再容易被读成“能用”。
 - yt-dlp 验证为 live：用规格的原始参数真实搜索一次并解析（夹具 `live-yt-dlp-search.txt`）。twitter 仍是 contract-only：契约来自 twitter-cli 0.8.5 源码与 issue 中的真实输出，我们自己没有用 Token 跑过搜索。
 
+### 免登录 CLI 实测（2026-10-26，`docs/validation/cli-live-2026-10-26.md`）
+
+对 bili、gh、omnireach、yt-dlp、wx-search-cli 和 mcporter→Exa 用插件自己的探测与运行器做了真实中文/英文/特殊字符/无结果查询，并在 rc.3 宿主上跑了 3 个 headless 会话。发现并修复：
+
+- gh：查询原来作为一个参数交给 `gh search`，gh 会把它当精确短语，四个词以上的查询搜不到东西，`repo:x 多个词` 还是无效查询。新增占位符 `{terms}`（按词拆成多个参数，引号保持短语），gh 三条搜索都用它；issues / code 搜索首次真实运行并解析。
+- yt-dlp：直播没有播放量和时长，yt-dlp 输出 `NA`，规格只把 `None` 当空值，摘要出现 “NA views | NA”；现在两者都当空值，时长改为 `H:M:S`（`duration_string` 对短视频只打印秒数 “11”）。
+- omnireach：多源命令原来用工具自己的自动路由，PATH 上有 `opencli` 时它会加入走你 Chrome 的 google / twitter 源（实测确认，并用替身 `opencli` 复现）；现在显式 `--on hackernews,youtube,github,wechat,bilibili`，测试用替身 `opencli` 断言从不被调用。
+- omnireach / httpx：DSH 宿主进程的 `NO_PROXY` 含 `[::1]`，httpx 因此对所有源报 “Invalid port: ':1]'”，wechat 链悄悄回退到 wx-search-cli（宿主会话里发现）；`buildCliEnv` 现在把 IPv6 条目写成不带方括号的形式。
+- bili：约五分之一的条目是没有链接的课程/系列，请求 3 条只返回 2 条；规格新增 `overfetch`（多要 3 条再截取）。
+- 平台链回退说明：被跳过的后端原来只写 “unavailable”，现在带原因（“the omnireach command is not installed: install it …”）。
+- wx-search-cli 升为 live；规格 `live` 现为 bili、gh（repos/issues/code）、omnireach、yt-dlp、wx-search-cli。新增 `test/cli-live.test.ts`（默认用夹具离线跑；`WSP_LIVE_CLI=1 pnpm run test:live-cli` 才跑真实工具）。
+- 登录类 CLI 陪测：`docs/validation/cli-login-checklist.md` 与 `scripts/cli-login-check.mjs`（由用户本人运行；默认不运行任何登录命令）。
+
 ### 验证
 
 - 790 项插件测试、94 项 bench 测试、类型检查、`test:peers`、构建与客户端 bundle 检查通过。

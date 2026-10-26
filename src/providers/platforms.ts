@@ -29,7 +29,7 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
       const errors: unknown[] = []
       const notes: string[] = []
       for (const engine of chain) {
-        if (!engine.available()) { notes.push(engine.id + ': unavailable'); continue }
+        if (!engine.available()) { notes.push(engine.id + ': ' + (engine.unavailableReason?.() ?? 'unavailable')); continue }
         try {
           const outcome = await engine.search(query, count, signal, options)
           // The legs that were passed over are named with their reasons, so a fall-through is never silent.
@@ -192,15 +192,15 @@ export const platformAdapters: readonly ProviderAdapter[] = [
     languages: ['zh'], regions: ['cn'], domains: ['mp.weixin.qq.com', 'weixin.qq.com'], taskProfiles: ['news_fact', 'experience'], resultKinds: ['social'],
     requirements: [cliReq('omnireach', 'first backend: OmniReach (`--on wechat`, Sogou, no key)'), cliReq('wx-search-cli', 'second backend: wx-search-cli (Sogou)')],
     costModel: { kind: 'free', note: 'Sogou WeChat search through a local CLI; no key, no login; rate limits and captchas apply' }, costTier: 'anonymous',
-    verification: { live: true, note: 'omnireach 0.19.0-alpha wechat search parsed on 2026-10-06; wx-search-cli from its docs only' },
+    verification: { live: true, note: 'omnireach 0.19.0-alpha (--on wechat) and wx-search-cli 0.1.0 searches parsed live on 2026-10-26' },
   }),
 
   // OmniReach as its own multi-source provider: addressable (`platform=omnireach`), never planned on its own.
   cliPlatform('omnireach', 'OmniReach (多源)', {
     languages: ['zh', 'en'], regions: ['global', 'cn'], taskProfiles: [], resultKinds: ['web', 'social'],
-    requirements: [cliReq('omnireach', 'OmniReach CLI (its own default sources; browser-backed ones stay opt-in there)')],
-    costModel: { kind: 'free', note: 'the CLI\'s default free sources; keys and the Chrome bridge are not passed' }, costTier: 'anonymous',
-    verification: { live: false, note: 'contract probed and the wechat source run live; the multi-source command was not run' },
+    requirements: [cliReq('omnireach', 'OmniReach CLI (explicit keyless sources: hackernews, youtube, github, wechat, bilibili; never its automatic routing, which adds Chrome-backed google / twitter)')],
+    costModel: { kind: 'free', note: 'five keyless sources named with --on; keys and the Chrome bridge are not passed' }, costTier: 'anonymous',
+    verification: { live: true, note: 'omnireach 0.19.0-alpha: the explicit-source multi-source command and the wechat source parsed live on 2026-10-26' },
   }),
 
   // Tanso (Bocha / Zhihu API CLI): documented contract only.

@@ -13,6 +13,12 @@ export declare class CliAdapterError extends EngineError {
     readonly hint?: string | undefined;
     constructor(message: string, code: CliErrorCode, hint?: string | undefined, retryable?: boolean);
 }
+/**
+ * A NO_PROXY list with its IPv6 entries written without brackets (`[::1]` / `[::1]:8080` -> `::1`). Python's httpx (omnireach, and
+ * any tool built on it) refuses a bracketed entry with "Invalid port: ':1]'" and the whole search fails; the DSH Host sets
+ * `NO_PROXY` with `[::1]`, which a plain terminal does not (found live 2026-10-26). Every tool that takes NO_PROXY accepts the bare form.
+ */
+export declare function normalizeNoProxy(list: string): string;
 /** The environment a spec's command runs with: the base set, what the spec lists, and the fixed UTF-8 / `env.set` values. */
 export declare function buildCliEnv(spec: Pick<CliAdapterSpec, 'env'>, source?: NodeJS.ProcessEnv): Record<string, string>;
 /** Names of the credential variables a spec relies on that are not set. */
@@ -56,8 +62,13 @@ export declare function mapCliItemsDetailed(output: CliOutputSpec, items: readon
 export declare function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number): WebSearchSource[];
 /** Parse and map in one go (what the fixtures tests call). */
 export declare function parseCliOutput(spec: Pick<CliAdapterSpec, 'bins'>, search: CliSearchSpec, stdout: string, count?: number): WebSearchSource[];
-/** Fill the placeholders of an argv template. A value that would read as a flag gets a leading space (the tool then takes it as the query). */
-export declare function buildArgv(search: Pick<CliSearchSpec, 'argv' | 'maxCount'>, input: {
+/** Split a query into words; double quotes keep a phrase in one word (`a "b c" d` -> `a`, `b c`, `d`) and are dropped. */
+export declare function splitTerms(query: string): string[];
+/**
+ * Fill the placeholders of an argv template. A value that would read as a flag gets a leading space (the tool then takes it as the query)
+ * unless a `--` precedes it. A `{terms}` token becomes one token per word of the query.
+ */
+export declare function buildArgv(search: Pick<CliSearchSpec, 'argv' | 'maxCount' | 'overfetch'>, input: {
     query: string;
     count: number;
 }): string[];

@@ -39,8 +39,10 @@ test('bili dependency probe requires version 0.6.2 and the structured search con
 test('bili search uses explicit JSON output and preserves argv boundaries', () => {
   assert.deepEqual(
     biliSearchArgs('DeepSeek Harness & 中文', 30),
-    ['search', 'DeepSeek Harness & 中文', '--type', 'video', '--max', '10', '--json'],
+    ['search', 'DeepSeek Harness & 中文', '--type', 'video', '--max', '13', '--json'],
+    'the count is clamped to 10 and 3 more are asked for: entries without a link are skipped',
   )
+  assert.equal(biliSearchArgs('x', 3)[5], '6')
 })
 
 test('bili JSON envelope preserves UTF-8 Chinese metadata', () => {

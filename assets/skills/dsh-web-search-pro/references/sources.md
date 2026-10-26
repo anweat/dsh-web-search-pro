@@ -41,7 +41,7 @@ Every platform is ONE source with an ordered chain of backends; the first usable
 
 - A backend that is not installed, has another contract (`incompatible`, with the reason) or is not logged in is skipped. When the whole chain is down the error names every backend and what to install or run. Report it; do not retry.
 - **Login is the user's job.** Never run `xhs login`, `rdt login`, `zhihu login`, `gh auth login` or anything like them, and never pass cookie options. Tell the user to run the CLI's own login. xhs, rdt and zhihu are not run until a saved login exists (without one they read browser cookies themselves).
-- Verification differs per adapter (`sources.deps` shows it): `live` (bili, gh repos, omnireach wechat, yt-dlp), `contract-only` (help probed, output shape from the tool's source or docs, no login-bound search run: xhs, zhihu, rdt, twitter, wx-search-cli, standalone opencli; `sources.status` tags these backends), `docs-only` (tanso, from upstream docs). Treat contract-only and docs-only results as experimental.
+- Verification differs per adapter (`sources.deps` shows it): `live` (bili, gh repos / issues / code, omnireach, yt-dlp, wx-search-cli), `contract-only` (help probed, output shape from the tool's source or docs, no login-bound search run: xhs, zhihu, rdt, twitter, standalone opencli; `sources.status` tags these backends), `docs-only` (tanso, from upstream docs). Treat contract-only and docs-only results as experimental.
 - The plugin only ever runs read commands (search); posting, liking, following and the like are refused by the adapter spec itself.
 
 ## Platforms (one site or community)

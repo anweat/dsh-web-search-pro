@@ -2,10 +2,11 @@
  * The built-in CLI adapter specs (dev-plan M12). Every argv, flag and output field was derived from the tool's own
  * `--help` (and, where the help does not show the output shape, from the installed package source or the upstream
  * README), and `verification` records how far each was checked:
- *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach/wechat, yt-dlp);
+ *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach, yt-dlp, wx-search-cli; and Exa through mcporter,
+ *    which is not a spec);
  *  - `contract-only`: help and version probed on a real install, output shape taken from the tool's own source,
- *    README or documented output option, because a search needs the user's login or reads browser cookies, or was outside
- *    the checks allowed (xhs, zhihu, rdt, twitter, opencli sites, wx-search-cli);
+ *    README or documented output option, because a search needs the user's login or reads browser cookies
+ *    (xhs, zhihu, rdt, twitter, opencli sites);
  *  - `docs-only`: not installed here; derived from the upstream README (tanso).
  * Fixtures for the contract-only and docs-only parsers are marked "constructed from help/docs" in test/fixtures/cli.
  * @module web-search-pro/cli/builtin-specs
@@ -48,6 +49,8 @@ const bili: CliAdapterSpec = {
   search: {
     argv: ['search', '{query}', '--type', 'video', '--max', '{count}', '--json'],
     maxCount: 10,
+    // About one entry in five is a course / series without a bvid or link and is skipped: ask for a few more so the count is met.
+    overfetch: 3,
     output: {
       format: 'json', itemsPath: 'data', expect: ENVELOPE, errorPaths: ['message', 'error'], stripTags: true, snippetMax: 300,
       fields: {
@@ -62,7 +65,7 @@ const bili: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 30_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'live', version: BILI_CLI_VERSION, date: SPEC_CHECK_DATE, note: '`bili search DeepSeek --type video --max 2 --json` parsed (fixture bili-search.json)' },
+  verification: { status: 'live', version: BILI_CLI_VERSION, date: '2026-10-26', note: 'zh / en / special-character searches parsed (fixtures live-bili-*); about one entry in five is a course / series without a bvid and link, so the adapter asks for 3 more than the count (overfetch) and a count of 3 stays 3. `bili search` never reads credentials or browser cookies (checked in bili_cli/auth.py and commands/user_search.py)' },
 }
 
 const ytDlp: CliAdapterSpec = {
@@ -73,10 +76,12 @@ const ytDlp: CliAdapterSpec = {
   probe: { versionArgs: ['--version'], helpArgs: ['--help'], mustContain: ['--flat-playlist', '--print', '--skip-download'] },
   allowedSubcommands: [],
   search: {
-    argv: ['ytsearch{count}:{query}', '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration_string)s'],
+    argv: ['ytsearch{count}:{query}', '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration>%H:%M:%S)s'],
     maxCount: 10,
     output: {
-      format: 'text', lines: { mode: 'tsv', columns: ['id', 'title', 'channel', 'view_count', 'duration'] }, emptyValues: ['None'], requireTitle: true,
+      // A field yt-dlp does not have (a live stream has no view count or duration) prints as its NA placeholder; duration is H:M:S because
+      // duration_string prints bare seconds ("11") for short videos.
+      format: 'text', lines: { mode: 'tsv', columns: ['id', 'title', 'channel', 'view_count', 'duration'] }, emptyValues: ['NA', 'None'], requireTitle: true,
       fields: {
         url: { template: 'https://www.youtube.com/watch?v={id}' },
         title: 'title',
@@ -88,7 +93,7 @@ const ytDlp: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 60_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'live', version: '2026.08.19', date: '2026-10-11', note: '`yt-dlp ytsearch2:"DeepSeek local deployment tutorial" --flat-playlist --skip-download --no-warnings --print <template>` parsed (fixture live-yt-dlp-search.txt); stdout held only the two records, the Python 3.10 deprecation notice went to stderr' },
+  verification: { status: 'live', version: '2026.08.19', date: '2026-10-26', note: 'zh / en / special-character / empty / live-stream searches parsed (fixtures live-yt-dlp-*). Live streams have no view count or duration: yt-dlp prints NA for them (the 2026-10-11 spec listed only None, so snippets read "NA views | NA"); duration is now H:M:S (duration_string printed a bare "11" for an 11 s video). Stdout held only the records, the Python 3.10 deprecation notice went to stderr' },
 }
 
 const twitter: CliAdapterSpec = {
@@ -212,9 +217,13 @@ const rdt: CliAdapterSpec = {
 }
 
 const OMNIREACH_OUTPUT = {
-  format: 'json' as const, itemsPath: 'results', errorPaths: ['errors.0.error'], stripTags: true,
+  // The bilibili source writes a lone "-" when a video has no description.
+  format: 'json' as const, itemsPath: 'results', errorPaths: ['errors.0.error'], stripTags: true, emptyValues: ['-'],
   fields: { url: 'url', title: 'title', snippet: 'content', publishedAt: 'ts' },
 }
+
+/** The omnireach sources that need neither a key, a login nor a browser (the others are `heavy` / booster tiers or need a URL query). */
+export const OMNIREACH_KEYLESS_SOURCES = 'hackernews,youtube,github,wechat,bilibili'
 
 const omnireach: CliAdapterSpec = {
   id: 'omnireach',
@@ -223,8 +232,10 @@ const omnireach: CliAdapterSpec = {
   platforms: ['omnireach', 'wechat'],
   probe: { versionArgs: ['--version'], minVersion: '0.19.0', helpArgs: ['search', '--help'], mustContain: ['--on', '--limit', '--json'] },
   allowedSubcommands: ['search'],
-  // The multi-source search: the tool's own default sources (its browser-backed sources are opt-in there, never in the default fan-out).
-  search: { argv: ['search', '{query}', '--limit', '{count}', '--json'], maxCount: 20, output: OMNIREACH_OUTPUT },
+  // The multi-source search. Never the tool's own automatic routing: with `opencli` on PATH (or its Chrome bridge set up) that adds
+  // browser-backed Google and Twitter/X sources, which drive the user's logged-in Chrome (observed live 2026-10-26). `--on` names the
+  // keyless HTTP / CLI sources explicitly, and explicit sources are never augmented.
+  search: { argv: ['search', '{query}', '--on', OMNIREACH_KEYLESS_SOURCES, '--limit', '{count}', '--json'], maxCount: 20, output: OMNIREACH_OUTPUT },
   searches: {
     // WeChat official accounts through Sogou: no key, no login, no browser (the tool prefers Exa when EXA_API_KEY is set, which this adapter never passes).
     wechat: { argv: ['search', '{query}', '--on', 'wechat', '--limit', '{count}', '--json'], maxCount: 10, output: OMNIREACH_OUTPUT },
@@ -233,7 +244,7 @@ const omnireach: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 60_000,
   maxOutputBytes: 8 * MB,
-  verification: { status: 'live', version: '0.19.0-alpha', date: SPEC_CHECK_DATE, note: '`omnireach search 大模型 备案 --on wechat --limit 2 --json` parsed (fixture omnireach-wechat.json); the multi-source command was not run' },
+  verification: { status: 'live', version: '0.19.0-alpha', date: '2026-10-26', note: '`--on wechat` (2026-10-06, fixture omnireach-wechat.json) and the multi-source command with an explicit `--on hackernews,youtube,github,wechat,bilibili` (fixtures live-omnireach-multi-*.json) parsed. Its automatic routing added browser-backed google / twitter sources through opencli (they drive the user\'s Chrome), so the adapter never uses it' },
 }
 
 const GH_REPO_FIELDS = 'fullName,description,url,stargazersCount,language,updatedAt,forksCount'
@@ -246,7 +257,7 @@ const gh: CliAdapterSpec = {
   probe: { versionArgs: ['--version'], helpArgs: ['search', 'repos', '--help'], mustContain: ['--json', '--limit', 'stargazersCount'] },
   allowedSubcommands: ['search', 'repos', 'issues', 'code'],
   search: {
-    argv: ['search', 'repos', '--json', GH_REPO_FIELDS, '--limit', '{count}', '--sort', 'stars', '--order', 'desc', '--', '{query}'],
+    argv: ['search', 'repos', '--json', GH_REPO_FIELDS, '--limit', '{count}', '--sort', 'stars', '--order', 'desc', '--', '{terms}'],
     maxCount: 15,
     output: {
       format: 'json', stripTags: false,
@@ -259,7 +270,7 @@ const gh: CliAdapterSpec = {
   },
   searches: {
     'github-issues': {
-      argv: ['search', 'issues', '--json', 'title,url,state,repository,commentsCount,updatedAt', '--limit', '{count}', '--sort', 'updated', '--order', 'desc', '--', '{query}'],
+      argv: ['search', 'issues', '--json', 'title,url,state,repository,commentsCount,updatedAt', '--limit', '{count}', '--sort', 'updated', '--order', 'desc', '--', '{terms}'],
       maxCount: 15,
       output: {
         format: 'json',
@@ -271,7 +282,7 @@ const gh: CliAdapterSpec = {
       notLoggedInPatterns: ['gh auth login', 'not logged in', 'authentication required'],
     },
     'github-code': {
-      argv: ['search', 'code', '--json', 'path,repository,url', '--limit', '{count}', '--', '{query}'],
+      argv: ['search', 'code', '--json', 'path,repository,url', '--limit', '{count}', '--', '{terms}'],
       maxCount: 15,
       output: { format: 'json', fields: { url: 'url', title: { template: '{repository.nameWithOwner} / {path}' }, snippet: { template: '仓库: {repository.nameWithOwner}' } } },
       notLoggedInPatterns: ['gh auth login', 'not logged in', 'authentication required'],
@@ -282,7 +293,7 @@ const gh: CliAdapterSpec = {
   login: { command: 'gh auth login' },
   timeoutMs: 30_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'live', version: '2.101.0', date: SPEC_CHECK_DATE, note: '`gh search repos --json … --sort stars -- "dsh web search"` parsed (fixture gh-repos.json); issues and code searches follow the documented JSON fields of their help pages and were not run' },
+  verification: { status: 'live', version: '2.101.0', date: '2026-10-26', note: 'repos, issues and code searches run (zh / en / qualifier / empty) and parsed (fixtures live-gh-*); the query is passed as separate words ({terms}) because gh quotes a one-token query as an exact phrase (found nothing for four-word queries, broke `repo:x words`). Needs the user\'s own gh login (a token, never a browser cookie)' },
 }
 
 const wxSearchCli: CliAdapterSpec = {
@@ -301,7 +312,7 @@ const wxSearchCli: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 45_000,
   maxOutputBytes: 2 * MB,
-  verification: { status: 'contract-only', version: '0.1.0', date: SPEC_CHECK_DATE, note: 'help and version probed on a real install; output shape (JSON array of { title, link, real_url, publish_time, page }) from the upstream README and src/index.ts read with gh api; no search was run' },
+  verification: { status: 'live', version: '0.1.0', date: '2026-10-26', note: '`search` run for Chinese, English and special-character / nonsense queries and parsed (fixtures live-wx-search-cli-*): a JSON array of 10 { title, link, real_url, publish_time, page } per page, whatever the requested count (the adapter cuts it). Sogou anti-spider answers `[]` with exit 0 in this mode, indistinguishable from no hits' },
 }
 
 const tanso: CliAdapterSpec = {
