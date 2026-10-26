@@ -2,7 +2,7 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store';
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import { type RubricKind } from '../pipeline/rubrics-spec.ts';
 import type { Context } from './context-types.ts';
-import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, type CredentialId, type SettingField } from './form-specs.ts';
+import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, type CredentialId, type FieldSpec, type SettingField } from './form-specs.ts';
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS };
 export type { CredentialId, SettingField };
 export interface CardFieldState {
@@ -49,6 +49,8 @@ export interface WebSearchCardState {
     available: boolean;
     writable: boolean;
     dirty: boolean;
+    /** How many staged edits a save would write: fields whose draft differs from what is stored, plus pending secrets. */
+    changes: number;
     invalid: boolean;
     saving: boolean;
     failed: boolean;
@@ -60,6 +62,8 @@ export interface WebSearchCardState {
     /** Overrides in settings that name no built-in rubric. */
     unknownRubrics: string[];
 }
+/** Every field spec of the form model, in display order. */
+export declare const ALL_SPECS: readonly FieldSpec[];
 export declare class WebSearchSettingsController {
     private readonly scope;
     private readonly ctx;
@@ -107,6 +111,8 @@ export declare class WebSearchSettingsController {
     refreshCredentials(): Promise<void>;
     dispose(): void;
     private project;
+    /** Staged fields that differ from what is stored (a pending reset counts only when something is stored). */
+    private changedFields;
     private decorate;
     private projectRubrics;
     /** The state of one control from the staged draft, else from the Host section. */
@@ -117,6 +123,11 @@ export declare class WebSearchSettingsController {
      * evidence settings the draft would produce are then checked with the server's own validators.
      */
     private analyze;
+    /**
+     * The Host ops of a top-level field. A container the schema does not declare volatile as a whole (`playwright`: its keys are)
+     * is written key by key; every other field is one `set` or one `unset`.
+     */
+    private topOps;
     private opsOf;
     private credentialPlan;
     private writeCredential;

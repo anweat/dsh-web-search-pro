@@ -6,7 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
-import { type ResolvedConfig } from './config.ts';
+import type { ResolvedConfig } from './config.ts';
 import { type EngineSearchOptions, type UsageRecorder } from './engines.ts';
 import type { ChainEntryReport, ChainReport } from './cli/chain.ts';
 import { type CostTier, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';

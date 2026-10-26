@@ -391,21 +391,25 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 ## 设置面板
 
-面板按以下分组折叠显示（中英文随 DSH 语言；搜索、凭据、运行时默认展开）。嵌套选项（`evidence.*`、`provider.*`、`keyedSources.*`）由面板整体写回各自的顶层字段，不认识的同级键原样保留。
+0.2.3 起设置面板按“状态摘要 + 手风琴分组 + 列表与弹窗 + 固定保存条”重做（风格与 `@anweat/dsh-browser` 0.2.2 的设置页一致）；保存结构、Config schema 与运行时行为不变。顶部是**状态摘要**：实际尝试顺序的默认引擎链、已配置 Key 的来源数、“常用”的 DeepSeek 是否就绪、内置 web 工具是否经本插件、评分模型、工具面，以及校验提示的数量（点开看详情）。下面是九个分组，**默认只展开“常用”**；每个字段是“标签 + 一行说明”，长说明放在 `?` 气泡里，被覆盖的字段带“已覆盖”徽标和就地“恢复默认”，未覆盖的显示当前值（灰色）。底部的保存条一直可见，显示“N 项未保存的修改”，有“放弃修改”和“保存”。
 
 | 分组 | 内容 |
 |---|---|
-| 搜索策略 | 默认引擎顺序、默认结果数、并行融合 |
-| 网络 | `allowProxyFakeIp`（Clash/TUN fake-IP 症状说明）、`timeoutMs` |
-| 工具面 | `toolSurface`：`indexed`（默认）/ `flat`（仅调试），启动时生效 |
-| 内置 web 工具路由 | `registerProvider`、`providerId`、`provider.evidence`（auto / off）、`provider.deadlineMs`，以及选中本插件所需的 profile patch 片段（随 `providerId` 变化） |
-| 证据管线 | `evidence.autoProviders`、`maxRounds`、`maxQueries`，`fetchDefaultChars`、`exaContentsPerUrlChars` / `TotalChars`。`minKeep` 与证据包字符预算没有配置项（内置默认 / `search.run` 的 `budget` 参数） |
-| 评分模型 | `evidence.judge.mode`（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer` 保持一致）、`hybridBorderline`、provider 下拉（内置预设 + 自定义 id）、`maxJevQuestions`、`allowLlm`；覆盖判定 `evidence.coverage` 的模式、provider、阈值；用量上限 `evidence.budget`（单次 / 每日 / 时区 / 按 provider）；自定义 provider JSON（与服务端同一套校验，拒绝在定义里放密钥，只放 `keyRef` 名） |
-| 提示词（rubric） | 列出内置 rubric 与生效版本；逐个覆盖（版本、模板、等级、字符上限），按 `rubrics.ts` 的规则校验（未知变量、必需变量、等级数、版本必须不同于内置）；“恢复默认”删除覆盖 |
-| 来源 | 来源策略（`evidence.sourcePolicy`、`sources.priority`、`sources.disabled`）、博查（Key 引用名、接口地址、长摘要）、八个需 Key 的来源（含标有“常用”的 DeepSeek 搜索 / 抓取：Key 引用名、写入式密钥、接口地址，`deepseekFetch` 开关；其余七个：Key 引用名、写入式密钥、接口地址）、每个来源的请求额度（`sources.budget.<id>.total` / `daily`，已用 / 剩余见 `web_call sources.status`）、`searxngUrl`、`openalexMailto`，以及匿名来源参考表；各来源的实时就绪状态由 `web_call sources.status` 显示 |
-| 服务凭据 / 运行时与后端 / 高级 | Exa、Jina、GitHub 凭据引用与密钥；CLI、OpenCLI、Agent Reach、Playwright、**平台后端顺序 `platformBackends`、自定义 CLI 适配 `cliAdapters`（JSON，校验与服务端共用）**；缓存、排序加权、平台规则、自定义平台、浏览器绑定 |
+| 常用（默认展开） | 默认引擎链（可增删的标签）和它**实际**会怎么排的一行预览（与路由器用同一个函数）、默认结果数、并行融合、工具面（下拉）、`allowProxyFakeIp`（带“网络”标注）、DeepSeek 搜索 / 抓取（“常用”）一行和 `deepseekFetch` 开关（带“计费”标注） |
+| 来源 | 来源策略（`evidence.sourcePolicy` 下拉、`sources.priority` / `sources.disabled` 标签）；**来源列表**：DeepSeek（常用）、博查、Tavily、Brave、Linkup、Serper、秘塔、智谱、百度千帆、Exa、Jina、GitHub、SearXNG，每行显示层级（付费 / 有免费额度 / 免 Key）、Key 是否已设和请求上限，点“编辑”在**弹窗**里改 Key 引用名、写入式密钥（遮罩，只显示“已配置”）、接口地址、请求额度（`sources.budget.<id>.total` / `daily`）；匿名来源参考表和 `openalexMailto` 在折叠区 |
+| 读取与证据 | `fetchDefaultChars`、`exaContentsPerUrlChars` / `TotalChars`、`evidence.autoProviders` / `maxRounds` / `maxQueries`（带单位的数字输入）。`minKeep` 与证据包字符预算没有配置项 |
+| 评分模型 | `evidence.judge.mode` 下拉（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer`）、provider 下拉、`hybridBorderline`、`maxJevQuestions`、`allowLlm`；折叠区：覆盖判定（模式、provider、阈值）与用量上限；自定义 provider / 按 provider 上限是 JSON 列表（弹窗里编辑，校验与服务端共用，拒绝在定义里放密钥）；**提示词（rubric）列表**：每行显示名称、生效版本、默认 / 已覆盖，“编辑”打开弹窗，左边是默认文本、右边是你的覆盖，“从默认文本开始覆盖”“恢复默认” |
+| 内置 web 工具路由 | `registerProvider` 开关；打开后才出现 `providerId`、`provider.evidence`、`provider.deadlineMs`；折叠区给出选中本插件所需的 profile patch（随 `providerId` 变化） |
+| 运行时与后端 | CLI / OpenCLI / Agent Reach 开关；Twitter / X 登录值（弹窗：两个引用名与两个写入式密钥）；JSON 对象列表：Playwright、平台后端顺序、自定义 CLI 适配、自定义平台、平台选择器覆盖、浏览器绑定（每项一个弹窗） |
+| 网络与缓存 | `timeoutMs`、`ttlSeconds`、`memoryCacheEntries`、`dbPath`、`verbose` |
+| 排序加权（高级） | `rrfConstant`、`freshnessBoost` / `freshnessDays`、`authorityBoost` / `authorityDomains` |
+| 高级：文本模式 | 当前草稿的设置（不含密钥）打印成**每个键前都带注释**的 YAML：用途、取值或范围、默认值、风险，中英文随界面语言；只读视图，可复制；去掉 `#` 行后剩下的恰好是你覆盖的键 |
 
-校验与服务端共用同一批纯函数（`pipeline/rubrics-spec.ts`、`judges/providers-spec.ts`、`judges/calibration-spec.ts`、`coverage.ts`、`budget-spec.ts`），它们不引入 Node 模块，客户端 bundle 仍只依赖宿主模块表里的少数模块（`pnpm run test:client-bundle` 检查）。
+- **弹窗里的改动**先留在草稿里，点底部“保存”才写入；“放弃修改”丢掉全部草稿。
+- **写入方式**：保存是一次原子的 `mutate`，按字段路径逐项写入（`evidence.maxRounds`、`sources.budget.deepseek.daily`、`playwright.enabled` …），而不是整体写回 `evidence` / `sources` 容器；宿主只接受声明了 `.volatile()` 的字段之下的编辑，整体写容器会被拒绝（0.2.2 的面板在 rc.3 宿主上保存这些字段会失败，见 CHANGELOG）。恢复默认会 `unset` 那一项，宿主不会清掉留下的空容器（`evidence: {}` 之类，无害）；不认识的同级键原样保留。
+- 密钥通过 DSH Credentials 写入，页面只显示“已配置 / 未配置”，不读回明文，也不写进 `settings.yaml`；写密钥发生在设置写入成功之后。
+
+校验与服务端共用同一批纯函数（`pipeline/rubrics-spec.ts`、`judges/providers-spec.ts`、`judges/calibration-spec.ts`、`coverage.ts`、`budget-spec.ts`、`default-chain.ts`、`config-fillers.ts`），它们不引入 Node 模块，客户端 bundle 只依赖宿主模块表里的少数模块（`react`、`@deepseek-ai/dsh-client-ui-slots`、`dsh-client-store`、cordis 与 `@deepseek-ai/dsh-client-ui-primitives`；`pnpm run test:client-bundle` 检查）。0.2.3 新增 peer `@deepseek-ai/dsh-client-ui-primitives`（可选，与其他 `dsh-client-*` peer 同一范围）：开关、按钮、徽标、弹窗和 `?` 气泡用宿主自己的组件，下拉、标签输入、手风琴、列表行宿主没有，用原生元素搭，颜色全部来自宿主的 `--dsw-alias-*` 变量，浅色 / 深色 / 窄宽度都跟随。
 
 ## CLI 适配 / CLI adapters
 

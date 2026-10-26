@@ -123,10 +123,10 @@ declare const _default: {
         cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
         playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         }>>, Schemastery.ObjectT<NoInfer<{
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         }>>, "plain">;
         sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
@@ -588,10 +588,10 @@ declare const _default: {
         cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
         playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         }>>, Schemastery.ObjectT<NoInfer<{
             enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         }>>, "plain">;
         sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;

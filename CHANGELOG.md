@@ -2,7 +2,7 @@
 
 ## 0.2.3（开发中）
 
-接入 **DeepSeek Search / Fetch API**（[文档](https://api-docs.deepseek.com/guides/search/)，2026-10-17 上线）并标为“**常用**”。兼容范围与 0.2.2 相同（DSH `>=0.2.1-rc.2 <0.2.2-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更，Config schema 只增不改（`deepseekFetch`、`keyedSources.deepseek`）。
+接入 **DeepSeek Search / Fetch API**（[文档](https://api-docs.deepseek.com/guides/search/)，2026-10-17 上线）并标为“**常用**”。兼容范围与 0.2.2 相同（DSH `>=0.2.1-rc.2 <0.2.2-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更，Config schema 只增不改（`deepseekFetch`、`keyedSources.deepseek`；`playwright.snapshotDir` 现在声明为 volatile，见下文面板保存的修复）。
 
 ### 请先看：默认行为会变
 
@@ -21,10 +21,31 @@
 - 设置面板：需 Key 的来源里第一项就是“DeepSeek Search / Fetch”，带“常用”标记，默认展开，含 `deepseekFetch` 开关；README、skill（含 `references/`）、目录（`catalog/sources.v1.json`，`common: true`）同步更新。
 - 其他：`ProviderDescriptor.common`、目录条目 `common` 为新增字段；`ProviderOutcome` 的 `notes` 与 `SearchOutcome.sources` 的 `rerankScore` / `authority` 为新增可选字段；`search.recommend` 对没配置 Key 的付费来源仍按“免费的在前、付费的在后”排，所以 DeepSeek 没配置 Key 时不会被强行塞进三个推荐（直接问 `platform: deepseek` 会得到配置说明）。
 
+### 设置面板改版（照 `@anweat/dsh-browser` 0.2.2 的做法）
+
+用户反馈 Browser 设置页“文字和框体太多、不知道怎么配”，Web Search Pro 的面板有同样的问题（实测：10 个分组、110 个控件、119 条说明行，全部展开约 10,000 px；默认展开 3 组就是 19 个控件、20 条说明）。重做后保存结构、Config schema、运行时行为不变，现有测试继续成立。
+
+- **信息架构**：顶部状态摘要（实际尝试顺序的默认引擎链、已配置 Key 的来源数、“常用”的 DeepSeek 是否就绪、内置 web 路由、评分模型、工具面、校验提示数）；九个手风琴分组（常用 / 来源 / 读取与证据 / 评分模型 / 内置 web 工具路由 / 运行时与后端 / 网络与缓存 / 排序加权 / 高级：文本模式），**默认只展开“常用”**（默认展开：3 个控件、6 条说明）；固定在底部的保存条（“N 项未保存的修改”、放弃、保存）。
+- **控件**：下拉（工具面、来源策略、评分 / 覆盖模式、provider）、开关（带“网络 / 计费 / 调用模型”风险标注）、带单位的数字输入、引擎 / 来源 id / 域名的标签输入；每个字段一行说明，长说明在 `?` 气泡里；“已覆盖”徽标 + 就地“恢复默认”。
+- **列表 + 弹窗**：来源（每行：名称、付费 / 免费额度 / 免 Key、“常用”、Key 已设 / 未设、请求上限；弹窗：Key 引用名、遮罩的写入式密钥、接口地址、请求额度）；评分 rubric（每行：生效版本、默认 / 已覆盖；弹窗：默认文本与你的覆盖左右对照，窄屏上下）；JSON 对象（自定义 provider、按 provider 上限、Playwright、平台后端顺序、CLI 适配、自定义平台、选择器覆盖、浏览器绑定：每项一个弹窗，校验信息与服务端一致）；Twitter / X 登录值（弹窗）。弹窗里的改动先留在草稿里，点保存才写入。
+- **高级：文本模式**：当前草稿的设置（不含密钥）打印成每个键前都带注释的 YAML（用途、取值或范围、默认值、风险，中英文随界面语言）；只读视图，可复制；去掉 `#` 行后恰好是你覆盖的键（测试覆盖往返、嵌套、密钥不出现）。
+- 新增可选 peer `@deepseek-ai/dsh-client-ui-primitives`（与其他 `dsh-client-*` 同一范围；开关、按钮、徽标、弹窗、`?` 气泡用宿主的组件），客户端 bundle 的允许清单、`minimumReleaseAgeExclude`、devDependencies 同步；新增纯模块 `default-chain.ts`（路由器与摘要共用的默认引擎链规则）和 `config-fillers.ts`（服务端与面板共用的“去掉宿主 schema 填的空容器”）。
+
+### 修复：面板保存 `evidence` / `provider` / `sources` / `playwright` 在 rc.3 宿主上被拒绝
+
+- 旧面板（0.2.2 与 0.2.3 开发版改版前的同一份代码）把 `evidence`、`provider`、`sources` 作为**整个容器**写回，宿主（`dsh-settings`）只接受声明了 `.volatile()` 的字段之下的编辑，整体写容器报 “Config field … is not volatile”，面板显示“Host 未接受全部修改”，同一次保存里排在后面的修改（包括密钥）也不会落盘。在 rc.3 的真实面板上复现并修复（rc.2 宿主没有测）：现在一次保存是**一个原子的 `mutate`，按字段路径逐项写**（`evidence.maxRounds`、`sources.budget.deepseek.daily`……），恢复默认 `unset` 那一项；`playwright` 逐键写（`snapshotDir` 现在声明为 volatile）。密钥只在设置写入成功之后才写。不认识的同级键原样保留；宿主不会清掉恢复默认后留下的空容器（`evidence: {}`），无害。
+- 另一个老问题：宿主的 schema 解析器会在 `evidence.coverage` 下填一个空的 `thresholds: {}`，面板把它当成“给了阈值”，默认就报 “thresholds.weak must be a number in 0..1”；现在和服务端一样先去掉这些填充物再校验。
+- 测试里的 Host 替身现在按宿主的规则拒绝不在 volatile 字段之下的路径，并有一条测试固定“卡片写的每个字段都在 volatile 节点之下”。
+
 ### 验证
 
+- 真实面板（DSH 0.2.1-rc.3 桌面端运行时，隔离 home，Web profile，端口 3395）：改版前后截图、浅 / 深色、420 px 窄宽度、来源弹窗、rubric 弹窗；真的点了一次保存：`cordis.patch.yml` 的 `web-search-pro` 条目写出 `searchMaxResults`、`deepseekFetch`、`evidence.maxRounds`、`sources.disabled`、`sources.budget.deepseek.daily`，密钥只进了凭据文件，不在 patch 里；之后把文件还原。
+- 831 项插件测试（新增面板、保存路径、文本视图、列表与弹窗、状态摘要共 16 项，并重写了面板渲染测试）、94 项 bench 测试、类型检查、`test:peers`、构建与客户端 bundle 检查通过。
+
+### 验证（DeepSeek 搜索 / 抓取）
+
 - 真实调用 **8 次 Search + 4 次 Fetch**（`docs/validation/dsh-web-search-pro-0.2.3.md`）：结果结构与全部字段、`site:` / `-site:` / `after:` 运算符、128 字符上限（HTTP 400）、401 / 404 错误体、Fetch 的 Markdown 都按预期；与文档不一致的地方（`summary` / `snippet` 长度远超文档所写；乱码查询仍返回低 `rerank_score` 的结果而不是空数组）写在记录里。**没有亲眼验证**：403 的 Fetch 拒绝、402、408 / 429 / 5xx 与重试路径（只用模拟响应测试）。
-- 815 项插件测试（含新增 25 项 DeepSeek 测试）、94 项 bench 测试、类型检查、`test:peers`、构建与客户端 bundle 检查通过。
+- DeepSeek 部分新增 25 项测试（见上文总数）。
 
 ## 0.2.2（2026-10-26）
 

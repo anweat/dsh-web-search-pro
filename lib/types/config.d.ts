@@ -247,8 +247,8 @@ export interface Config {
     evidence?: Partial<EvidenceConfig>;
     verbose: boolean;
 }
-/** The default `engines` list. A list equal to it is "not customised": the default rule for common ("常用") sources applies to it (router.preferred). */
-export declare const DEFAULT_ENGINES: readonly string[];
+export { DEFAULT_ENGINES };
+import { DEFAULT_ENGINES } from './default-chain.ts';
 export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     dbPath: z<string, string, "volatile">;
     toolSurface: z<string, string, "volatile-defined">;
@@ -344,10 +344,10 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
     playwright: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
+        snapshotDir: z<string, string, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
+        snapshotDir: z<string, string, "volatile">;
     }>>, "plain">;
     sources: z<Schemastery.ObjectS<NoInfer<{
         priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
@@ -809,10 +809,10 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
     playwright: z<Schemastery.ObjectS<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
+        snapshotDir: z<string, string, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
+        snapshotDir: z<string, string, "volatile">;
     }>>, "plain">;
     sources: z<Schemastery.ObjectS<NoInfer<{
         priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
@@ -1207,8 +1207,6 @@ export interface ResolvedConfig extends Config {
 }
 /** Default database path under the harness home. */
 export declare function defaultDbPath(): string;
-export declare function normalizeJudge<T>(judge: T): T;
-export declare function normalizeRubrics<T>(rubrics: T): T;
-export declare function normalizeCoverage<T>(coverage: T): T;
+export { normalizeJudge, normalizeRubrics, normalizeCoverage } from './config-fillers.ts';
 /** Resolve a fully-defaulted config from user input. Unwraps volatile fields (schemastery `Volatile<T>`) into plain values so consumers never see the wrapper. */
 export declare function resolveConfig(config: Config): ResolvedConfig;
