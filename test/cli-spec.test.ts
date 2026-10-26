@@ -25,6 +25,8 @@ test('argv is an array of tokens with {query}: a shell string is refused', () =>
   assert.match(errorsOf({ search: { ...baseSpec().search, argv: ['search', '--json'] } }), /placeholder/)
   assert.match(errorsOf({ search: { ...baseSpec().search, argv: ['search', '{query}', '{secret}'] } }), /unknown placeholder \{secret\}/)
   assert.match(errorsOf({ search: { ...baseSpec().search, argv: ['search', '{query', '--json'] } }), /unbalanced brace|placeholder/)
+  assert.equal(errorsOf({ search: { ...baseSpec().search, argv: ['search', '--json', '--', '{terms}'] } }), '', '{terms} alone is a query placeholder')
+  assert.match(errorsOf({ search: { ...baseSpec().search, argv: ['search', 'q={terms}', '--json'] } }), /\{terms\} must be a token of its own/)
   assert.match(errorsOf({ search: { ...baseSpec().search, argv: ['search', '', '{query}'] } }), /argv must be an array/)
 })
 

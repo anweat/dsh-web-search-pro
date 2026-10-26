@@ -246,7 +246,7 @@ const gh: CliAdapterSpec = {
   probe: { versionArgs: ['--version'], helpArgs: ['search', 'repos', '--help'], mustContain: ['--json', '--limit', 'stargazersCount'] },
   allowedSubcommands: ['search', 'repos', 'issues', 'code'],
   search: {
-    argv: ['search', 'repos', '--json', GH_REPO_FIELDS, '--limit', '{count}', '--sort', 'stars', '--order', 'desc', '--', '{query}'],
+    argv: ['search', 'repos', '--json', GH_REPO_FIELDS, '--limit', '{count}', '--sort', 'stars', '--order', 'desc', '--', '{terms}'],
     maxCount: 15,
     output: {
       format: 'json', stripTags: false,
@@ -259,7 +259,7 @@ const gh: CliAdapterSpec = {
   },
   searches: {
     'github-issues': {
-      argv: ['search', 'issues', '--json', 'title,url,state,repository,commentsCount,updatedAt', '--limit', '{count}', '--sort', 'updated', '--order', 'desc', '--', '{query}'],
+      argv: ['search', 'issues', '--json', 'title,url,state,repository,commentsCount,updatedAt', '--limit', '{count}', '--sort', 'updated', '--order', 'desc', '--', '{terms}'],
       maxCount: 15,
       output: {
         format: 'json',
@@ -271,7 +271,7 @@ const gh: CliAdapterSpec = {
       notLoggedInPatterns: ['gh auth login', 'not logged in', 'authentication required'],
     },
     'github-code': {
-      argv: ['search', 'code', '--json', 'path,repository,url', '--limit', '{count}', '--', '{query}'],
+      argv: ['search', 'code', '--json', 'path,repository,url', '--limit', '{count}', '--', '{terms}'],
       maxCount: 15,
       output: { format: 'json', fields: { url: 'url', title: { template: '{repository.nameWithOwner} / {path}' }, snippet: { template: '仓库: {repository.nameWithOwner}' } } },
       notLoggedInPatterns: ['gh auth login', 'not logged in', 'authentication required'],
@@ -282,7 +282,7 @@ const gh: CliAdapterSpec = {
   login: { command: 'gh auth login' },
   timeoutMs: 30_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'live', version: '2.101.0', date: SPEC_CHECK_DATE, note: '`gh search repos --json … --sort stars -- "dsh web search"` parsed (fixture gh-repos.json); issues and code searches follow the documented JSON fields of their help pages and were not run' },
+  verification: { status: 'live', version: '2.101.0', date: '2026-10-26', note: 'repos, issues and code searches run (zh / en / qualifier / empty) and parsed (fixtures live-gh-*); the query is passed as separate words ({terms}) because gh quotes a one-token query as an exact phrase (found nothing for four-word queries, broke `repo:x words`). Needs the user\'s own gh login (a token, never a browser cookie)' },
 }
 
 const wxSearchCli: CliAdapterSpec = {

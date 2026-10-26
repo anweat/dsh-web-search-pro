@@ -78,7 +78,11 @@ export interface CliOutputSpec {
 }
 
 export interface CliSearchSpec {
-  /** Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`). */
+  /**
+   * Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`).
+   * A token that is exactly `{terms}` expands to the query split into one argv token per word (double quotes keep a phrase together):
+   * for tools that join their positional arguments themselves and would otherwise quote a one-token query as an exact phrase (`gh search`).
+   */
   argv: readonly string[]
   /** Largest `{count}` sent (the search call's count is clamped to 1..maxCount). */
   maxCount?: number
@@ -196,7 +200,7 @@ const BIN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const ENV_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
 const PATH_RE = /^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$/
 const VERSION_RE = /^\d+(\.\d+){0,3}$/
-const PLACEHOLDERS = new Set(['query', 'count', 'url'])
+const PLACEHOLDERS = new Set(['query', 'count', 'url', 'terms'])
 const MAX_TIMEOUT_MS = 180_000
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
@@ -303,7 +307,8 @@ function checkSearch(value: unknown, where: string, allowed: readonly string[], 
   } else {
     const argv = value.argv as string[]
     argv.forEach(token => templateProblems(token, where + '.argv', PLACEHOLDERS, errors))
-    if (!argv.some(t => /\{(query|url)\}/.test(t))) errors.push(where + '.argv must carry a {query} (or {url}) placeholder')
+    if (!argv.some(t => /\{(query|url|terms)\}/.test(t))) errors.push(where + '.argv must carry a {query} (or {url} / {terms}) placeholder')
+    for (const token of argv) if (token.includes('{terms}') && token !== '{terms}') errors.push(where + '.argv: {terms} must be a token of its own')
     errors.push(...argvProblems(argv, allowed, where + '.argv'))
   }
   if (value.maxCount !== undefined && !(Number.isInteger(value.maxCount) && (value.maxCount as number) >= 1 && (value.maxCount as number) <= 100)) errors.push(where + '.maxCount must be an integer 1..100')

@@ -274,14 +274,39 @@ export function parseCliOutput(spec: Pick<CliAdapterSpec, 'bins'>, search: CliSe
 
 // ── argv ────────────────────────────────────────────────────────────────────
 
-/** Fill the placeholders of an argv template. A value that would read as a flag gets a leading space (the tool then takes it as the query). */
+/** Largest number of words `{terms}` expands to (more are folded into the last one). */
+const MAX_TERMS = 16
+
+/** Split a query into words; double quotes keep a phrase in one word (`a "b c" d` -> `a`, `b c`, `d`) and are dropped. */
+export function splitTerms(query: string): string[] {
+  const terms: string[] = []
+  let current = ''
+  let quoted = false
+  for (const ch of query) {
+    if (ch === '"') quoted = !quoted
+    else if (!quoted && /\s/.test(ch)) { if (current) terms.push(current); current = '' }
+    else current += ch
+  }
+  if (current) terms.push(current)
+  return terms.length > MAX_TERMS ? [...terms.slice(0, MAX_TERMS - 1), terms.slice(MAX_TERMS - 1).join(' ')] : terms
+}
+
+/**
+ * Fill the placeholders of an argv template. A value that would read as a flag gets a leading space (the tool then takes it as the query)
+ * unless a `--` precedes it. A `{terms}` token becomes one token per word of the query.
+ */
 export function buildArgv(search: Pick<CliSearchSpec, 'argv' | 'maxCount'>, input: { query: string; count: number }): string[] {
   const count = Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? 50)
   const dashdash = (index: number): boolean => search.argv.slice(0, index).includes('--')
-  return search.argv.map((token, index) => {
+  const guard = (value: string, index: number): string => (value.startsWith('-') && !dashdash(index) ? ' ' + value : value)
+  return search.argv.flatMap((token, index) => {
     const withCount = token.replace(/\{count\}/g, () => String(count))
-    if (withCount === '{query}' || withCount === '{url}') return input.query.startsWith('-') && !dashdash(index) ? ' ' + input.query : input.query
-    return withCount.replace(/\{(?:query|url)\}/g, () => input.query)
+    if (withCount === '{terms}') {
+      const terms = splitTerms(input.query)
+      return (terms.length ? terms : [input.query]).map(term => guard(term, index))
+    }
+    if (withCount === '{query}' || withCount === '{url}') return [guard(input.query, index)]
+    return [withCount.replace(/\{(?:query|url)\}/g, () => input.query)]
   })
 }
 

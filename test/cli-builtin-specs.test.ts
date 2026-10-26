@@ -92,12 +92,28 @@ test('gh (live fixture and documented fields): repos, issues and code each have 
   assert.deepEqual(searchSpecFor(gh, 'github').argv.slice(0, 3), ['search', 'repos', '--json'])
   assert.deepEqual(searchSpecFor(gh, 'github-issues').argv.slice(0, 2), ['search', 'issues'])
   assert.deepEqual(searchSpecFor(gh, 'github-code').argv.slice(0, 2), ['search', 'code'])
-  // The query follows `--`, so a query that starts with a dash cannot become a flag.
-  for (const platform of gh.platforms) assert.deepEqual(searchSpecFor(gh, platform).argv.slice(-2), ['--', '{query}'])
+  // The query follows `--`, so a query that starts with a dash cannot become a flag, and it is handed over as separate words
+  // ({terms}): gh quotes a one-token query as an exact phrase, which found nothing for four-word queries and broke `repo:x some words`.
+  for (const platform of gh.platforms) assert.deepEqual(searchSpecFor(gh, platform).argv.slice(-2), ['--', '{terms}'])
   const issues = parseCliOutput(gh, searchSpecFor(gh, 'github-issues'), JSON.stringify([{ title: 'Crash on start', url: 'https://github.com/o/r/issues/1', state: 'open', repository: { name: 'r', nameWithOwner: 'o/r' }, commentsCount: 3, updatedAt: '2026-10-01T00:00:00Z' }]))
   assert.deepEqual(issues, [{ url: 'https://github.com/o/r/issues/1', title: 'Crash on start', snippet: '[open] · o/r · 3 comments', publishedAt: '2026-10-01' }])
   const code = parseCliOutput(gh, searchSpecFor(gh, 'github-code'), JSON.stringify([{ path: 'src/a.ts', repository: { nameWithOwner: 'o/r' }, url: 'https://github.com/o/r/blob/main/src/a.ts' }]))
   assert.deepEqual(code, [{ url: 'https://github.com/o/r/blob/main/src/a.ts', title: 'o/r / src/a.ts', snippet: '仓库: o/r' }])
+})
+
+test('gh (live fixtures 2026-10-26): Chinese repos query, issues and code searches, the empty answer', () => {
+  const gh = spec('gh')
+  const zh = parse('gh', 'live-gh-repos-zh.json', 'github')
+  assert.equal(zh.length, 4)
+  assert.deepEqual(zh[0], { url: 'https://github.com/KomoriDev/nonebot-plugin-deepseek', title: 'KomoriDev/nonebot-plugin-deepseek', publishedAt: '2026-10-26', snippet: 'NoneBot DeepSeek 插件。接入 DeepSeek 模型，提供智能对话与问答功能 | ⭐178 | [Python] | forks 19' })
+  assert.ok(zh.every(r => /^https:\/\/github\.com\/[^/]+\/[^/]+$/.test(r.url) && r.title === r.url.replace('https://github.com/', '')), 'title is owner/name of the url')
+  const issues = parse('gh', 'live-gh-issues.json', 'github-issues')
+  assert.deepEqual(issues, [{ url: 'https://github.com/anweat/dsh-web-search-pro/issues/38', title: '[Bug] twitter 平台源结果全错：url-lines 解析器套在 twitter-cli 的 YAML 输出上（0.2.1 与 main 均复现）', publishedAt: '2026-10-08', snippet: '[open] · anweat/dsh-web-search-pro · 0 comments' }])
+  const code = parse('gh', 'live-gh-code.json', 'github-code')
+  assert.equal(code.length, 3)
+  assert.deepEqual(code[0], { url: 'https://github.com/anweat/dsh-web-search-pro/blob/9e905c212fac5e891cc0f7ea75e1c276c9e5498e/src/prompt.ts', title: 'anweat/dsh-web-search-pro / src/prompt.ts', snippet: '仓库: anweat/dsh-web-search-pro' })
+  // No hits prints `[]`: nothing parsed, which the runner reports as an empty answer.
+  assert.deepEqual(parseCliOutput(gh, gh.search, '[]\n', 5), [])
 })
 
 test('omnireach (live fixture): the wechat source uses --on wechat, the multi-source command does not', () => {
