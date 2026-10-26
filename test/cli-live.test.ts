@@ -20,6 +20,11 @@ import { findOnPath, probeCli } from '../src/cli/probe.ts'
 import { parseCliOutput, runCliSearchDetailed, CliAdapterError } from '../src/cli/runner.ts'
 import { searchSpecFor, type CliAdapterSpec } from '../src/cli/spec.ts'
 import { exaEngine, parseMcporterExaSearch } from '../src/engines.ts'
+import { resolveConfig } from '../src/config.ts'
+import { createBuiltinRegistry } from '../src/providers/index.ts'
+import { SearchRouter } from '../src/router.ts'
+import { Store } from '../src/store.ts'
+import { clearProbeCache } from '../src/cli/probe.ts'
 
 const dir = new URL('./fixtures/cli/', import.meta.url)
 const read = (name: string): string => fs.readFileSync(new URL(name, dir), 'utf8')
@@ -189,9 +194,84 @@ test('live Exa through mcporter (keyless): Chinese and English', { skip: skipRea
   } finally { if (savedKey !== undefined) process.env.EXA_API_KEY = savedKey }
 })
 
+/** A router on an isolated store with the real PATH: the platform chains as a Host would run them. */
+async function withRouter<T>(extra: Record<string, unknown>, fn: (r: { search: (platform: string, query: string) => Promise<{ engine: string; sources: WebSearchSource[] }>; last: () => { engine: string; detail: string }; report: () => Promise<Awaited<ReturnType<SearchRouter['providerReport']>>> }) => Promise<T>): Promise<T> {
+  clearProbeCache()
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-live-chain-'))
+  const store = new Store(path.join(work, 'store.db'))
+  const config = resolveConfig({ engines: ['ddg'], dbPath: path.join(work, 'store.db'), enableCliBackends: true, opencliEnabled: true, agentReachEnabled: true, ttlSeconds: 60, allowProxyFakeIp: true, ...extra } as never)
+  const router = new SearchRouter({ get: () => undefined } as never, config, store, () => config, () => undefined, undefined, createBuiltinRegistry())
+  try {
+    return await fn({
+      search: (platform, query) => router.search({ query, count: 3, fresh: true, multi: false, signal: undefined, platform: { id: platform } } as never) as never,
+      last: () => { const q = store.listQueries({ kind: 'platform' })[0]!; return { engine: q.engine, detail: typeof q.detail === 'string' ? q.detail : JSON.stringify(q.detail) } },
+      report: () => router.providerReport(),
+    })
+  } finally { router.dispose(); store.close(); fs.rmSync(work, { recursive: true, force: true }) }
+}
+
+test('live chains: configured order, fall-through with the reason, REST failure falls back to gh', { skip: skipReason('wx-search-cli') || skipReason('omnireach') || skipReason('gh'), ...RUN_OPTS }, async () => {
+  await withRealPath(async () => {
+    await withRouter({}, async r => {
+      assert.equal((await r.search('wechat', '人工智能')).sources.length > 0, true)
+      assert.equal(r.last().engine, 'omnireach', 'wechat: omnireach is first')
+    })
+    await withRouter({ platformBackends: { wechat: ['wx-search-cli', 'omnireach'] } }, async r => {
+      await r.search('wechat', '人工智能')
+      assert.equal(r.last().engine, 'wx-search-cli', 'a configured order replaces the default')
+    })
+    // The first backend of the wechat chain is not there: the second answers and the history says why the first was passed over.
+    const withoutOmnireach = (process.env.PATH ?? '').split(path.delimiter).filter(dirName => !fs.existsSync(path.join(dirName, 'omnireach'))).join(path.delimiter)
+    const saved = process.env.PATH
+    process.env.PATH = withoutOmnireach
+    try {
+      await withRouter({}, async r => {
+        await r.report()
+        const out = await r.search('wechat', '人工智能')
+        assert.ok(out.sources.length > 0)
+        assert.equal(r.last().engine, 'wx-search-cli')
+        assert.match(r.last().detail, /skipped backends: omnireach: the omnireach command is not installed: install it/)
+      })
+    } finally { process.env.PATH = saved }
+    // github: REST first; a rejected token makes it fall through to gh with the REST error named.
+    await withRouter({}, async r => { await r.search('github', 'web search plugin'); assert.equal(r.last().engine, 'github'); assert.match(r.last().detail, /"backend":"rest"/) })
+    await withRouter({ githubToken: 'ghp_' + 'invalid'.repeat(5) }, async r => {
+      const out = await r.search('github', 'web search plugin')
+      assert.ok(out.sources.length > 0)
+      assert.match(r.last().detail, /"backend":"gh"/)
+      assert.match(r.last().detail, /skipped backends: github: GitHub API 401/)
+    })
+  })
+})
+
+test('live chains: login-bound backends are reported as skipped without being run when their saved login is missing (an empty HOME)', { skip: skipReason('bili'), ...RUN_OPTS }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-live-nohome-'))
+  const savedHome = process.env.HOME
+  process.env.HOME = home
+  try {
+    await withRealPath(async () => {
+      await withRouter({}, async r => {
+        const report = await r.report()
+        const chainOf = (route: string) => report.find(p => p.route === route)!.chain!
+        for (const [route, id, bin] of [['xiaohongshu', 'xhs', 'xhs'], ['reddit', 'rdt', 'rdt'], ['zhihu', 'zhihu', 'zhihu']] as const) {
+          const leg = chainOf(route).find(e => e.id === id)!
+          if (leg.installation === 'missing') continue // not installed on this machine: reported as missing instead
+          assert.deepEqual([leg.state, leg.credential], ['skipped', 'missing'], route)
+          assert.match(leg.reason ?? '', new RegExp(id + ': no saved login \\(run `' + bin + ' login` yourself\\)'), route)
+        }
+        const tw = chainOf('twitter').find(e => e.id === 'twitter')!
+        if (tw.installation !== 'missing') assert.match(tw.reason ?? '', /TWITTER_AUTH_TOKEN \/ TWITTER_CT0 not set/)
+        assert.equal(chainOf('bilibili')[0]!.state, 'ready')
+      })
+    })
+  } finally { if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome; fs.rmSync(home, { recursive: true, force: true }) }
+})
+
 test('the live suite never runs a login-bound tool: only the key-less adapters are named', () => {
   const body = fs.readFileSync(new URL(import.meta.url), 'utf8')
   const live = body.slice(body.indexOf('// ── live: opt-in'))
   const named = new Set([...live.matchAll(/(?:live|spec|skipReason)\('([\w-]+)'/g)].map(m => m[1]))
   assert.deepEqual([...named].sort(), ['bili', 'gh', 'mcporter', 'omnireach', 'wx-search-cli', 'yt-dlp'])
+  // No platform search is issued for a login-bound platform: only reports are read.
+  assert.deepEqual([...live.matchAll(/\.search\('([\w-]+)'/g)].map(m => m[1]).filter(p => ['xiaohongshu', 'reddit', 'zhihu', 'twitter'].includes(p!)), [])
 })

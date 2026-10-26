@@ -36,6 +36,8 @@ export interface Engine {
   backend?: string
   /** Cheap local availability check; must not do network I/O. */
   available(): boolean
+  /** Why `available()` is false, when the engine knows (a platform chain quotes it in its fall-through note instead of "unavailable"). */
+  unavailableReason?(): string | undefined
   /** Browser-service method this engine depends on (dsh-browser is optional). */
   needsBrowser?: BrowserMethod
   search(query: string, count: number, signal?: AbortSignal, options?: EngineSearchOptions): Promise<SearchOutcome>

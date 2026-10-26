@@ -87,6 +87,10 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
     backend: 'opencli',
     label: 'OpenCLI (standalone)',
     available: () => !disabledBySettings({ id: 'opencli' }, ctx.deps) && (cachedProbe(OPENCLI_PROBE)?.state ?? 'detected') === 'detected',
+    unavailableReason: () => {
+      const probe = cachedProbe(OPENCLI_PROBE)
+      return disabledBySettings({ id: 'opencli' }, ctx.deps) ?? (probe && probe.state !== 'detected' ? probeError(OPENCLI_PROBE, probe)?.message : undefined)
+    },
     async search(query, count, signal) {
       const off = disabledBySettings({ id: 'opencli' }, ctx.deps)
       if (off) throw new CliAdapterError(off, 'CLI_NOT_FOUND')

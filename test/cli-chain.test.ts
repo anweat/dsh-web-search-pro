@@ -95,6 +95,10 @@ test('a backend that is missing is skipped with the reason and the next one answ
       assert.equal(out.engine, 'wechat')
       assert.equal(out.sources[0]!.url, 'https://mp.weixin.qq.com/s?a=1')
       assert.equal(h.store.listQueries({ kind: 'platform' })[0]!.engine, 'wx-search-cli', 'history names the leg')
+      // The fall-through note says why the first backend was passed over (once a probe has seen it missing), not just "unavailable".
+      await chainReport('wechat', { deps: h.deps(), config: h.config })
+      await h.search('人工智能 周报', 'wechat')
+      assert.match(JSON.stringify(h.store.listQueries({ kind: 'platform' })[0]!.detail), /skipped backends: omnireach: the omnireach command is not installed: install it/)
       const report = await chainReport('wechat', { deps: h.deps(), config: h.config })
       assert.deepEqual(report.entries.map(e => [e.id, e.state, e.installation, e.verification]), [['omnireach', 'skipped', 'missing', 'live'], ['wx-search-cli', 'ready', 'detected', 'live']])
       assert.match(report.entries[0]!.reason!, /omnireach: omnireach not found on PATH.*omnireach/)

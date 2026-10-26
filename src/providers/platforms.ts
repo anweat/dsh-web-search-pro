@@ -29,7 +29,7 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
       const errors: unknown[] = []
       const notes: string[] = []
       for (const engine of chain) {
-        if (!engine.available()) { notes.push(engine.id + ': unavailable'); continue }
+        if (!engine.available()) { notes.push(engine.id + ': ' + (engine.unavailableReason?.() ?? 'unavailable')); continue }
         try {
           const outcome = await engine.search(query, count, signal, options)
           // The legs that were passed over are named with their reasons, so a fall-through is never silent.

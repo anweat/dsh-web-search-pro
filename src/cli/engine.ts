@@ -60,6 +60,12 @@ export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick
       // Before the first probe the command is assumed present; the search itself probes and reports.
       return options.run ? true : (cachedProbe(spec)?.state ?? 'detected') === 'detected'
     },
+    unavailableReason: () => {
+      const off = disabledBySettings(spec, deps)
+      if (off) return off
+      const probe = options.run ? undefined : cachedProbe(spec)
+      return probe && probe.state !== 'detected' ? probeError(spec, probe)?.message : undefined
+    },
     async search(query, count, signal) {
       const why = disabledBySettings(spec, deps)
       if (why) throw new CliAdapterError(why, 'CLI_NOT_FOUND', undefined, false)
