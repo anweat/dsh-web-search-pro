@@ -13,10 +13,9 @@
 | `0.1.17` | `dsh-v0.1.7-rc.2` ~ `dsh-v0.2.0-rc.2` + Browser `0.1.17` | 过渡版本，已不再演进；新功能不会回到这条线 |
 | `0.2.0`（正式版） | **只支持 `dsh-v0.2.0-rc.2` 这一条线**（peer `>=0.2.0-rc.2 <0.2.1-0`）+ 可选 `@anweat/dsh-browser ^0.2.0` | 第一个 0.2.0 线版本，**破坏性变更**（见 [CHANGELOG.md](./CHANGELOG.md)）；711 项单元测试、94 项 bench 测试，`pnpm run test:peers` 两种解析模式检查，真实 Host（DSH 0.2.0-rc.2）验收 |
 | `0.2.1` | 同 `0.2.0`（peer `>=0.2.0-rc.2 <0.2.1-0` + 可选 `@anweat/dsh-browser ^0.2.0`） | 独立 CLI 适配层与平台后端链，无破坏性变更（见 [CHANGELOG.md](./CHANGELOG.md)）；774 项单元测试、94 项 bench 测试，真实 Host（DSH 0.2.0-rc.2）验收 |
-| `0.2.2` | 同 `0.2.1`（peer `>=0.2.0-rc.2 <0.2.1-0` + 可选 `@anweat/dsh-browser ^0.2.0`） | 修复 twitter 平台结果全错（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)），无破坏性变更；790 项单元测试、94 项 bench 测试；twitter 的搜索输出契约来自 twitter-cli 0.8.5 源码与 issue 里的真实输出，我们自己没有用 Token 跑过搜索 |
-| `0.2.3` | **只支持 `dsh-v0.2.1-rc.2` 这一条线**（peer `>=0.2.1-rc.2 <0.2.2-0`）+ 可选 `@anweat/dsh-browser ^0.2.0`（配套 `0.2.2` 起，旧的 0.2.0 / 0.2.1 只适用于 0.2.0-rc.2 宿主） | 适配 DSH 0.2.1-rc.2 宿主（cordis 4.0.5、schemastery 3.18.5、cordis-plugin-group 1.0.5 / loader 1.0.6 / include 1.0.10、cosmokit 1.8.6），无破坏性功能变更；devDeps 里停更的 `dsh-invariants` 换成 `dsh-working-directory`，并显式补上 0.2.1-rc.2 改成 peer-only 的 `dsh-llm` / `dsh-session`（宿主 `autoInstallPeers: false` 不自动装 peer）；790 项单元测试、94 项 bench 测试、`pnpm run test:peers` 两种解析模式检查 |
+| `0.2.2` | **只支持 `dsh-v0.2.1-rc.2` / `dsh-v0.2.1-rc.3`（0.2.1 线）**（peer `>=0.2.1-rc.2 <0.2.2-0`）+ 可选 `@anweat/dsh-browser ^0.2.0`（配套 `0.2.2` 起，旧的 0.2.0 / 0.2.1 只适用于 0.2.0-rc.2 宿主） | 适配 DSH 0.2.1-rc.2 / rc.3 宿主（cordis 4.0.5、schemastery 3.18.5、cordis-plugin-group 1.0.5 / loader 1.0.6 / include 1.0.10、cosmokit 1.8.6），并修复 twitter 平台结果全错（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)）；无破坏性变更。npm 上的 0.2.1 在 0.2.1-rc.x 宿主上会被安装闸门拒绝，需要升级到本版。devDeps 里停更的 `dsh-invariants` 换成 `dsh-working-directory`，并显式补上 0.2.1 线改成 peer-only 的 `dsh-llm` / `dsh-session`（宿主 `autoInstallPeers: false` 不自动装 peer）；790 项单元测试、94 项 bench 测试、`pnpm run test:peers` 两种解析模式检查；真实宿主验收（rc.3）见 `docs/validation/dsh-0.2.1-rc.3.md`。twitter 的搜索输出契约来自 twitter-cli 0.8.5 源码与 issue 里的真实输出，我们自己没有用 Token 跑过搜索 |
 
-**支持范围**：DSH `>=0.2.1-rc.2 <0.2.2-0`，可选配套浏览器插件 `@anweat/dsh-browser ^0.2.0`（即 0.2.x，不含 0.3；与 DSH 0.2.1-rc.2 配套的是 0.2.2 起的 0.2.x）。
+**支持范围**：DSH `>=0.2.1-rc.2 <0.2.2-0`（已验证 `0.2.1-rc.2`、`0.2.1-rc.3`），可选配套浏览器插件 `@anweat/dsh-browser ^0.2.0`（即 0.2.x，不含 0.3；与 DSH 0.2.1-rc.x 配套的是 0.2.2 起的 0.2.x）。
 
 **不再支持 DSH 0.1.x 宿主线，也不再支持旧的 dsh-browser 0.1.x 线；仍在这两条线上的用户请停留在 dsh-web-search-pro 0.1.15。**
 
@@ -31,15 +30,15 @@
 
 - 宿主的组装期校验用的是 `semver.satisfies(host, range, { includePrerelease: true })`；真正决定装机成败的是 npm/pnpm 的**默认** semver：预发布版本只有在某个比较符自带同号（同 major.minor.patch）预发布时才被判为满足。`>=0.2.1-rc.2` 这个比较符自带 `0.2.1` 的预发布，是**承重**的，必须保留；写成 `>=0.2.0-rc.2 <0.2.2-0` 这类下界在别的版本线的范围会过宿主校验、却让 `dsh plugin add` 报 ERESOLVE。与 `@anweat/dsh-browser` 必须声明同一套策略，否则两者互为 peer 时会出现 ERESOLVE。
 - 上界是 `<0.2.2-0` 而不是 `<0.2.2`：后者放行 `0.2.2-alpha.1` 这类 0.2.2 的预发布。收口后，若 0.2.2 真出现破坏，会在**组装期**直接报 `is incompatible with dsh 0.2.2` 并点名，而不是拖到用户机器上变成运行期怪错（`0.1.5 → 0.1.7` 曾一次性打断所有按 `0.1.5-alpha.1` 构建的插件）。
-- 范围只表示「测过哪些」，不等于承诺不破坏；真正的防线是每换一个 DSH 版本重跑一遍这套验证。`pnpm run test:peers`（已并入 `pnpm verify`）用两种解析模式逐个断言受管 peer：`0.2.1-rc.2`（以及同一 patch 线的 `0.2.1`）必须通过，`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`、`0.2.2-alpha.1` 必须被拒绝；并自带 `--selftest` 已知行为自校验。
+- 范围只表示「测过哪些」，不等于承诺不破坏；真正的防线是每换一个 DSH 版本重跑一遍这套验证。`pnpm run test:peers`（已并入 `pnpm verify`）用两种解析模式逐个断言受管 peer：`0.2.1-rc.2`、`0.2.1-rc.3`（以及同一 patch 线的 `0.2.1`）必须通过，`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`、`0.2.2-alpha.1` 必须被拒绝；并自带 `--selftest` 已知行为自校验。
 
 ## 安装
 
 ```bash
-# 默认安装（面向 dsh-v0.2.1-rc.2 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+# 默认安装（面向 dsh-v0.2.1-rc.2 / rc.3 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
+dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.2
 # 不需要浏览器能力时，只装本插件即可：
-dsh plugin --profile web add dsh-web-search-pro@0.2.3
+dsh plugin --profile web add dsh-web-search-pro@0.2.2
 # 或本地目录 / tarball：
 dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
@@ -48,16 +47,16 @@ dsh --profile web
 
 > 两个插件都必须是 profile 的直接依赖：DSH 只激活直接依赖的 bundle layer，且标准 profile 可能设置 `autoInstallPeers: false`。不要只安装 Web Search Pro 后依赖 peer 自动补齐。
 > pnpm 11 若拦截 Browser 的 OpenCLI 依赖安装脚本，会要求在 profile 的 `pnpm-workspace.yaml` 中明确决定 `allowBuilds: { '@jackwener/opencli': false }`（或在确实需要安装期下载 adapter 时自行审核后设为 `true`），再重试安装；隔离 profile 中禁用脚本后，已发布 Browser 的 OpenCLI 入口仍可运行。
-> 本版只支持 `dsh-v0.2.1-rc.2` 与 Browser `^0.2.0`（配套 0.2.2 起的 0.2.x），宿主或浏览器插件仍在 0.1.x 线上的，请安装 `dsh-web-search-pro@0.1.15`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
+> 本版只支持 `dsh-v0.2.1-rc.2` / `dsh-v0.2.1-rc.3` 与 Browser `^0.2.0`（配套 0.2.2 起的 0.2.x），宿主或浏览器插件仍在 0.1.x 线上的，请安装 `dsh-web-search-pro@0.1.15`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
 > `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
 > 里对齐版本后重装即可。
 
 ## 从旧版本升级
 
-先确认宿主是 `dsh-v0.2.1-rc.2`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x）；两者都需要作为 profile 的直接依赖。
+先确认宿主是 `dsh-v0.2.1-rc.2` 或 `dsh-v0.2.1-rc.3`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x）；两者都需要作为 profile 的直接依赖。
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.2
 ```
 
 > **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级，停留在 `dsh-web-search-pro@0.1.15`。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回上面的 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。

@@ -1,26 +1,29 @@
 # 更新记录
 
-## 0.2.3（2026-10-18）
+## 0.2.2（2026-10-26）
 
-适配 DSH 0.2.1-rc.2 宿主。没有功能变更，也没有破坏性变更；0.2.2 的配置与数据照常可用。
+适配 DSH 0.2.1-rc.2 / 0.2.1-rc.3 宿主，并修复 twitter 平台源返回错误结果的问题（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)，感谢 @gogososonono 的报告与根因分析）。npm 上的 0.2.1 的 peer 是 `<0.2.1-0`，在 0.2.1-rc.x 宿主上会被安装闸门拒绝；本版是第一个能装进 0.2.1-rc.x 宿主的发布（0.2.2 / 0.2.3 曾在内部分开记录，从未发布，这里合并为 0.2.2）。除下面 #38 的修复外没有功能变更，也没有破坏性变更；0.2.1 的配置与数据照常可用。
 
-- peer 基线：所有受管的 `@deepseek-ai/dsh-*` peer 从 `>=0.2.0-rc.2 <0.2.1-0` 移到 `>=0.2.1-rc.2 <0.2.2-0`（单基线策略不变：0.2.0 线整体拒绝，0.2.2 的预发布也被上界挡掉）。`@deepseek-ai/cordis` peer `~4.0.5`、`@deepseek-ai/schemastery` peer `^3.18.5`；可选 Browser peer 仍是 `^0.2.0`。
-- devDependencies：`@deepseek-ai/dsh-*` 全部 → `0.2.1-rc.2`；cordis `^4.0.5`、schemastery `^3.18.5`、cordis-plugin-group `1.0.5`、cordis-plugin-include `1.0.10`、cosmokit `~1.8.6`、`@anweat/dsh-browser` `0.2.1`（最新已发布版；浏览器 0.2.2 与它的 peer 范围更新一起发布）。
-- 随宿主生态调整：`@deepseek-ai/dsh-invariants` 在 0.2.1 线不再发布（最后版本 0.2.0-rc.2），本插件也从未 import 它，从 devDependencies 移除；0.2.1-rc.2 把 `dsh-llm` / `dsh-session` 改成 peer-only，宿主 `autoInstallPeers: false` 不会自动装，故显式加入 devDependencies；新增宿主包 `dsh-working-directory@0.2.1-rc.2`（0.2.0-rc.2 的 `dsh-invariants` peer 位置）。不补这些时，测试在 import `@deepseek-ai/dsh-tools` 时会报 `ERR_MODULE_NOT_FOUND: @deepseek-ai/dsh-llm`。
-- `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 从 `@0.2.0-rc.2` 移到 `@0.2.1-rc.2`（去掉停更的 `dsh-invariants`，加入 `dsh-working-directory`）。
-- `test/compat/check-peer-ranges.js`：受支持基线改为 `0.2.1-rc.2`；行为矩阵覆盖 `0.2.1-rc.2` / `0.2.1` 通过，`0.1.7-rc.2` / `0.2.0-rc.1` / `0.2.0-rc.2` / `0.2.2-alpha.1` 在两种解析模式下都拒绝；`--selftest` 16 条已知行为通过。
-- 验证：790 项插件测试、94 项 bench 测试、类型检查、`test:peers`、构建与客户端 bundle 检查通过。本版没有在真实 0.2.1-rc.2 宿主上做端到端验收（由独立验证者在打包产物上执行）；CLI / 网络相关测试沿用既有 fixture，没有新增 live 依赖。
+### 宿主适配（DSH 0.2.1-rc.2 / 0.2.1-rc.3）
 
-## 0.2.2（2026-10-11）
+- peer 基线：所有受管的 `@deepseek-ai/dsh-*` peer 从 `>=0.2.0-rc.2 <0.2.1-0` 移到 `>=0.2.1-rc.2 <0.2.2-0`，同时覆盖 `0.2.1-rc.2` 与 `0.2.1-rc.3`（单基线策略不变：0.2.0 线整体拒绝，0.2.2 的预发布也被上界挡掉）。`@deepseek-ai/cordis` peer `~4.0.5`、`@deepseek-ai/schemastery` peer `^3.18.5`；可选 Browser peer 仍是 `^0.2.0`（与 0.2.1-rc.x 配套的是 `@anweat/dsh-browser` 0.2.2 起）。
+- devDependencies：`@deepseek-ai/dsh-*` 全部 → `0.2.1-rc.3`；cordis `^4.0.5`、schemastery `^3.18.5`、cordis-plugin-group `1.0.5`、cordis-plugin-include `1.0.10`、cosmokit `~1.8.6`、`@anweat/dsh-browser` `0.2.1`（最新已发布版）。rc.2 → rc.3 的宿主改动（导航入口自定义、菜单图标、analytics、DeepSeek API-key 路线跟随官方 /models）不涉及插件使用的 API，插件源码与 `lib/` 无需改动。
+- 随宿主生态调整：`@deepseek-ai/dsh-invariants` 在 0.2.1 线不再发布，本插件也从未 import 它，从 devDependencies 移除；0.2.1 线把 `dsh-llm` / `dsh-session` 改成 peer-only，宿主 `autoInstallPeers: false` 不会自动装，故显式加入 devDependencies；新增宿主包 `dsh-working-directory`（原 `dsh-invariants` peer 位置）。不补这些时，测试在 import `@deepseek-ai/dsh-tools` 时会报 `ERR_MODULE_NOT_FOUND: @deepseek-ai/dsh-llm`。
+- `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 改为 `@0.2.1-rc.3`。
+- `test/compat/check-peer-ranges.js`：受支持基线为 `0.2.1-rc.2` 与 `0.2.1-rc.3`；`0.1.7-rc.2` / `0.2.0-rc.1` / `0.2.0-rc.2` / `0.2.2-alpha.1` 在两种解析模式下都拒绝；`--selftest` 16 条已知行为通过。
 
-修复 twitter 平台源返回错误结果的问题（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)，感谢 @gogososonono 的报告与根因分析）。兼容范围与 0.2.1 相同，没有破坏性变更。
+### 修复 #38（twitter）
 
 - 修复：twitter 规格原来用 `url-lines` 解析 `twitter search` 的默认输出，而 twitter-cli 在 stdout 不是终端时默认打印 YAML，于是头像、视频、`t.co` 链接和 `profileImageUrl:` 之类的字段名都被当成结果。现在执行 `twitter search QUERY -n N --json`，按 `{ ok, schema_version, data[] }` 信封解析：永久链接由 `author.screenName` 与 `id` 拼出，标题取推文正文（折成一行），摘要含作者、赞 / 转 / 阅读数与 ISO 时间；失败信封里的 `error.message` 原样给出，未登录按工具自己的错误码判定。探测要求 `search --help` 含 `--json`，旧版 twitter-cli 报 `incompatible` 并写明已知可用的最低版本 0.8.5。
 - twitter 凭据：`TWITTER_AUTH_TOKEN` / `TWITTER_CT0` 现在和插件其他密钥一样解析——设置里的 `twitterAuthToken` / `twitterCt0`（密钥角色）→ DSH 凭据引用 `twitterAuthTokenEnv` / `twitterCt0Env`（默认即这两个变量名）→ 宿主进程环境变量；值只通过子进程环境变量交给 `twitter`，不进命令行、日志，错误信息里已脱敏。缺失时 `sources.status` 写明查过哪里，并提示“只写 shell 配置文件宿主读不到”。设置面板新增两个密钥与两个引用名字段。
 - 防止同类问题：内置规格不得使用 `url-lines`，且每条命令必须显式要求机器可读输出（`--json` / `-f json` / `--print` 等，测试覆盖全部内置与生成的 OpenCLI 规格；唯一例外 wx-search-cli 的帮助写明它只输出 JSON）；文本模式（`url-lines` / `tsv`，自定义适配会用到）遇到整段是 JSON 或 YAML 文档的输出时报 `CLI_CONTRACT_MISMATCH`，不再返回行；`url-lines` 丢弃只有 `key:` 标签的行，`tsv` 跳过没有制表符的行；失败时优先引用工具自己的错误信息。
 - `sources.status` 与 `search.recommend` 对未经真实搜索验证的后端加一句标注（`contract-only — output parser not verified with a real search`），“已检测 + 已配置”不再容易被读成“能用”。
 - yt-dlp 验证为 live：用规格的原始参数真实搜索一次并解析（夹具 `live-yt-dlp-search.txt`）。twitter 仍是 contract-only：契约来自 twitter-cli 0.8.5 源码与 issue 中的真实输出，我们自己没有用 Token 跑过搜索。
-- 验证：790 项插件测试、94 项 bench 测试、类型检查、peer 范围、构建与客户端 bundle 检查通过。
+
+### 验证
+
+- 790 项插件测试、94 项 bench 测试、类型检查、`test:peers`、构建与客户端 bundle 检查通过。
+- 真实宿主验收见 `docs/validation/dsh-0.2.1-rc.3.md`。
 
 ## 0.2.1（2026-10-07）
 
