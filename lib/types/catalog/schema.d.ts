@@ -62,6 +62,8 @@ export interface CatalogEntry {
     invoke?: string;
     /** Curation order among equals (lower first, default 50). */
     rank?: number;
+    /** "常用": the plugin's recommended source. Once its key is configured it leads the recommendations, and `search.recommend` marks it. Mirrors the provider descriptor's `common`. */
+    common?: boolean;
     /** Short install or configuration text. */
     install: string;
     license: string;

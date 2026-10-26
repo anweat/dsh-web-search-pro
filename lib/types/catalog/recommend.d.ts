@@ -60,6 +60,8 @@ export interface Suggestion {
     /** First counter-example of the entry. */
     notFor?: string;
     verified: boolean;
+    /** "常用": the plugin's recommended source (it leads once its key is configured). */
+    common?: boolean;
     /** The CLI backend this source runs through, when its adapter was not verified with a real search (`twitter: contract-only — …`). */
     backend?: string;
     sourceFamily?: string;

@@ -173,6 +173,11 @@ export interface Config {
     bochaBaseUrl?: string;
     /** Ask Bocha for its longer per-page summary (default true). */
     bochaSummary?: boolean;
+    /**
+     * Let `read.fetch` use the DeepSeek Fetch API ($0.75 per 1,000 successful requests) as a backend, after the free ones and before the
+     * browser, in `mode: auto`, and accept `mode: deepseek`. Uses the same key as DeepSeek Search (`keyedSources.deepseek`). Off by default: it spends money.
+     */
+    deepseekFetch: boolean;
     /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
     searxngUrl?: string;
     /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
@@ -242,6 +247,8 @@ export interface Config {
     evidence?: Partial<EvidenceConfig>;
     verbose: boolean;
 }
+/** The default `engines` list. A list equal to it is "not customised": the default rule for common ("常用") sources applies to it (router.preferred). */
+export declare const DEFAULT_ENGINES: readonly string[];
 export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     dbPath: z<string, string, "volatile">;
     toolSurface: z<string, string, "volatile-defined">;
@@ -268,6 +275,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     bochaApiKeyEnv: z<string, string, "volatile-defined">;
     bochaBaseUrl: z<string, string, "volatile-defined">;
     bochaSummary: z<boolean, boolean, "volatile-defined">;
+    deepseekFetch: z<boolean, boolean, "volatile-defined">;
     searxngUrl: z<string, string, "volatile">;
     openalexMailto: z<string, string, "volatile">;
     keyedSources: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -732,6 +740,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     bochaApiKeyEnv: z<string, string, "volatile-defined">;
     bochaBaseUrl: z<string, string, "volatile-defined">;
     bochaSummary: z<boolean, boolean, "volatile-defined">;
+    deepseekFetch: z<boolean, boolean, "volatile-defined">;
     searxngUrl: z<string, string, "volatile">;
     openalexMailto: z<string, string, "volatile">;
     keyedSources: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -1187,6 +1196,7 @@ export interface ResolvedConfig extends Config {
     bochaApiKeyEnv: string;
     bochaBaseUrl: string;
     bochaSummary: boolean;
+    deepseekFetch: boolean;
     searxngUrl?: string;
     openalexMailto?: string;
     keyedSources?: Config['keyedSources'];

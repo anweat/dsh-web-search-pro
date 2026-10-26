@@ -8,7 +8,8 @@ import type { ResolvedConfig } from './config.ts';
 import type { BrowserService } from './browser-service.ts';
 import { type BrowserGetter } from './browser-access.ts';
 import type { ExtractRule } from './extract.ts';
-export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright';
+import { type DeepSeekFetchAccess } from './providers/deepseek.ts';
+export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright' | 'deepseek';
 export interface FetchOptions {
     mode: FetchMode;
     signal: AbortSignal | undefined;
@@ -63,7 +64,7 @@ export declare function detectShellPage(text: string): boolean;
 export type PageClass = 'content' | 'shell' | 'login_wall' | 'captcha' | 'js_shell' | 'error';
 /** One backend attempt of a fetch, in order (recorded in the result and in the stored fetch detail). */
 export interface FetchAttempt {
-    source: 'jina' | 'http' | 'playwright';
+    source: 'jina' | 'http' | 'playwright' | 'deepseek';
     class: PageClass;
     chars?: number;
     detail?: string;
@@ -82,14 +83,20 @@ export declare function classifyPage(text: string, meta?: {
 export declare function normalizeUrl(raw: string): string;
 /** All rules: user (DB) first, then built-ins; user rules win on ties. */
 export declare function mergedRules(store: Store): ExtractRule[];
+/**
+ * The DeepSeek Fetch API access for a call: key, endpoint, ledger. Resolved per call by the router (settings literal -> DSH credentials ->
+ * process environment); undefined = no key. Test seams (`fetchImpl`, `lookup`, `sleep`) ride along on the returned object.
+ */
+export type DeepSeekFetchAccessProvider = () => Promise<Pick<DeepSeekFetchAccess, 'apiKey' | 'baseUrl' | 'usage' | 'fetchImpl' | 'lookup' | 'sleep' | 'allowProxyFakeIp'> | undefined>;
 export declare class FetchService {
     private readonly store;
     private readonly config;
+    private readonly deepseek?;
     private readonly memory;
     /** In-flight de-duplication of identical non-fresh fetches (C3). */
     private readonly flights;
     private readonly getBrowser;
-    constructor(store: Store, config: ResolvedConfig | (() => ResolvedConfig), browser?: BrowserService | BrowserGetter);
+    constructor(store: Store, config: ResolvedConfig | (() => ResolvedConfig), browser?: BrowserService | BrowserGetter, deepseek?: DeepSeekFetchAccessProvider | undefined);
     private cfg;
     /** True when the optional browser can render right now (enabled in config and the service has render()). */
     private canRender;
@@ -98,5 +105,7 @@ export declare class FetchService {
     private runFetch;
     private fetchJina;
     private fetchHttp;
+    /** One page through the DeepSeek Fetch API. 403 / 404 are DeepSeek's own verdicts (see `DeepSeekFetchError`), never the target page's status. */
+    private fetchDeepSeek;
     private fetchPlaywright;
 }

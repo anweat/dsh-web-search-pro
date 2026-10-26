@@ -12,7 +12,7 @@
  */
 export type Json = Record<string, unknown>;
 /** Top-level config fields (one Host write each). */
-export type TopField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env' | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'searxngUrl' | 'openalexMailto' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose';
+export type TopField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env' | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'deepseekFetch' | 'searxngUrl' | 'openalexMailto' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose';
 /** Options inside `evidence` / `provider`, addressed by their dotted config path. */
 export type PathField = 'evidence.autoProviders' | 'evidence.sourcePolicy' | 'evidence.maxRounds' | 'evidence.maxQueries' | 'evidence.judge.mode' | 'evidence.hybridBorderline' | 'evidence.judge.provider' | 'evidence.maxJevQuestions' | 'evidence.judge.allowLlm' | 'evidence.judge.providers' | 'evidence.coverage.mode' | 'evidence.coverage.provider' | 'evidence.coverage.thresholds.weak' | 'evidence.coverage.thresholds.covered' | 'evidence.budget.perSearchInputTokens' | 'evidence.budget.dailyInputTokens' | 'evidence.budget.timezone' | 'evidence.budget.providers' | 'provider.evidence' | 'provider.deadlineMs' | 'sources.priority' | 'sources.disabled';
 /** One rubric override entry (`evidence.rubrics.<id>`) and one keyed-source field. */
@@ -93,6 +93,7 @@ export declare const DEFAULTS: {
     readonly twitterCt0Env: "TWITTER_CT0";
     readonly bochaBaseUrl: "https://api.bocha.cn";
     readonly bochaSummary: true;
+    readonly deepseekFetch: false;
 };
 /** Top-level fields, in display order. */
 export declare const FIELD_SPECS: readonly FieldSpec[];

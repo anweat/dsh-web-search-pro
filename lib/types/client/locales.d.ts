@@ -182,7 +182,10 @@ export declare const zh: {
     readonly bochaSummary: "请求博查长摘要";
     readonly bochaSummaryHint: "默认开启；关闭可减少返回体。";
     readonly keyedGroup: "需 Key 的来源";
-    readonly keyedGroupHint: "填入 Key 引用名即启用（未设 Key 前不可用）；Key 写入 DSH Credentials，不在此显示。地址仅在使用代理或私有网关时覆盖。均未经真实服务验证。";
+    readonly keyedGroupHint: "填入 Key 引用名即启用（未设 Key 前不可用）；Key 写入 DSH Credentials，不在此显示。地址仅在使用代理或私有网关时覆盖。DeepSeek 搜索是“常用”来源，配置 Key 后默认排第一；其余未经真实服务验证。";
+    readonly commonBadge: "常用";
+    readonly deepseekFetch: "用 DeepSeek Fetch 读取网页";
+    readonly deepseekFetchHint: "默认关闭。开启后 read.fetch 在 Jina、直连都没拿到正文时，改用 DeepSeek Fetch API（每 1000 次成功请求 $0.75，空结果与失败不计费），之后才轮到浏览器渲染；也可显式用 mode=deepseek。与 DeepSeek 搜索共用同一个 Key。";
     readonly keyedEnv: "Key 引用名";
     readonly keyedEnvHint: "凭据 / 环境变量名，留空用默认值：";
     readonly keyedBaseUrl: "接口地址";

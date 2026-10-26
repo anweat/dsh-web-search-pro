@@ -6,8 +6,8 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
-import type { ResolvedConfig } from './config.ts';
-import { type EngineSearchOptions } from './engines.ts';
+import { type ResolvedConfig } from './config.ts';
+import { type EngineSearchOptions, type UsageRecorder } from './engines.ts';
 import type { ChainEntryReport, ChainReport } from './cli/chain.ts';
 import { type CostTier, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
 import { type RequestBudgetState } from './pipeline/ledger.ts';
@@ -95,6 +95,8 @@ export interface ProviderReport {
     budget?: RequestBudgetState;
     /** Not verified against the live service (descriptor.verification). */
     unverified?: boolean;
+    /** "常用": the plugin's recommended source (descriptor.common). With a resolved key it leads the default order. */
+    common?: boolean;
     /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
     chain?: ChainEntryReport[];
     readiness: Readiness & {
@@ -152,10 +154,27 @@ export declare class SearchRouter {
     private bindingsOf;
     private probeEnv;
     /**
-     * The configured `engines` list with the user's `sources.*` preferences applied: disabled sources removed, `priority` ones that are
-     * already in the list moved to the front in their listed order. An explicit `engines` of a call never goes through this.
+     * The default engine order for a search that names no `engines`: the configured `engines` list with the user's `sources.*`
+     * preferences applied, then the default rule for "常用" (common) sources.
+     *  1. an explicit `engines` of a call never comes through here;
+     *  2. `sources.disabled` ids are removed, `sources.priority` ids that are in the list move to the front in their listed order;
+     *  3. a common source (DeepSeek Search) whose key resolves leads what is left, while `engines` is still the default list (a
+     *     list the user wrote is theirs: it keeps its order, and a common source in it keeps the position given). `sources.disabled`
+     *     and `evidence.sourcePolicy: anonymous-only` switch it off.
      */
     private preferred;
+    /** Route ids of the common ("常用") sources that are ready to run now (key resolved), best `priority` first. */
+    private commonReady;
+    /**
+     * Key and endpoint of the DeepSeek Fetch API for the fetch pipeline, or undefined when no key resolves (settings literal ->
+     * DSH credentials ref -> process environment, the same order as the search side). Resolved per call; the key is never cached.
+     */
+    deepseekAccess(): Promise<{
+        apiKey: string;
+        baseUrl?: string;
+        allowProxyFakeIp: boolean;
+        usage: UsageRecorder;
+    } | undefined>;
     /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
     private canonicalIds;
     backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]>;

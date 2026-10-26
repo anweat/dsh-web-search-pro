@@ -54,6 +54,7 @@ declare const _default: {
         bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        deepseekFetch: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         keyedSources: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
@@ -518,6 +519,7 @@ declare const _default: {
         bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        deepseekFetch: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         keyedSources: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{

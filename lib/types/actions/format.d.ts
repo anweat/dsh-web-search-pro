@@ -4,6 +4,8 @@ export declare function formatSources(sources: {
     title?: string;
     snippet?: string;
     publishedAt?: string;
+    rerankScore?: number;
+    authority?: number;
 }[]): string;
 /**
  * Per-item character limit so that `sum(min(length, limit)) <= total` and `limit <= perItem`:

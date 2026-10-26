@@ -13,6 +13,8 @@ export interface ProviderSource {
     title?: string | null;
     snippet?: string | null;
     publishedAt?: string | null;
+    rerankScore?: number | null;
+    authority?: number | null;
 }
 /** One provider's ordered result list for one query (index 0 = rank 1). */
 export interface ProviderOutput {

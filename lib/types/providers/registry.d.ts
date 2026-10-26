@@ -85,6 +85,13 @@ export interface ProviderDescriptor {
     costTier?: CostTier;
     /** Order among providers promoted for a language (lower first, default 100). */
     priority?: number;
+    /**
+     * "常用" (common): the source this plugin recommends first. Once its key resolves it leads the default order in every language
+     * (ahead of the other promoted sources and of the configured `engines`), and `sources.status`, `search.recommend` and the settings
+     * panel mark it. It never overrides what the user said: an explicit `engines` list, then `sources.priority` / `sources.disabled`,
+     * then `evidence.sourcePolicy: anonymous-only` all come first. Without a key it is not planned.
+     */
+    common?: boolean;
     /** Default `web`. A `platform` provider is never added to a plan on its own, only by an explicit source choice or a hard `site` constraint naming one of its `domains`. */
     kind?: ProviderKind;
     /** Site domains a `platform` provider covers (`zhihu.com`): a hard `site` constraint on one of them selects it. */
