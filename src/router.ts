@@ -8,7 +8,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WebRuntime, WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { Store } from './store.ts'
-import { DEFAULT_ENGINES, type ResolvedConfig } from './config.ts'
+import type { ResolvedConfig } from './config.ts'
+import { effectiveChain } from './default-chain.ts'
 import {
   EngineError,
   type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
@@ -314,13 +315,13 @@ export class SearchRouter {
   private async preferred(ids: string[]): Promise<string[]> {
     const cfg = this.dynamic()
     const src = cfg.sources
-    const disabled = new Set(this.canonicalIds(src?.disabled ?? []))
-    const kept = ids.filter(id => !disabled.has(id))
-    if (ids.length && !kept.length) throw new Error('every configured engine is disabled (sources.disabled): ' + ids.join(', '))
-    const first = this.canonicalIds(src?.priority ?? []).filter(id => kept.includes(id))
-    const customised = ids.length !== DEFAULT_ENGINES.length || ids.some((id, i) => id !== DEFAULT_ENGINES[i])
-    const lead = customised || cfg.evidence?.sourcePolicy === 'anonymous-only' ? [] : (await this.commonReady()).filter(id => !disabled.has(id) && !kept.includes(id))
-    return [...first, ...lead, ...kept.filter(id => !first.includes(id))]
+    return effectiveChain({
+      engines: ids,
+      priority: this.canonicalIds(src?.priority ?? []),
+      disabled: this.canonicalIds(src?.disabled ?? []),
+      anonymousOnly: cfg.evidence?.sourcePolicy === 'anonymous-only',
+      commonReady: await this.commonReady(),
+    })
   }
 
   /** Route ids of the common ("常用") sources that are ready to run now (key resolved), best `priority` first. */

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { FIELD_SPECS, WebSearchSettingsController } from '../src/client/form.ts'
+import { ScopeStub } from './settings-harness.ts'
 
 test('settings panel covers every non-secret Web Search Pro configuration field', () => {
   assert.deepEqual(FIELD_SPECS.map(spec => spec.field), [
@@ -15,49 +15,6 @@ test('settings panel covers every non-secret Web Search Pro configuration field'
   ])
 })
 
-class ScopeStub implements SettingsScope<Record<string, unknown>> {
-  readonly writes: string[] = []
-  private readonly listeners = new Set<() => void>()
-  private snapshotValue: SettingsScopeSnapshot<Record<string, unknown>>
-
-  constructor(base: Record<string, unknown>) {
-    this.snapshotValue = {
-      status: 'ready', value: structuredClone(base), base: structuredClone(base), user: {},
-      revision: 0, writable: true, mode: 'host',
-    }
-  }
-
-  getSnapshot(): SettingsScopeSnapshot<Record<string, unknown>> { return this.snapshotValue }
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
-  }
-  async set(field: string, value: unknown): Promise<void> {
-    this.writes.push(`set:${field}`)
-    const user = { ...(this.snapshotValue.user as Record<string, unknown>), [field]: structuredClone(value) }
-    this.snapshotValue = {
-      ...this.snapshotValue,
-      value: { ...(this.snapshotValue.value ?? {}), [field]: structuredClone(value) },
-      user,
-      revision: (this.snapshotValue.revision ?? 0) + 1,
-    }
-    for (const listener of this.listeners) listener()
-  }
-  async unset(field: string): Promise<void> {
-    this.writes.push(`unset:${field}`)
-    const user = { ...(this.snapshotValue.user as Record<string, unknown>) }
-    delete user[field]
-    const value = { ...(this.snapshotValue.value ?? {}) }
-    const base = this.snapshotValue.base as Record<string, unknown>
-    if (Object.hasOwn(base, field)) value[field] = structuredClone(base[field])
-    else delete value[field]
-    this.snapshotValue = {
-      ...this.snapshotValue, value, user, revision: (this.snapshotValue.revision ?? 0) + 1,
-    }
-    for (const listener of this.listeners) listener()
-  }
-  async dispose(): Promise<void> {}
-}
 
 function fixture() {
   const scope = new ScopeStub({
@@ -142,7 +99,7 @@ test('credential writes follow a newly saved reference and never enter settings'
 
 test('settings panel closes a rejected Host write and keeps the draft retryable', async () => {
   const { scope, controller } = fixture()
-  scope.set = async () => { throw new Error('host write rejected') }
+  scope.mutate = async () => { throw new Error('host write rejected') }
   controller.edit('searchMaxResults', '12')
 
   await controller.save()

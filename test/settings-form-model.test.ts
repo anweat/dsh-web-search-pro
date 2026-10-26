@@ -6,7 +6,9 @@ import { BUILTIN_RUBRIC_IDS } from '../src/pipeline/rubrics-spec.ts'
 import { resolveAllRubrics } from '../src/pipeline/rubrics.ts'
 import { resolveProviders } from '../src/pipeline/judges/providers.ts'
 import { BUDGET_SPECS, BUDGETED_SOURCES, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
-import { BASE, harness } from './settings-harness.ts'
+import { isPathSpec } from '../src/client/form-specs.ts'
+import { ALL_SPECS } from '../src/client/form.ts'
+import { BASE, harness, isVolatilePath, type SchemaNode as VolatileNode } from './settings-harness.ts'
 
 // ── the form covers the whole schema ────────────────────────────────────────
 
@@ -119,7 +121,7 @@ for (const item of CASES) {
     assert.equal(controller.snapshot().dirty, false)
 
     const key = item.root ?? item.field
-    assert.deepEqual(scope.writes, [`set:${key}`])
+    assert.deepEqual(scope.writes, [`set:${item.field}`], 'one op, at the path of the field: never a whole container')
     assert.deepEqual(scope.user[key], item.payload)
     // The payload is something the schema takes, and the server reads back exactly what was meant.
     const parsed = (Config as unknown as (value: unknown) => unknown)({ [key]: item.payload })
@@ -185,7 +187,7 @@ test('judge mode keeps the legacy scorer / jevMode pair in step, and either read
 
   controller.resetField('evidence.judge.mode')
   await controller.save()
-  assert.equal(Object.hasOwn(scope.user, 'evidence'), false, 'resetting the mode removes all three keys and the emptied evidence object')
+  assert.deepEqual(scope.user.evidence, { judge: {} }, 'resetting the mode removes all three keys; the Host leaves the emptied container behind')
   controller.dispose()
 })
 
@@ -202,7 +204,7 @@ test('a legacy-only settings file shows its mode, and editing it leaves no stale
 
 // ── roots keep what the card does not edit ──────────────────────────────────
 
-test('saving one option writes its root once and carries the siblings the card does not know', async () => {
+test('saving one option writes only its own path, so the siblings the card does not know stay as they are', async () => {
   const user = {
     evidence: { maxRounds: 3, somethingNew: { keep: true } },
     keyedSources: { tavily: { apiKey: 'literal-from-yaml', apiKeyEnv: 'T1' }, brave: { baseUrl: 'https://brave.example.com' } },
@@ -211,7 +213,7 @@ test('saving one option writes its root once and carries the siblings the card d
   controller.edit('evidence.maxQueries', '5')
   controller.edit('keyedSources.tavily.baseUrl', 'https://tavily.example.com')
   await controller.save()
-  assert.deepEqual(scope.writes.sort(), ['set:evidence', 'set:keyedSources'])
+  assert.deepEqual(scope.writes.sort(), ['set:evidence.maxQueries', 'set:keyedSources.tavily.baseUrl'])
   assert.deepEqual(scope.user.evidence, { maxRounds: 3, somethingNew: { keep: true }, maxQueries: 5 })
   assert.deepEqual(scope.user.keyedSources, {
     tavily: { apiKey: 'literal-from-yaml', apiKeyEnv: 'T1', baseUrl: 'https://tavily.example.com' },
@@ -222,18 +224,19 @@ test('saving one option writes its root once and carries the siblings the card d
   controller.dispose()
 })
 
-test('resetting removes the option, prunes what it leaves empty, and unsets an emptied root', async () => {
+test('resetting unsets the option at its own path; what it leaves empty stays (the Host does not prune)', async () => {
   const { scope, controller } = harness(BASE, { evidence: { coverage: { mode: 'shadow', provider: 'bocha-jev' } }, provider: { deadlineMs: 4000 } })
   controller.resetField('evidence.coverage.mode')
   controller.resetField('provider.deadlineMs')
   await controller.save()
   assert.deepEqual(scope.user.evidence, { coverage: { provider: 'bocha-jev' } })
-  assert.equal(Object.hasOwn(scope.user, 'provider'), false)
-  assert.deepEqual(scope.writes.sort(), ['set:evidence', 'unset:provider'])
+  assert.deepEqual(scope.user.provider, {})
+  assert.deepEqual(scope.writes.sort(), ['unset:evidence.coverage.mode', 'unset:provider.deadlineMs'])
 
   controller.resetField('evidence.coverage.provider')
   await controller.save()
-  assert.equal(Object.hasOwn(scope.user, 'evidence'), false)
+  assert.deepEqual(scope.user.evidence, { coverage: {} })
+  assert.equal(controller.snapshot().dirty, false)
   controller.dispose()
 })
 
@@ -243,7 +246,7 @@ test('an unchanged draft is not a change, and a failed Host write keeps the path
   controller.edit('evidence.maxRounds', '2')
   assert.equal(controller.snapshot().dirty, false)
 
-  scope.set = async () => { throw new Error('host write rejected') }
+  scope.mutate = async () => { throw new Error('host write rejected') }
   controller.edit('evidence.maxRounds', '3')
   await controller.save()
   assert.equal(controller.snapshot().failed, true)
@@ -304,5 +307,85 @@ test('the twitter-cli tokens are write-only credentials that follow their saved 
   assert.equal(controller.snapshot().credentials['twitter-ct0'].configured, true)
   assert.equal(controller.snapshot().credentials['twitter-ct0'].text, '')
   assert.equal(JSON.stringify(scope.user).includes('secret-for-test'), false, 'no token value reaches the settings')
+  controller.dispose()
+})
+
+// ── the Host only takes edits beneath a volatile field ──────────────────────
+
+test('every field the card writes lies beneath a volatile node of the Config schema, so the Host accepts it (a whole container is never written)', () => {
+  const schema = Config as unknown as VolatileNode
+  const refused: string[] = []
+  for (const spec of ALL_SPECS) {
+    const path = isPathSpec(spec) ? [spec.root, ...spec.path] : spec.field === 'playwright' ? ['playwright', 'enabled'] : [spec.field]
+    if (!isVolatilePath(schema, path)) refused.push(spec.field + ' -> ' + path.join('.'))
+  }
+  // `playwright` is written key by key: both of its keys are live.
+  assert.ok(isVolatilePath(schema, ['playwright', 'snapshotDir']))
+  assert.deepEqual(refused, [])
+  // Whole containers are not volatile themselves: exactly what the Host refused when the card wrote `evidence` as one value.
+  for (const container of ['evidence', 'sources', 'provider', 'playwright']) assert.equal(isVolatilePath(schema, [container]), false, container)
+})
+
+test('a save sends one atomic mutation of leaf ops: sources, budget and flags together; nothing is refused', async () => {
+  const { scope, controller } = harness()
+  controller.edit('sources.disabled', 'bing')
+  controller.edit('sources.budget.deepseek.daily', '50')
+  controller.edit('deepseekFetch', 'true')
+  controller.edit('evidence.coverage.thresholds.weak', '0.1')
+  controller.edit('evidence.coverage.thresholds.covered', '0.4')
+  await controller.save()
+  assert.equal(scope.mutations.length, 1, 'one mutation')
+  assert.deepEqual(scope.refused, [])
+  assert.deepEqual(scope.writes.sort(), ['set:deepseekFetch', 'set:evidence.coverage.thresholds.covered', 'set:evidence.coverage.thresholds.weak', 'set:sources.budget.deepseek.daily', 'set:sources.disabled'])
+  assert.deepEqual(scope.user.sources, { disabled: ['bing'], budget: { deepseek: { daily: 50 } } })
+  assert.equal(controller.snapshot().failed, false)
+  controller.dispose()
+})
+
+test('playwright is written key by key (the Host refuses the whole object), and removed keys are unset', async () => {
+  const { scope, controller } = harness()
+  controller.edit('playwright', '{"enabled":false,"snapshotDir":"/tmp/shots"}')
+  await controller.save()
+  assert.deepEqual(scope.refused, [])
+  assert.deepEqual(scope.writes, ['set:playwright.enabled', 'set:playwright.snapshotDir'])
+  assert.deepEqual(scope.user.playwright, { enabled: false, snapshotDir: '/tmp/shots' })
+  scope.writes.length = 0
+  controller.edit('playwright', '{"enabled":true}')
+  await controller.save()
+  assert.deepEqual(scope.writes, ['set:playwright.enabled', 'unset:playwright.snapshotDir'])
+  assert.deepEqual(scope.user.playwright, { enabled: true })
+  scope.writes.length = 0
+  controller.resetField('playwright')
+  await controller.save()
+  assert.deepEqual(scope.writes, ['unset:playwright.enabled'])
+  assert.equal(controller.snapshot().failed, false)
+  controller.dispose()
+})
+
+test('a refused mutation keeps the whole draft and the credentials unwritten; accepted ones clear both', async () => {
+  const { scope, credentialValues, controller } = harness()
+  controller.edit('searchMaxResults', '12')
+  controller.editCredential('exa', 'secret-for-test')
+  const real = scope.mutate.bind(scope)
+  scope.mutate = async () => false
+  await controller.save()
+  assert.equal(controller.snapshot().failed, true)
+  assert.equal(controller.snapshot().changes, 2)
+  assert.equal(credentialValues.size, 0, 'no key is written after a refused settings write')
+  scope.mutate = real
+  await controller.save()
+  assert.equal(controller.snapshot().failed, false)
+  assert.equal(controller.snapshot().changes, 0)
+  assert.equal(scope.user.searchMaxResults, 12)
+  assert.equal(credentialValues.get('EXA_API_KEY'), 'secret-for-test')
+  controller.dispose()
+})
+
+test('the empty containers the Host parser fills into the section are not read as given values', () => {
+  const { controller } = harness({ ...BASE, evidence: { coverage: { mode: 'off', thresholds: {} }, judge: { providers: {} }, rubrics: {} } })
+  const fields = controller.snapshot().fields
+  assert.equal(fields['evidence.coverage.thresholds.weak'].message, undefined)
+  assert.equal(fields['evidence.coverage.thresholds.covered'].message, undefined)
+  assert.deepEqual(Object.values(fields).filter(field => field.message || field.warning), [])
   controller.dispose()
 })
