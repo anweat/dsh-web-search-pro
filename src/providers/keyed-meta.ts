@@ -6,6 +6,8 @@
 
 /** Default environment variable names of each keyed source's API key, first one preferred (route id -> names). */
 export const KEYED_SOURCE_ENVS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  // DeepSeek Search / Fetch API (the account's API key, the same variable the host's own DeepSeek access uses).
+  deepseek: ['DEEPSEEK_API_KEY'],
   tavily: ['TAVILY_API_KEY'],
   brave: ['BRAVE_API_KEY'],
   linkup: ['LINKUP_API_KEY'],
@@ -17,3 +19,9 @@ export const KEYED_SOURCE_ENVS: Readonly<Record<string, readonly string[]>> = Ob
 })
 
 export const KEYED_SOURCE_IDS: readonly string[] = Object.freeze(Object.keys(KEYED_SOURCE_ENVS))
+
+/**
+ * The "常用" (common) sources: a test pins this list to the registry descriptors that set `common: true`. Data only, for the
+ * settings panel (client bundle), which cannot import the descriptors.
+ */
+export const COMMON_SOURCE_IDS: readonly string[] = Object.freeze(['deepseek'])

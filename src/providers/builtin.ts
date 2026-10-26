@@ -26,6 +26,7 @@ import { serperAdapter } from './serper.ts'
 import { metasoAdapter } from './metaso.ts'
 import { zhipuAdapter } from './zhipu.ts'
 import { baiduAdapter } from './baidu-qianfan.ts'
+import { deepseekAdapter } from './deepseek.ts'
 import { descriptor } from './descriptor.ts'
 import { ProviderRegistry, type ProbeEnv, type ProviderAdapter, type ProviderDescriptor, type Readiness, type Requirement } from './registry.ts'
 
@@ -120,6 +121,8 @@ export function builtinAdapters(): ProviderAdapter[] {
     semanticScholarAdapter,
     anySearchAdapter,
     searxngAdapter,
+    // DeepSeek Search API (0.2.3): the "common" source, executable once its API key resolves.
+    deepseekAdapter,
     // Keyed sources (dev-plan M7c): reserved interfaces, executable only once a key is configured; never called live.
     tavilyAdapter,
     braveAdapter,

@@ -298,14 +298,17 @@ export const SNIPPET_MAX_CHARS = 500
  * slice to `count`, cap snippets, drop empty optional fields.
  */
 export function shapeSources(
-  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; lowConfidence?: boolean }[],
+  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; lowConfidence?: boolean; rerankScore?: number | null; authority?: number | null }[],
   count: number,
-): { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: true }[] {
+): { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: true }[] {
   return sources.slice(0, count).map(s => ({
     url: s.url,
     ...s.title ? { title: s.title } : {},
     ...s.snippet ? { snippet: capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
     ...s.publishedAt ? { publishedAt: s.publishedAt } : {},
+    // The provider's own quality grade (DeepSeek Search), as source metadata.
+    ...typeof s.rerankScore === 'number' && Number.isFinite(s.rerankScore) ? { rerankScore: Math.round(s.rerankScore * 100) / 100 } : {},
+    ...typeof s.authority === 'number' && Number.isFinite(s.authority) && s.authority >= 0 ? { authority: s.authority } : {},
     ...s.lowConfidence ? { lowConfidence: true as const } : {},
   }))
 }

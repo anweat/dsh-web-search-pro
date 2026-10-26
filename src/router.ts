@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WebRuntime, WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { Store } from './store.ts'
-import type { ResolvedConfig } from './config.ts'
+import { DEFAULT_ENGINES, type ResolvedConfig } from './config.ts'
 import {
   EngineError,
   type Engine, type EngineDeps, type SearchOutcome, type EngineSearchOptions, type UsageRecorder,
@@ -114,6 +114,8 @@ export interface ProviderReport {
   budget?: RequestBudgetState
   /** Not verified against the live service (descriptor.verification). */
   unverified?: boolean
+  /** "常用": the plugin's recommended source (descriptor.common). With a resolved key it leads the default order. */
+  common?: boolean
   /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
   chain?: ChainEntryReport[]
   readiness: Readiness & { state?: ChainReport['state']; lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
@@ -301,16 +303,51 @@ export class SearchRouter {
   }
 
   /**
-   * The configured `engines` list with the user's `sources.*` preferences applied: disabled sources removed, `priority` ones that are
-   * already in the list moved to the front in their listed order. An explicit `engines` of a call never goes through this.
+   * The default engine order for a search that names no `engines`: the configured `engines` list with the user's `sources.*`
+   * preferences applied, then the default rule for "常用" (common) sources.
+   *  1. an explicit `engines` of a call never comes through here;
+   *  2. `sources.disabled` ids are removed, `sources.priority` ids that are in the list move to the front in their listed order;
+   *  3. a common source (DeepSeek Search) whose key resolves leads what is left, while `engines` is still the default list (a
+   *     list the user wrote is theirs: it keeps its order, and a common source in it keeps the position given). `sources.disabled`
+   *     and `evidence.sourcePolicy: anonymous-only` switch it off.
    */
-  private preferred(ids: string[]): string[] {
-    const src = this.dynamic().sources
+  private async preferred(ids: string[]): Promise<string[]> {
+    const cfg = this.dynamic()
+    const src = cfg.sources
     const disabled = new Set(this.canonicalIds(src?.disabled ?? []))
     const kept = ids.filter(id => !disabled.has(id))
     if (ids.length && !kept.length) throw new Error('every configured engine is disabled (sources.disabled): ' + ids.join(', '))
     const first = this.canonicalIds(src?.priority ?? []).filter(id => kept.includes(id))
-    return [...first, ...kept.filter(id => !first.includes(id))]
+    const customised = ids.length !== DEFAULT_ENGINES.length || ids.some((id, i) => id !== DEFAULT_ENGINES[i])
+    const lead = customised || cfg.evidence?.sourcePolicy === 'anonymous-only' ? [] : (await this.commonReady()).filter(id => !disabled.has(id) && !kept.includes(id))
+    return [...first, ...lead, ...kept.filter(id => !first.includes(id))]
+  }
+
+  /** Route ids of the common ("常用") sources that are ready to run now (key resolved), best `priority` first. */
+  private async commonReady(): Promise<string[]> {
+    const common = this.registry.list({ operation: 'search' }).filter(a => a.descriptor.common && a.descriptor.kind !== 'platform')
+    if (!common.length) return []
+    const env = await this.probeEnv()
+    const out: { id: string; priority: number }[] = []
+    for (const adapter of common) {
+      try {
+        const readiness = await adapter.probeLocal(env)
+        if (readiness.available && readiness.credential === 'configured') out.push({ id: routeIdOf(adapter.descriptor), priority: adapter.descriptor.priority ?? 100 })
+      } catch { /* a probe that throws is not ready */ }
+    }
+    return out.sort((a, b) => a.priority - b.priority).map(x => x.id)
+  }
+
+  /**
+   * Key and endpoint of the DeepSeek Fetch API for the fetch pipeline, or undefined when no key resolves (settings literal ->
+   * DSH credentials ref -> process environment, the same order as the search side). Resolved per call; the key is never cached.
+   */
+  async deepseekAccess(): Promise<{ apiKey: string; baseUrl?: string; allowProxyFakeIp: boolean; usage: UsageRecorder } | undefined> {
+    const cfg = this.dynamic()
+    const { sourceKeys, sourceBaseUrls } = await this.keyedSources(cfg, (ref, literal) => this.resolveKey(ref, literal))
+    const apiKey = sourceKeys?.deepseek
+    if (!apiKey) return undefined
+    return { apiKey, ...sourceBaseUrls?.deepseek ? { baseUrl: sourceBaseUrls.deepseek } : {}, allowProxyFakeIp: cfg.allowProxyFakeIp, usage: this.usageRecorder() }
   }
 
   /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
@@ -392,7 +429,7 @@ export class SearchRouter {
         { preferred: this.canonicalIds([call.id]), signal: call.signal },
       )
       const sources = selected.value.sources
-      return sources.length ? { state: 'ok', sources, ...selected.value.backend ? { backend: selected.value.backend } : {} } : { state: 'empty' }
+      return sources.length ? { state: 'ok', sources, ...selected.value.backend ? { backend: selected.value.backend } : {}, ...selected.value.notes?.length ? { notes: selected.value.notes } : {} } : { state: 'empty' }
     } catch (error) {
       if (call.signal.aborted) throw error
       if (error instanceof NoBackendError) {
@@ -647,6 +684,7 @@ export class SearchRouter {
         ...d.sourceFamily ? { sourceFamily: d.sourceFamily } : {},
         requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel }, costTier: local.costTier ?? costTierOf(d),
         ...d.verification?.live ? {} : { unverified: true },
+        ...d.common ? { common: true } : {},
         ...chain ? { chain } : {},
         ...this.requestBudgetOf(route) ? { budget: this.requestBudgetOf(route)! } : {},
         readiness: {
@@ -674,7 +712,7 @@ export class SearchRouter {
     const platform = opts.platform ? this.resolvePlatform(opts.platform, opts.query) : undefined
     const query = platform ? platform.query : opts.query.trim()
     if (!platform && !query) throw new Error('query must be a non-empty string')
-    const ids = platform ? [platform.id] : opts.engines && opts.engines.length ? this.canonicalIds(opts.engines) : this.preferred(this.canonicalIds(cfg.engines))
+    const ids = platform ? [platform.id] : opts.engines && opts.engines.length ? this.canonicalIds(opts.engines) : await this.preferred(this.canonicalIds(cfg.engines))
     const nq = normQuery(platform ? query || platform.url || platform.id : query)
     const count = Math.min(Math.max(opts.count, 1), 20)
     const multi = !platform && opts.multi && ids.length > 1

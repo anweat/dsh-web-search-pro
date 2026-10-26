@@ -17,10 +17,22 @@ import { cliSpecEngine, specEnv } from './cli/engine.ts'
 import { builtinSpecById } from './cli/builtin-specs.ts'
 import { buildArgv, missingEnv, parseCliOutput } from './cli/runner.ts'
 
+/**
+ * A source row as an engine returns it: the host's `WebSearchSource` plus the provider's own quality signals, when it has any
+ * (DeepSeek Search: `rerank_score` 0..3 and `authority` 0..4). They travel with the row as source metadata and are one small
+ * fusion signal (pipeline/fusion.ts); no engine is required to set them.
+ */
+export interface EngineSource extends WebSearchSource {
+  /** The provider's relevance / authority / freshness rank score, 0..3 (higher is better). */
+  readonly rerankScore?: number
+  /** The provider's source-authority grade, 0..4 (unknown = absent). */
+  readonly authority?: number
+}
+
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
   content?: string
-  sources: WebSearchSource[]
+  sources: EngineSource[]
   /** Id of the concrete backend that answered (a platform provider with a fallback chain names the leg that ran). */
   via?: string
   /** The backend id of the platform chain that answered (`bili`, `browser-opencli`), for display and history. */
@@ -45,6 +57,8 @@ export interface EngineSearchOptions {
   exa?: Omit<ExaSearchRequest, 'query' | 'numResults'>
   /** Bocha native request fields compiled from hard constraints (pipeline/compile.ts). */
   bocha?: { freshness?: string; include?: string[]; exclude?: string[] }
+  /** The caller's original question or need (DeepSeek Search `ori_question`, cut to 128 characters by the engine); absent = none sent. */
+  originalQuestion?: string
   /** Lower bound of the publication date (ISO 8601), compiled from a hard time_window; the engine maps it to its native filter. */
   since?: string
   /** Domain lists compiled from hard site / exclude_site constraints (keyed sources that take them as request fields). */
@@ -77,6 +91,8 @@ export interface EngineDeps {
   usage?: UsageRecorder
   /** Test seam: replaces the global fetch of API clients that accept one. */
   fetchImpl?: typeof fetch
+  /** Test seam: waits between retries of the engines that retry (DeepSeek); resolves early on abort. Default: a real timer. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   /** Test seam: replaces the DNS lookup of the SSRF check. */
   lookup?: (hostname: string) => Promise<{ address: string; family?: number }[]>
   /** API keys of the keyed sources by route id (`tavily`, `brave`, ...): config literal -> credentials ref -> environment (router). */

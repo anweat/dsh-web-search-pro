@@ -8,7 +8,7 @@ test('settings panel covers every non-secret Web Search Pro configuration field'
     'engines', 'parallelEngines', 'searchMaxResults', 'timeoutMs',
     'fetchDefaultChars', 'exaContentsPerUrlChars', 'exaContentsTotalChars',
     'exaApiKeyEnv', 'jinaApiKeyEnv', 'githubTokenEnv', 'twitterAuthTokenEnv', 'twitterCt0Env',
-    'bochaApiKeyEnv', 'bochaBaseUrl', 'bochaSummary', 'searxngUrl', 'openalexMailto',
+    'bochaApiKeyEnv', 'bochaBaseUrl', 'bochaSummary', 'deepseekFetch', 'searxngUrl', 'openalexMailto',
     'enableCliBackends', 'opencliEnabled', 'agentReachEnabled', 'providerId', 'registerProvider', 'toolSurface', 'playwright',
     'ttlSeconds', 'memoryCacheEntries', 'rrfConstant', 'freshnessBoost', 'freshnessDays', 'authorityBoost',
     'authorityDomains', 'dbPath', 'allowProxyFakeIp', 'platformRules', 'customPlatforms', 'browserBindings', 'platformBackends', 'cliAdapters', 'verbose',

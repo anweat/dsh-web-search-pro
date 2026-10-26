@@ -62,7 +62,7 @@ test('the card renders every section, collapsible, and a control for every field
   assert.deepEqual(missing, [])
   for (const id of CREDENTIAL_IDS) assert.ok(ids.has(`web-search-pro-credential-${id}`), `credential input ${id}`)
   assert.deepEqual(root.querySelectorAll('[data-web-search-pro-rubric]').map(node => node.getAttribute('data-web-search-pro-rubric')), [...BUILTIN_RUBRIC_IDS])
-  assert.equal(root.querySelectorAll('[data-web-search-pro-keyed]').length, 7)
+  assert.equal(root.querySelectorAll('[data-web-search-pro-keyed]').length, 8)
   assert.deepEqual(missingKeys, [])
 })
 

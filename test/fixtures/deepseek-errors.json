@@ -1,0 +1,39 @@
+{
+  "_comment": "LIVE captures, 2026-10-26, api.deepseek.com/v1/tools: 401 (search with an invalid key), 400 (search with a 140-character query), 404 (fetch of http://localhost/ and of a missing page: same body). Request ids replaced by zeros.",
+  "live": true,
+  "errors": {
+    "bad-key": {
+      "status": 401,
+      "body": {
+        "error": {
+          "message": "Authentication Fails, Your api key: ****0000 is invalid (request_id: 00000000-0000-0000-0000-000000000000)",
+          "type": "authentication_error",
+          "param": null,
+          "code": "invalid_request_error"
+        }
+      }
+    },
+    "over-128": {
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "'query' must be at most 128 characters (request_id: 00000000-0000-0000-0000-000000000000)",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "invalid_request_error"
+        }
+      }
+    },
+    "404": {
+      "status": 404,
+      "body": {
+        "error": {
+          "message": "failed to fetch URL (request_id: 00000000-0000-0000-0000-000000000000)",
+          "type": "not_found_error",
+          "param": null,
+          "code": "invalid_request_error"
+        }
+      }
+    }
+  }
+}

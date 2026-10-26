@@ -45,7 +45,7 @@ export interface ProviderCall {
 }
 
 export type ProviderOutcome =
-  | { state: 'ok'; sources: readonly ProviderSource[]; /** The backend of a platform chain that answered. */ backend?: string }
+  | { state: 'ok'; sources: readonly ProviderSource[]; /** The backend of a platform chain that answered. */ backend?: string; /** The engine's own remarks (a query it had to cut, results it dropped); they reach the pack notes. */ notes?: readonly string[] }
   /** `detail` carries the provider's own explanation of an empty answer (e.g. a login hint), when it gave one. */
   | { state: 'empty'; detail?: string }
   | { state: 'skipped'; reason: string }
@@ -243,6 +243,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
         sink.push(id + ': ' + (error instanceof Error ? error.message : String(error)))
         return undefined
       }
+      if (outcome.state === 'ok') for (const n of outcome.notes ?? []) if (!notes.includes(n)) notes.push(n)
       if (outcome.state === 'ok' && outcome.sources.length) { emptyDetails.delete(id); return { providerId: id, query, sources: outcome.sources, ...outcome.backend ? { backend: outcome.backend } : {} } }
       if (outcome.state === 'empty' || outcome.state === 'ok') {
         // Keep the provider's reason (login hint, selector hint) so an empty pack says why.
@@ -639,7 +640,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     coveredNeeds: coverage.covered,
     gaps: coverage.gaps,
     ...uncertain.length ? { uncertainNeeds: uncertain } : {},
-    sources: kept.slice(0, sourcesCount).map(c => ({ url: c.url, ...c.title ? { title: c.title } : {}, ...c.snippet ? { snippet: c.snippet } : {}, ...c.publishedAt ? { publishedAt: c.publishedAt } : {}, ...c.gate?.lowConfidence ? { lowConfidence: true as const } : {} })),
+    sources: kept.slice(0, sourcesCount).map(c => ({ url: c.url, ...c.title ? { title: c.title } : {}, ...c.snippet ? { snippet: c.snippet } : {}, ...c.publishedAt ? { publishedAt: c.publishedAt } : {}, ...c.signals?.rerankScore !== undefined ? { rerankScore: c.signals.rerankScore } : {}, ...c.signals?.authority !== undefined ? { authority: c.signals.authority } : {}, ...c.gate?.lowConfidence ? { lowConfidence: true as const } : {} })),
     engine: 'pipeline(' + (used.length ? used.join('+') : 'none') + ')',
     enginesTried: [...new Set([...ctx.plan.providers.map(p => p.id), ...extraEngines])],
     partial,

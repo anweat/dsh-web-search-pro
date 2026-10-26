@@ -196,6 +196,11 @@ export interface Config {
   bochaBaseUrl?: string
   /** Ask Bocha for its longer per-page summary (default true). */
   bochaSummary?: boolean
+  /**
+   * Let `read.fetch` use the DeepSeek Fetch API ($0.75 per 1,000 successful requests) as a backend, after the free ones and before the
+   * browser, in `mode: auto`, and accept `mode: deepseek`. Uses the same key as DeepSeek Search (`keyedSources.deepseek`). Off by default: it spends money.
+   */
+  deepseekFetch: boolean
   /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
   searxngUrl?: string
   /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
@@ -257,6 +262,9 @@ export interface Config {
   verbose: boolean
 }
 
+/** The default `engines` list. A list equal to it is "not customised": the default rule for common ("常用") sources applies to it (router.preferred). */
+export const DEFAULT_ENGINES: readonly string[] = Object.freeze(['ddg', 'bing', 'exa', 'seam', 'jina'])
+
 // The volatile() modifier changes each live field's output type to
 // Volatile<T> (a readonly array-like snapshot with get()), which is not
 // structurally assignable to the plain input shape. Cordis only reads
@@ -282,7 +290,7 @@ export const Config = z.object({
   exaContentsTotalChars: z.number().default(30_000).volatile(),
   timeoutMs: z.number().default(30_000).volatile(),
   allowProxyFakeIp: z.boolean().default(false).volatile(),
-  engines: z.array(z.string()).default(['ddg', 'bing', 'exa', 'seam', 'jina']).volatile(),
+  engines: z.array(z.string()).default([...DEFAULT_ENGINES]).volatile(),
   parallelEngines: z.boolean().default(false).volatile(),
   exaApiKey: z.string().role('secret').volatile(),
   exaApiKeyEnv: z.string().default('EXA_API_KEY').volatile(),
@@ -292,6 +300,7 @@ export const Config = z.object({
   bochaApiKeyEnv: z.string().default('BOCHA_SEARCH_API_KEY').volatile(),
   bochaBaseUrl: z.string().default('https://api.bocha.cn').volatile(),
   bochaSummary: z.boolean().default(true).volatile(),
+  deepseekFetch: z.boolean().default(false).volatile(),
   searxngUrl: z.string().volatile(),
   openalexMailto: z.string().volatile(),
   keyedSources: z.dict(z.object({
@@ -410,6 +419,7 @@ export interface ResolvedConfig extends Config {
   bochaApiKeyEnv: string
   bochaBaseUrl: string
   bochaSummary: boolean
+  deepseekFetch: boolean
   searxngUrl?: string
   openalexMailto?: string
   keyedSources?: Config['keyedSources']
@@ -507,7 +517,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     exaContentsTotalChars: vOr(config.exaContentsTotalChars, 30_000) as number,
     timeoutMs: vOr(config.timeoutMs, 30_000) as number,
     allowProxyFakeIp: vOr(config.allowProxyFakeIp, false) as boolean,
-    engines: vOr(config.engines, ['ddg', 'bing', 'exa', 'seam', 'jina']) as string[],
+    engines: vOr(config.engines, [...DEFAULT_ENGINES]) as string[],
     parallelEngines: vOr(config.parallelEngines, false) as boolean,
     exaApiKey: config.exaApiKey !== undefined ? v(config.exaApiKey) : undefined,
     exaApiKeyEnv: vOr(config.exaApiKeyEnv, 'EXA_API_KEY') as string,
@@ -517,6 +527,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     bochaApiKeyEnv: vOr(config.bochaApiKeyEnv, 'BOCHA_SEARCH_API_KEY') as string,
     bochaBaseUrl: vOr(config.bochaBaseUrl, 'https://api.bocha.cn') as string,
     bochaSummary: vOr(config.bochaSummary, true) as boolean,
+    deepseekFetch: vOr(config.deepseekFetch, false) as boolean,
     searxngUrl: config.searxngUrl !== undefined ? v(config.searxngUrl) : undefined,
     openalexMailto: config.openalexMailto !== undefined ? v(config.openalexMailto) : undefined,
     keyedSources: config.keyedSources !== undefined ? v(config.keyedSources) : undefined,

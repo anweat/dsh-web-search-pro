@@ -19,7 +19,7 @@ const EXPECTED: Record<string, string> = {
   jina: 'free-quota', 'github-code': 'free-quota', tavily: 'free-quota', brave: 'free-quota', linkup: 'free-quota', serper: 'free-quota', 'baidu-qianfan': 'free-quota',
   xiaohongshu: 'free-quota', twitter: 'free-quota', reddit: 'free-quota', instagram: 'free-quota', facebook: 'free-quota', zhihu: 'free-quota', weibo: 'free-quota', douban: 'free-quota', tieba: 'free-quota', douyin: 'free-quota', kuaishou: 'free-quota',
   wechat: 'anonymous', omnireach: 'anonymous', tanso: 'paid',
-  bocha: 'paid', metaso: 'paid', zhipu: 'paid',
+  bocha: 'paid', metaso: 'paid', zhipu: 'paid', deepseek: 'paid',
 }
 
 test('cost tiers: every built-in provider states its tier explicitly and the table matches the plan', () => {

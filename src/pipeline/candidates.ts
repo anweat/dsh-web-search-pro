@@ -19,7 +19,7 @@ const MIN_APPEND_CHARS = 40
 /** Share of a snippet's terms already present in the other before it counts as a repeat. */
 const REPEAT_OVERLAP = 0.8
 
-export interface ProviderSource { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null }
+export interface ProviderSource { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; rerankScore?: number | null; authority?: number | null }
 
 /** One provider's ordered result list for one query (index 0 = rank 1). */
 export interface ProviderOutput {
@@ -93,6 +93,9 @@ export function mergeCandidates(outputs: readonly ProviderOutput[], options: Mer
       if (title.length > candidate.title.length) candidate.title = title
       candidate.snippet = mergeSnippets(candidate.snippet, source.snippet, cap)
       if (!candidate.publishedAt && source.publishedAt) candidate.publishedAt = source.publishedAt
+      // Provider quality signals: the best one seen for the URL (a URL several providers return keeps the strongest grade, never a sum).
+      if (typeof source.rerankScore === 'number' && Number.isFinite(source.rerankScore)) candidate.signals = { ...candidate.signals, rerankScore: Math.max(candidate.signals?.rerankScore ?? 0, source.rerankScore) }
+      if (typeof source.authority === 'number' && Number.isFinite(source.authority) && source.authority >= 0) candidate.signals = { ...candidate.signals, authority: Math.max(candidate.signals?.authority ?? 0, source.authority) }
     })
   }
   return [...byKey.values()]

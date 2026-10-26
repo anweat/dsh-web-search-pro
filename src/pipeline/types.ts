@@ -52,6 +52,13 @@ export interface TaskSpec {
   budget: BudgetProfile
 }
 
+export interface CandidateSignals {
+  /** Provider relevance / authority / freshness rank score, 0..3. */
+  rerankScore?: number
+  /** Provider source-authority grade, 0..4. */
+  authority?: number
+}
+
 /** One provider hit for a candidate. `rank` is 1-based within that provider's result list. */
 export interface Contribution {
   providerId: string
@@ -94,6 +101,11 @@ export interface Candidate {
   title: string
   snippet: string
   publishedAt?: string
+  /**
+   * The providers' own quality signals for this URL (best seen over all providers that gave one): DeepSeek Search's `rerank_score`
+   * (0..3) and `authority` (0..4). Source metadata, and one small fusion signal (fusion.ts); absent for providers that give none.
+   */
+  signals?: CandidateSignals
   /** Every (provider, rank, query) that returned this URL. */
   contributions: Contribution[]
   checks?: ConstraintCheck[]
@@ -228,7 +240,7 @@ export interface EvidencePack {
   /** Covered needs the coverage judge was unsure about (control mode): still covered, with a caution marker. */
   uncertainNeeds?: string[]
   /** Fused kept candidates, best first (unshaped; the tool exit applies `shapeSources`). */
-  sources: { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: true }[]
+  sources: { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: true }[]
   engine: string
   enginesTried: string[]
   partial: boolean

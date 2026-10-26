@@ -69,6 +69,8 @@ export interface CatalogEntry {
   invoke?: string
   /** Curation order among equals (lower first, default 50). */
   rank?: number
+  /** "常用": the plugin's recommended source. Once its key is configured it leads the recommendations, and `search.recommend` marks it. Mirrors the provider descriptor's `common`. */
+  common?: boolean
   /** Short install or configuration text. */
   install: string
   license: string
@@ -91,7 +93,7 @@ export interface SourceCatalog {
   entries: CatalogEntry[]
 }
 
-const ENTRY_KEYS = new Set<string>(['id', 'label', 'kind', 'operations', 'languages', 'regions', 'profiles', 'resultKinds', 'auth', 'costTier', 'keyEnv', 'requires', 'provider', 'platform', 'invoke', 'rank', 'install', 'license', 'cost', 'sourceFamily', 'url', 'verification', 'recommendedFor', 'notFor'])
+const ENTRY_KEYS = new Set<string>(['id', 'label', 'kind', 'operations', 'languages', 'regions', 'profiles', 'resultKinds', 'auth', 'costTier', 'keyEnv', 'requires', 'provider', 'platform', 'invoke', 'rank', 'common', 'install', 'license', 'cost', 'sourceFamily', 'url', 'verification', 'recommendedFor', 'notFor'])
 const REQUIRES_KEYS = new Set<string>(['cli', 'browser', 'service', 'config'])
 const VERIFICATION_KEYS = new Set<string>(['status', 'date', 'version', 'note'])
 const TOP_KEYS = new Set<string>(['$schema', 'version', 'updated', 'description', 'entries'])
@@ -152,6 +154,7 @@ function checkEntry(entry: unknown, index: number, errors: string[]): void {
   for (const key of ['provider', 'platform']) if (entry[key] !== undefined && !(typeof entry[key] === 'string' && ID_RE.test(entry[key] as string))) errors.push(p(key) + ' must be an id')
   if (entry.invoke !== undefined && !isString(entry.invoke, MAX.install)) errors.push(p('invoke') + ' must be a short string')
   if (entry.rank !== undefined && !(typeof entry.rank === 'number' && Number.isFinite(entry.rank))) errors.push(p('rank') + ' must be a number')
+  if (entry.common !== undefined && typeof entry.common !== 'boolean') errors.push(p('common') + ' must be a boolean')
   if (!isString(entry.install, MAX.install)) errors.push(p('install') + ' must be a short non-empty string')
   if (!isString(entry.license, MAX.license)) errors.push(p('license') + ' must be a short non-empty string')
   if (!isString(entry.cost, MAX.cost)) errors.push(p('cost') + ' must be a short non-empty string')

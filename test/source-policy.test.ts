@@ -24,7 +24,7 @@ const spec = (over: Partial<TaskSpec> = {}): TaskSpec => ({ goal: 'goal', query:
 const EN = { goal: 'Find how Postgres logical replication slots work', query: 'postgres logical replication slot lag' }
 const ZH = { goal: '了解国内大模型备案的最新要求', query: '大模型备案 最新要求 2026' }
 const CONFIGURED = ['ddg', 'bing', 'exa', 'seam', 'jina']
-const KEYED = ['bocha', 'jina', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan']
+const KEYED = ['deepseek', 'bocha', 'jina', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan']
 
 /** Nothing configured: Exa over its keyless MCP route is runnable, keyed sources have no key, ctx.web is absent. */
 const NOTHING = (id: string): ProviderStatus =>

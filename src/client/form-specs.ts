@@ -24,7 +24,7 @@ export type TopField =
   | 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs'
   | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars'
   | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env'
-  | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'searxngUrl' | 'openalexMailto'
+  | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'deepseekFetch' | 'searxngUrl' | 'openalexMailto'
   | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled'
   | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright'
   | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant'
@@ -222,6 +222,7 @@ export const DEFAULTS = {
   twitterCt0Env: 'TWITTER_CT0',
   bochaBaseUrl: 'https://api.bocha.cn',
   bochaSummary: true,
+  deepseekFetch: false,
 } as const
 
 // ── the specs ───────────────────────────────────────────────────────────────
@@ -243,6 +244,7 @@ export const FIELD_SPECS: readonly FieldSpec[] = [
   textField('bochaApiKeyEnv', { pattern: KEY_REF_PATTERN }),
   textField('bochaBaseUrl', { url: true }),
   booleanField('bochaSummary', true),
+  booleanField('deepseekFetch'),
   textField('searxngUrl', { url: true }),
   textField('openalexMailto', { email: true }),
   booleanField('enableCliBackends'),

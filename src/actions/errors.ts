@@ -9,6 +9,7 @@ import { ActionArgError, ActionNotFoundError, type ActionErrorBody, type ErrorCo
 import { BrowserUnavailableError } from '../browser-access.ts'
 import { NoBackendError } from '../backend-registry.ts'
 import { SourceUnavailableError } from '../providers/unavailable.ts'
+import { DeepSeekFetchError } from '../providers/deepseek.ts'
 import { loadCatalog } from '../catalog/load.ts'
 
 export const DEFAULT_ERROR_HINTS: Readonly<Partial<Record<ErrorCode, string>>> = {
@@ -62,6 +63,7 @@ export function mapError(error: unknown, opts: { signal?: AbortSignal } = {}): A
     const setup = setupTextFor(error.source)
     return result('CAPABILITY_UNAVAILABLE', 'Tell the user what is missing' + (setup ? ' (setup: ' + setup + ')' : '') + '; do not read this as "no results". Pass allowFallback=true in evidence mode to search the web engines instead.')
   }
+  if (error instanceof DeepSeekFetchError) return result('ACTION_FAILED', 'DeepSeek Fetch declined or failed: that is DeepSeek\'s answer, not the page\'s own status. Try read.fetch with mode http or playwright, or another URL.')
   if (abortedByDeadline(opts.signal)) return result('DEADLINE')
   if (opts.signal?.aborted || name === 'AbortError' || /\baborted\b/i.test(message)) return result('CANCELLED')
   if (NOT_FOUND.test(message)) return result('NOT_FOUND')

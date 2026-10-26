@@ -43,7 +43,7 @@ test('every leaf of the Config schema is a control, a derived control, or a secr
   assert.deepEqual(missing, [])
   // dict-valued controls that are not a single field: one pair per keyed source, one JSON entry per built-in rubric.
   assert.deepEqual(KEYED_SPECS.map(spec => spec.field), KEYED_SOURCES.flatMap(({ id }) => [`keyedSources.${id}.apiKeyEnv`, `keyedSources.${id}.baseUrl`]))
-  assert.equal(KEYED_SOURCES.length, 7)
+  assert.equal(KEYED_SOURCES.length, 8)
   const h = harness()
   for (const id of BUILTIN_RUBRIC_IDS) assert.ok(rubricField(id) in h.controller.snapshot().fields)
   h.controller.dispose()

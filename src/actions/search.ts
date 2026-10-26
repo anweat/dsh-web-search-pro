@@ -55,7 +55,7 @@ const RECOMMEND_PROPERTIES: Record<string, OutputNode> = {
   profile: { type: 'string', required: true }, profileInferred: { type: 'boolean' }, language: { type: 'string' },
   picks: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
     id: { type: 'string', required: true }, label: { type: 'string', required: true }, kind: { type: 'string' }, costTier: { type: 'string' }, status: { type: 'string', required: true }, executable: { type: 'boolean', required: true },
-    use: { type: 'string', required: true }, why: { type: 'string' }, missing: { type: 'array', items: { type: 'string' } }, setup: { type: 'string' }, notFor: { type: 'string' }, verified: { type: 'boolean' }, backend: { type: 'string' }, sourceFamily: { type: 'string' },
+    use: { type: 'string', required: true }, why: { type: 'string' }, missing: { type: 'array', items: { type: 'string' } }, setup: { type: 'string' }, notFor: { type: 'string' }, verified: { type: 'boolean' }, common: { type: 'boolean' }, backend: { type: 'string' }, sourceFamily: { type: 'string' },
   } } },
   instruction: { type: 'string', required: true },
   notes: { type: 'array', items: { type: 'string' } },
@@ -64,7 +64,7 @@ const RECOMMEND_PROPERTIES: Record<string, OutputNode> = {
 const EXA_FIELDS = ['exaType', 'includeDomains', 'excludeDomains', 'startPublishedDate', 'endPublishedDate', 'category'] as const
 const EVIDENCE_FIELDS = ['task', 'profile', 'needs', 'constraints', 'budget'] as const
 
-type SourceRow = { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: boolean }
+type SourceRow = { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean }
 
 export const SEARCH_ACTIONS: ActionDef[] = [
   {
@@ -101,7 +101,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
         ...EVIDENCE_OUTPUT_PROPERTIES,
         content: { type: 'string' },
         platform: { type: 'string' },
-        sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, lowConfidence: { type: 'boolean' } } } },
+        sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, rerankScore: { type: 'number' }, authority: { type: 'number' }, lowConfidence: { type: 'boolean' } } } },
         engine: { type: 'string', required: true },
         backend: { type: 'string' },
         enginesTried: { type: 'array', items: { type: 'string' } },
