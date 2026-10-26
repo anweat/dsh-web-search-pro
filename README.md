@@ -414,7 +414,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 | 内置规格 | 命令 | 已验证版本（2026-10-06；yt-dlp 与 twitter 为 2026-10-11） | 验证程度 |
 |---|---|---|---|
-| `bili`（bilibili） | `bili` | 0.6.2 | **live**：真实只读搜索并解析 |
+| `bili`（bilibili） | `bili` | 0.6.2 | **live**（2026-10-26：中英文与特殊字符查询实测；约五分之一的条目是没有链接的课程/系列，适配层多要 3 条以凑够 count） |
 | `gh`（github / github-issues / github-code 的回退） | `gh` | 2.101.0 | **live**（2026-10-26：仓库、issues、code 搜索均实测；查询按词拆成多个参数，因为 gh 会把单个参数当精确短语） |
 | `omnireach`（`wechat` 与多源 `omnireach`） | `omnireach` | 0.19.0-alpha | **live**（`--on wechat`；多源命令 2026-10-26 实测，显式 `--on hackernews,youtube,github,wechat,bilibili`——工具自带的自动路由在 PATH 上有 `opencli` 时会加入走你 Chrome 的 google / twitter 源，所以从不使用） |
 | `yt-dlp`（youtube） | `yt-dlp` | 2026.08.19 | **live**：真实运行 `ytsearch2:` 搜索并解析（2026-10-11） |

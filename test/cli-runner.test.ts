@@ -22,6 +22,17 @@ test('argv: placeholders are filled per token, never joined into a shell string;
   assert.equal(buildArgv({ argv: ['search', '--', '{query}'] }, { query: '-rf', count: 1 })[2], '-rf')
 })
 
+test('argv overfetch: the tool is asked for more than the count, the mapper still returns at most the count', async () => {
+  assert.equal(buildArgv({ argv: ['s', '{query}', '-n', '{count}'], maxCount: 10, overfetch: 3 }, { query: 'q', count: 4 })[3], '7')
+  assert.equal(buildArgv({ argv: ['s', '{query}', '-n', '{count}'], maxCount: 10, overfetch: 3 }, { query: 'q', count: 99 })[3], '13')
+  assert.equal(buildArgv({ argv: ['s', '{query}', '-n', '{count}'], maxCount: 10 }, { query: 'q', count: 4 })[3], '4')
+  const out = JSON.stringify({ data: [{ url: 'https://e.test/1', title: 'a' }, { title: 'no link' }, { url: 'https://e.test/2', title: 'b' }, { url: 'https://e.test/3', title: 'c' }] })
+  if (posix) await withCommands({ 'demo-cli': emit(out) }, async () => {
+    const r = await runCliSearch(baseSpec({ search: { ...baseSpec().search, overfetch: 2, maxCount: 5 } }), { query: 'q', count: 2 })
+    assert.deepEqual(r.map(s => s.url), ['https://e.test/1', 'https://e.test/2'], 'two results although an entry without a link came between them')
+  })
+})
+
 test('argv {terms}: the query becomes one token per word (quotes keep a phrase), so a tool that joins its words itself sees real words', () => {
   const gh = { argv: ['search', 'issues', '--limit', '{count}', '--', '{terms}'], maxCount: 15 }
   assert.deepEqual(buildArgv(gh, { query: 'DeepSeek 搜索  插件\t问题', count: 3 }), ['search', 'issues', '--limit', '3', '--', 'DeepSeek', '搜索', '插件', '问题'])

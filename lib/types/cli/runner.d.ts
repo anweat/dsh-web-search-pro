@@ -56,7 +56,12 @@ export declare function mapCliItemsDetailed(output: CliOutputSpec, items: readon
 export declare function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number): WebSearchSource[];
 /** Parse and map in one go (what the fixtures tests call). */
 export declare function parseCliOutput(spec: Pick<CliAdapterSpec, 'bins'>, search: CliSearchSpec, stdout: string, count?: number): WebSearchSource[];
-/** Fill the placeholders of an argv template. A value that would read as a flag gets a leading space (the tool then takes it as the query). */
+/** Split a query into words; double quotes keep a phrase in one word (`a "b c" d` -> `a`, `b c`, `d`) and are dropped. */
+export declare function splitTerms(query: string): string[];
+/**
+ * Fill the placeholders of an argv template. A value that would read as a flag gets a leading space (the tool then takes it as the query)
+ * unless a `--` precedes it. A `{terms}` token becomes one token per word of the query.
+ */
 export declare function buildArgv(search: Pick<CliSearchSpec, 'argv' | 'maxCount'>, input: {
     query: string;
     count: number;

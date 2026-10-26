@@ -295,8 +295,9 @@ export function splitTerms(query: string): string[] {
  * Fill the placeholders of an argv template. A value that would read as a flag gets a leading space (the tool then takes it as the query)
  * unless a `--` precedes it. A `{terms}` token becomes one token per word of the query.
  */
-export function buildArgv(search: Pick<CliSearchSpec, 'argv' | 'maxCount'>, input: { query: string; count: number }): string[] {
-  const count = Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? 50)
+export function buildArgv(search: Pick<CliSearchSpec, 'argv' | 'maxCount' | 'overfetch'>, input: { query: string; count: number }): string[] {
+  // The tool is asked for `overfetch` more than the count; the mapper cuts back to the count.
+  const count = Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? 50) + (search.overfetch ?? 0)
   const dashdash = (index: number): boolean => search.argv.slice(0, index).includes('--')
   const guard = (value: string, index: number): string => (value.startsWith('-') && !dashdash(index) ? ' ' + value : value)
   return search.argv.flatMap((token, index) => {

@@ -91,7 +91,11 @@ export interface CliOutputSpec {
     requireTitle?: boolean;
 }
 export interface CliSearchSpec {
-    /** Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`). */
+    /**
+     * Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`).
+     * A token that is exactly `{terms}` expands to the query split into one argv token per word (double quotes keep a phrase together):
+     * for tools that join their positional arguments themselves and would otherwise quote a one-token query as an exact phrase (`gh search`).
+     */
     argv: readonly string[];
     /** Largest `{count}` sent (the search call's count is clamped to 1..maxCount). */
     maxCount?: number;

@@ -49,6 +49,8 @@ const bili: CliAdapterSpec = {
   search: {
     argv: ['search', '{query}', '--type', 'video', '--max', '{count}', '--json'],
     maxCount: 10,
+    // About one entry in five is a course / series without a bvid or link and is skipped: ask for a few more so the count is met.
+    overfetch: 3,
     output: {
       format: 'json', itemsPath: 'data', expect: ENVELOPE, errorPaths: ['message', 'error'], stripTags: true, snippetMax: 300,
       fields: {
@@ -63,7 +65,7 @@ const bili: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 30_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'live', version: BILI_CLI_VERSION, date: SPEC_CHECK_DATE, note: '`bili search DeepSeek --type video --max 2 --json` parsed (fixture bili-search.json)' },
+  verification: { status: 'live', version: BILI_CLI_VERSION, date: '2026-10-26', note: 'zh / en / special-character searches parsed (fixtures live-bili-*); about one entry in five is a course / series without a bvid and link, so the adapter asks for 3 more than the count (overfetch) and a count of 3 stays 3. `bili search` never reads credentials or browser cookies (checked in bili_cli/auth.py and commands/user_search.py)' },
 }
 
 const ytDlp: CliAdapterSpec = {

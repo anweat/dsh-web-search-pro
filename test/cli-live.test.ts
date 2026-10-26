@@ -55,6 +55,10 @@ test('live captures (offline): bili zh / en, Exa through mcporter zh / en', () =
   const bili = parse('bili', 'live-bili-zh.json', 'bilibili', 5)
   assert.equal(bili.length, 4, 'five rows, one is a course entry without a bvid and is skipped')
   assertSane('bili zh', bili, 5, /^https:\/\/www\.bilibili\.com\/video\/BV[0-9A-Za-z]{10}$/)
+  // Asked for 6 to get 3 (overfetch): the third entry is a course without a bvid, the count is still met.
+  const over = parse('bili', 'live-bili-overfetch.json', 'bilibili', 3)
+  assert.equal(over.length, 3)
+  assert.ok(JSON.parse(read('live-bili-overfetch.json')).data.some((row: { bvid: string }) => !row.bvid), 'the capture holds an entry without a link')
   assert.equal(bili[0]!.title, '全网最简单的Deepseek本地部署方法，谁都可以照抄！')
   assert.equal(bili[0]!.snippet, 'UP: 我是阿众 | 播放: 1502363 | 3:47')
   const en = parse('bili', 'live-bili-en.json', 'bilibili', 3)
@@ -120,7 +124,7 @@ test('live bili: Chinese, English and special-character queries', { skip: skipRe
     { label: 'zh', platform: 'bilibili', query: 'DeepSeek 本地部署教程', count: 5, url: v },
     { label: 'en', platform: 'bilibili', query: 'rust async runtime tutorial', count: 3, url: v },
     { label: 'special', platform: 'bilibili', query: 'C++ "template" <b>& 100%', count: 3, url: v },
-  ])
+  ], (c, sources) => assert.equal(sources.length, c.count, c.label + ': the requested count is met (overfetch covers the entries without a link)'))
 })
 
 test('live gh: repos, issues and code; multi-word queries are words, not one exact phrase', { skip: skipReason('gh'), ...RUN_OPTS }, async () => {
