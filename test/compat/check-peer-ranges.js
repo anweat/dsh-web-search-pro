@@ -3,7 +3,7 @@
  * 断言 package.json 里所有受管 peer 范围在**两种解析模式**下都成立：
  *
  *   runtime —— DSH 组装期校验：semver.satisfies(host, range, { includePrerelease: true })
- *              （@deepseek-ai/dsh-app-boot 的 plugin-compatibility.ts，0.1.7-rc.2、0.2.0-rc.2 与 0.2.1-rc.2 同）
+ *              （@deepseek-ai/dsh-app-boot 的 plugin-compatibility.ts，0.1.7-rc.2、0.2.0-rc.2、0.2.1-rc.2 与 0.2.1-rc.3 同）
  *   install —— npm/pnpm 解析 peer：**默认** semver。预发布版本只有在某个比较符
  *              自带同号（同 major.minor.patch）预发布时才被判为满足。
  *
@@ -12,14 +12,14 @@
  *
  * 用法：
  *   node test/compat/check-peer-ranges.js                    # 检查本仓库：受支持基线必须通过，已放弃/未验证的版本必须被拒绝
- *   node test/compat/check-peer-ranges.js 0.2.1-rc.2         # 只检查指定宿主版本（必须通过）
+ *   node test/compat/check-peer-ranges.js 0.2.1-rc.3         # 只检查指定宿主版本（必须通过）
  *   node test/compat/check-peer-ranges.js --selftest         # 自校验（含本文档引用的行为矩阵）
  *   node test/compat/check-peer-ranges.js --json             # 机器可读输出
  *
  * 本脚本自带最小 semver 实现（插件仓库没有 semver 依赖，也不该为了这个检查新增依赖）：
  * 只支持本仓库 peer 范围实际用到的写法（^ / ~ / >= / > / <= / < / =、`||` 分组、空格并列），
  * 以及 semver 的预发布优先级与上面那条“同号预发布”规则。
- * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：只有 0.2.1-rc.2 这一条基线。
+ * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：只有 0.2.1 这一条线（rc.2 与 rc.3 两个预发布基线）。
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -156,7 +156,7 @@ function satisfies(version, range, options = {}) {
 
 // ── 策略与检查 ────────────────────────────────────────────────────────────────
 /** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：只有这一条线。 */
-const SUPPORTED_BASELINES = ['0.2.1-rc.2']
+const SUPPORTED_BASELINES = ['0.2.1-rc.2', '0.2.1-rc.3']
 /**
  * 必须被拒绝的宿主版本（runtime 与 install 两种模式都不能满足）：
  * 已放弃的旧线、上一条基线（含它的预发布）、以及不放行的下一个次版本的预发布。
@@ -164,7 +164,7 @@ const SUPPORTED_BASELINES = ['0.2.1-rc.2']
 const REJECTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.2-alpha.1']
 /** 用于说明范围宽窄的代表性版本（只做展示，不影响退出码）。 */
 const MATRIX_VERSIONS = [
-  '0.1.7-rc.2', '0.2.0-rc.2', '0.2.0', '0.2.1-alpha.1', '0.2.1-rc.1', '0.2.1-rc.2',
+  '0.1.7-rc.2', '0.2.0-rc.2', '0.2.0', '0.2.1-alpha.1', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3',
   '0.2.1', '0.2.2-alpha.1', '0.2.2', '0.3.0-rc.1',
 ]
 
@@ -279,7 +279,7 @@ for (const version of rejected) {
   if (!json) console.log(`  ${rows.length} 个 dsh peer 在 ${version} 上两种模式均拒绝（符合预期）`)
 }
 
-if (!json && targets.includes('0.2.1-rc.2')) {
+if (!json && targets.includes('0.2.1-rc.3')) {
   const ranges = [...new Set(gated.map(([, range]) => range))]
   const capped = ranges.every((range) => /<0\.2\.2-0/.test(range))
   console.log('\n  代表性宿主版本（runtime / install）：')
