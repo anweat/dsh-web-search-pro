@@ -2,10 +2,11 @@
  * The built-in CLI adapter specs (dev-plan M12). Every argv, flag and output field was derived from the tool's own
  * `--help` (and, where the help does not show the output shape, from the installed package source or the upstream
  * README), and `verification` records how far each was checked:
- *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach/wechat, yt-dlp);
+ *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach, yt-dlp, wx-search-cli; and Exa through mcporter,
+ *    which is not a spec);
  *  - `contract-only`: help and version probed on a real install, output shape taken from the tool's own source,
- *    README or documented output option, because a search needs the user's login or reads browser cookies, or was outside
- *    the checks allowed (xhs, zhihu, rdt, twitter, opencli sites, wx-search-cli);
+ *    README or documented output option, because a search needs the user's login or reads browser cookies
+ *    (xhs, zhihu, rdt, twitter, opencli sites);
  *  - `docs-only`: not installed here; derived from the upstream README (tanso).
  * Fixtures for the contract-only and docs-only parsers are marked "constructed from help/docs" in test/fixtures/cli.
  * @module web-search-pro/cli/builtin-specs
@@ -309,7 +310,7 @@ const wxSearchCli: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 45_000,
   maxOutputBytes: 2 * MB,
-  verification: { status: 'contract-only', version: '0.1.0', date: SPEC_CHECK_DATE, note: 'help and version probed on a real install; output shape (JSON array of { title, link, real_url, publish_time, page }) from the upstream README and src/index.ts read with gh api; no search was run' },
+  verification: { status: 'live', version: '0.1.0', date: '2026-10-26', note: '`search` run for Chinese, English and special-character / nonsense queries and parsed (fixtures live-wx-search-cli-*): a JSON array of 10 { title, link, real_url, publish_time, page } per page, whatever the requested count (the adapter cuts it). Sogou anti-spider answers `[]` with exit 0 in this mode, indistinguishable from no hits' },
 }
 
 const tanso: CliAdapterSpec = {

@@ -40,7 +40,7 @@ test('every built-in spec passes the same validation as a user spec, and is read
 
 test('verification records: live only where a real read-only search was run, docs-only where the tool was not available to probe', () => {
   const status = Object.fromEntries(BUILTIN_CLI_SPECS.map(s => [s.id, s.verification!.status]))
-  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'live', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'contract-only', tanso: 'docs-only' })
+  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'live', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'live', tanso: 'docs-only' })
   for (const s of BUILTIN_CLI_SPECS) {
     if (s.verification!.status === 'live') assert.match(s.verification!.date ?? '', /^\d{4}-\d{2}-\d{2}$/)
     assert.ok(s.verification!.version, s.id + ' records the verified version')
@@ -210,6 +210,24 @@ test('yt-dlp (live fixtures 2026-10-26): NA placeholders of live streams are dro
   assert.equal(en.length, 4)
   assert.equal(en[0]!.snippet, 'Rust Dev Lab | 78 views | 00:00:11', 'an 11 second video is 00:00:11, not a bare "11"')
   assert.ok([...zh, ...en, ...live].every(r => /^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(r.url) && r.title))
+})
+
+test('wx-search-cli (live fixtures 2026-10-26): ten rows per page with a resolved mp.weixin.qq.com link and an ISO time; the adapter cuts to the count', () => {
+  const wx = spec('wx-search-cli')
+  assert.deepEqual(wx.search.argv, ['search', '{query}'])
+  const zh = parse('wx-search-cli', 'live-wx-search-cli-zh.json')
+  assert.equal(zh.length, 10)
+  assert.deepEqual(zh[0], { url: 'https://mp.weixin.qq.com/s?src=11&timestamp=1793030938&ver=7050&signature=REDACTED&new=1', title: '国办发文定调!事关应对AI就业冲击', publishedAt: '2026-10-26T13:39:51.000Z' })
+  assert.equal(parse('wx-search-cli', 'live-wx-search-cli-zh.json', undefined, 3).length, 3)
+  const en = parse('wx-search-cli', 'live-wx-search-cli-en.json')
+  assert.ok(en.length > 0 && en.every(r => r.url.startsWith('https://mp.weixin.qq.com/s?') && r.title && /^\d{4}-\d\d-\d\dT/.test(r.publishedAt ?? '')))
+  assert.ok(![...zh, ...en].some(r => r.url.includes('weixin.sogou.com')), 'the unresolved Sogou redirect link is never a result')
+  // A search with no hits (or an anti-spider page) prints `[]`: nothing parsed, an empty answer.
+  assert.deepEqual(parseCliOutput(wx, wx.search, '[]\n', 5), [])
+  // omnireach\'s wechat source (live 2026-10-26): ISO `ts` becomes publishedAt, snippets keep their Chinese punctuation.
+  const og = parse('omnireach', 'live-omnireach-wechat-zh.json', 'wechat')
+  assert.equal(og.length, 3)
+  assert.ok(og.every(r => r.url.startsWith('https://mp.weixin.qq.com/s?') && r.snippet && /^\d{4}-/.test(r.publishedAt ?? '')))
 })
 
 test('wx-search-cli (README fixture) and tanso (docs-only fixture): drop captcha rows, keep the documented fields', () => {

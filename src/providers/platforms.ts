@@ -192,7 +192,7 @@ export const platformAdapters: readonly ProviderAdapter[] = [
     languages: ['zh'], regions: ['cn'], domains: ['mp.weixin.qq.com', 'weixin.qq.com'], taskProfiles: ['news_fact', 'experience'], resultKinds: ['social'],
     requirements: [cliReq('omnireach', 'first backend: OmniReach (`--on wechat`, Sogou, no key)'), cliReq('wx-search-cli', 'second backend: wx-search-cli (Sogou)')],
     costModel: { kind: 'free', note: 'Sogou WeChat search through a local CLI; no key, no login; rate limits and captchas apply' }, costTier: 'anonymous',
-    verification: { live: true, note: 'omnireach 0.19.0-alpha wechat search parsed on 2026-10-06; wx-search-cli from its docs only' },
+    verification: { live: true, note: 'omnireach 0.19.0-alpha (--on wechat) and wx-search-cli 0.1.0 searches parsed live on 2026-10-26' },
   }),
 
   // OmniReach as its own multi-source provider: addressable (`platform=omnireach`), never planned on its own.
