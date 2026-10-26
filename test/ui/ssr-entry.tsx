@@ -1,21 +1,50 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { SettingsCard } from '../../src/client/SettingsCard.tsx'
+import { JSON_FIELDS, SOURCE_DEFS } from '../../src/client/field-keys.ts'
+import { RubricForm } from '../../src/client/group-judge.tsx'
+import { TwitterForm } from '../../src/client/group-runtime.tsx'
+import { SourceForm } from '../../src/client/group-sources.tsx'
+import { JsonForm } from '../../src/client/json-list.tsx'
+import { BUILTIN_RUBRIC_IDS } from '../../src/pipeline/rubrics-spec.ts'
 import { en, zh } from '../../src/client/locales.ts'
 
-/** Render the real card with a controller snapshot and one of the shipped dictionaries; report the keys it asked for that the dictionary lacks. */
-export function renderCard(state: unknown, lang: 'zh' | 'en', view: 'page' | 'summary' = 'page'): { html: string; missingKeys: string[] } {
+const noop = (): void => {}
+
+/** The props the Plugins page injects, over a controller snapshot and one of the shipped dictionaries; reports the keys asked for that the dictionary lacks. */
+function propsFor(state: unknown, lang: 'zh' | 'en', view: 'page' | 'summary' = 'page') {
   const dictionary = (lang === 'zh' ? zh : en) as Record<string, string>
   const missingKeys: string[] = []
   const t = (key: string): string => {
     if (!(key in dictionary)) missingKeys.push(key)
     return dictionary[key] ?? key
   }
-  const noop = (): void => {}
   const props = {
     t, view, useWebSearchPro: (selector: (snapshot: unknown) => unknown) => selector(state),
     edit: noop, resetField: noop, editCredential: noop, editRubric: noop, startRubric: noop, restoreRubric: noop,
     save: noop, discard: noop, refreshCredentials: noop,
   }
+  return { props, missingKeys }
+}
+
+/** Render the real card. */
+export function renderCard(state: unknown, lang: 'zh' | 'en', view: 'page' | 'summary' = 'page'): { html: string; missingKeys: string[] } {
+  const { props, missingKeys } = propsFor(state, lang, view)
   return { html: renderToStaticMarkup(createElement(SettingsCard as never, props as never)), missingKeys }
+}
+
+/**
+ * The controls that live inside dialogs (a source's key, address and budget, a rubric override, a JSON object, the Twitter values),
+ * rendered open, one block per owner: a closed dialog renders nothing, so these are the only way to read them from markup.
+ */
+export function renderForms(state: unknown, lang: 'zh' | 'en'): { html: string; missingKeys: string[] } {
+  const { props, missingKeys } = propsFor(state, lang)
+  const card = props as never
+  const block = (kind: string, id: string, body: unknown) => createElement('section', { 'data-form': kind, 'data-id': id }, body as never)
+  const tree = createElement('div', null,
+    ...SOURCE_DEFS.map(def => block('source', def.id, createElement(SourceForm as never, { card, def } as never))),
+    ...BUILTIN_RUBRIC_IDS.map(id => block('rubric', id, createElement(RubricForm as never, { card, id } as never))),
+    ...JSON_FIELDS.map(entry => block('json', entry.field, createElement(JsonForm as never, { card, field: entry.field } as never))),
+    block('twitter', 'twitter', createElement(TwitterForm as never, { card } as never)))
+  return { html: renderToStaticMarkup(tree), missingKeys }
 }
