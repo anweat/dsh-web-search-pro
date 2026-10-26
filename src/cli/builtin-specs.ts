@@ -73,10 +73,12 @@ const ytDlp: CliAdapterSpec = {
   probe: { versionArgs: ['--version'], helpArgs: ['--help'], mustContain: ['--flat-playlist', '--print', '--skip-download'] },
   allowedSubcommands: [],
   search: {
-    argv: ['ytsearch{count}:{query}', '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration_string)s'],
+    argv: ['ytsearch{count}:{query}', '--flat-playlist', '--skip-download', '--no-warnings', '--print', '%(id)s\t%(title)s\t%(channel)s\t%(view_count)s\t%(duration>%H:%M:%S)s'],
     maxCount: 10,
     output: {
-      format: 'text', lines: { mode: 'tsv', columns: ['id', 'title', 'channel', 'view_count', 'duration'] }, emptyValues: ['None'], requireTitle: true,
+      // A field yt-dlp does not have (a live stream has no view count or duration) prints as its NA placeholder; duration is H:M:S because
+      // duration_string prints bare seconds ("11") for short videos.
+      format: 'text', lines: { mode: 'tsv', columns: ['id', 'title', 'channel', 'view_count', 'duration'] }, emptyValues: ['NA', 'None'], requireTitle: true,
       fields: {
         url: { template: 'https://www.youtube.com/watch?v={id}' },
         title: 'title',
@@ -88,7 +90,7 @@ const ytDlp: CliAdapterSpec = {
   needsLogin: false,
   timeoutMs: 60_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'live', version: '2026.08.19', date: '2026-10-11', note: '`yt-dlp ytsearch2:"DeepSeek local deployment tutorial" --flat-playlist --skip-download --no-warnings --print <template>` parsed (fixture live-yt-dlp-search.txt); stdout held only the two records, the Python 3.10 deprecation notice went to stderr' },
+  verification: { status: 'live', version: '2026.08.19', date: '2026-10-26', note: 'zh / en / special-character / empty / live-stream searches parsed (fixtures live-yt-dlp-*). Live streams have no view count or duration: yt-dlp prints NA for them (the 2026-10-11 spec listed only None, so snippets read "NA views | NA"); duration is now H:M:S (duration_string printed a bare "11" for an 11 s video). Stdout held only the records, the Python 3.10 deprecation notice went to stderr' },
 }
 
 const twitter: CliAdapterSpec = {

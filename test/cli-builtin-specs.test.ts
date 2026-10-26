@@ -180,6 +180,21 @@ test('yt-dlp (live fixture 2026-10-11): the print template records parse; notice
   assert.deepEqual(parseCliOutput(yt, yt.search, '', 20), [])
 })
 
+test('yt-dlp (live fixtures 2026-10-26): NA placeholders of live streams are dropped, durations are H:M:S, Chinese and English queries', () => {
+  const live = parse('yt-dlp', 'live-yt-dlp-livestreams.txt')
+  assert.equal(live.length, 10)
+  assert.ok(live.every(r => !/\bNA\b|None/.test(r.snippet ?? '')), 'no placeholder text reaches a snippet')
+  assert.deepEqual(live[0], { url: 'https://www.youtube.com/watch?v=rFZHOHl-L8A', title: 'lofi hip hop radio 📚 beats to relax/study to', snippet: 'Lofi Girl' }, 'a live stream: channel only')
+  assert.equal(live[1]!.snippet, 'Cloud Club Lofi | 647457 views | 07:52:55', 'a finished stream keeps views and duration')
+  const zh = parse('yt-dlp', 'live-yt-dlp-zh.txt')
+  assert.equal(zh.length, 3)
+  assert.deepEqual(zh[0], { url: 'https://www.youtube.com/watch?v=bxKavltsOBo', title: '太牛逼了！12GB 显卡就能跑！DeepSeek-V4.1-Flash-1017 Strata版 AI 大模型本地部署教程｜接入 Harness', snippet: 'X超哥 | 8955 views | 00:24:54' })
+  const en = parse('yt-dlp', 'live-yt-dlp-en.txt')
+  assert.equal(en.length, 4)
+  assert.equal(en[0]!.snippet, 'Rust Dev Lab | 78 views | 00:00:11', 'an 11 second video is 00:00:11, not a bare "11"')
+  assert.ok([...zh, ...en, ...live].every(r => /^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(r.url) && r.title))
+})
+
 test('wx-search-cli (README fixture) and tanso (docs-only fixture): drop captcha rows, keep the documented fields', () => {
   assert.deepEqual(parse('wx-search-cli', 'constructed-wx-search-cli.json'), [{ url: 'https://mp.weixin.qq.com/s?src=11&abc', title: '人工智能周报', publishedAt: '2026-09-30T08:00:00Z' }])
   assert.deepEqual(parse('tanso', 'constructed-tanso.json'), [{ url: 'https://example.com/article', title: 'Example result title', snippet: 'A normalized summary from the provider response.' }])
