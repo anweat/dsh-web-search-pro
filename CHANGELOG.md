@@ -1,5 +1,31 @@
 # 更新记录
 
+## 0.2.3（开发中）
+
+接入 **DeepSeek Search / Fetch API**（[文档](https://api-docs.deepseek.com/guides/search/)，2026-10-17 上线）并标为“**常用**”。兼容范围与 0.2.2 相同（DSH `>=0.2.1-rc.2 <0.2.2-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更，Config schema 只增不改（`deepseekFetch`、`keyedSources.deepseek`）。
+
+### 请先看：默认行为会变
+
+- **已经有 `DEEPSEEK_API_KEY`（环境变量、DSH 凭据或设置里的密钥字段）的用户，升级后默认的 `search.run` 和证据模式自动规划会先用 DeepSeek 搜索，而它按请求计费**：Search 与 Fetch 各为每 1000 次成功请求 $0.75（空结果、失败、超时不计费，`count` 不影响价格）。文档写明经 DeepSeek Harness / Claude Code / Codex 的服务端工具调用在 2026-11-01 00:00（北京时间）前免费，但没写插件直接调用算不算，**所以本插件按会计费处理**。
+- 不想用：在 `sources.disabled` 里加 `deepseek`；只想在需要时用：自己写一份 `engines`（自定义过的 `engines` 列表保持你写的顺序，不会被自动加入）；想限量：`sources.budget.deepseek: { total, daily }`；`evidence.sourcePolicy: anonymous-only` 也不会自动使用它。没有 Key 时行为与 0.2.2 完全一样。
+
+### DeepSeek 搜索（引擎 `deepseek`，“常用”）
+
+- 新的原生搜索引擎，描述符 `common: true`（成本层级 `paid`，语言 `zh` + `en`）。Key 与插件其他密钥一致：设置里的密钥字段 → DSH 凭据引用（默认 `DEEPSEEK_API_KEY`，`keyedSources.deepseek.apiKeyEnv` 可改）→ 进程环境变量；`keyedSources.deepseek.baseUrl` 可改接口，默认 `https://api.deepseek.com/v1/tools`。值不进日志、状态输出、错误信息和历史。
+- **“常用”的优先级**：解析到 Key 时，中英文任务都排第一——证据模式的自动规划里排在 Exa / 博查 / 其余需 Key 来源之前（规划排序：已配置 Key → 常用 → 描述符 `priority`），没有 `engines` 的普通搜索也先用它（`engines` 仍是默认列表时）。顺序规则：调用里的 `engines` / `platform` > `sources.priority` / `sources.disabled` > 默认规则；请求额度 `sources.budget.deepseek` 照常生效。`sources.status` 的“常用 (common)”行、provider 行、`search.recommend` 的“常用”标记都会显示；没有 Key 时它不进默认链，`sources.status` 写明配置方法。
+- **字段映射**：`summary`（给模型看的长摘要）→ 摘录文本（截到 1000 字符，去掉与标题重复的一级标题；没有就用 `snippet`），`date` → `publishedAt`，`rerank_score`（0–3）→ `rerankScore`、`authority`（0–4，-1 视为未知不给）→ `authority`，作为来源元数据随结果输出并显示为 `[rerank 2.3/3, authority 4/4]`（`search.run` 的输出 schema 新增这两个可选字段）。不请求 `content`。
+- **证据评分里的权重（保守）**：只用在候选融合（S3），与已有的新鲜度 / 权威域名加分同类：加分 = `0.3 ×（0.7 × rerank/3 + 0.3 × authority/4）` 个“排名单位”。三项加分全拿满也只有 0.75 个单位，所以只在并列时分先后，不能把第 10 名抬到第 1 名之上；一个 URL 被多个来源返回时每个字段取最大值，不叠加；其他来源不带这些字段，一分不加。块级评分不变。
+- **查询**：编成服务支持的运算符——硬 `site` / `exclude_site` / `exclude_term` / `time_window` → `site:a OR site:b`、`-site:`、`-词`、`after:YYYY-MM-DD`；`ori_question` 用任务的 `goal`（没有则第一个关键 need），截到 128 字符。查询超过服务的 128 字符上限时，保留全部运算符、截掉自由文本的尾部，并在结果说明里写明（引擎的 `notes` 现在也会进入证据包的 `notes`）。
+- **错误与重试**：408 / 429 / 5xx 最多共 3 次、等待取 `Retry-After`，否则 0.8 s / 1.6 s（`Retry-After` 超过 8 s 不干等，作为冷却时间）；**402 → `ENGINE_QUOTA` 并提示“余额不足”、去 platform.deepseek.com 充值**；401 / 403 → `ENGINE_AUTH`；其余 4xx 不重试；错误信息带 `request_id`，不含 Key。只有“有结果的 200”记入用量账本（`deepseek-search` / `deepseek-fetch`）。
+- **抓取后端（默认关闭）**：设置 `deepseekFetch: true` 后 `read.fetch` 的 `mode: auto` 在 Jina、直连都没拿到正文时用 Fetch API（Markdown），之后才轮到浏览器渲染；`mode: deepseek` 显式指定（未开启时说明原因，不会偷偷花钱）。403 / 404 是 DeepSeek 自己的判断，不是目标页面的 HTTP 状态，错误信息这样写，`auto` 下记成失败的尝试。
+- 设置面板：需 Key 的来源里第一项就是“DeepSeek Search / Fetch”，带“常用”标记，默认展开，含 `deepseekFetch` 开关；README、skill（含 `references/`）、目录（`catalog/sources.v1.json`，`common: true`）同步更新。
+- 其他：`ProviderDescriptor.common`、目录条目 `common` 为新增字段；`ProviderOutcome` 的 `notes` 与 `SearchOutcome.sources` 的 `rerankScore` / `authority` 为新增可选字段；`search.recommend` 对没配置 Key 的付费来源仍按“免费的在前、付费的在后”排，所以 DeepSeek 没配置 Key 时不会被强行塞进三个推荐（直接问 `platform: deepseek` 会得到配置说明）。
+
+### 验证
+
+- 真实调用 **8 次 Search + 4 次 Fetch**（`docs/validation/dsh-web-search-pro-0.2.3.md`）：结果结构与全部字段、`site:` / `-site:` / `after:` 运算符、128 字符上限（HTTP 400）、401 / 404 错误体、Fetch 的 Markdown 都按预期；与文档不一致的地方（`summary` / `snippet` 长度远超文档所写；乱码查询仍返回低 `rerank_score` 的结果而不是空数组）写在记录里。**没有亲眼验证**：403 的 Fetch 拒绝、402、408 / 429 / 5xx 与重试路径（只用模拟响应测试）。
+- 815 项插件测试（含新增 25 项 DeepSeek 测试）、94 项 bench 测试、类型检查、`test:peers`、构建与客户端 bundle 检查通过。
+
 ## 0.2.2（2026-10-26）
 
 适配 DSH 0.2.1-rc.2 / 0.2.1-rc.3 宿主，并修复 twitter 平台源返回错误结果的问题（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)，感谢 @gogososonono 的报告与根因分析）。npm 上的 0.2.1 的 peer 是 `<0.2.1-0`，在 0.2.1-rc.x 宿主上会被安装闸门拒绝；本版是第一个能装进 0.2.1-rc.x 宿主的发布（0.2.2 / 0.2.3 曾在内部分开记录，从未发布，这里合并为 0.2.2）。除下面 #38 的修复外没有功能变更，也没有破坏性变更；0.2.1 的配置与数据照常可用。

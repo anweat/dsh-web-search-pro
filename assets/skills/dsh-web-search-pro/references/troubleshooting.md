@@ -6,6 +6,7 @@ Start with `sources.status`: it makes no search request and shows engine state, 
 |---|---|
 | `resolved to proxy fake-IP ...` | Clash/TUN fake-IP DNS (`198.18.0.0/15`, `fdfe:dcba:9876::/64`, `2001:2::/48`). Ask the user to enable `allowProxyFakeIp` in the plugin's advanced settings (default off). It trusts only those DNS answers; literal fake-IP URLs, localhost and other private addresses stay blocked. |
 | `quota_exhausted (HTTP 402)`, `ENGINE_QUOTA`, "no credit/quota" | The account or the anonymous tier is used up. It is not retried or cooled down. Use another source from `search.recommend`; for a keyed source tell the user to top up. Never retry in a loop. |
+| DeepSeek `HTTP 402 ... 余额不足` | The DeepSeek API balance is empty (Search and Fetch share it). Tell the user to top it up at platform.deepseek.com; the plugin falls back to the next source meanwhile. 408 / 429 / 5xx from DeepSeek are retried twice after a wait before they count as a failure. |
 | `ENGINE_RATE_LIMIT`, 429, a source in `cooldown` | The service said wait; the plugin respects `Retry-After`. Use a different source now; `cooldownUntil` shows when it is free. |
 | 401 / 403 on a keyed source | The key is rejected: the user must check it. It does not cool the source down. |
 | every engine returned nothing | Not an error. Rephrase, add a `site:` word, or try a source from `search.recommend`; a `fallbackNote` lists who was tried and skipped. |

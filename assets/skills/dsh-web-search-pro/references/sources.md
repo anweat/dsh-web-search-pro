@@ -8,9 +8,9 @@ Every source has a cost tier, shown by `search.recommend` and `sources.status`:
 
 - `anonymous`: no key, account or money (rate limits aside): `ddg`, `bing`, `exa` over its keyless MCP route (needs `mcporter` and an `exa` MCP server), `wikipedia`, `hackernews`, `stackexchange`, `openalex`, `semanticscholar`, `anysearch`, `github`, `arxiv`, `pubmed`, `v2ex`, `rss`, `searxng`.
 - `free-quota`: needs a key, account or login and is free to use: `tavily` (1000 credits a month), `brave` ($5 of credits a month, a card for identity), `linkup`, `serper` (2500 queries at sign-up, once), `jina` (10M tokens per new key, once), `baidu-qianfan` (100 calls a day), `exa` with an API key ($10 a month), `github-code` (a free token), login platforms.
-- `paid`: `bocha`, `metaso`, `zhipu` (no free allowance on the official pages).
+- `paid`: `deepseek` ($0.75 per 1,000 successful requests), `bocha`, `metaso`, `zhipu` (no free allowance on the official pages).
 
-Order of precedence for the automatic plan: (1) `engines` / `platform` in the call; (2) the user's `priority` list (setting `sources:`); (3) sources the user configured with a key, promoted for their language and profile (at most two, one per family); (4) otherwise the anonymous / free defaults. A paid source is used only when the user configured its key; `evidence.sourcePolicy: anonymous-only` never uses a source that needs a key, account or login. `budget: { <id>: {total, daily} }` under `sources:` (optional, nothing is capped by default) caps a source; a used-up one is skipped with a note and the plan falls back to free sources. `sources.status` shows used and remaining requests. Example for a Bocha account with 1000 requests: `sources: { budget: { bocha: { total: 1000, daily: 50 } } }`. These are the user's settings: do not change them, tell the user.
+Order of precedence for the automatic plan: (1) `engines` / `platform` in the call; (2) the user's `priority` list (setting `sources:`); (3) sources the user configured with a key, promoted for their language and profile (at most two, one per family; `deepseek`, the 常用 source, goes first of them in both languages, and leads a plain search's default chain while `engines` is the default list); (4) otherwise the anonymous / free defaults. A paid source is used only when the user configured its key; `evidence.sourcePolicy: anonymous-only` never uses a source that needs a key, account or login. `budget: { <id>: {total, daily} }` under `sources:` (optional, nothing is capped by default) caps a source; a used-up one is skipped with a note and the plan falls back to free sources. `sources.status` shows used and remaining requests. Example for a Bocha account with 1000 requests: `sources: { budget: { bocha: { total: 1000, daily: 50 } } }`. These are the user's settings: do not change them, tell the user.
 
 ## Kinds
 
@@ -19,6 +19,7 @@ Order of precedence for the automatic plan: (1) `engines` / `platform` in the ca
 
 | id | language | key variable |
 |---|---|---|
+| `deepseek` | zh + en, 常用 | `DEEPSEEK_API_KEY` (DeepSeek Search API; verified live 2026-10-26; billed, see below) |
 | `exa` | en | `EXA_API_KEY` |
 | `bocha` | zh | `BOCHA_SEARCH_API_KEY` (falls back to `BOCHA_JEV_API_KEY`; verified live 2026-10-04) |
 | `tavily` | en | `TAVILY_API_KEY` |
@@ -56,6 +57,10 @@ Platforms are sources like any other (`sources.status` lists them with `kind: pl
 - A platform that ran but found nothing returns an empty list with a note (often "needs a login": see `browserBindings`); nothing is cooled down for that.
 - `url` (rss only), `authProfile` and `rulePack` go with `platform`; `browserBindings` fill the last two per platform.
 - The user's own `customPlatforms` appear here as platforms too, under their key.
+
+## DeepSeek Search and Fetch (常用)
+
+`deepseek` is the plugin's common source: `POST https://api.deepseek.com/v1/tools/search`, the same API key as the DeepSeek models (`DEEPSEEK_API_KEY`, a DSH credential, or `keyedSources.deepseek.apiKey`). $0.75 per 1,000 SUCCESSFUL requests (empty results and failures are free; `count` does not change the price); calls through the Harness's own tools are free until 2026-11-01 Beijing time, but this plugin's direct calls are treated as billed. Results carry a model-ready `summary` (used as the excerpt), `date`, and the provider's own grades `rerankScore` (0-3, 1.5+ is good) and `authority` (0-4, 3+ is high): hints, not proof. Queries are cut to 128 characters (operators kept) and the result says so. 402 means the account balance is empty: tell the user to top it up. Cap it with the `sources` setting's `budget.deepseek`; turn it off by listing `deepseek` under its `disabled`. The Fetch API is `read.fetch mode:"deepseek"` (auto mode uses it as a fallback when `deepseekFetch` is on); its 403 / 404 are DeepSeek's answer, not the page's HTTP status.
 
 ## Setting a key (the user does this; never ask for the key value)
 

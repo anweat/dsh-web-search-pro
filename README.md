@@ -14,6 +14,7 @@
 | `0.2.0`（正式版） | **只支持 `dsh-v0.2.0-rc.2` 这一条线**（peer `>=0.2.0-rc.2 <0.2.1-0`）+ 可选 `@anweat/dsh-browser ^0.2.0` | 第一个 0.2.0 线版本，**破坏性变更**（见 [CHANGELOG.md](./CHANGELOG.md)）；711 项单元测试、94 项 bench 测试，`pnpm run test:peers` 两种解析模式检查，真实 Host（DSH 0.2.0-rc.2）验收 |
 | `0.2.1` | 同 `0.2.0`（peer `>=0.2.0-rc.2 <0.2.1-0` + 可选 `@anweat/dsh-browser ^0.2.0`） | 独立 CLI 适配层与平台后端链，无破坏性变更（见 [CHANGELOG.md](./CHANGELOG.md)）；774 项单元测试、94 项 bench 测试，真实 Host（DSH 0.2.0-rc.2）验收 |
 | `0.2.2` | **只支持 `dsh-v0.2.1-rc.2` / `dsh-v0.2.1-rc.3`（0.2.1 线）**（peer `>=0.2.1-rc.2 <0.2.2-0`）+ 可选 `@anweat/dsh-browser ^0.2.0`（配套 `0.2.2` 起，旧的 0.2.0 / 0.2.1 只适用于 0.2.0-rc.2 宿主） | 适配 DSH 0.2.1-rc.2 / rc.3 宿主（cordis 4.0.5、schemastery 3.18.5、cordis-plugin-group 1.0.5 / loader 1.0.6 / include 1.0.10、cosmokit 1.8.6），并修复 twitter 平台结果全错（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)）；无破坏性变更。npm 上的 0.2.1 在 0.2.1-rc.x 宿主上会被安装闸门拒绝，需要升级到本版。devDeps 里停更的 `dsh-invariants` 换成 `dsh-working-directory`，并显式补上 0.2.1 线改成 peer-only 的 `dsh-llm` / `dsh-session`（宿主 `autoInstallPeers: false` 不自动装 peer）；790 项单元测试、94 项 bench 测试、`pnpm run test:peers` 两种解析模式检查；真实宿主验收（rc.3）见 `docs/validation/dsh-0.2.1-rc.3.md`。twitter 的搜索输出契约来自 twitter-cli 0.8.5 源码与 issue 里的真实输出，我们自己没有用 Token 跑过搜索 |
+| `0.2.3` | 同 `0.2.2`（peer `>=0.2.1-rc.2 <0.2.2-0` + 可选 `@anweat/dsh-browser ^0.2.0`） | 接入 **DeepSeek Search / Fetch API** 并标为“常用”（有 Key 时默认排第一；**按请求计费**，见下文“DeepSeek 搜索 / 抓取”）；设置面板同步调整。无破坏性变更，但**已有 `DEEPSEEK_API_KEY` 的用户升级后默认搜索会走这个付费接口**（`sources.disabled: [deepseek]` 关闭）；测试数见 [CHANGELOG.md](./CHANGELOG.md) |
 
 **支持范围**：DSH `>=0.2.1-rc.2 <0.2.2-0`（已验证 `0.2.1-rc.2`、`0.2.1-rc.3`），可选配套浏览器插件 `@anweat/dsh-browser ^0.2.0`（即 0.2.x，不含 0.3；与 DSH 0.2.1-rc.x 配套的是 0.2.2 起的 0.2.x）。
 
@@ -36,9 +37,9 @@
 
 ```bash
 # 默认安装（面向 dsh-v0.2.1-rc.2 / rc.3 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.2
+dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
 # 不需要浏览器能力时，只装本插件即可：
-dsh plugin --profile web add dsh-web-search-pro@0.2.2
+dsh plugin --profile web add dsh-web-search-pro@0.2.3
 # 或本地目录 / tarball：
 dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
 # 重启（web profile 关闭了 HMR）：
@@ -56,7 +57,7 @@ dsh --profile web
 先确认宿主是 `dsh-v0.2.1-rc.2` 或 `dsh-v0.2.1-rc.3`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x）；两者都需要作为 profile 的直接依赖。
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.2
+dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
 ```
 
 > **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级，停留在 `dsh-web-search-pro@0.1.15`。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回上面的 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。
@@ -82,7 +83,7 @@ dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.2
 "DeepSeek Harness community feedback"，指定 exa、fresh=true、返回 8 条来源。
 ```
 
-**开箱默认值（不改任何设置）**：默认关闭 Jev（`evidence.jevMode: off`，证据评分用本地规则，不调用任何模型，也不需要任何模型 Key）；只有配置了博查 Key（`bochaApiKey` / `BOCHA_SEARCH_API_KEY` 或凭据引用）才会使用博查，没配置时博查不在引擎列表里，也不会被自动规划选中。默认引擎是 `seam`、`exa`、`ddg`、`bing`、`jina`（Exa 可走无 Key 的 MCP 回退，ddg / bing 免 Key）。**Defaults out of the box:** Jev is off by default (`evidence.jevMode: off`; evidence scoring uses the local rules and no model is called, no model key is needed); Bocha is used only when you configure a key (`bochaApiKey` / `BOCHA_SEARCH_API_KEY` / a credentials ref) — without one it is not in the engine list and never planned.
+**开箱默认值（不改任何设置）**：默认关闭 Jev（`evidence.jevMode: off`，证据评分用本地规则，不调用任何模型，也不需要任何模型 Key）；只有配置了博查 Key（`bochaApiKey` / `BOCHA_SEARCH_API_KEY` 或凭据引用）才会使用博查，没配置时博查不在引擎列表里，也不会被自动规划选中。默认引擎是 `seam`、`exa`、`ddg`、`bing`、`jina`（Exa 可走无 Key 的 MCP 回退，ddg / bing 免 Key）。**例外：DeepSeek 搜索（“常用”，按请求计费）只要能解析到 DeepSeek API Key（设置里的密钥字段、DSH 凭据 `DEEPSEEK_API_KEY` 或进程环境变量），默认搜索和自动规划都把它放第一位**；不想用就在 `sources.disabled` 里写 `deepseek`，或自己写一份 `engines`（见“DeepSeek 搜索 / 抓取”）。**Defaults out of the box:** Jev is off by default (`evidence.jevMode: off`; evidence scoring uses the local rules and no model is called, no model key is needed); Bocha is used only when you configure a key (`bochaApiKey` / `BOCHA_SEARCH_API_KEY` / a credentials ref) — without one it is not in the engine list and never planned. **Exception:** DeepSeek Search (the common, 常用, source; billed per request) leads the default order in both languages as soon as a DeepSeek API key resolves (settings key field, DSH credential `DEEPSEEK_API_KEY`, or the process environment); put `deepseek` under `sources.disabled` or write your own `engines` list to opt out.
 
 模型通常不需要先翻目录：`web_index()` 根目录直接给出搜索与读取两个最常用调用，随包的 skill `dsh-web-search-pro` 带有证据模式的工作示例；没有 skill 服务时根目录附一段精简指南。
 
@@ -338,7 +339,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 1. **DSH 可视化面板**：打开 `设置 → 插件 → 插件配置 → Web Search Pro`（各分组见下节“设置面板”）。修改先保留为本地草稿，点击“保存”后写入 `settings.yaml` 并热更新，支持放弃修改和逐字段恢复部署值。
 
-   - Exa、Jina、GitHub、博查与各需 Key 来源的密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器，也不会把密钥值写进 `settings.yaml`。
+   - Exa、Jina、GitHub、博查、DeepSeek 与各需 Key 来源的密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器，也不会把密钥值写进 `settings.yaml`。
    - `platformRules`、`customPlatforms`、`browserBindings`、Playwright、自定义评分 provider 等使用 JSON 对象编辑器；格式、数值范围或服务端校验不通过时会阻止保存，并在字段下方给出与服务端一致的错误信息。
    - 浏览器工具的审批自由度由 `dsh-browser.automationMode` 管辖，调用缓冲由 `dsh-browser.usagePolicy` 管辖；用 `browser_call` 的 `runtime.status` 查看当前状态。Web Search Pro 面板只管理搜索插件自己的后端开关，不会绕过浏览器插件的审批或资源策略。
    - 更新带客户端面板的插件版本后需要重启 Web profile，让 DSH 客户端模块扫描器重新装载 `client.js`。
@@ -355,6 +356,8 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
      # twitterCt0Env: TWITTER_CT0
      # keyedSources: # 付费来源（可选，见“付费 / 需 Key 的来源”）：tavily / brave / linkup / serper / metaso / zhipu / baidu-qianfan
      #   tavily: { apiKeyEnv: TAVILY_API_KEY }   # 或 apiKey（字面量，不推荐）/ baseUrl；没有 Key 的来源保持不可用
+     #   deepseek: { apiKeyEnv: DEEPSEEK_API_KEY } # DeepSeek 搜索 / 抓取（常用）：默认就读 DEEPSEEK_API_KEY；baseUrl 默认 https://api.deepseek.com/v1/tools
+     # deepseekFetch: false # true = read.fetch 可用 DeepSeek Fetch API（按请求计费，默认关闭）
      engines: [ddg, bing, exa, seam, jina]
      parallelEngines: false
      # registerProvider: false # true = 把本插件注册为 ctx.web provider（还需在 web 条目里选中，见“两种用法”）
@@ -399,7 +402,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | 证据管线 | `evidence.autoProviders`、`maxRounds`、`maxQueries`，`fetchDefaultChars`、`exaContentsPerUrlChars` / `TotalChars`。`minKeep` 与证据包字符预算没有配置项（内置默认 / `search.run` 的 `budget` 参数） |
 | 评分模型 | `evidence.judge.mode`（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer` 保持一致）、`hybridBorderline`、provider 下拉（内置预设 + 自定义 id）、`maxJevQuestions`、`allowLlm`；覆盖判定 `evidence.coverage` 的模式、provider、阈值；用量上限 `evidence.budget`（单次 / 每日 / 时区 / 按 provider）；自定义 provider JSON（与服务端同一套校验，拒绝在定义里放密钥，只放 `keyRef` 名） |
 | 提示词（rubric） | 列出内置 rubric 与生效版本；逐个覆盖（版本、模板、等级、字符上限），按 `rubrics.ts` 的规则校验（未知变量、必需变量、等级数、版本必须不同于内置）；“恢复默认”删除覆盖 |
-| 来源 | 来源策略（`evidence.sourcePolicy`、`sources.priority`、`sources.disabled`）、博查（Key 引用名、接口地址、长摘要）、七个需 Key 的来源（Key 引用名、写入式密钥、接口地址）、每个来源的请求额度（`sources.budget.<id>.total` / `daily`，已用 / 剩余见 `web_call sources.status`）、`searxngUrl`、`openalexMailto`，以及匿名来源参考表；各来源的实时就绪状态由 `web_call sources.status` 显示 |
+| 来源 | 来源策略（`evidence.sourcePolicy`、`sources.priority`、`sources.disabled`）、博查（Key 引用名、接口地址、长摘要）、八个需 Key 的来源（含标有“常用”的 DeepSeek 搜索 / 抓取：Key 引用名、写入式密钥、接口地址，`deepseekFetch` 开关；其余七个：Key 引用名、写入式密钥、接口地址）、每个来源的请求额度（`sources.budget.<id>.total` / `daily`，已用 / 剩余见 `web_call sources.status`）、`searxngUrl`、`openalexMailto`，以及匿名来源参考表；各来源的实时就绪状态由 `web_call sources.status` 显示 |
 | 服务凭据 / 运行时与后端 / 高级 | Exa、Jina、GitHub 凭据引用与密钥；CLI、OpenCLI、Agent Reach、Playwright、**平台后端顺序 `platformBackends`、自定义 CLI 适配 `cliAdapters`（JSON，校验与服务端共用）**；缓存、排序加权、平台规则、自定义平台、浏览器绑定 |
 
 校验与服务端共用同一批纯函数（`pipeline/rubrics-spec.ts`、`judges/providers-spec.ts`、`judges/calibration-spec.ts`、`coverage.ts`、`budget-spec.ts`），它们不引入 Node 模块，客户端 bundle 仍只依赖宿主模块表里的少数模块（`pnpm run test:client-bundle` 检查）。
@@ -515,6 +518,32 @@ Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包
 
 **English**　Bocha (`bocha` / `builtin:bocha`) is a Chinese-strong key-based search source: `POST /v1/web-search`, Bearer key from `bochaApiKey` or `$BOCHA_SEARCH_API_KEY` (env name configurable via `bochaApiKeyEnv`), falling back to `$BOCHA_JEV_API_KEY` (same account). Billed per request; the plugin counts requests in the usage ledger (`bocha-search`, tokens n/a, price unknown). HTTP 401/403 are non-retryable (no cooldown; "no balance or package" is reported as quota), 429 cools down for `Retry-After`. Hard site / exclude_site / time_window are pushed down (`include` / `exclude` / `freshness` date range); everything else is verified locally and reported. The success path was verified live on 2026-10-04 (4 requests: success shape, include / exclude / freshness range, both hosts accept the key); the default host is `https://api.bocha.cn`. Search sources are registry entries (descriptor + adapter, namespaced ids with legacy aliases, duplicates throw, `register` returns an unregister function); evidence-mode source planning is described in the next section.
 
+### DeepSeek 搜索 / 抓取（常用）/ DeepSeek Search and Fetch (common)
+
+**中文**　[DeepSeek Search / Fetch API](https://api-docs.deepseek.com/guides/search/)（2026-10-17 上线）是本插件标为“**常用**”的来源：引擎 id `deepseek`，也可写 `builtin:deepseek`。`POST https://api.deepseek.com/v1/tools/search`，`Authorization: Bearer <DeepSeek API Key>`；抓取端点是同一个 base 的 `/fetch`。与宿主自带的 `deepseek-search-api` 不同，它不只映射 snippet 与日期（宿主那一路只带这两样）。
+
+- **配置**：Key 与 DeepSeek 模型用的是同一个 `DEEPSEEK_API_KEY`，解析顺序和插件其他密钥一致：设置里的密钥字段（`keyedSources.deepseek.apiKey`，面板里的写入式输入会写进 DSH Credentials）→ DSH 凭据引用（默认名 `DEEPSEEK_API_KEY`，可用 `keyedSources.deepseek.apiKeyEnv` 改）→ 进程环境变量（“只写 shell 配置文件宿主读不到”）。值不进日志、状态输出、错误信息和历史。`keyedSources.deepseek.baseUrl` 可改接口（默认 `https://api.deepseek.com/v1/tools`）；请求的 `count` 跟调用走（证据模式每个来源要 10 条，与服务默认值一致），上限 50。
+- **“常用”的含义**：解析到 Key 时，中文和英文任务的默认优先级都把它放第一位 —— 证据模式的自动规划里排在 Exa / 博查 / 其余需 Key 来源之前；没有指定 `engines` 的普通 `search.run` 也先用它（**仅当 `engines` 还是默认列表时**；你自己写过 `engines` 就按你写的，写进去的位置也尊重）。仍然服从你说的话：调用里的 `engines` / `platform` > `sources.priority` / `sources.disabled` > 这条默认规则；`evidence.sourcePolicy: anonymous-only` 不会自动使用它（它是付费来源）；`sources.budget.deepseek` 的请求额度照常生效（用完被跳过并回退）。没有 Key 时它不在默认链里，`sources.status` 的“常用 (common)”行写明去哪里配置；`search.recommend` 把它标为“常用”，已配置时排在其他已就绪的需 Key 来源之前。面板里它在“来源”分组、需 Key 的来源列表的第一项，带“常用”标记。
+- **字段映射**：`summary`（给模型看的长摘要，约 600–800 字，实测有更长的；截到 1000 字符并去掉与标题重复的一级标题）→ 摘录文本（门限和评分看的就是它），没有 `summary` 时用 `snippet`；`date`（RFC 3339 或 null）→ `publishedAt`；`rerank_score`（0–3，综合相关性、权威性和时效）→ `rerankScore`，`authority`（0–4，-1 未知则不给）→ `authority`，作为**来源元数据**随结果输出（`[rerank 2.3/3, authority 4/4]`）。不请求 `content`（`need_content: false`）。
+- **证据评分里的权重（保守）**：只用在候选融合（S3）这一步，和已有的新鲜度 / 权威域名加分同类 —— 加分 = `0.3 ×（0.7 × rerank/3 + 0.3 × authority/4）` 个“排名单位”（一个排名单位 = 同一来源里相邻两名的分差）。默认三项加分（新鲜度 0.2、域名权威 0.25、来源评分 0.3）全拿满也只有 0.75 个单位：能在两个来源把同几个 URL 排成并列时分出先后，**不能**把某来源的第 10 名抬到第 1 名之上；一个 URL 被多个来源返回时每个字段取最大值，不叠加。没有这些字段的来源（其余所有来源）一分不加。块级评分（S6）不使用它们。
+- **查询**：服务只收 1–128 字符。硬约束 `site` / `exclude_site` / `exclude_term` / `time_window` 编成服务支持的 `site:a OR site:b`、`-site:`、`-词`、`after:YYYY-MM-DD` 写进查询；`ori_question` 用任务的 `goal`（没有就取第一个关键 need），截到 128 字符。超过 128 字符时保留全部运算符，截掉自由文本的尾部，并在结果说明里写明（普通搜索的 `fallbackNote`，证据包的 `notes`）。
+- **费用**：Search 与 Fetch 各为每 1000 次**成功**请求 $0.75，空结果、失败和超时不计费，`count` 不影响价格。经 DeepSeek Harness / Claude Code / Codex 的服务端工具调用在 2026-11-01 00:00（北京时间）前免费；**文档没写插件直接调用是否在这个免费范围内，所以本插件按会计费处理**。账号级限流：Search 100 QPS，Fetch 25 QPS 另有按域名的限制。请求数记入用量账本（`deepseek-search` / `deepseek-fetch`，金额插件不知道），只记会计费的那种（有结果的 200）。
+- **错误与重试**：408 / 429 / 5xx 按文档“等一会儿再试”：最多共 3 次，等待取 `Retry-After`，否则 0.8 秒、1.6 秒；`Retry-After` 超过 8 秒就不干等，直接失败并把它作为冷却时间。401 / 403 → `ENGINE_AUTH`；**402 → `ENGINE_QUOTA`，提示“余额不足”并让你去 platform.deepseek.com 充值**（不重试、不冷却）；其余 4xx 不重试。错误信息带 `request_id`（找 DeepSeek 支持用）。
+- **抓取后端（默认关闭）**：设置 `deepseekFetch: true` 后，`read.fetch` 的 `mode: auto` 在 Jina 和直连都没拿到正文时，改用 Fetch API（Markdown），之后才轮到浏览器渲染；`mode: deepseek` 显式指定（关闭时会说明为什么不行，不会偷偷花钱）。它不报目标页面的状态码；**403（安全策略拒绝）/ 404（取不到可用内容）是 DeepSeek 自己的判断，不是目标页面的 HTTP 状态**，错误信息里这样写，`auto` 模式下记成一次失败的尝试（`attempts` 里 `deepseek: error`）。
+- **验证状态**：2026-10-26 真实调用 8 次 Search + 4 次 Fetch（`docs/validation/dsh-web-search-pro-0.2.3.md`）：结果结构与全部字段、`site:` / `-site:` / `after:` 运算符、128 字符上限（超出 HTTP 400）、401 / 404 错误体、Fetch 的 Markdown。**没有亲眼验证的**：403 的 Fetch 拒绝（只在文档里）、402 余额不足、429 / 408 / 5xx 的重试路径（用模拟响应测试）、`localization`（没有发送）。
+
+**English**　The DeepSeek Search / Fetch API ([docs](https://api-docs.deepseek.com/guides/search/)) is this plugin's common (常用) source: engine id `deepseek` (`builtin:deepseek`), `POST https://api.deepseek.com/v1/tools/search` with a Bearer key; Fetch is `/fetch` on the same base. Unlike the host's own `deepseek-search-api` it maps more than snippet and date.
+
+- **Configuration**: the key is the same `DEEPSEEK_API_KEY` the DeepSeek models use, resolved like every other key of the plugin: the settings key field (`keyedSources.deepseek.apiKey`; the panel's write-only input stores it as a DSH credential) -> a DSH credentials reference (default `DEEPSEEK_API_KEY`, renamed by `keyedSources.deepseek.apiKeyEnv`) -> the process environment. The value never reaches logs, status output, errors or history. `keyedSources.deepseek.baseUrl` overrides the endpoint (default `https://api.deepseek.com/v1/tools`); `count` follows the call (evidence mode asks each source for 10, the service default), at most 50.
+- **What "common" means**: once a key resolves, DeepSeek leads the default order for Chinese AND English tasks: first in the evidence plan (ahead of Exa, Bocha and the other keyed sources) and first in a plain `search.run` without `engines` (only while `engines` is still the default list; a list you wrote is yours, and a position you gave `deepseek` in it is kept). It yields to what you said: `engines` / `platform` in the call > `sources.priority` / `sources.disabled` > this default; `evidence.sourcePolicy: anonymous-only` never plans it automatically (it is paid); `sources.budget.deepseek` applies as for any source. Without a key it is not in the default chain, `sources.status` has a "常用 (common)" line saying where to configure it, `search.recommend` marks it and, once configured, ranks it ahead of the other ready keyed sources.
+- **Field mapping**: `summary` (the long, model-ready text; cut at 1,000 characters, the H1 that repeats the title dropped) is the excerpt the gate and the scorer read, `snippet` when there is no summary; `date` -> `publishedAt`; `rerank_score` (0-3) -> `rerankScore`, `authority` (0-4; -1 = unknown = not given) -> `authority`, shown as source metadata (`[rerank 2.3/3, authority 4/4]`). `content` is never requested.
+- **Weight in evidence scoring (conservative)**: only in candidate fusion (S3), next to the existing freshness / authority-domain bonuses: bonus = `0.3 x (0.7 x rerank/3 + 0.3 x authority/4)` of one rank step (the score gap between adjacent ranks of one provider). With the other defaults the three bonuses together top out at 0.75 of a step: they break ties between providers, and cannot lift a rank-10 result over a rank-1 one; the best value per field wins when several providers return a URL; providers that give no grades add nothing. Block scoring (S6) ignores them.
+- **Query**: the API takes 1-128 characters. Hard `site` / `exclude_site` / `exclude_term` / `time_window` constraints are written as `site:a OR site:b`, `-site:`, `-term`, `after:YYYY-MM-DD`; `ori_question` is the task goal (else the first critical need), cut to 128. A longer query keeps every operator, loses the tail of the free text, and says so in the result notes.
+- **Cost**: Search and Fetch are each $0.75 per 1,000 SUCCESSFUL requests (empty results, failures and timeouts are free; `count` does not change the price). Calls through DeepSeek Harness / Claude Code / Codex server-side tools are free until 2026-11-01 00:00 Beijing time; the docs do not say whether a plugin calling the API directly is inside that window, **so the plugin treats every call as billed**. Account limits: Search 100 QPS, Fetch 25 QPS plus per-domain limits. Requests are counted in the usage ledger (`deepseek-search` / `deepseek-fetch`; the plugin does not know money), only the billed kind (a 200 with results).
+- **Errors and retries**: 408 / 429 / 5xx are retried as the docs say, at most 3 tries in all, waiting `Retry-After`, else 0.8 s and 1.6 s; a `Retry-After` over 8 s is not slept through (it becomes the cooldown). 401 / 403 -> `ENGINE_AUTH`; **402 -> `ENGINE_QUOTA` with an insufficient-balance message (余额不足) pointing at platform.deepseek.com**, not retried; other 4xx are not retried. Messages carry the `request_id`.
+- **Fetch backend (off by default)**: with `deepseekFetch: true`, `read.fetch mode=auto` falls back to the Fetch API (Markdown) when Jina and a direct request produced no content, before browser rendering; `mode=deepseek` asks for it explicitly (when the setting is off it says why instead of spending money). No target status code is claimed; **403 (security policy) and 404 (no usable content) are DeepSeek's own verdicts, not the target page's HTTP status**, and the message says so; in auto mode they are a failed attempt (`deepseek: error` in `attempts`).
+- **Verification**: 2026-10-26, 8 live Search and 4 live Fetch requests (`docs/validation/dsh-web-search-pro-0.2.3.md`): result shape and all fields, the `site:` / `-site:` / `after:` operators, the 128-character limit (HTTP 400), the 401 and 404 bodies, Fetch Markdown. **Not observed**: the 403 Fetch refusal (docs only), 402 insufficient balance, the 429 / 408 / 5xx retry paths (tested with simulated responses), `localization` (not sent).
+
 ### 来源策略 / Source policy
 
 **中文**　插件主要依赖**免费 / 匿名额度**的来源；付费来源是预留接口，**不会因为存在 Key 之外的任何原因成为默认**。每个来源有成本层级（`search.recommend`、`sources.status` 与目录的 `costTier` 都显示）：
@@ -523,7 +552,7 @@ Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包
 |---|---|---|
 | `anonymous` | 无需 Key、账号或付费（只有限流） | `ddg`、`bing`、`exa`（匿名 MCP 路线）、`wikipedia`、`hackernews`、`stackexchange`、`openalex`、`semanticscholar`、`anysearch`、`github`、`arxiv`、`pubmed`、`v2ex`、`rss`、`searxng`、`bilibili`、`youtube`、`seam`（成本由宿主决定） |
 | `free-quota` | 需要 Key / 账号 / 登录，可免费使用（有文档可查的免费额度，或只需免费账号） | `tavily`（每月 1000 credits）、`brave`（每月 $5 额度，需绑卡验证身份）、`linkup`（专业邮箱注册送 $20，符合条件的账号每月补足）、`serper`（注册送 2500 次，一次性）、`jina`（每个新 Key 1000 万 token，一次性）、`baidu-qianfan`（每日 100 次）、`exa`（有 API Key 时每月 $10）、`github-code`（免费 Token）、各登录态平台 |
-| `paid` | 需要 Key 并按次计费；官方页面未能确认免费额度 | `bocha`、`metaso`、`zhipu` |
+| `paid` | 需要 Key 并按次计费；官方页面未能确认免费额度 | `deepseek`（每 1000 次成功请求 $0.75，见上节）、`bocha`、`metaso`、`zhipu` |
 
 免费额度的依据写在目录条目的 `cost` 里（带官方页面 URL，读于 2026-10-04）；确认不了的一律标 `paid`。Exa 有两条路线，按**实际会走的那条**报告层级：没有 Key 走匿名 MCP 路线（`anonymous`），配置了 Key 走 API（`free-quota`）。
 
@@ -531,14 +560,14 @@ Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包
 
 1. 调用里明确写的 `engines` / `platform`——永远最优先，不受下面任何设置影响。
 2. 你的偏好 `sources.priority: [id, …]`：列出的、已就绪且适合任务 profile 和语言的来源按此顺序排最前；`sources.disabled: [id, …]` 的来源完全不用（自动规划和 `engines` 配置列表都不用）。
-3. 你**配置了 Key** 的来源按任务语言 / profile 提前（最多 2 个，其余留给第二轮）：这是“排名跟着用户的需要走”——配了的可以排在前面，付费的也一样。
+3. 你**配置了 Key** 的来源按任务语言 / profile 提前（最多 2 个，其余留给第二轮）：这是“排名跟着用户的需要走”——配了的可以排在前面，付费的也一样；其中“常用”的 `deepseek` 在中文和英文任务里都排最前（见上节）。
 4. 什么都没配置时用匿名 / 免费默认：**英文先 Exa 的无 Key 路线**（需要 `mcporter` 且其中配置了 Exa MCP），再 `ddg`；**中文** `ddg` + `bing`（Exa 擅长英文，退到第二轮）；`academic` / `experience` / `docs_code` 的垂直来源不变。
 
 `evidence.sourcePolicy: anonymous-only` 让自动规划**绝不**使用需要 Key、账号或登录的来源（即使配置了；`priority` 也不能把它们带回来；Exa 一旦有 API Key 走的就是付费 / 额度路线，也会被排除）。默认 `default`。
 
 **请求额度（可选）**：`sources.budget.<id>: { total?, daily? }`，**默认不设任何上限**——例如博查账号有 1000 次请求，可写 `sources: { budget: { bocha: { total: 1000, daily: 50 } } }`（这只是示例，不是插件默认值）。计数在用量账本里（持久化，重启后仍有效；发送前在立即事务里预留一次请求，两个搜索或两个进程不会同时花掉最后一次；适配器自己的计数会结算这次预留，所以一次请求只算一次；失败的请求归还预留，空结果算一次）。用完后该来源被**跳过并回退到其他来源**，记一条 “request budget used up” 的说明，**不是错误**；`web_call sources.status` 显示每个设了额度的来源的已用 / 剩余与策略一行。`daily` 的日界线取 `evidence.budget.timezone`。
 
-**English**　The plugin relies mainly on sources with a free or anonymous allowance; paid sources are reserved interfaces and never become the default for any reason other than the user configuring their key. Cost tiers (shown by `search.recommend`, `sources.status` and the catalog's `costTier`): `anonymous` (no key, account or money), `free-quota` (needs a key / account / login, free to use; the allowance and its official page are cited in the catalog `cost` note) and `paid` (billed per use; a free allowance could not be confirmed). Exa reports the tier of the route that would run: keyless MCP is `anonymous`, an API key is `free-quota`. Precedence of the automatic plan: (1) `engines` / `platform` in the call, always; (2) the user's `sources.priority` (ready sources that fit the profile and language go first, in order) and `sources.disabled` (never used); (3) sources the user configured a key for are promoted for their language and profile (at most two, one per family), paid ones included: ranking follows the user's needs; (4) otherwise the anonymous / free defaults: English leads with Exa over its keyless MCP route (needs `mcporter` with an Exa MCP server), then `ddg`; Chinese uses `ddg` and `bing`. `evidence.sourcePolicy: anonymous-only` never plans a source that needs a key, account or login, even a configured one. `sources.budget.<id>: { total?, daily? }` is optional and unset by default (the Bocha example `total: 1000, daily: 50` is documentation, not a default): counted in the usage ledger, reserved atomically before the request, persistent across restarts; a used-up source is skipped with a note and the plan falls back, never an error; `sources.status` shows used and remaining.
+**English**　The plugin relies mainly on sources with a free or anonymous allowance; paid sources are reserved interfaces and never become the default for any reason other than the user configuring their key. Cost tiers (shown by `search.recommend`, `sources.status` and the catalog's `costTier`): `anonymous` (no key, account or money), `free-quota` (needs a key / account / login, free to use; the allowance and its official page are cited in the catalog `cost` note) and `paid` (billed per use; a free allowance could not be confirmed). Exa reports the tier of the route that would run: keyless MCP is `anonymous`, an API key is `free-quota`. Precedence of the automatic plan: (1) `engines` / `platform` in the call, always; (2) the user's `sources.priority` (ready sources that fit the profile and language go first, in order) and `sources.disabled` (never used); (3) sources the user configured a key for are promoted for their language and profile (at most two, one per family), paid ones included: ranking follows the user's needs, and the common (常用) `deepseek` goes first of them in both languages; (4) otherwise the anonymous / free defaults: English leads with Exa over its keyless MCP route (needs `mcporter` with an Exa MCP server), then `ddg`; Chinese uses `ddg` and `bing`. `evidence.sourcePolicy: anonymous-only` never plans a source that needs a key, account or login, even a configured one. `sources.budget.<id>: { total?, daily? }` is optional and unset by default (the Bocha example `total: 1000, daily: 50` is documentation, not a default): counted in the usage ledger, reserved atomically before the request, persistent across restarts; a used-up source is skipped with a note and the plan falls back, never an error; `sources.status` shows used and remaining.
 
 ### 匿名来源与来源目录 / Anonymous sources and the source catalog
 
