@@ -133,6 +133,22 @@ export class ActionNotFoundError extends Error {
   }
 }
 
+/** Raised when something the call needs is not set up here (a broken overlay file, say); mapped to CAPABILITY_UNAVAILABLE. */
+export class ActionUnavailableError extends Error {
+  constructor(message: string, readonly hint?: string) {
+    super(message)
+    this.name = 'ActionUnavailableError'
+  }
+}
+
+/** Raised when a write is refused because the stored state moved on since the caller read it (revision mismatch); mapped to ACTION_FAILED with the hint to read again. */
+export class ActionConflictError extends Error {
+  constructor(message: string, readonly hint?: string) {
+    super(message)
+    this.name = 'ActionConflictError'
+  }
+}
+
 export const ERROR_CODES = [
   'INVALID_ARGS', 'UNKNOWN_ACTION', 'CAPABILITY_UNAVAILABLE', 'POLICY_DENIED',
   'DEADLINE', 'CANCELLED', 'NOT_FOUND', 'ACTION_FAILED',

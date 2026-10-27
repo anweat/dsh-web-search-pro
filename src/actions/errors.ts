@@ -5,7 +5,7 @@
  * @module web-search-pro/actions/errors
  */
 
-import { ActionArgError, ActionNotFoundError, type ActionErrorBody, type ErrorCode } from './types.ts'
+import { ActionArgError, ActionConflictError, ActionNotFoundError, ActionUnavailableError, type ActionErrorBody, type ErrorCode } from './types.ts'
 import { BrowserUnavailableError } from '../browser-access.ts'
 import { NoBackendError } from '../backend-registry.ts'
 import { SourceUnavailableError } from '../providers/unavailable.ts'
@@ -55,6 +55,8 @@ function setupTextFor(source: string): string | undefined {
 export function mapError(error: unknown, opts: { signal?: AbortSignal } = {}): ActionErrorBody {
   if (error instanceof ActionArgError) return { code: 'INVALID_ARGS', message: error.message, ...error.hint ? { hint: error.hint } : {} }
   if (error instanceof ActionNotFoundError) return { code: 'NOT_FOUND', message: error.message, hint: error.hint ?? hintFor('NOT_FOUND')! }
+  if (error instanceof ActionUnavailableError) return { code: 'CAPABILITY_UNAVAILABLE', message: error.message, hint: error.hint ?? hintFor('CAPABILITY_UNAVAILABLE')! }
+  if (error instanceof ActionConflictError) return { code: 'ACTION_FAILED', message: error.message, hint: error.hint ?? 'The stored state changed since you read it; read it again and decide again.' }
   const message = messageOf(error)
   const name = error instanceof Error ? error.name : ''
   const result = (code: ErrorCode, hint = hintFor(code)): ActionErrorBody => ({ code, message, ...hint ? { hint } : {} })
