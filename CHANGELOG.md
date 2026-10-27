@@ -2,13 +2,43 @@
 
 ## 0.2.3（2026-10-28）
 
-接入 **DeepSeek Search / Fetch API**（[文档](https://api-docs.deepseek.com/guides/search/)，2026-10-17 上线）并标为“**常用**”。兼容范围与 0.2.2 相同（DSH `>=0.2.1-rc.2 <0.2.2-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更，Config schema 只增不改（`deepseekFetch`、`keyedSources.deepseek`；`playwright.snapshotDir` 现在声明为 volatile，见下文面板保存的修复）。
+接入 **DeepSeek Search / Fetch API**（[文档](https://api-docs.deepseek.com/guides/search/)，2026-10-17 上线）并标为“**常用**”。兼容范围见下面“同时支持 DSH 0.2.0-rc.2 与 0.2.1-rc.2 ~ rc.4”（DSH `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更，Config schema 只增不改（`deepseekFetch`、`keyedSources.deepseek`；`playwright.snapshotDir` 现在声明为 volatile，见下文面板保存的修复）。
 
 ### 请先看：默认行为会变
 
 - **已经有 `DEEPSEEK_API_KEY`（环境变量、DSH 凭据或设置里的密钥字段）的用户，升级后默认的 `search.run` 和证据模式自动规划会先用 DeepSeek 搜索，而它按请求计费**：Search 与 Fetch 各为每 1000 次成功请求 $0.75（空结果、失败、超时不计费，`count` 不影响价格）。文档写明经 DeepSeek Harness / Claude Code / Codex 的服务端工具调用在 2026-11-01 00:00（北京时间）前免费，但没写插件直接调用算不算，**所以本插件按会计费处理**。
 - 不想用：在 `sources.disabled` 里加 `deepseek`；只想在需要时用：自己写一份 `engines`（自定义过的 `engines` 列表保持你写的顺序，不会被自动加入）；想限量：`sources.budget.deepseek: { total, daily }`；`evidence.sourcePolicy: anonymous-only` 也不会自动使用它。没有 Key 时行为与 0.2.2 完全一样。
 - **登录类平台的默认后端顺序变了**：小红书、知乎、Reddit、X 现在先试独立 `opencli`（用你日常 Chrome 的登录态），再试独立 CLI（`xhs`、`zhihu`、`rdt`、`twitter`），最后是 dsh-browser 的后端——知乎、Reddit、Twitter 原来是独立 CLI 在前（小红书本来就是 opencli 在前）。已经登录了独立 CLI 并想继续优先用它的，在设置 `platformBackends` 里写出顺序（显式配置原样优先，不受影响）。没装独立 opencli 的用户行为不变：它被跳过并写明原因，链继续往下走。见下文“登录类平台改走 OpenCLI”。
+
+### 同时支持 DSH 0.2.0-rc.2 与 0.2.1-rc.2 ~ rc.4（2026-10-28）
+
+0.2.2 把 peer 移到了 0.2.1 线，留在 0.2.0-rc.2 宿主上的用户（0.2.1 的 peer 是 `<0.2.1-0`）就没有可装的新版本；DSH 又出了 0.2.1-rc.4。0.2.3 两条线都接。**运行时代码没有为此改动**——评估了插件用到的每个宿主接口，0.2.0-rc.2 上都在、语义相同，真实宿主验证也都通过：
+
+- peer：每个受管 `@deepseek-ai/dsh-*` 改为 `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0`，cordis 改为 `~4.0.4`（0.2.0-rc.2 宿主依赖 `~4.0.4`，0.2.1-rc.x 依赖 `~4.0.5`，干净安装都解析到 4.0.5）。
+- 对照结果（`git diff dsh-v0.2.0-rc.2 dsh-v0.2.1-rc.3`）：设置面板的原子 `mutate` 与 `.volatile()` 校验（`dsh-settings` / `dsh-client-ui-settings`）两个版本相同，只有 rc.3 去掉了远程浏览器的“内存模式”，插件不读它；私有 RPC 通道（`connection.rpc.handle`、`webServer`）的注册接口相同（rc.3 只多了 Peer 的概念，处理函数的签名不变）；凭据服务（`credentialRef`、`credentials.resolve`、面板的 `remote.credentials`）相同，只是 rc.2 在“只读来源遮蔽引用”时拒绝写入、面板会原样显示这条拒绝；`tools/pre-execute` 的 `allow | deny | ask` 与“没有审批通道的 ask 变成拒绝”（`serviceAsk`）两个版本一致；`dsh-client-ui-primitives` 的 `Button / Modal / Switch / Tag / Tooltip`、`plugins.bundle.config` 槽位、`configForms.whileServed` 都在 rc.2 里。没有需要“缺了就降级”的分支，原有的降级（没有 `connection` / `webServer` 时不注册 RPC、没有 skill 注册表时用内嵌指南）继续保留。
+- 真实宿主（隔离 `DSH_HOME`，从 npm 装进 scratchpad 的 `@deepseek-ai/dsh` 0.2.0-rc.2 / 0.2.1-rc.3 / 0.2.1-rc.4，用 `pnpm pack` 出的 tgz 以 `file:` 安装）：三个宿主上 `dsh plugin add` 退出码 0、无警告；headless 下 `web_index` / `web_call` 都在，`sources.status`、`config.inspect|set_order|reset` 可用，`config.upsert_cli` 被拒绝而不是执行；Web profile 下设置卡片渲染，保存一项后 `cordis.patch.yml` 里恰好多一个键，恢复默认后移除，agent 覆盖层的“采纳到配置”（原子 `mutate`）和“撤销”（私有 RPC）、自定义 CLI 的试运行（RPC `trial`）都工作，保存之后插件**不重启**就读到新配置（`ctx.fiber.config` 热更新）。反向对照：未改 peer 的 0.2.3-dev.1 装进 0.2.0-rc.2、旧的 0.2.1 装进 rc.4，都被安装闸门以 `incompatible` 拒绝。
+- `test/compat/check-peer-ranges.js`：受支持基线 `0.2.0-rc.2`、`0.2.1-rc.2` ~ `rc.4`；`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.1-alpha.5`、`0.2.1-rc.1`、`0.2.2-alpha.1` 在两种解析模式下都拒绝；cordis 4.0.4 / 4.0.5 通过、4.1.0 拒绝；`--selftest` 25 条已知行为（比之前多的 9 条是两段范围的断言），范围判定与 `semver` 7 逐版本核对一致。
+- 可选 Browser peer `^0.2.0`：0.2.0 线宿主上 Browser `0.2.0` / `0.2.1`（及 0.2.2）都能装；0.2.1 线宿主上，装 Browser 0.2.0 / 0.2.1 会被安装闸门拒绝（`nothing was installed`，连同这次一起装的本插件也没装上），要用 0.2.2 起。
+
+### 修复：新用户没有浏览器时的提示（2026-10-28）
+
+`@anweat/dsh-browser` 装上不等于能开浏览器：新用户机器上没有 Playwright 的 Chromium。dsh-browser 0.2.2 会自己判断能否启动、有没有系统 Chrome / Edge 可用（`status().browser`）；本插件把这一点说出来，而不是一律显示“ready”：
+
+- `sources.status` 的 `browser` 多一个 `launch: { ready, source?, path?, advice? }`；没有可启动的浏览器时那一行写成 `❌ browser:dsh-browser [loaded, no browser to launch] — <dsh-browser 的建议>`，用系统浏览器时写 `uses the system browser <路径>`。dsh-browser 没有报这个字段（旧版本）或查询失败时什么都不说。
+- `read.fetch mode=auto`：浏览器渲染失败的原因原来只记成 160 个字符的 `detail`、正文里完全看不到；现在浏览器那一条保留 500 个字符，页面文字末尾多一行 `Browser render did not run: <原因>`，所有后端都失败时错误里带上 `(browser render failed: <原因>)`。
+
+### 分发：干净安装与同装（2026-10-28）
+
+用户原话：npm 有可能遇上 opencli 或 playwright 的分发问题，可以顺便修。
+
+- **本插件自己**：没有 `playwright` / `patchright` / `@jackwener/opencli` 依赖，也没有安装脚本；运行时只依赖 `cross-spawn`、`js-yaml`、`node-html-parser`。pnpm 11 下 `dsh plugin add <tgz>` 在 0.2.0-rc.2 / 0.2.1-rc.3 / 0.2.1-rc.4 三个宿主上退出码 0、无警告，共 20 个包、约 10 MB、1–2 秒（pnpm 存储已有缓存；没有测冷缓存）。
+- **和旧 Browser 同装会被连带失败**（复现）：`@anweat/dsh-browser` 0.2.1 及更早的 dev 版把 `@jackwener/opencli`（有 postinstall）列为依赖，pnpm 11 默认拦下它的构建脚本，`dsh plugin add` 以 `ERR_PNPM_IGNORED_BUILDS` 退出码 1 失败。包其实装上了，但宿主只把“新增依赖”加入 profile 的 `dsh.profile.bundles`，所以失败的那次里的**两个插件都没有被启用**；此后在这个 profile 里再 `add` 任何包（本插件单独装、甚至无关的 `is-odd`）都因为同一个被忽略的构建而失败，pnpm 还会往 `pnpm-workspace.yaml` 里写一条 `allowBuilds: '@jackwener/opencli': set this to true or false`。本插件不能在自己这边修这个问题；修在 Browser 0.2.2（OpenCLI 改为可选 peer，按 PATH、全局 npm 目录等找；系统 Chrome / Edge 顶替没下载过的 Playwright Chromium）。用 Browser 0.2.2 的候选包验证：三个宿主上 Browser + 本插件一起装、先本插件后 Browser、再装无关包，退出码都是 0，bundles 里两个插件都在。
+- **playwright / patchright**：两个包都没有 install / postinstall 脚本，不会在安装时下载浏览器，所以不存在“脚本被忽略后怎么办”；缺的是浏览器本身，见上一节（本插件说清楚，dsh-browser 自动用系统 Chrome / Edge）。同装 74 MB（旧 Browser，含 OpenCLI）→ 50 MB（Browser 0.2.2，不含 OpenCLI）。
+- **README**：新增“新用户第一次安装 / 第一次使用”两段，写明 Browser 0.2.2 起才能同装、OpenCLI 与浏览器怎么装、没有浏览器时会看到什么。
+
+### 验证（宿主两条线与分发，2026-10-28）
+
+见 `docs/validation/2026-10-28-host-lines-and-install.md`。
 
 ### 设置里的搜索顺序、自定义 CLI 与置信度（2026-10-27）
 
