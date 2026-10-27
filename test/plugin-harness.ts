@@ -22,6 +22,8 @@ export interface PluginHarness {
   tools: Map<string, any>
   listeners: { event: string; handler: any }[]
   rpc: Map<string, any>
+  /** Optional services the fake ctx hands out by name (e.g. `browser`); tests assign them. */
+  services: Record<string, unknown>
   run: (action: string, args?: Record<string, unknown>, exec?: unknown) => Promise<any>
   envelope: (action: string, args?: Record<string, unknown>, exec?: unknown) => Promise<any>
   overlayFile: string
@@ -36,6 +38,7 @@ export function bootPlugin(extra: Record<string, unknown> = {}, before?: (dir: s
   const listeners: { event: string; handler: any }[] = []
   const rpc = new Map<string, any>()
   const disposers: (() => void)[] = []
+  const services: Record<string, unknown> = {}
   const config: Record<string, any> = {
     engines: ['ddg'], parallelEngines: false, searchMaxResults: 8, timeoutMs: 5_000, ttlSeconds: 60,
     memoryCacheEntries: 16, rrfConstant: 60, freshnessBoost: 0, authorityBoost: 0, freshnessDays: 30,
@@ -48,7 +51,7 @@ export function bootPlugin(extra: Record<string, unknown> = {}, before?: (dir: s
   const connection = { rpc: { handle: (channel: string, handler: any) => { rpc.set(channel, handler); return async () => { rpc.delete(channel) } } } }
   const ctx: any = {
     fiber: { config },
-    get: (name: string) => name === 'connection' ? connection : undefined,
+    get: (name: string) => name === 'connection' ? connection : services[name],
     effect: (fn: () => () => void) => { disposers.push(fn()) },
     logger: () => ({ info() {}, warn() {}, error() {} }),
     tools: { register: (d: any) => tools.set(d.name, d) },
@@ -61,7 +64,7 @@ export function bootPlugin(extra: Record<string, unknown> = {}, before?: (dir: s
   if (typeof config.dbPath !== 'string') throw new Error('bootPlugin: dbPath must stay a temp path; a missing dbPath would open the real home')
   plugin.apply(ctx, config as never)
   return {
-    dir, config, tools, listeners, rpc,
+    dir, config, tools, listeners, rpc, services,
     run: (action, args = {}, exec = { signal: undefined }) => callAction(tools, action, args, exec),
     envelope: (action, args = {}, exec = { signal: undefined }) => callEnvelope(tools, action, args, exec),
     overlayFile: path.join(dir, 'overlay.json'),

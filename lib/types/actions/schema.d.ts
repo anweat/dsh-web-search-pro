@@ -3,7 +3,7 @@
  * output schemas (used by tests to hold results to their declared shape).
  * @module web-search-pro/actions/schema
  */
-import type { OutputSchema, ParamSchema } from './types.ts';
+import type { ActionDef, OutputSchema, ParamSchema } from './types.ts';
 export interface ValidationResult {
     ok: boolean;
     value: Record<string, unknown>;
@@ -11,6 +11,12 @@ export interface ValidationResult {
 }
 /** Validate call arguments against an action's parameter schema. */
 export declare function validateArgs(params: ParamSchema, args: unknown): ValidationResult;
+/**
+ * The argument check `runAction` applies before `execute`: the parameter schema, then the action's own `precheck`. The approval
+ * hook asks the same function, so what it lets through unasked is exactly what `runAction` refuses before running anything.
+ * Never throws: a crashing `precheck` counts as passed, because `execute` validates for itself and nothing here may block a call.
+ */
+export declare function preflightArgs(action: Pick<ActionDef, 'params' | 'precheck'>, args: unknown): ValidationResult;
 /** One-line parameter summary: `query: string, count?: number`. */
 export declare function compactParams(params: ParamSchema): string;
 /** Compact schema block attached to INVALID_ARGS replies. */

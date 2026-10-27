@@ -35,7 +35,7 @@ import { EvidenceService } from './pipeline/service.ts'
 import { buildPromptText } from './prompt.ts'
 import { registerSkillWhenAvailable } from './skill.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
-import { automationModeOf, resolveWebCall, webPolicyDecision } from './actions/approval.ts'
+import { automationModeOf, resolveWebCall, webCallDecision } from './actions/approval.ts'
 import { registerRpc } from './rpc.ts'
 import { OverlayStore, overlayFileFor } from './overlay.ts'
 import { pendingRestart, restartValues } from './restart.ts'
@@ -128,7 +128,7 @@ export function apply(ctx: Context, config: Config): void {
     if (call?.kind !== 'action') return downstream
     const action = findAction(call.action)
     if (!action || action.approval === 'none') return downstream
-    return webPolicyDecision(call.action, call.args, await automationModeOf(usableBrowser(getBrowser())))
+    return webCallDecision(call.action, call.args, await automationModeOf(usableBrowser(getBrowser())))
   })
 
   // 5. Optional ctx.web provider registration (opt-in: `registerProvider`). The Host picks a provider only when the `web`

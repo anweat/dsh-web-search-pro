@@ -38,6 +38,12 @@ export declare function effectiveValueOf(config: ResolvedConfig, key: string): u
 export type KnownSource = (id: string) => boolean;
 /** Problems the overlay values add to what the baseline already has (the user's own mistakes are not the overlay's to answer for). */
 export declare function overlayErrors(base: ResolvedConfig, values: OverlayValues, known: KnownSource): string[];
+/**
+ * Every problem with the `id` / `spec` of a `config.upsert_cli` call, one message each ([] when the call is valid). The single
+ * source of these rules: {@link OverlayStore.apply} refuses a change that has any, and the action's `precheck` asks it before the
+ * user is, so an unusable spec never reaches an approval prompt. It reads no state, so it never depends on the overlay file.
+ */
+export declare function cliSpecProblems(id: unknown, spec: unknown): string[];
 /** Reason rule shared by every write: a real sentence, not a placeholder. */
 export declare function checkReason(reason: unknown): string;
 export type OverlayChange = {

@@ -113,6 +113,12 @@ export interface ActionDef {
     unavailable?(env: {
         browserReady: boolean;
     }): string | undefined;
+    /**
+     * Checks beyond the parameter schema that need no state and run no side effect, one message per problem ([] when fine).
+     * Run on the schema-validated arguments by `runAction` before `execute`, and by the approval hook before the user is asked,
+     * so a call that would be refused as INVALID_ARGS never becomes an approval prompt. Keep it a pure function of `args`.
+     */
+    precheck?(args: Record<string, any>): string[];
     execute(args: Record<string, any>, ctx: ActionContext): Promise<unknown>;
     /** The result as the text the model reads. */
     render(result: any, args: Record<string, any>): string;

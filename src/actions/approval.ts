@@ -9,6 +9,7 @@
  * @module web-search-pro/actions/approval
  */
 
+import { preflightArgs } from './schema.ts'
 import { CALL_TOOL, INDEX_TOOL, findAction, findActionByFlatTool } from './registry.ts'
 
 export const AUTOMATION_MODES = ['read-only', 'standard', 'autonomous', 'unrestricted'] as const
@@ -92,6 +93,22 @@ export function webPolicyDecision(actionName: string, args: unknown, mode: Autom
   if (mode === 'read-only') return { kind: 'deny', reason: `Web Search Pro mutations are disabled by automationMode=${mode}` }
   if (mode === 'autonomous' || mode === 'unrestricted') return { kind: 'allow' }
   return { kind: 'ask', reason: `${label}: Modify Web Search Pro local state (cache, history or extraction rules)` }
+}
+
+/**
+ * What the `tools/pre-execute` hook decides for a resolved call: {@link webPolicyDecision}, except that a call `runAction` will
+ * refuse as INVALID_ARGS is let through unasked. Asking the user to approve (or denying) a call that cannot run only withholds the
+ * schema from the model (headless: "requires approval, but no approval channel is available"). Letting it through executes
+ * nothing, since `runAction` repeats the check (`preflightArgs`) before `execute`. This also holds in read-only mode: nothing
+ * runs, so the model gets the INVALID_ARGS reply with the schema rather than a refusal it cannot act on. A valid call is decided
+ * exactly as before. A failure of the check itself is not allowed to block the call: the ordinary decision applies.
+ */
+export function webCallDecision(actionName: string, args: unknown, mode: AutomationMode | undefined): PolicyDecision {
+  const action = findAction(actionName)
+  if (action && action.approval !== 'none') {
+    try { if (!preflightArgs(action, args).ok) return { kind: 'allow' } } catch { /* decide as for a valid call */ }
+  }
+  return webPolicyDecision(actionName, args, mode)
 }
 
 /** The dsh-browser automationMode, when the optional service is present and reports one. */

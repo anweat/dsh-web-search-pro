@@ -33,6 +33,10 @@
 - **设置面板**：被覆盖的行（引擎顺序、优先 / 停用、平台后端链、置信度、自定义 CLI）带“agent 修改”标记，悬停看值、reason、时间；新分组“agent 修改”列出全部覆盖项与最近审计，每项“采纳到配置”（用保存条同款的原子 `mutate` 写进 profile，成功后才经 RPC 删掉这一项覆盖）和“撤销”，另有“全部撤销”（也用来修复被忽略的坏文件）和“刷新”；只在覆盖层里的 CLI 列在自定义 CLI 列表下面。RPC 通道 `/dsh-web-search-pro` 新增 `overlay`、`overlay.revoke`，`status` 带上覆盖层摘要与待重启项。
 - **测试**：新增 54 项（935 → 989，另有 8 项需真实命令的跳过）（分组顺序、覆盖层文件读写 / 损坏 / 冲突 / 审计上限 / 合并、各 `config.*` 的参数与效果、审批与 headless、重启项检测与扫描、面板标记与采纳 / 撤销的 patch 与 RPC 调用）。测试进程使用一次性的 `DSH_HOME`，不会碰真实目录。
 
+### 审批前先校验参数（2026-10-27）
+
+要审批的动作（`config.upsert_cli`、`cache.clear`、`history.delete`、`rules.*`、`sources.install`）现在先做和 `runAction` 同一套的参数校验（参数 schema，外加动作可选的 `precheck`；`config.upsert_cli` 的 `precheck` 就是写覆盖层时用的那套完整 `id` / `spec` 校验，一条一条列出问题），不合法就不问用户：钩子直接放行，`runAction` 在 `execute` 之前返回 `INVALID_ARGS` 和 schema，不执行、不写覆盖层、不记审计。之前真实模型会话里 `config.upsert_cli` 连 `id` 和 `spec` 都没给就进了审批，headless 下被拒（“requires approval, but no approval channel is available”），模型拿不到 schema。参数合法时审批判定不变；`automationMode=read-only` 下，合法的写入照样被拒，不合法的返回 `INVALID_ARGS`（没有东西会执行，给模型 schema 比一句拒绝更有用）。校验自身出错不会卡住调用。新增 8 项测试（含 flat 工具面与无审批渠道的宿主）。
+
 ### DeepSeek 搜索（引擎 `deepseek`，“常用”）
 
 - 新的原生搜索引擎，描述符 `common: true`（成本层级 `paid`，语言 `zh` + `en`）。Key 与插件其他密钥一致：设置里的密钥字段 → DSH 凭据引用（默认 `DEEPSEEK_API_KEY`，`keyedSources.deepseek.apiKeyEnv` 可改）→ 进程环境变量；`keyedSources.deepseek.baseUrl` 可改接口，默认 `https://api.deepseek.com/v1/tools`。值不进日志、状态输出、错误信息和历史。

@@ -213,8 +213,8 @@ test('approval: config.upsert_cli always asks, with the command and argument tem
     assert.match(upsert.reason, /^config\.upsert_cli id=mytool: Let Web Search Pro run a local program as a search source — command mytool or mytool2; search: search \{query\} --limit \{count\} --json; probe: --version ; search --help; reads environment variables MYTOOL_TOKEN/)
     for (const action of ['config.set_order', 'config.set_confidence', 'config.remove_cli', 'config.reset', 'config.inspect', 'config.export']) assert.equal((await decide(h, action, { id: 'x', scope: 'all', reason: 'whatever' })).kind, 'allow', action)
     // The same through a flat tool name, and a decision made by an earlier hook stands.
-    assert.equal((await hookOf(h).handler({ name: 'web_config_upsert_cli', arguments: { id: 'mytool', spec } }, allow)).kind, 'ask')
-    assert.equal((await decide(h, 'config.upsert_cli', { id: 'mytool', spec }, async () => ({ kind: 'deny', reason: 'no' }))).kind, 'deny')
+    assert.equal((await hookOf(h).handler({ name: 'web_config_upsert_cli', arguments: { id: 'mytool', spec, reason: 'asked' } }, allow)).kind, 'ask')
+    assert.equal((await decide(h, 'config.upsert_cli', { id: 'mytool', spec, reason: 'asked' }, async () => ({ kind: 'deny', reason: 'no' }))).kind, 'deny')
     // The prompt carries a bounded text even for a hostile spec.
     const long = describeCliSpec({ bins: ['x'.repeat(10)], search: { argv: ['y'.repeat(500)] }, probe: { versionArgs: ['z'.repeat(500)], helpArgs: [] }, env: { passthrough: ['A'.repeat(300)] } })
     assert.ok(long.length < 600, 'bounded: ' + long.length)

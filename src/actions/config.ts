@@ -13,7 +13,7 @@ import { cliCommandLine, MAX_REASON, MIN_REASON, RESET_SCOPES, type AuditEntry, 
 import { pendingRestartLine } from '../restart.ts'
 import { ActionUnavailableError, type ActionContext, type ActionDef, type OutputNode, type ParamSchema } from './types.ts'
 import { PENDING_RESTART_SCHEMA } from './sources.ts'
-import type { OverlayChange } from '../overlay.ts'
+import { cliSpecProblems, type OverlayChange } from '../overlay.ts'
 import type { ResolvedConfig } from '../config.ts'
 
 const REASON = { type: 'string', required: true, description: `Why the setting changes (${MIN_REASON}-${MAX_REASON} characters). Recorded in the audit trail the user can read.` } as const
@@ -225,6 +225,7 @@ export const CONFIG_ACTIONS: ActionDef[] = [
     timeoutMs: () => 10_000,
     errors: ['POLICY_DENIED'],
     examples: [{ args: { id: 'mytool', spec: { bins: ['mytool'], packageNote: 'mytool (npm i -g mytool)', platforms: [], engine: true, probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['--json'] }, allowedSubcommands: ['search'], search: { argv: ['search', '{query}', '--json'], output: { format: 'json', itemsPath: 'results', fields: { url: 'url', title: 'title', snippet: 'text' } } }, env: {}, needsLogin: false, timeoutMs: 20000, maxOutputBytes: 65536 }, reason: 'the user asked for mytool as a source' } }],
+    precheck: args => cliSpecProblems(args.id, args.spec),
     execute: write('config.upsert_cli', args => ({ kind: 'upsertCli', id: args.id, spec: args.spec })),
     render: renderWrite('config.upsert_cli'),
   },

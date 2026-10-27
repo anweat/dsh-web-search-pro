@@ -371,7 +371,8 @@ test('approval is decided per action by this plugin: web_call -> action -> polic
     // No browser: automationMode unknown, so the ordinary (standard) rule applies.
     assert.equal((await call('cache.clear')).kind, 'ask')
     assert.match((await call('sources.install', { backend: 'twitter', installer: 'uv' })).reason, /^sources\.install backend=twitter installer=uv: Install an external Web Search Pro backend dependency/)
-    for (const action of ['history.delete', 'rules.upsert', 'rules.remove', 'rules.import']) assert.equal((await call(action, { id: 'q', hostname: 'a.test', rulesJson: '[]' })).kind, 'ask', action)
+    const valid: Record<string, unknown> = { 'history.delete': { id: 'q' }, 'rules.upsert': { hostname: 'a.test', contentSelectors: 'article' }, 'rules.remove': { hostname: 'a.test' }, 'rules.import': { rulesJson: '[]' } }
+    for (const action of Object.keys(valid)) assert.equal((await call(action, valid[action])).kind, 'ask', action)
     for (const action of ['search.run', 'read.fetch', 'read.contents', 'read.snapshot', 'history.list', 'history.expand', 'history.export', 'sources.status', 'sources.deps', 'rules.list', 'rules.export', 'cache.stats', 'search.recommend']) assert.equal((await call(action)).kind, 'allow', action)
     // Not ours, the index, an unknown action, and a call another hook already refused pass through unchanged.
     assert.equal((await decide('web_index', {})).kind, 'allow')
@@ -389,7 +390,7 @@ test('approval is decided per action by this plugin: web_call -> action -> polic
     assert.equal((await call('search.run', { query: 'q' })).kind, 'allow')
     withMode('standard')
     assert.equal((await call('cache.clear')).kind, 'ask')
-    assert.equal((await call('rules.upsert', { hostname: 'a.test' })).kind, 'ask')
+    assert.equal((await call('rules.upsert', { hostname: 'a.test', contentSelectors: 'article' })).kind, 'ask')
     withMode('autonomous')
     assert.equal((await call('cache.clear')).kind, 'allow')
     assert.equal((await call('rules.import', { rulesJson: '[]' })).kind, 'allow')

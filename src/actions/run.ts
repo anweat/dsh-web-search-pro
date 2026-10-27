@@ -10,7 +10,7 @@
 
 import type { ActionContext, ActionEnvelope, ActionErrorBody, ActionServices } from './types.ts'
 import { CALL_TOOL, INDEX_TOOL, findAction, similarActions } from './registry.ts'
-import { compactSchema, validateArgs } from './schema.ts'
+import { compactSchema, preflightArgs } from './schema.ts'
 import { DeadlineError, abortedByDeadline, hintFor, mapError } from './errors.ts'
 import { isLegacyToolName, mapLegacyCall } from './legacy.ts'
 
@@ -111,7 +111,7 @@ export function unknownActionFailure(name: unknown, args?: unknown): ActionEnvel
 export async function runAction(name: unknown, rawArgs: unknown, services: ActionServices & { signal: AbortSignal; sessionId?: string }): Promise<ActionEnvelope> {
   const action = findAction(name)
   if (!action) return unknownActionFailure(name, rawArgs)
-  const validation = validateArgs(action.params, rawArgs)
+  const validation = preflightArgs(action, rawArgs)
   if (!validation.ok) {
     return failure(action.name, {
       code: 'INVALID_ARGS',
