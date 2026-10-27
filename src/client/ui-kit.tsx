@@ -54,6 +54,10 @@ export interface RowProps {
   meta?: string
   /** A short warning badge beside the label, for a setting that widens what an agent may do. */
   risk?: string
+  /** The setting is read when the plugin starts: a badge saying so, with a `?` explaining why; `touched` picks it out while an edit of it is waiting to be saved. */
+  restart?: { badge: string; why: string; touched?: boolean }
+  /** Extra controls beside the label (the "changed by the agent" mark with its adopt / revoke buttons). */
+  mark?: ReactNode
   disabled?: boolean
   labels: RowLabels
   onReset?: () => void
@@ -72,6 +76,8 @@ export function Row(props: RowProps) {
         {props.id ? <label htmlFor={props.id}>{props.label}</label> : <span>{props.label}</span>}
         {props.help ? <Help label={labels.help} text={props.help} /> : null}
         {props.risk ? <Badge tone="warning">{props.risk}</Badge> : null}
+        {props.restart ? <span className="wsp-restart" data-wsp-restart={props.field}><Badge tone={props.restart.touched ? 'warning' : 'outline'}>{props.restart.badge}</Badge><Help label={labels.help} text={props.restart.why} /></span> : null}
+        {props.mark}
         {props.overridden ? <Badge tone="info">{labels.overridden}</Badge> : null}
         {props.overridden && props.onReset ? <button type="button" className={css.link} disabled={props.disabled} onClick={props.onReset} data-wsp-reset={props.field}>{labels.reset}</button> : null}
       </div>

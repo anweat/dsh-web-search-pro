@@ -9,6 +9,7 @@
 
 import { fieldDoc, textViewDocs, type DocLang } from './field-docs.ts'
 import { CONFIG_GROUP_IDS, CONFIG_GROUPS } from '../config-groups.ts'
+import { isRestartField } from '../restart.ts'
 import { isPathSpec, type FieldSpec, type Json, type PathSpec } from './form-specs.ts'
 
 interface FieldView { text: string; overridden: boolean }
@@ -22,6 +23,12 @@ const hasActive = (node: Node): boolean => (node.leaf?.overridden ?? false) || [
 const scalar = (value: unknown): string => JSON.stringify(value)
 const quoteKey = (key: string): string => /^[A-Za-z0-9_.-]+$/.test(key) ? key : JSON.stringify(key)
 
+/** The tail of a comment for a setting the plugin reads only when it starts (`playwright` holds one such option: snapshotDir). */
+function restartNote(field: string, lang: DocLang | string): string {
+  if (field === 'playwright') return lang === 'zh' ? ' 【snapshotDir 重启插件后生效】' : ' [snapshotDir applies after a plugin restart]'
+  return isRestartField(field) ? (lang === 'zh' ? ' 【重启插件后生效】' : ' [applies after a plugin restart]') : ''
+}
+
 function valueOf(spec: FieldSpec, view: FieldView): { value: unknown; set: boolean } {
   const write = spec.parse(view.text)
   if (write?.kind === 'set') return { value: write.value, set: true }
@@ -34,7 +41,8 @@ function print(node: Node, key: string, depth: number, lang: DocLang | string, o
   if (node.leaf) {
     const { spec, value, set, overridden } = node.leaf
     const doc = fieldDoc(spec.field, lang)
-    if (doc) out.push(pad + '# ' + doc)
+    // A setting the plugin reads only when it starts says so in its own comment.
+    if (doc) out.push(pad + '# ' + doc + restartNote(spec.field, lang))
     const line = quoteKey(key) + ':' + (set ? ' ' + scalar(value) : '')
     out.push(overridden ? pad + line : pad + '# ' + line)
     return

@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { fill, rowLabels, stateOf, useField, type Card, type LabelKey } from './field-rows.tsx'
 import { hasHelp, JSON_FIELDS, labelKey } from './field-keys.ts'
 import { styles as css } from './styles.ts'
-import { Badge, Btn, Dialog, Item, Row } from './ui-kit.tsx'
+import { Badge, Btn, Dialog, Help, Item, Row } from './ui-kit.tsx'
 
 /** How many entries a JSON object text holds; undefined when it is not an object. */
 export function entryCount(text: string): number | undefined {
@@ -44,6 +44,7 @@ function JsonItem({ card, field, onEdit }: { card: Card; field: string; onEdit: 
     badges={<>
       <Badge tone={st.invalid ? 'danger' : st.overridden ? 'info' : 'outline'}>{st.invalid ? t('invalid') : st.overridden ? t('overridden') : t('promptStateDefault')}</Badge>
       {n ? <Badge tone="neutral">{fill(t('jsonEntries'), { n })}</Badge> : null}
+      {field === 'playwright' ? <span className="wsp-restart" data-wsp-restart="playwright.snapshotDir"><Badge tone="outline">{t('restartBadgeSnapshot')}</Badge><Help label={t('helpLabel')} text={t('restartWhyPlaywright')} /></span> : null}
     </>}
     meta={t(`${key}Hint` as LabelKey)} actions={<Btn disabled={disabled} onClick={onEdit} data="json-edit">{t('edit')}</Btn>} />
 }

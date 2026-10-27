@@ -38,6 +38,12 @@ export const WITH_HELP: ReadonlySet<string> = new Set([
 /** `?` text applies to the generic budget keys too. */
 export const hasHelp = (field: string): boolean => WITH_HELP.has(field) || WITH_HELP.has(field.replace(/^sources\.budget\..+\.(total|daily)$/, 'sources.budget.$1'))
 
+/** Dictionary key of the sentence saying why a start-up-only field needs a plugin restart (restart.ts lists the fields). */
+export function restartWhyKey(field: string): string {
+  const named: Record<string, string> = { toolSurface: 'restartWhyToolSurface', 'playwright.snapshotDir': 'restartWhyPlaywright', providerId: 'restartWhyProviderId', registerProvider: 'restartWhyRegisterProvider', timeoutMs: 'restartWhyTimeoutMs', memoryCacheEntries: 'restartWhyMemoryCacheEntries', dbPath: 'restartWhyDbPath', verbose: 'restartWhyVerbose' }
+  return named[field] ?? 'restartBadge'
+}
+
 export type SourceTier = 'paid' | 'free-quota' | 'anonymous'
 
 /** One source the "Sources" list shows and its edit dialog is made of. */

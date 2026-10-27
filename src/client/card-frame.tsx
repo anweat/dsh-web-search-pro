@@ -42,6 +42,7 @@ export function warningsOf(snapshot: WebSearchCardState, t: Card['t']): string[]
     if (state.warning) out.push(name + ': ' + state.warning)
   }
   for (const rubric of snapshot.rubrics) for (const problem of rubric.problems) out.push(rubric.id + ': ' + problem)
+  for (const entry of snapshot.server.status?.pendingRestart ?? []) out.push(entry.field + ': ' + fill(t('pendingRestartLine'), { running: entry.running || t('pendingEmpty'), configured: entry.configured || t('pendingEmpty') }))
   if (snapshot.unknownRubrics.length) out.push(t('rubricUnknown') + ' ' + snapshot.unknownRubrics.join(', '))
   return out
 }
@@ -57,6 +58,7 @@ export function SummaryBar({ card }: { card: Card }) {
     common: SOURCE_DEFS.filter(def => def.common).map(def => ({ id: def.id, name: def.name, ready: !!snapshot.credentials[def.credential as keyof typeof snapshot.credentials]?.configured })),
     route: snapshot.fields.registerProvider.text === 'true', surface: snapshot.fields.toolSurface.text || 'indexed',
     judge: snapshot.fields['evidence.judge.mode'].text || 'off',
+    pending: snapshot.server.status?.pendingRestart ?? [],
     warnings: warningsOf(snapshot, t),
   }))
   const chain = view.chain.split(' › ')
@@ -69,6 +71,8 @@ export function SummaryBar({ card }: { card: Card }) {
     <Badge tone={view.route ? 'info' : 'neutral'}>{view.route ? t('summaryRouteOn') : t('summaryRouteOff')}</Badge>
     <Badge tone={JUDGE_TONE[view.judge] ?? 'neutral'}>{t('summaryJudge')} {view.judge}</Badge>
     <Badge tone="neutral">{t('summarySurface')} {view.surface}</Badge>
+    {view.pending.length ? <span data-wsp-pending-restart={view.pending.map(entry => entry.field).join(',')} title={view.pending.map(entry => entry.field + ': ' + fill(t('pendingRestartLine'), { running: entry.running || t('pendingEmpty'), configured: entry.configured || t('pendingEmpty') })).join('\n')}>
+      <Badge tone="warning">{fill(t('summaryPendingRestart'), { n: view.pending.length })}: {view.pending.map(entry => entry.field).join(', ')}</Badge></span> : null}
     <button type="button" className={css.link} onClick={() => setOpen(true)} data-wsp-warnings-count={view.warnings.length}>
       {view.warnings.length ? <Badge tone="warning">{fill(t('summaryWarnings'), { n: view.warnings.length })}</Badge> : <span className={css.muted}>{t('summaryNoWarnings')}</span>} · {t('summaryDetails')}
     </button>
@@ -89,6 +93,7 @@ export function SaveBar({ card }: { card: Card }) {
   return <div className={css.savebar} role="region" aria-label={t('save')} data-wsp-savebar data-wsp-floating={floating ? '' : undefined}>
     <div className={css.saveText}>
       <span data-wsp-unsaved={count}>{state.invalid ? t('savebarInvalid') : count ? fill(t('savebarDirty'), { n: count }) : t('savebarClean')}</span>
+      {state.restartTouched.length ? <span className="wsp-bad-soft" role="note" data-wsp-restart-note={state.restartTouched.join(',')}>{fill(t('savebarRestart'), { fields: state.restartTouched.join(', ') })}</span> : null}
       {state.failed ? <span className="wsp-bad" role="status">{t('saveFailed')}</span> : null}
     </div>
     <div className={css.actions}>

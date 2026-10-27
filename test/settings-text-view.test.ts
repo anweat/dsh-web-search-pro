@@ -129,3 +129,15 @@ test('effectiveChain is the one rule behind the router and the card: priority, t
   assert.deepEqual(effectiveChain({ engines: ['ddg', 'deepseek'], commonReady: ['deepseek'] }), ['ddg', 'deepseek'])
   assert.throws(() => effectiveChain({ engines: ['ddg'], disabled: ['ddg'] }), /every configured engine is disabled/)
 })
+
+test('a start-up-only setting says so in its own comment, in both languages; a live one does not', () => {
+  const { controller } = harness()
+  const en = view(controller, 'en')
+  const zh = view(controller, 'zh')
+  assert.match(en, /# Tools the model sees:.*\[applies after a plugin restart\]\ntoolSurface|# [^\n]*\[applies after a plugin restart\]\n# toolSurface:/)
+  assert.match(zh, /【重启插件后生效】\n# toolSurface:/)
+  assert.doesNotMatch(zh, /【重启插件后生效】\n# searchMaxResults:/)
+  assert.doesNotMatch(en, /\[applies after a plugin restart\]\n# engines:/)
+  for (const field of ['dbPath', 'memoryCacheEntries', 'timeoutMs', 'verbose', 'registerProvider', 'providerId']) assert.match(zh, new RegExp('【重启插件后生效】\\n# ' + field + ':'), field)
+  controller.dispose()
+})

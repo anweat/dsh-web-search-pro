@@ -9,6 +9,7 @@ import {
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
 import { RPC_CHANNEL, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts'
+import { RESTART_FIELD_LIST } from '../restart.ts'
 import { cliIssues, evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
@@ -77,6 +78,8 @@ export interface WebSearchCardState {
   /** Ids the judge / coverage provider controls offer: the presets plus the valid custom entries of the draft. */
   providerChoices: string[]
   rubrics: RubricCardState[]
+  /** Settings read only when the plugin starts (restart.ts) that have an edit waiting to be saved: a save would not take effect until a restart. */
+  restartTouched: string[]
   /** Overrides in settings that name no built-in rubric. */
   unknownRubrics: string[]
   server: ServerState
@@ -430,9 +433,35 @@ export class WebSearchSettingsController {
       credentials: Object.fromEntries(CREDENTIAL_IDS.map(id => [id, { text: this.secretDrafts.get(id) ?? '', ...this.credentialStates[id] }])) as Record<CredentialId, CredentialState>,
       providerChoices: providerChoices(getAt(analysis.evidence, ['judge', 'providers'])),
       rubrics: this.projectRubrics(fields, analysis),
+      restartTouched: this.restartTouched(),
       unknownRubrics: unknownRubricIds(analysis.evidence.rubrics),
       server: this.server,
     }
+  }
+
+  /** The start-up-only settings (restart.ts) whose staged edit differs from what is stored. */
+  private restartTouched(): string[] {
+    const touched: string[] = []
+    for (const field of RESTART_FIELD_LIST) {
+      if (field === 'playwright.snapshotDir') { if (this.snapshotDirTouched()) touched.push(field); continue }
+      const draft = this.staged.get(field)
+      if (!draft) continue
+      if (draft.clear ? this.stored(field) : draft.text !== this.spec(field).format(this.sectionValue(field))) touched.push(field)
+    }
+    return touched
+  }
+
+  /** `playwright` is one JSON field; only its `snapshotDir` is a start-up setting (`enabled` is live). */
+  private snapshotDirTouched(): boolean {
+    const draft = this.staged.get('playwright')
+    if (!draft) return false
+    const stored = this.sectionValue('playwright')
+    const before = isRecord(stored) ? stored.snapshotDir : undefined
+    if (draft.clear) return before !== undefined
+    try {
+      const value = JSON.parse(draft.text) as unknown
+      return (isRecord(value) ? value.snapshotDir : undefined) !== before
+    } catch { return false }
   }
 
   /** Staged fields that differ from what is stored (a pending reset counts only when something is stored). */

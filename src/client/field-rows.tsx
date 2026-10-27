@@ -10,7 +10,8 @@
 import type { ReactNode } from 'react'
 import type { SettingsCardProps } from './index.ts'
 import type { CardFieldState, WebSearchCardState } from './form.ts'
-import { hasHelp, labelKey } from './field-keys.ts'
+import { hasHelp, labelKey, restartWhyKey } from './field-keys.ts'
+import { isRestartField } from '../restart.ts'
 import { Chips, Row, Select, TextInput, Toggle, UnitInput, type RowLabels, type SelectOption } from './ui-kit.tsx'
 
 export type Card = SettingsCardProps
@@ -63,10 +64,12 @@ export function useField(card: Card, field: string) {
 function rowFor(props: FieldProps, field: ReturnType<typeof useField>, children: ReactNode, extra: { id?: string; inline?: boolean; wide?: boolean } = {}) {
   const { card } = props
   const { t } = card
+  const touched = card.useWebSearchPro(snapshot => snapshot.restartTouched.includes(props.field))
   const key = labelKey(props.field)
   const st = field.state
   return <Row field={props.field} id={extra.id} label={props.label ?? t(key as LabelKey)} hint={props.hint ?? t(`${key}Hint` as LabelKey)}
     help={hasHelp(props.field) ? t(`${key}Help` as LabelKey) : undefined} risk={props.risk}
+    restart={isRestartField(props.field) ? { badge: t('restartBadge'), why: t(restartWhyKey(props.field) as LabelKey), touched } : undefined}
     overridden={st.overridden} invalid={st.invalid || !!st.message} problem={st.message ?? t('invalid')} warning={st.warning} disabled={field.disabled}
     labels={rowLabels(t)} onReset={field.reset} inline={extra.inline} wide={extra.wide}>{children}</Row>
 }
