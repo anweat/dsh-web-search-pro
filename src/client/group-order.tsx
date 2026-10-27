@@ -73,7 +73,7 @@ function ConfidenceBox({ card, info, adapters }: { card: Card; info: SourceInfo;
 function OrderItem(props: { card: Card; info: SourceInfo; index: number; count: number; adapters: unknown; state: RowState; confidence: number; muted?: boolean; onMove: (delta: -1 | 1) => void; onRemove: () => void; disabled: boolean; withConfidence?: boolean }) {
   const { card, info, index, count, state } = props
   const { t } = card
-  return <div className={props.muted ? 'wsp-order-default' : undefined} data-wsp-order-item={info.id}>
+  return <div className={props.muted ? 'wsp-order-row wsp-order-default' : 'wsp-order-row'} data-wsp-order-item={info.id}>
     <Item data={info.id}
       title={<><span className="wsp-order-no">{index + 1}</span><strong>{info.name}</strong>{info.name !== info.id ? <code>{info.id}</code> : null}</>}
       badges={<>

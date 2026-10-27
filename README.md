@@ -391,19 +391,21 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 ## 设置面板
 
-0.2.3 起设置面板按“状态摘要 + 手风琴分组 + 列表与弹窗 + 固定保存条”重做（风格与 `@anweat/dsh-browser` 0.2.2 的设置页一致）；保存结构、Config schema 与运行时行为不变。顶部是**状态摘要**：实际尝试顺序的默认引擎链、已配置 Key 的来源数、“常用”的 DeepSeek 是否就绪、内置 web 工具是否经本插件、评分模型、工具面，以及校验提示的数量（点开看详情）。下面是九个分组，**默认只展开“常用”**；每个字段是“标签 + 一行说明”，长说明放在 `?` 气泡里，被覆盖的字段带“已覆盖”徽标和就地“恢复默认”，未覆盖的显示当前值（灰色）。底部的保存条一直可见，显示“N 项未保存的修改”，有“放弃修改”和“保存”。
+0.2.3 起设置面板按“状态摘要 + 手风琴分组 + 列表与弹窗 + 固定保存条”重做（风格与 `@anweat/dsh-browser` 0.2.2 的设置页一致）；保存结构、Config schema 与运行时行为不变。顶部是**状态摘要**：实际尝试顺序的默认引擎链、已配置 Key 的来源数、“常用”的 DeepSeek 是否就绪、内置 web 工具是否经本插件、评分模型、工具面，以及校验提示的数量（点开看详情）。下面是十一个分组（常用 · 搜索顺序 · 来源 · 自定义 CLI · 读取与证据 · 评分模型 · 内置 web 工具路由 · 运行时与后端 · 网络与缓存 · 排序加权 · 高级），**默认只展开“常用”**；每个字段是“标签 + 一行说明”，长说明放在 `?` 气泡里，被覆盖的字段带“已覆盖”徽标和就地“恢复默认”，未覆盖的显示当前值（灰色）。底部的保存条一直可见，显示“N 项未保存的修改”，有“放弃修改”和“保存”。
 
 | 分组 | 内容 |
 |---|---|
-| 常用（默认展开） | 默认引擎链（可增删的标签）和它**实际**会怎么排的一行预览（与路由器用同一个函数）、默认结果数、并行融合、工具面（下拉）、`allowProxyFakeIp`（带“网络”标注）、DeepSeek 搜索 / 抓取（“常用”）一行和 `deepseekFetch` 开关（带“计费”标注） |
+| 常用（默认展开） | 它**实际**会怎么排的一行预览（与路由器用同一个函数，带“编辑顺序”链接）、默认结果数、并行融合、工具面（下拉）、`allowProxyFakeIp`（带“网络”标注）、DeepSeek 搜索 / 抓取（“常用”）一行和 `deepseekFetch` 开关（带“计费”标注） |
+| 搜索顺序 | **通用搜索顺序**：`engines` 是一个可排序的列表（每行：位置、名称、就绪状态——Key 或地址是否已设，已保存的自定义 CLI 用插件自己的本地探测——置信度和一个置信度输入框，上移 / 下移 / 移除），下拉框里是还能加入的来源（内置引擎，加上标记为“通用引擎”的自定义 CLI），“恢复默认顺序”删掉 `engines` 这个键；列表下面是**实际生效顺序**预览和一句“为什么和列表不同”（DeepSeek 因为有 Key 排最前、`sources.disabled` 去掉了谁、`sources.priority` 提前了谁、只用免费来源时没加谁、你自己写的顺序不自动加 DeepSeek）；一段说明三者的关系：调用里显式给的 `engines` > `sources.priority` / `sources.disabled` > 默认规则，并链接到“来源”。**平台后端顺序**：每个有后端链的平台一行（没改过的灰色显示内置默认链并标“默认”），弹窗里用同样的列表编辑；可选后端 = 该平台的内置后端加上**声明服务该平台**的自定义 CLI；“恢复默认”删除 `platformBackends.<平台>` 这一项（最后一项删掉时整个字段 `unset`） |
 | 来源 | 来源策略（`evidence.sourcePolicy` 下拉、`sources.priority` / `sources.disabled` 标签）；**来源列表**：DeepSeek（常用）、博查、Tavily、Brave、Linkup、Serper、秘塔、智谱、百度千帆、Exa、Jina、GitHub、SearXNG，每行显示层级（付费 / 有免费额度 / 免 Key）、Key 是否已设和请求上限，点“编辑”在**弹窗**里改 Key 引用名、写入式密钥（遮罩，只显示“已配置”）、接口地址、请求额度（`sources.budget.<id>.total` / `daily`）；匿名来源参考表和 `openalexMailto` 在折叠区 |
 | 读取与证据 | `fetchDefaultChars`、`exaContentsPerUrlChars` / `TotalChars`、`evidence.autoProviders` / `maxRounds` / `maxQueries`（带单位的数字输入）。`minKeep` 与证据包字符预算没有配置项 |
 | 评分模型 | `evidence.judge.mode` 下拉（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer`）、provider 下拉、`hybridBorderline`、`maxJevQuestions`、`allowLlm`；折叠区：覆盖判定（模式、provider、阈值）与用量上限；自定义 provider / 按 provider 上限是 JSON 列表（弹窗里编辑，校验与服务端共用，拒绝在定义里放密钥）；**提示词（rubric）列表**：每行显示名称、生效版本、默认 / 已覆盖，“编辑”打开弹窗，左边是默认文本、右边是你的覆盖，“从默认文本开始覆盖”“恢复默认” |
 | 内置 web 工具路由 | `registerProvider` 开关；打开后才出现 `providerId`、`provider.evidence`、`provider.deadlineMs`；折叠区给出选中本插件所需的 profile patch（随 `providerId` 变化） |
-| 运行时与后端 | CLI / OpenCLI / Agent Reach 开关；Twitter / X 登录值（弹窗：两个引用名与两个写入式密钥）；JSON 对象列表：Playwright、平台后端顺序、自定义 CLI 适配、自定义平台、平台选择器覆盖、浏览器绑定（每项一个弹窗） |
+| 自定义 CLI | 列表（id、命令行、用途——通用引擎 / 服务的平台、置信度、规格合法或问题数）和新增 / “用 echo 做示例” / 编辑 / 复制 / 删除；**编辑弹窗是表单**：命令、参数模板（一格一个 token，`{query}` `{count}` `{terms}` 提示，允许的子命令从模板自动推出并显示）、输出格式、“整段输出”开关、结果数组路径、四个字段路径、超时、用途、置信度；折叠区有高级项（安装说明、帮助命令、帮助里必须出现的内容、输出上限）、**试运行**和**查看 JSON**（直接编辑整份规格，与表单双向同步；服务端的校验函数实时校验，每条消息显示在对应的控件旁；规格有问题时“完成”不可点） |
+| 运行时与后端 | CLI / OpenCLI / Agent Reach 开关；Twitter / X 登录值（弹窗：两个引用名与两个写入式密钥）；JSON 对象列表：Playwright、自定义平台、平台选择器覆盖、浏览器绑定（每项一个弹窗） |
 | 网络与缓存 | `timeoutMs`、`ttlSeconds`、`memoryCacheEntries`、`dbPath`、`verbose` |
 | 排序加权（高级） | `rrfConstant`、`freshnessBoost` / `freshnessDays`、`authorityBoost` / `authorityDomains` |
-| 高级：文本模式 | 当前草稿的设置（不含密钥）打印成**每个键前都带注释**的 YAML：用途、取值或范围、默认值、风险，中英文随界面语言；只读视图，可复制；去掉 `#` 行后剩下的恰好是你覆盖的键 |
+| 高级：文本模式与原始 JSON | 折叠区“原始 JSON”：`platformBackends` 与 `cliAdapters` 的整段 JSON（不再是主要入口）；当前草稿的设置（不含密钥）打印成**每个键前都带注释**的 YAML：用途、取值或范围、默认值、风险，中英文随界面语言；只读视图，可复制；去掉 `#` 行后剩下的恰好是你覆盖的键 |
 
 - **弹窗里的改动**先留在草稿里，点底部“保存”才写入；“放弃修改”丢掉全部草稿。
 - **写入方式**：保存是一次原子的 `mutate`，按字段路径逐项写入（`evidence.maxRounds`、`sources.budget.deepseek.daily`、`playwright.enabled` …），而不是整体写回 `evidence` / `sources` 容器；宿主只接受声明了 `.volatile()` 的字段之下的编辑，整体写容器会被拒绝（0.2.2 的面板在 rc.3 宿主上保存这些字段会失败，见 CHANGELOG）。恢复默认会 `unset` 那一项，宿主不会清掉留下的空容器（`evidence: {}` 之类，无害）；不认识的同级键原样保留。
@@ -460,11 +462,13 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
     web-search-pro:
       platformBackends:
         xiaohongshu: [xhs, opencli, browser-opencli]   # 例：想让 xhs 排在 opencli 前面
-      cliAdapters:                     # 自定义只读适配（同样的校验），注册为平台 custom-cli:mytool
+      cliAdapters:                     # 自定义只读适配（同样的校验），注册为 custom-cli:mytool
         mytool:
           bins: [mytool]
           packageNote: 'mytool (npm i -g mytool)'
-          platforms: [mytool]
+          engine: true                 # 通用搜索引擎：可写进 engines: [ddg, custom-cli:mytool]
+          platforms: []                # 或声明它服务哪些平台（platformBackends.<平台> 里才能放它）
+          confidence: 0.7              # 0–1，默认 0.5
           probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['--json'] }
           allowedSubcommands: [search]
           search:
@@ -476,7 +480,23 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
           timeoutMs: 30000
           maxOutputBytes: 1048576
 
-无效的 `cliAdapters` 条目被忽略，原因出现在 `sources.status` 的 `notes`；设置面板里两项都有 JSON 编辑器，校验与服务端是同一批函数。
+无效的 `cliAdapters` 条目被忽略，原因出现在 `sources.status` 的 `notes`；设置面板里有“自定义 CLI”表单（和它的 JSON 视图），校验与服务端是同一批函数。
+
+**自定义 CLI（0.2.3）**：规格新增三项（只用于用户规格，内置规格写会被拒绝）：
+
+- `engine: true`：作为**通用搜索引擎**，`engines` 里写 `custom-cli:<id>`；它和其他引擎一样按顺序回退，`multi` / `parallelEngines` 时参与融合与去重。`platforms` 现在是它**声明服务的平台**（`platformBackends.<平台>` 里放它之前必须声明；声明了没有后端链的平台会在 `sources.status` 和面板里报问题）；只做通用引擎时可以为空。它同时仍是平台 `custom-cli:<id>`（`search.run platform=custom-cli:<id>`）。
+- `confidence`（0–1，默认 0.5）：见下“置信度”。
+- `search.output.lines: { mode: whole, maxChars? }`（`format: text`）：**整段输出**。不想写字段映射、只输出一段文本的工具：stdout 整体作为**一条**结果，标题是“`<id>: <查询>`”，链接是占位的 `cli://<id>?q=<查询>`，文本截到 `maxChars`（默认 2000，最大 8000）并在末尾写明“truncated: N of M characters shown”，空输出是 `ENGINE_EMPTY`。**限制**：这个链接不是网页——证据模式（`task` / `profile`）把它列为来源（它的文本就是摘要），但**不会抓取它**，也不占读页名额；它不会产生证据摘录。结果只在普通搜索结果和证据包的 `sources` 里；多来源融合时换行会折成空格。只读保证、禁用词、不经 shell、超时、输出上限对它照常生效。
+
+**结果打包**：自定义 CLI 的结果与其他来源同一个结构（标题、链接、摘要、时间、`engine`、`backend`），另带三个可选字段：`via`（`custom-cli:<id>`）、`confidence`（低于 1 时）和 `tag`（“user-defined, not verified by the plugin (用户自定义，未经插件验证)”）；文本渲染成 `[via custom-cli:echo, confidence 0.5, user-defined, not verified by the plugin (…)]`，证据摘录行同样带上。缓存命中、历史里的结果保留这三项。
+
+**置信度（0–1）**：自定义 CLI 写在规格里（默认 0.5），任何来源或平台后端都能用 `sources.confidence.<id>` 覆盖（内置来源默认 1；平台的结果取“平台自己的 × 回答的后端的”）。作用方式很保守，只在多个来源融合排名时起作用：
+
+    factor(c)  = 1 − 0.2 · (1 − c)                          ∈ [0.8, 1]，c = 1 时不乘（恰好 1）
+    rrf(d)     = Σ_来源  factor(c_来源) / (k + 该来源给 d 的最好名次)
+    bonus(d)  *= max_来源 factor(c_来源)                    只有被存疑来源返回的 URL，新鲜度 / 权威 / 评分信号的加分按比例减少
+
+即置信度 c 的来源像是它的列表整体往后排了 (k+1)·(1/factor − 1) 位：k = 60 时 c = 0.5 约 7 位、c = 0 约 16 位；多个来源都返回的结果几乎不受影响，只有存疑来源有的结果沉向队尾，但**它最好的那条仍保证留在展示的列表里**（并行搜索的前 `count` 条；证据模式里是会被读页的前几条；最多占 `size−1` 个位置）。内置来源全是 1 时融合分数与原来**逐位相同**（单元测试固定；`bench:eval-pack` 在 v1 / v2 上的报告与改动前逐字段相同）。一次只用一个引擎（顺序回退）时没有融合，置信度只作标注。`sources.status` 显示每个来源和每个后端的置信度，设置面板的搜索顺序列表每行显示并可改。
 
 **English**　Platforms no longer depend almost entirely on dsh-browser's bundled OpenCLI. A declarative adapter layer (`src/cli/`) describes each standalone CLI: `bins` (the package name may differ from the command, see `packageNote`), a contract `probe` (version floor, subcommands / flags that must appear in `--help`), a `search.argv` ARRAY with `{query}` / `{count}` placeholders (never a shell string), the output format and field mapping, `env.required` / `passthrough` NAMES only, timeout and output cap. The runner decodes UTF-8 and maps failures to `CLI_NOT_FOUND`, `CLI_CONTRACT_MISMATCH`, `CLI_NOT_LOGGED_IN` (hint: run `<cli> login` yourself; for `opencli`: log in to the site in your own Chrome and retry, since opencli uses Chrome's login), `ENGINE_EMPTY`, `CLI_FAILED`; environment values never appear in errors. A spec may carry `errorCodes` describing the tool's failure format: opencli prints `ok: false / error: {code, message}` as YAML on stderr; `AUTH_REQUIRED` (exit 77) is not-logged-in, `LOGIN_WALL` / `SECURITY_BLOCK` / `RATE_LIMITED` and the `Unexpected token '<'` JSON error (the site answered a web page, measured on Reddit) are `CLI_FAILED` saying the site returned a web page instead of data or blocked the request (risk control, IP block, login wall), `EMPTY_RESULT` is empty, `BROWSER_CONNECT` / `TIMEOUT` have their own messages; an HTML document printed by any command is reported the same way. **Read-only guarantee** for built-in and user specs alike: every command word must be in the spec's `allowedSubcommands` and none may match the global deny-list (login, logout, post, comment, delete*, like, follow, favorite, upvote, save, subscribe, publish, ask, article, pin, setup, init, ...); flags that read browser cookies or carry credentials are rejected. The plugin never runs a login and never logs in for you; xhs / rdt / zhihu are not run without a saved login (without one they read your browser cookies themselves). Children get a minimal environment. Probes are local (version + help, cached 60 s), never search or log in; a same-named program with another contract is `incompatible`. The table above lists each built-in spec with the verified version and how far it was checked (live / contract-only / docs-only). **Login platforms (Xiaohongshu, Zhihu, Reddit, X): logging in is entirely yours.** Log in to the sites in your day-to-day Chrome and install OpenCLI (`npm i -g @jackwener/opencli`) with its OpenCLI Browser Bridge extension (`opencli doctor` all OK); the standalone `opencli` is the first backend of these four chains and uses that Chrome's login. The plugin has no login flow, runs no login command and reads no browser cookies; an expired login is reported as "log in to <site> in your own Chrome and retry". It passes `--window background --site-session ephemeral --keep-tab false` (supported by the 1.8.8 browser commands, and their defaults) so your Chrome keeps its focus and the tab is closed, only when `opencli <site> search --help` lists those options. The standalone CLIs (`xhs`, `rdt`, `zhihu`, `twitter`) are optional fallbacks that you log in yourself with the tool's own command; without a saved login they are skipped. Measured 2026-10-27 (opencli 1.8.8): twitter and zhihu searches work and are mapped (live); xiaohongshu answered `AUTH_REQUIRED` (no login in that Chrome); Reddit answered a web page behind a proxied IP (Reddit blocks proxied addresses), so those two mappings are contract-only; `xhs search` with a saved login works (live; `hot_query` cards skipped, publish time parsed conservatively). Each platform has an ordered backend chain (table above, configurable with `platformBackends`; an explicit setting always wins); skipped backends show their reason in `sources.status` (`providers[].chain`) and in the error when the whole chain is down. Your own adapters go in `cliAdapters` (validated by the same rules; registered as `custom-cli:<id>`).
 
@@ -573,6 +593,8 @@ Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包
 4. 什么都没配置时用匿名 / 免费默认：**英文先 Exa 的无 Key 路线**（需要 `mcporter` 且其中配置了 Exa MCP），再 `ddg`；**中文** `ddg` + `bing`（Exa 擅长英文，退到第二轮）；`academic` / `experience` / `docs_code` 的垂直来源不变。
 
 `evidence.sourcePolicy: anonymous-only` 让自动规划**绝不**使用需要 Key、账号或登录的来源（即使配置了；`priority` 也不能把它们带回来；Exa 一旦有 API Key 走的就是付费 / 额度路线，也会被排除）。默认 `default`。
+
+**置信度（可选）**：`sources.confidence.<id>: 0–1`，只在多来源融合时让它的权重略低并随结果标注，默认 1（内置）/ 规格里的值（自定义 CLI，默认 0.5）；公式与保证见上文“CLI 适配”一节的“置信度”。
 
 **请求额度（可选）**：`sources.budget.<id>: { total?, daily? }`，**默认不设任何上限**——例如博查账号有 1000 次请求，可写 `sources: { budget: { bocha: { total: 1000, daily: 50 } } }`（这只是示例，不是插件默认值）。计数在用量账本里（持久化，重启后仍有效；发送前在立即事务里预留一次请求，两个搜索或两个进程不会同时花掉最后一次；适配器自己的计数会结算这次预留，所以一次请求只算一次；失败的请求归还预留，空结果算一次）。用完后该来源被**跳过并回退到其他来源**，记一条 “request budget used up” 的说明，**不是错误**；`web_call sources.status` 显示每个设了额度的来源的已用 / 剩余与策略一行。`daily` 的日界线取 `evidence.budget.timezone`。
 

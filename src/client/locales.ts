@@ -280,6 +280,7 @@ export const zh = {
   cliTrialLabel: '用户自定义，未经插件验证',
   cliTrialRpcFailed: '试运行没有完成：{why}',
   chainEdit: '编辑顺序 →', advancedRawTitle: '原始 JSON', advancedRawHint: '平台后端顺序和自定义 CLI 的整段 JSON',
+  cliOutput: '输出',
 } as const
 
 export const en = {
@@ -545,4 +546,5 @@ export const en = {
   cliTrialLabel: 'User-defined, not verified by the plugin',
   cliTrialRpcFailed: 'The trial did not finish: {why}',
   chainEdit: 'Edit the order →', advancedRawTitle: 'Raw JSON', advancedRawHint: 'the whole JSON of the platform backend order and the custom CLIs',
+  cliOutput: 'Output',
 } as const

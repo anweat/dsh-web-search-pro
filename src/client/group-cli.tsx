@@ -117,10 +117,10 @@ export function CliBody({ card, draft, check, disabled, onForm, onId, onJson, on
       <p className={css.rowHint}>{t('cliArgvNote')}</p>
     </FormRow>
     <FormRow card={card} label={t('cliAllowed')} hint={t('cliAllowedHint')} errors={errors('probe')}>
-      <span data-wsp-allowed>{allowed.length ? allowed.map(word => <code key={word}>{word} </code>) : <span className={css.muted}>{t('cliAllowedNone')}</span>}</span>
+      <span className="wsp-allowed" data-wsp-allowed>{allowed.length ? allowed.map(word => <code key={word}>{word} </code>) : <span className={css.muted}>{t('cliAllowedNone')}</span>}</span>
     </FormRow>
 
-    <SubHead>{t('cliFields')}</SubHead>
+    <SubHead>{t('cliOutput')}</SubHead>
     <FormRow card={card} id="web-search-pro-cli-format" label={t('cliFormat')} hint={t('cliFormatHint')} errors={errors('format')}>
       <Select id="web-search-pro-cli-format" value={format} disabled={disabled} options={OUTPUT_FORMATS.map(value => ({ value, label: value }))} onChange={value => onForm({ format: value as CliForm['format'] })} />
     </FormRow>

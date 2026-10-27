@@ -10,6 +10,18 @@
 - 不想用：在 `sources.disabled` 里加 `deepseek`；只想在需要时用：自己写一份 `engines`（自定义过的 `engines` 列表保持你写的顺序，不会被自动加入）；想限量：`sources.budget.deepseek: { total, daily }`；`evidence.sourcePolicy: anonymous-only` 也不会自动使用它。没有 Key 时行为与 0.2.2 完全一样。
 - **登录类平台的默认后端顺序变了**：小红书、知乎、Reddit、X 现在先试独立 `opencli`（用你日常 Chrome 的登录态），再试独立 CLI（`xhs`、`zhihu`、`rdt`、`twitter`），最后是 dsh-browser 的后端——知乎、Reddit、Twitter 原来是独立 CLI 在前（小红书本来就是 opencli 在前）。已经登录了独立 CLI 并想继续优先用它的，在设置 `platformBackends` 里写出顺序（显式配置原样优先，不受影响）。没装独立 opencli 的用户行为不变：它被跳过并写明原因，链继续往下走。见下文“登录类平台改走 OpenCLI”。
 
+### 设置里的搜索顺序、自定义 CLI 与置信度（2026-10-27）
+
+用户原话：“把默认搜索参考顺序和 cli 加入都做到设置中，允许自定义加入可用的 cli 软件和命令，并将结果打包返回，自定义的也可以加入置信度”。Config schema 只增不改（`sources.confidence`，volatile）；兼容范围不变。
+
+- **搜索顺序（新分组，在“常用”之后，默认折叠）**：`engines` 是可排序列表（位置、名称、就绪、置信度、上移 / 下移 / 移除、下拉添加、“恢复默认顺序”＝ `unset engines`），下面是实际生效顺序和一句“为什么和列表不同”（新纯函数 `explainChain`，与 `effectiveChain` 同一规则）；平台后端顺序每个平台一行 + 弹窗，可选后端 = 内置后端 + 声明服务该平台的自定义 CLI，“恢复默认”删除该平台的键。`platformBackends` / `cliAdapters` 的原始 JSON 移到“高级”。
+- **自定义 CLI（新分组）**：列表 + 表单弹窗（命令、参数 token、自动推出的子命令、输出格式、整段输出、结果路径、字段路径、超时、用途、置信度、高级项）+ “查看 JSON” 双向同步；服务端的校验函数实时校验，消息显示在对应控件旁。规格新增 `engine`、`confidence`、`search.output.lines: { mode: whole }`（见 README“CLI 适配”）；`platforms` 现在是声明服务的平台（只做通用引擎时可为空）。**偏离旧行为**：`platformBackends.<平台>` 里放 `custom-cli:<id>` 现在要求它的 `platforms` 声明了该平台（之前任何平台都接受）。
+- **整段输出**：stdout 整体一条结果，标题“`<id>: <查询>`”、链接 `cli://<id>?q=…`、文本截断并注明；证据管线**不抓取**这种链接（只列为来源，不占读页名额）。
+- **结果打包**：自定义 CLI 的结果与其他来源同一结构，另带 `via`、`confidence`（低于 1 时）、`tag`（“user-defined, not verified by the plugin (用户自定义，未经插件验证)”）；`search.run` 输出 schema、文本渲染、证据摘录行、缓存与 `sources.status` 同步（`providers[].confidence`、`chain[].confidence`、`sources.confidence`）。
+- **置信度**：`factor(c) = 1 − 0.2·(1 − c)`，乘到每个来源的 RRF 项上，并乘到“只有存疑来源返回的 URL”的加分上；c = 1 不乘，所以内置来源全是 1 时融合分数与原来逐位相同（单元测试固定，`bench:eval-pack` v1 / v2 报告与改动前逐字段相同，bench 94 项测试通过）；存疑来源最好的一条仍保证留在展示的列表里。
+- **试运行 / 实时就绪**：插件在宿主的连接传输上注册私有通道 `/dsh-web-search-pro`（照 dsh-browser 的做法，没有该服务的宿主上不注册，面板照常工作并提示改用 `web_call` 的 `sources.status` / `search.run` 测试）：`status`（各来源和链上各后端的就绪、原因、置信度）和 `trial`（用面板里还没保存的规格真的探测并搜一次，显示解析出的前三条和工具原话；先过同一套只读校验，不登录，不保存任何东西，受 `enableCliBackends` 控制）。
+- 测试：新增 55 项（置信度公式与不变性、整段输出、规格字段、顺序编辑产生的 patch、`explainChain`、表单 ↔ JSON、面板渲染、RPC）。
+
 ### DeepSeek 搜索（引擎 `deepseek`，“常用”）
 
 - 新的原生搜索引擎，描述符 `common: true`（成本层级 `paid`，语言 `zh` + `en`）。Key 与插件其他密钥一致：设置里的密钥字段 → DSH 凭据引用（默认 `DEEPSEEK_API_KEY`，`keyedSources.deepseek.apiKeyEnv` 可改）→ 进程环境变量；`keyedSources.deepseek.baseUrl` 可改接口，默认 `https://api.deepseek.com/v1/tools`。值不进日志、状态输出、错误信息和历史。
