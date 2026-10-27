@@ -31,7 +31,7 @@
 - **agent 覆盖层**：`$DSH_HOME/data/web-search-pro/overlay.json`（与 `dbPath` 同目录），含版本、`revision`（乐观锁）、sha256 校验和、`values`、50 条审计；临时文件 + 改名，0600；按 mtime 和大小缓存重读，无 fs.watch。只能覆盖 `engines`、`sources.priority` / `disabled`、`sources.confidence.<id>`、`platformBackends.<平台>`、`cliAdapters.<id>`，且只能新增或替换。`dynamic()` 返回“基线 + 覆盖层”，所有消费者下次调用就生效；加载时用与改动同一批函数严格校验，解析失败 / 校验和不符 / 值被拒 / 与基线不再一致就**整体忽略**并在 `sources.status` / `config.inspect` 报告，绝不只应用一半。做法照 `@anweat/dsh-browser` 的策略覆盖层，没有跨包 import。
 - **`config.*`（新动作组，`web_index` 里出现）**：`inspect`、`set_order`、`set_confidence`、`upsert_cli`、`remove_cli`、`reset`、`export`。每次写入要有 3–300 字符的 `reason`，可带 `expectedRevision`；成功后 `revision + 1`、写审计（时间、动作、键、前后值摘要、reason、sessionId）、立即生效；没有变化的写入不落盘。审批：**`config.upsert_cli` 一律先问用户**（提示里写命令、搜索与探测参数模板、环境变量名），其余不问；`dsh-browser.automationMode=read-only` 时全部拒绝（偏离简报：简报只说“不需要审批”，这里让只读模式也拦住写入，与 `cache.clear` 等一致）。**headless 下**宿主对“询问”一律拒绝（无 `approval` 服务按插件理由拒绝；有服务但无应答者得 `unavailable` 也拒绝；策略 `never` 直接拒绝），所以 headless 的 agent 加不了 CLI；测试把宿主这几处逻辑固定住，宿主升级后若行为变了会报警。
 - **设置面板**：被覆盖的行（引擎顺序、优先 / 停用、平台后端链、置信度、自定义 CLI）带“agent 修改”标记，悬停看值、reason、时间；新分组“agent 修改”列出全部覆盖项与最近审计，每项“采纳到配置”（用保存条同款的原子 `mutate` 写进 profile，成功后才经 RPC 删掉这一项覆盖）和“撤销”，另有“全部撤销”（也用来修复被忽略的坏文件）和“刷新”；只在覆盖层里的 CLI 列在自定义 CLI 列表下面。RPC 通道 `/dsh-web-search-pro` 新增 `overlay`、`overlay.revoke`，`status` 带上覆盖层摘要与待重启项。
-- **测试**：新增约 90 项（分组顺序、覆盖层文件读写 / 损坏 / 冲突 / 审计上限 / 合并、各 `config.*` 的参数与效果、审批与 headless、重启项检测与扫描、面板标记与采纳 / 撤销的 patch 与 RPC 调用）。测试进程使用一次性的 `DSH_HOME`，不会碰真实目录。
+- **测试**：新增 54 项（935 → 989，另有 8 项需真实命令的跳过）（分组顺序、覆盖层文件读写 / 损坏 / 冲突 / 审计上限 / 合并、各 `config.*` 的参数与效果、审批与 headless、重启项检测与扫描、面板标记与采纳 / 撤销的 patch 与 RPC 调用）。测试进程使用一次性的 `DSH_HOME`，不会碰真实目录。
 
 ### DeepSeek 搜索（引擎 `deepseek`，“常用”）
 
