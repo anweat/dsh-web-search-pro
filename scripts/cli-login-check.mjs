@@ -40,7 +40,7 @@ try {
   process.exit(2)
 }
 const {
-  builtinSpecById, probeCli, savedLoginPresent, missingEnv, loginHint, runCliSearchDetailed, searchSpecFor, listOpencliSites, opencliSearchSpec, OPENCLI_PROBE, runCli,
+  builtinSpecById, probeCli, savedLoginPresent, missingEnv, loginHint, runCliSearchDetailed, searchSpecFor, listOpencliSites, planOpencliSearch, OPENCLI_PROBE, runCli,
 } = modules
 
 // ── 参数 ────────────────────────────────────────────────────────────────────
@@ -191,12 +191,13 @@ if (opencliSites.length) {
   const probe = await probeCli(OPENCLI_PROBE, { force: true })
   console.log('\n=== opencli（独立）：' + probe.state + (probe.version ? ' ' + probe.version : '') + (probe.reason ? ' - ' + probe.reason : ''))
   if (probe.state === 'detected') {
-    const listed = await listOpencliSites({ force: true })
+    await listOpencliSites({ force: true })
     for (const site of opencliSites) {
-      const entry = listed.sites?.get(site)
-      if (!entry) { rows.push({ id: 'opencli:' + site, platform: site, status: 'skipped', note: listed.problem ?? 'opencli list 里没有 ' + site + ' 的只读 search 命令' }); console.log('  ' + site + '：跳过 - ' + rows.at(-1).note); continue }
-      const spec = opencliSearchSpec(site, entry)
-      if (!spec) { rows.push({ id: 'opencli:' + site, platform: site, status: 'skipped', note: '生成的规格无效' }); continue }
+      // 与插件完全相同的计划：命令表里的 search 条目、是否带后台窗口 / 临时会话 / 不保留标签页参数、生成的规格。
+      const plan = await planOpencliSearch(site, site)
+      if (!plan.spec) { rows.push({ id: 'opencli:' + site, platform: site, status: 'skipped', note: plan.problem ?? '生成的规格无效' }); console.log('  ' + site + '：跳过 - ' + rows.at(-1).note); continue }
+      const spec = plan.spec
+      console.log('  ' + site + '：' + (plan.silent ? '带 --window background --site-session ephemeral --keep-tab false（不抢焦点，用完关标签页）' : '该命令不支持后台窗口参数，按默认方式运行'))
       // 登录态在 Chrome 里，无法本地检查；这里就是用户点名要跑的那一次。
       rows.push(await checkOne('opencli:' + site, { ...spec, probe: OPENCLI_PROBE.probe }, site, DEFAULT_QUERY[Object.keys(PLATFORM_OF).find(k => PLATFORM_OF[k] === site)] ?? 'DeepSeek', { skipCredentialGate: true }))
     }

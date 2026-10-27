@@ -11,7 +11,7 @@ import { clearProbeCache } from '../src/cli/probe.ts'
 import { clearOpencliCache } from '../src/cli/opencli.ts'
 import { resolveChain } from '../src/cli/chain.ts'
 import { BROWSER_020 } from './browser-stub.ts'
-import { fakeOpencli, posix, withCommands } from './cli-helpers.ts'
+import { fakeOpencli, OPENCLI_SILENT_HELP, posix, withCommands } from './cli-helpers.ts'
 
 const FIXTURES = new URL('./fixtures/cli/', import.meta.url).pathname
 
@@ -102,6 +102,27 @@ test('no earlier backend can answer and no later one exists: the error names eve
       await withHome([], async () => {
         await assert.rejects(h.search('rust', 'zhihu'), (e: any) => /opencli is not logged in.*zhihu: /.test(e.message))
       })
+    } finally { h.cleanup() }
+  })
+})
+
+const ZHIHU_ROWS = JSON.stringify([{ rank: 1, title: 'Rust 异步运行时', type: 'article', author: 'author-a', votes: 12, url: 'https://zhuanlan.zhihu.com/p/100000001' }])
+
+test('OpenCLI is asked to stay out of the way: background window, ephemeral session, tab released - only when the command lists those options', { skip: !posix }, async () => {
+  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }) }, async dir => {
+    const h = harness({ platformBackends: { zhihu: ['opencli'] } })
+    try {
+      assert.equal((await h.search('rust', 'zhihu')).sources[0]!.url, 'https://zhuanlan.zhihu.com/p/100000001')
+      const argv = fs.readFileSync(path.join(dir, 'argv.log'), 'utf8').trim()
+      assert.equal(argv, 'zhihu search rust --limit 3 -f json --window background --site-session ephemeral --keep-tab false')
+    } finally { h.cleanup() }
+  })
+  // An older opencli whose command does not list the options: nothing unknown is passed.
+  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS, help: OPENCLI_SILENT_HELP.split('\n').filter(l => !l.includes('--keep-tab')).join('\n') } }) }, async dir => {
+    const h = harness({ platformBackends: { zhihu: ['opencli'] } })
+    try {
+      await h.search('rust', 'zhihu')
+      assert.equal(fs.readFileSync(path.join(dir, 'argv.log'), 'utf8').trim(), 'zhihu search rust --limit 3 -f json')
     } finally { h.cleanup() }
   })
 })

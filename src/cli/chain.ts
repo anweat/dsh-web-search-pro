@@ -17,7 +17,7 @@ import type { ResolvedConfig } from '../config.ts'
 import { BUILTIN_CLI_SPECS } from './builtin-specs.ts'
 import { backendServes, CHAIN_PLATFORMS, DEFAULT_CHAINS, OPENCLI_SITE_OF } from './chains-spec.ts'
 import { cliSpecEngine, disabledBySettings, probeError, specReadiness, type SpecReadiness } from './engine.ts'
-import { listOpencliSites, OPENCLI_PROBE, opencliSearchSpec } from './opencli.ts'
+import { listOpencliSites, OPENCLI_PROBE, planOpencliSearch } from './opencli.ts'
 import { cachedProbe, probeCli } from './probe.ts'
 import { CliAdapterError, runCliSearchDetailed } from './runner.ts'
 import { resolveCliAdapters, type CliAdapterSpec } from './spec.ts'
@@ -97,11 +97,9 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
       const probe = await probeCli(OPENCLI_PROBE)
       const failure = probe.state === 'detected' ? undefined : probeError(OPENCLI_PROBE, probe)
       if (failure) throw failure
-      const listed = await listOpencliSites()
-      const entry = listed.sites?.get(site)
-      if (!entry) throw new CliAdapterError(listed.problem ?? 'opencli has no read `search` command for the site ' + site + ' (opencli list)', 'CLI_CONTRACT_MISMATCH', 'run `opencli list` to see the sites your version supports')
-      const spec = opencliSearchSpec(platform, entry)
-      if (!spec) throw new CliAdapterError('opencli site ' + site + ' cannot be used by this adapter', 'CLI_CONTRACT_MISMATCH')
+      const plan = await planOpencliSearch(platform, site)
+      if (!plan.spec) throw new CliAdapterError(plan.problem ?? 'opencli site ' + site + ' cannot be used by this adapter', 'CLI_CONTRACT_MISMATCH', plan.hint)
+      const spec = plan.spec
       const { sources, skipped } = await runCliSearchDetailed(spec, { query, count, signal }, { platform, bin: probe.path ?? 'opencli' })
       return { sources, via: 'opencli', backend: 'opencli', ...skipped ? { notes: [skipped + ' result' + (skipped === 1 ? '' : 's') + ' without a link skipped'] } : {} }
     },

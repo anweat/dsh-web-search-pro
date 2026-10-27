@@ -242,12 +242,18 @@ test('standalone opencli: only sites whose own list shows a read search command;
   const sites = parseOpencliList(read('opencli-list.json'))
   assert.deepEqual([...sites.keys()].sort(), ['douyin', 'hackernews', 'reddit', 'twitter', 'weixin', 'xiaohongshu', 'zhihu'], 'v2ex and xiaoyuzhou have no search command')
   assert.equal(sites.get('hackernews')!.strategy, 'public')
-  assert.equal(sites.get('xiaohongshu')!.loginCommand, 'opencli xiaohongshu login')
+  assert.equal(sites.get('xiaohongshu')!.domain, 'www.xiaohongshu.com')
+  assert.deepEqual([sites.get('xiaohongshu')!.browser, sites.get('hackernews')!.browser], [true, false])
   const xhs = opencliSearchSpec('xiaohongshu', sites.get('xiaohongshu')!)!
   assert.deepEqual(xhs.search.argv, ['xiaohongshu', 'search', '{query}', '--limit', '{count}', '-f', 'json'])
   assert.equal(xhs.needsLogin, true)
   assert.deepEqual(opencliSearchSpec('hackernews', sites.get('hackernews')!)!.needsLogin, false)
   assert.equal(validateCliAdapterSpec(xhs, 'builtin').ok, true)
+  // Browser-backed commands that list the silent options get them (background window, ephemeral session, tab released); a command without a browser never does.
+  const silent = opencliSearchSpec('xiaohongshu', sites.get('xiaohongshu')!, { silent: true })!
+  assert.deepEqual(silent.search.argv, [...xhs.search.argv, '--window', 'background', '--site-session', 'ephemeral', '--keep-tab', 'false'])
+  assert.equal(validateCliAdapterSpec(silent, 'builtin').ok, true)
+  assert.deepEqual(opencliSearchSpec('hackernews', sites.get('hackernews')!, { silent: true })!.search.argv, ['hackernews', 'search', '{query}', '--limit', '{count}', '-f', 'json'])
   const out = parseCliOutput(xhs, xhs.search, read('constructed-opencli-xiaohongshu-search.json'))
   assert.deepEqual(out, [{ url: 'https://www.xiaohongshu.com/search_result/66f0aa0000000000', title: '露营装备测评', snippet: '小王', publishedAt: '2026-09-20' }])
   const wx = opencliSearchSpec('wechat', sites.get('weixin')!)!
