@@ -73,8 +73,8 @@ export interface CliOutputSpec {
   /** text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`). */
   lines?: { mode: 'tsv'; columns: readonly string[] } | { mode: 'url-lines' }
   fields: { url: FieldSource; title?: FieldSource; snippet?: FieldSource; publishedAt?: FieldSource }
-  /** Keep only the items whose `path` equals the value; the others are not results at all and are not counted as skipped (xhs: `model_type` is `note`; its search page also carries `hot_query` suggestion cards). */
-  keepWhen?: { path: string; equals: string | number | boolean }
+  /** Items whose `path` equals the value are not results at all and are not counted as skipped (xhs: `model_type` is `hot_query` for the suggestion cards its result list also carries). */
+  skipWhen?: { path: string; equals: string | number | boolean }
   /** Strip HTML tags from title and snippet. */
   stripTags?: boolean
   /** Values read as "empty" (`None`). */
@@ -255,7 +255,7 @@ const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'probe', 'a
 const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
 const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'])
-const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'keepWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
+const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'skipWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
 const ENV_KEYS = new Set(['required', 'passthrough', 'set'])
 const LOGIN_KEYS = new Set(['command', 'hint', 'savedCredentialPaths', 'readsBrowserCookiesWithoutLogin'])
@@ -327,9 +327,9 @@ function checkOutput(value: unknown, where: string, errors: string[]): void {
     }
   }
   if (value.errorPaths !== undefined && !(Array.isArray(value.errorPaths) && value.errorPaths.length <= 6 && value.errorPaths.every(p => typeof p === 'string' && PATH_RE.test(p)))) errors.push(where + '.errorPaths must be dotted paths')
-  if (value.keepWhen !== undefined) {
-    const k = value.keepWhen
-    if (!(isObject(k) && typeof k.path === 'string' && PATH_RE.test(k.path) && ['string', 'number', 'boolean'].includes(typeof k.equals) && Object.keys(k).every(key => key === 'path' || key === 'equals'))) errors.push(where + '.keepWhen must be { path, equals }')
+  if (value.skipWhen !== undefined) {
+    const k = value.skipWhen
+    if (!(isObject(k) && typeof k.path === 'string' && PATH_RE.test(k.path) && ['string', 'number', 'boolean'].includes(typeof k.equals) && Object.keys(k).every(key => key === 'path' || key === 'equals'))) errors.push(where + '.skipWhen must be { path, equals }')
   }
   if (value.lines !== undefined) {
     const l = value.lines

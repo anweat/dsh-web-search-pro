@@ -57,7 +57,7 @@ test('cli-login-check: with a saved login it runs the spec\'s search once, parse
     assert.equal(r.code, 0, r.stdout)
     const summary = JSON.parse(fs.readFileSync(path.join(r.out, 'summary.json'), 'utf8')) as { results: { status: string; resultCount: number; skipped: number; junk: string[]; sample: { url: string }[] }[] }
     const x = summary.results[0]!
-    assert.deepEqual([x.status, x.resultCount, x.skipped, x.junk], ['ok', 1, 1, []])
+    assert.deepEqual([x.status, x.resultCount, x.skipped, x.junk], ['ok', 1, 0, []], 'the hot_query card is not a result and is not reported as a result without a link')
     assert.match(x.sample[0]!.url, /xsec_token=REDACTED/)
     assert.equal(fs.readFileSync(marker, 'utf8').trim(), 'ran')
     const raw = fs.readFileSync(path.join(r.out, 'xhs.stdout.txt'), 'utf8')

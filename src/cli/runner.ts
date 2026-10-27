@@ -310,7 +310,7 @@ export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unkno
   let skipped = 0
   for (const item of items) {
     if (!isObject(item)) continue
-    if (output.keepWhen && getPath(item, output.keepWhen.path) !== output.keepWhen.equals) continue
+    if (output.skipWhen && getPath(item, output.skipWhen.path) === output.skipWhen.equals) continue
     const url = resolveField(output.fields.url, item, empty, now)
     if (!url || !/^https?:\/\//i.test(url)) { skipped++; continue }
     // A title is one line: a multi-line body (a tweet) is folded.

@@ -139,8 +139,8 @@ const xhs: CliAdapterSpec = {
     argv: ['search', '{query}', '--json'],
     output: {
       format: 'json', itemsPath: 'data.items', expect: ENVELOPE, errorPaths: ['error.message'],
-      // The result list also carries `hot_query` suggestion cards ("大家都在搜": an id and a token, but no note_card): not results.
-      keepWhen: { path: 'model_type', equals: 'note' },
+      // The result list also carries `hot_query` suggestion cards ("大家都在搜": an id and a token, but no note_card): not results. Excluded by what they are, so a note that lacks model_type still counts.
+      skipWhen: { path: 'model_type', equals: 'hot_query' },
       fields: {
         url: { template: 'https://www.xiaohongshu.com/explore/{id}?xsec_token={xsec_token}&xsec_source=pc_search' },
         title: ['note_card.display_title', 'note_card.title'],
@@ -156,7 +156,7 @@ const xhs: CliAdapterSpec = {
   login: { command: 'xhs login', savedCredentialPaths: ['~/.xiaohongshu-cli/cookies.json'], readsBrowserCookiesWithoutLogin: true },
   timeoutMs: 45_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'live', version: '0.6.4', date: '2026-10-27', note: 'a real `xhs search --json` run with the user\'s own saved login and parsed (fixture live-xhs-search.json, synthetic content in the real shape): 22 items for a count of 3, two of the 22 are hot_query suggestion cards (skipped); the publish time is in note_card.corner_tag_info (MM-DD or YYYY-MM-DD). Without a saved login the tool reads browser cookies by itself, so the plugin never runs it then' },
+  verification: { status: 'live', version: '0.6.4', date: '2026-10-27', note: 'a real `xhs search --json` run with the user\'s own saved login and parsed (fixture live-xhs-search.json, synthetic content in the real shape): 22 items for a count of 3, two of the 22 are hot_query suggestion cards (skipped by model_type); the publish time is in note_card.corner_tag_info (MM-DD or YYYY-MM-DD). Without a saved login the tool reads browser cookies by itself, so the plugin never runs it then' },
 }
 
 const zhihu: CliAdapterSpec = {

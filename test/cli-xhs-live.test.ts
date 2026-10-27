@@ -33,6 +33,9 @@ test('xhs: the hot_query suggestion cards of the result list are not results and
   assert.equal(sources.length, 4)
   assert.equal(skipped, 0)
   assert.ok(sources.every(s => !/b1\b/.test(s.url)), 'the card\'s id is never a link')
+  // Excluded by what they are: a note that carries no model_type at all still counts.
+  const bare = items.map((i: any) => (i.model_type === 'note' ? Object.fromEntries(Object.entries(i).filter(([k]) => k !== 'model_type')) : i))
+  assert.equal(mapCliItemsDetailed(xhs.search.output, bare, 20, NOW).sources.length, 4)
   // The count is met by notes, wherever the cards sit in the list.
   assert.equal(mapCliItemsDetailed(xhs.search.output, items, 3, NOW).sources.length, 3)
 })

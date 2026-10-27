@@ -51,14 +51,14 @@ test('field sources: { time } and a time join part read the text through the sam
   assert.equal(resolveField({ join: [{ path: 'likes', prefix: 'likes ' }, { time: 'created_at' }, { time: 'bad' }], sep: ' · ' }, item, new Set(), NOW), 'likes 308 · 2026-10-27T08:38:08Z')
 })
 
-test('keepWhen drops the items that are not results without counting them as skipped; the spec validator knows time, key=value paths and keepWhen', () => {
+test('skipWhen drops the items that are not results without counting them as skipped; the spec validator knows time, key=value paths and skipWhen', () => {
   const output = baseSpec().search.output
-  const spec = { ...output, keepWhen: { path: 'kind', equals: 'note' }, fields: { url: 'url', title: 'title', publishedAt: { time: 'tags.type=publish_time.text' } } }
+  const spec = { ...output, skipWhen: { path: 'kind', equals: 'suggestion' }, fields: { url: 'url', title: 'title', publishedAt: { time: 'tags.type=publish_time.text' } } }
   const items = [{ kind: 'suggestion', id: 'x' }, { kind: 'note', url: 'https://example.com/1', title: 'one', tags: [{ type: 'publish_time', text: '3小时前' }] }, { kind: 'note', title: 'no link' }]
   const out = mapCliItemsDetailed(spec, items, 5, NOW)
   assert.deepEqual(out.sources, [{ url: 'https://example.com/1', title: 'one', publishedAt: '2026-10-27T01:00:00Z' }])
   assert.equal(out.skipped, 1, 'only the note without a link is reported')
   assert.deepEqual(validateCliAdapterSpec(baseSpec({ search: { ...baseSpec().search, output: spec } })).errors, [])
-  assert.match(validateCliAdapterSpec(baseSpec({ search: { ...baseSpec().search, output: { ...spec, keepWhen: { path: 'a b', equals: 1 } } } })).errors.join(), /keepWhen must be \{ path, equals \}/)
+  assert.match(validateCliAdapterSpec(baseSpec({ search: { ...baseSpec().search, output: { ...spec, skipWhen: { path: 'a b', equals: 1 } } } })).errors.join(), /skipWhen must be \{ path, equals \}/)
   assert.match(validateCliAdapterSpec(baseSpec({ search: { ...baseSpec().search, output: { ...spec, fields: { url: 'url', publishedAt: { time: 'a b' } } } } })).errors.join(), /time must be a dotted path/)
 })
