@@ -1,12 +1,18 @@
 /**
- * The private RPC channel between the settings card and the running plugin: the shapes it carries. Free of imports (the card
- * bundle includes this file); the server half is src/rpc.ts. Two calls, both read-only for the user's data:
+ * The private RPC channel between the settings card and the running plugin: the shapes it carries. Free of runtime imports (the card
+ * bundle includes this file); the server half is src/rpc.ts. The calls:
  *  - `status`: what the plugin can tell about each source and backend right now (installed, ready, why not), from the same local probes
  *    as `sources.status`; never a search, never a login;
  *  - `trial`: runs ONE search of a custom CLI spec that is still a draft in the dialog, the way a real search would run it (probe, then the
- *    spec's command through the same runner and the same read-only guard), and reports what it parsed and what the tool said.
+ *    spec's command through the same runner and the same read-only guard), and reports what it parsed and what the tool said;
+ *  - `overlay`: what the agent overlay holds (the settings an agent changed with `config.*`) and its newest audit entries;
+ *  - `overlay.revoke`: drop overlay entries (one or several keys, or all), as the user: the card's "Revoke" and the second half of
+ *    "Adopt" (the card writes the value into the profile first, then asks the plugin to drop the entry). Audited with actor `user`.
  * @module web-search-pro/rpc-types
  */
+
+import type { OverlayView } from './overlay-types.ts'
+import type { PendingRestart } from './restart.ts'
 
 /** The channel prefix this plugin registers with the Host transport (Browser registers `/dsh-browser-assets` the same way). */
 export const RPC_CHANNEL = '/dsh-web-search-pro'
@@ -15,6 +21,18 @@ export const RPC_CHANNEL = '/dsh-web-search-pro'
 export interface StatusView {
   sources: Record<string, { available: boolean; reason?: string; confidence: number }>
   legs: Record<string, { ready: boolean; reason?: string; confidence: number }>
+  /** Settings the configuration holds that the running plugin only reads at start-up (the card shows "restart the plugin"). */
+  pendingRestart?: PendingRestart[]
+  /** The agent overlay in one line: how many keys it overrides and whether it is being ignored. */
+  overlay?: { revision: number; count: number; valid: boolean; problem?: string }
+}
+
+export type { OverlayView, PendingRestart }
+
+/** `overlay.revoke`: the keys to drop (`OverlayItem.key`), or `'all'`; `adopted` says the value was first written into the configuration. */
+export interface RevokeRequest {
+  keys: string[] | 'all'
+  adopted?: boolean
 }
 
 export interface TrialRequest {
