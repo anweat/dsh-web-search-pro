@@ -20,6 +20,13 @@ export function Badge(props: { tone?: Tone; children: ReactNode }) {
   return <Tag tone={props.tone ?? 'neutral'}>{props.children}</Tag>
 }
 
+/** The mark of a setting an agent changed: a warning badge whose tooltip carries the value, the reason and the time. */
+export function AgentTag(props: { label: string; tip: string }) {
+  return <Tooltip label={props.tip} portal maxWidth={360} side="top">
+    <span className="wsp-agent-tag" tabIndex={0} aria-label={props.tip}><Badge tone="warning">{props.label}</Badge></span>
+  </Tooltip>
+}
+
 /** The `?` button: its text opens on click, so a long explanation costs one glyph until someone asks. */
 export function Help(props: { label: string; text: string }) {
   return <Tooltip label={props.text} openOnClick portal maxWidth={360} side="top">

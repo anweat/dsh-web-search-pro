@@ -14,6 +14,7 @@ import { chainInputOf } from './card-frame.tsx'
 import { fill, rowLabels, useField, useOverriddenCount, type Card, type LabelKey } from './field-rows.tsx'
 import { hasHelp, labelKey } from './field-keys.ts'
 import { confidenceField, CONFIDENCE_PREFIX } from './form-specs.ts'
+import { AgentMark } from './agent-mark.tsx'
 import {
   addId, backendChoices, backendName, chainsOf, confidenceView, customEntries, customRows, defaultChainOf, engineChoices, filterPlatforms, idsOf, isCustomId, moveId, ORDER_PLATFORMS, PLATFORM_NAMES, removeId,
   sourceInfo, splitPlatforms, textOf, withChain, type SourceInfo,
@@ -79,14 +80,14 @@ function ConfidenceBox({ card, info, adapters, fallback }: { card: Card; info: S
     return <span className="wsp-conf" data-wsp-confidence="quiet">
       <button type="button" className="wsp-conf-quiet" disabled={disabled} aria-label={name} title={t('orderConfidenceEdit')} onClick={() => setOpen(true)}>
         {t('orderConfidenceLabel')} <span>{view.typed ? view.effective : fill(t('orderConfidenceDefault'), { c: view.effective })}</span>
-      </button>{help}
+      </button>{help}<AgentMark card={card} itemKey={'sources.confidence.' + info.id} compact />
     </span>
   }
   return <span className={view.quiet && !invalid ? 'wsp-conf' : 'wsp-conf wsp-conf-on'} data-wsp-confidence="set">
     <label className="wsp-conf-label" htmlFor={'wsp-conf-' + info.id}>{t('orderConfidenceLabel')}</label>
     <TextInput id={'wsp-conf-' + info.id} small numeric value={text} placeholder={String(dflt)} invalid={invalid || view.invalid} disabled={disabled} ariaLabel={name} autoFocus={open}
       onBlur={() => setOpen(false)} onChange={value => card.edit(field as never, value)} />
-    {help}
+    {help}<AgentMark card={card} itemKey={'sources.confidence.' + info.id} compact />
   </span>
 }
 
@@ -157,7 +158,8 @@ export function EngineOrder({ card }: { card: Card }) {
   const set = (next: string[]): void => field.edit(textOf(next))
   const choices = engineChoices(ids, adaptersValue).map(id => ({ value: id, label: sourceInfo(id, adaptersValue).name + (sourceInfo(id, adaptersValue).name !== id ? ' (' + id + ')' : '') }))
   return <Row field="engines" label={t('engines')} hint={t('enginesHint')} help={hasHelp('engines') ? t(`${labelKey('engines')}Help` as LabelKey) : undefined}
-    overridden={st.overridden} invalid={st.invalid || !!st.message} problem={st.message ?? t('invalid')} warning={st.warning} disabled={field.disabled} labels={rowLabels(t)} wide>
+    overridden={st.overridden} invalid={st.invalid || !!st.message} problem={st.message ?? t('invalid')} warning={st.warning} disabled={field.disabled} labels={rowLabels(t)} wide
+    mark={<AgentMark card={card} itemKey="engines" />}>
     <div className={css.stack} data-wsp-order="engines">
       <div className={css.list} role="list" aria-label={t('orderListLabel')}>
         {ids.length === 0 ? <p className={css.empty}>{t('orderEmpty')}</p> : ids.map((id, index) => <EngineRow key={id} card={card} id={id} index={index} ids={ids} adapters={adaptersValue} disabled={field.disabled} onChange={set} />)}
@@ -195,7 +197,7 @@ function PlatformItem({ card, platform, onEdit }: { card: Card; platform: string
   const disabled = card.useWebSearchPro(snapshot => !snapshot.writable)
   const chain = chainFor(text, platform)
   return <Item data={platform} title={<strong>{PLATFORM_NAMES[platform] ?? platform}</strong>}
-    badges={<>{platform in PLATFORM_NAMES && PLATFORM_NAMES[platform] !== platform ? <code>{platform}</code> : null}<Badge tone={chain.overridden ? 'info' : 'outline'}>{chain.overridden ? t('overridden') : t('orderDefaultBadge')}</Badge></>}
+    badges={<>{platform in PLATFORM_NAMES && PLATFORM_NAMES[platform] !== platform ? <code>{platform}</code> : null}<Badge tone={chain.overridden ? 'info' : 'outline'}>{chain.overridden ? t('overridden') : t('orderDefaultBadge')}</Badge><AgentMark card={card} itemKey={'platformBackends.' + platform} compact /></>}
     meta={<span className={chain.overridden ? undefined : css.muted}>{chain.ids.map(backendName).join(' › ') || t('platformEmpty')}</span>}
     actions={<Btn disabled={disabled} onClick={onEdit} data="platform-edit">{t('edit')}</Btn>} />
 }

@@ -8,7 +8,8 @@ import {
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
-import { RPC_CHANNEL, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts'
+import { RPC_CHANNEL, type OverlayView, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts'
+import { adoptionOf } from './overlay-ops.ts'
 import { RESTART_FIELD_LIST } from '../restart.ts'
 import { cliIssues, evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
@@ -53,6 +54,18 @@ export interface RubricCardState {
   problems: string[]
 }
 
+/** What the card knows of the agent overlay (the settings an agent changed with `config.*`), read over the RPC channel. */
+export interface OverlayCardState {
+  loading: boolean
+  /** The channel answered with an error, or there is none. */
+  failed: boolean
+  /** An adopt or revoke is running: the buttons wait. */
+  busy: boolean
+  /** The last adopt / revoke that did not go through, as a dictionary key with its `{why}`. */
+  error?: { key: 'agentAdoptFailed' | 'agentAdoptHalf' | 'agentRevokeFailed'; why?: string }
+  view?: OverlayView
+}
+
 /** What the card knows from the running plugin over its private RPC channel (rpc-types.ts); empty where the Host has no transport. */
 export interface ServerState {
   /** The Host has the transport: live readiness and "Try it" are possible. */
@@ -62,6 +75,7 @@ export interface ServerState {
   status?: StatusView
   /** The trial run of a custom CLI draft: idle, running, or the last outcome. */
   trial: { state: 'idle' | 'running' | 'done' | 'failed'; id?: string; result?: TrialResult; error?: string }
+  overlay: OverlayCardState
 }
 
 export interface WebSearchCardState {
@@ -170,7 +184,7 @@ export class WebSearchSettingsController {
   private credentialGeneration = 0
   private credentialRefSignature = ''
   private credentialStates = emptyCredentials()
-  private server: ServerState = { available: false, loading: false, failed: false, trial: { state: 'idle' } }
+  private server: ServerState = { available: false, loading: false, failed: false, trial: { state: 'idle' }, overlay: { loading: false, failed: false, busy: false } }
   private trialGeneration = 0
 
   constructor(
@@ -185,6 +199,7 @@ export class WebSearchSettingsController {
     })
     void this.refreshCredentials()
     void this.refreshStatus()
+    void this.refreshOverlay()
   }
 
   /** The Host's RPC client, read when it is used (the service may arrive after the card was registered); undefined where there is none. */
@@ -211,6 +226,62 @@ export class WebSearchSettingsController {
       this.server = { ...this.server, loading: false, failed: true }
     }
     this.publish()
+  }
+
+  private setOverlay(patch: Partial<OverlayCardState>): void {
+    this.server = { ...this.server, overlay: { ...this.server.overlay, ...patch } }
+    this.publish()
+  }
+
+  /** Read what the agent overlay holds (once when the panel opens, and on the refresh button). Silent where the Host has no transport. */
+  async refreshOverlay(): Promise<void> {
+    const rpc = this.rpc()
+    if (!rpc) { this.setOverlay({ loading: false, failed: true }); return }
+    this.setOverlay({ loading: true })
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'overlay', { limit: 20 })
+      if (!result.ok) throw new Error(result.error.message)
+      this.setOverlay({ loading: false, failed: false, view: result.value as OverlayView })
+    } catch {
+      // A plugin build without the endpoint answers nothing useful: the card shows no agent changes and says it could not read them.
+      this.setOverlay({ loading: false, failed: true })
+    }
+  }
+
+  /** Drop overlay entries (keys, or `'all'`) as the user. The plugin audits it; the card shows the overlay as it is afterwards. */
+  async revokeOverlay(keys: readonly string[] | 'all', adopted = false): Promise<boolean> {
+    const rpc = this.rpc()
+    if (!rpc) { this.setOverlay({ error: { key: 'agentRevokeFailed', why: 'unavailable' } }); return false }
+    this.setOverlay({ busy: true, error: undefined })
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'overlay.revoke', { keys: keys === 'all' ? 'all' : [...keys], ...adopted ? { adopted: true } : {} })
+      if (!result.ok) throw new Error(result.error.message)
+      this.setOverlay({ busy: false, failed: false, view: result.value as OverlayView })
+      void this.refreshStatus()
+      return true
+    } catch (error) {
+      this.setOverlay({ busy: false, error: { key: 'agentRevokeFailed', why: error instanceof Error ? error.message : String(error) } })
+      return false
+    }
+  }
+
+  /**
+   * "Adopt into configuration": write the overlay item's value into the profile with the Host's atomic `mutate` (the same call the save bar
+   * makes, at the leaf the item is about), and only when that landed ask the plugin to drop the entry. A failed write leaves both as they were.
+   */
+  async adoptOverlay(key: string): Promise<boolean> {
+    const item = this.server.overlay.view?.items.find(entry => entry.key === key)
+    const adoption = item ? adoptionOf(item) : undefined
+    if (!item || !adoption || this.saving || !this.scope.getSnapshot().writable) return false
+    this.setOverlay({ busy: true, error: undefined })
+    let landed = false
+    try { landed = await this.scope.mutate(adoption.ops as Parameters<ConfigForm<Record<string, unknown>>['mutate']>[0]) } catch { landed = false }
+    if (!landed) { this.setOverlay({ busy: false, error: { key: 'agentAdoptFailed' } }); return false }
+    for (const field of adoption.drop) this.staged.delete(field as SettingField)
+    this.publish()
+    const dropped = await this.revokeOverlay([key], true)
+    if (!dropped) this.setOverlay({ error: { key: 'agentAdoptHalf', why: this.server.overlay.error?.why } })
+    return dropped
   }
 
   /** Run one search of a custom CLI draft (rpc-types.ts `trial`). The outcome lands in `server.trial`. */
@@ -251,6 +322,9 @@ export class WebSearchSettingsController {
       discard: () => { this.discard() },
       refreshCredentials: () => { void this.refreshCredentials() },
       refreshStatus: () => { void this.refreshStatus() },
+      refreshOverlay: () => { void this.refreshOverlay() },
+      revokeOverlay: (keys: readonly string[] | 'all') => { void this.revokeOverlay(keys) },
+      adoptOverlay: (key: string) => { void this.adoptOverlay(key) },
       runTrial: (request: TrialRequest) => { void this.runTrial(request) },
       clearTrial: () => { this.clearTrial() },
     }

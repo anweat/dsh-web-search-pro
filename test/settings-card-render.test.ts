@@ -48,7 +48,7 @@ before(async () => {
   }
 })
 
-const GROUPS = ['common', 'order', 'sources', 'cli', 'reading', 'judge', 'route', 'runtime', 'network', 'ranking', 'advanced']
+const GROUPS = ['common', 'order', 'sources', 'cli', 'reading', 'judge', 'route', 'runtime', 'network', 'ranking', 'agent', 'advanced']
 
 /** The card and every dialog body, parsed. `user` is the stored settings; `credentials` the refs that hold a secret. */
 function page(lang: 'zh' | 'en', user: Record<string, unknown> = {}, credentials: Record<string, string> = {}) {
@@ -64,7 +64,7 @@ function page(lang: 'zh' | 'en', user: Record<string, unknown> = {}, credentials
 
 const entriesOf = (root: ReturnType<typeof parse>, field: string) => root.querySelectorAll(`[data-wsp-field="${field}"]`).length
 
-test('the card is a status summary, eleven accordion groups of which only Common is open, and a sticky save bar', async () => {
+test('the card is a status summary, twelve accordion groups of which only Common is open, and a sticky save bar', async () => {
   const { root } = await page('en')
   assert.ok(root.querySelector('[data-wsp-summary]'), 'status summary on top')
   assert.deepEqual(root.querySelectorAll('details[data-wsp-group]').map(node => node.getAttribute('data-wsp-group')), GROUPS)

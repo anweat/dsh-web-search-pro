@@ -11,6 +11,9 @@ import type { ReactNode } from 'react'
 import type { SettingsCardProps } from './index.ts'
 import type { CardFieldState, WebSearchCardState } from './form.ts'
 import { hasHelp, labelKey, restartWhyKey } from './field-keys.ts'
+import { fill } from './fill.ts'
+import { AgentMark } from './agent-mark.tsx'
+import { overlayKeyOfField } from './overlay-ops.ts'
 import { isRestartField } from '../restart.ts'
 import { Chips, Row, Select, TextInput, Toggle, UnitInput, type RowLabels, type SelectOption } from './ui-kit.tsx'
 
@@ -18,8 +21,7 @@ export type Card = SettingsCardProps
 export type Translator = Card['t']
 export type LabelKey = Parameters<Translator>[0]
 
-/** Fill `{name}` placeholders of a dictionary entry. */
-export const fill = (text: string, values: Record<string, string | number>): string => text.replace(/\{(\w+)\}/g, (_match, key: string) => String(values[key] ?? ''))
+export { fill }
 
 export function rowLabels(t: Translator): RowLabels {
   return { overridden: t('overridden'), reset: t('reset'), help: t('helpLabel'), invalid: t('invalid') }
@@ -70,6 +72,7 @@ function rowFor(props: FieldProps, field: ReturnType<typeof useField>, children:
   return <Row field={props.field} id={extra.id} label={props.label ?? t(key as LabelKey)} hint={props.hint ?? t(`${key}Hint` as LabelKey)}
     help={hasHelp(props.field) ? t(`${key}Help` as LabelKey) : undefined} risk={props.risk}
     restart={isRestartField(props.field) ? { badge: t('restartBadge'), why: t(restartWhyKey(props.field) as LabelKey), touched } : undefined}
+    mark={overlayKeyOfField(props.field) ? <AgentMark card={card} itemKey={overlayKeyOfField(props.field)!} /> : undefined}
     overridden={st.overridden} invalid={st.invalid || !!st.message} problem={st.message ?? t('invalid')} warning={st.warning} disabled={field.disabled}
     labels={rowLabels(t)} onReset={field.reset} inline={extra.inline} wide={extra.wide}>{children}</Row>
 }

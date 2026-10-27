@@ -59,6 +59,7 @@ export function SummaryBar({ card }: { card: Card }) {
     route: snapshot.fields.registerProvider.text === 'true', surface: snapshot.fields.toolSurface.text || 'indexed',
     judge: snapshot.fields['evidence.judge.mode'].text || 'off',
     pending: snapshot.server.status?.pendingRestart ?? [],
+    agent: snapshot.server.overlay.view?.items.length ?? 0,
     warnings: warningsOf(snapshot, t),
   }))
   const chain = view.chain.split(' › ')
@@ -71,6 +72,8 @@ export function SummaryBar({ card }: { card: Card }) {
     <Badge tone={view.route ? 'info' : 'neutral'}>{view.route ? t('summaryRouteOn') : t('summaryRouteOff')}</Badge>
     <Badge tone={JUDGE_TONE[view.judge] ?? 'neutral'}>{t('summaryJudge')} {view.judge}</Badge>
     <Badge tone="neutral">{t('summarySurface')} {view.surface}</Badge>
+    {view.agent ? <button type="button" className={css.link} onClick={() => { const node = document.querySelector<HTMLDetailsElement>('[data-wsp-group="agent"]'); if (node) { node.open = true; node.scrollIntoView?.({ block: 'start', behavior: 'smooth' }) } }} data-wsp-agent-summary={view.agent}>
+      <Badge tone="warning">{fill(t('summaryAgent'), { n: view.agent })}</Badge> · {t('summaryAgentOpen')}</button> : null}
     {view.pending.length ? <span data-wsp-pending-restart={view.pending.map(entry => entry.field).join(',')} title={view.pending.map(entry => entry.field + ': ' + fill(t('pendingRestartLine'), { running: entry.running || t('pendingEmpty'), configured: entry.configured || t('pendingEmpty') })).join('\n')}>
       <Badge tone="warning">{fill(t('summaryPendingRestart'), { n: view.pending.length })}: {view.pending.map(entry => entry.field).join(', ')}</Badge></span> : null}
     <button type="button" className={css.link} onClick={() => setOpen(true)} data-wsp-warnings-count={view.warnings.length}>

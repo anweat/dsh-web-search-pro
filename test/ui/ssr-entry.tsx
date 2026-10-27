@@ -25,7 +25,7 @@ function propsFor(state: unknown, lang: 'zh' | 'en', view: 'page' | 'summary' = 
   const props = {
     t, view, useWebSearchPro: (selector: (snapshot: unknown) => unknown) => selector(state),
     edit: noop, resetField: noop, editCredential: noop, editRubric: noop, startRubric: noop, restoreRubric: noop,
-    save: noop, discard: noop, refreshCredentials: noop, refreshStatus: noop, runTrial: noop, clearTrial: noop,
+    save: noop, discard: noop, refreshCredentials: noop, refreshStatus: noop, refreshOverlay: noop, revokeOverlay: noop, adoptOverlay: noop, runTrial: noop, clearTrial: noop,
   }
   return { props, missingKeys }
 }

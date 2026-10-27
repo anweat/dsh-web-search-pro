@@ -14,6 +14,7 @@ import {
 } from './cli-form.ts'
 import type { TrialResult } from '../rpc-types.ts'
 import { fill, rowLabels, useOverriddenCount, type Card } from './field-rows.tsx'
+import { AgentMark } from './agent-mark.tsx'
 import { customEntries, customRows, ORDER_PLATFORMS } from './order.ts'
 import { styles as css } from './styles.ts'
 import { Badge, Btn, Chips, Dialog, Fold, Group, Item, Row, Select, SubHead, TextInput, Toggle, UnitInput } from './ui-kit.tsx'
@@ -285,6 +286,7 @@ export function CliList({ card }: { card: Card }) {
           {!row.engine && !row.platforms.length ? <Badge tone="warning">{t('cliPurposeNone')}</Badge> : null}
           <Badge tone="neutral">{fill(t('orderConfidenceBadge'), { c: row.confidence })}</Badge>
           <Badge tone={row.problems.length ? 'danger' : 'success'}>{row.problems.length ? t('stateSpecBad') + ' · ' + row.problems.length : t('stateSpecOk')}</Badge>
+          <AgentMark card={card} itemKey={'cliAdapters.' + row.id} compact />
         </>}
         meta={row.problems.length ? row.problems[0] : row.bin + ' ' + argvPreview(entry(row.id))}
         actions={<>
@@ -297,8 +299,33 @@ export function CliList({ card }: { card: Card }) {
       <Btn disabled={disabled || adapters === undefined} onClick={() => open('new', freeId('mycli', taken), newSpec())} data="cli-add">＋ {t('cliAdd')}</Btn>
       <Btn disabled={disabled || adapters === undefined} onClick={() => open('new', freeId('echo', taken), echoSpec())} data="cli-add-example">{t('cliAddExample')}</Btn>
     </div>
+    <AgentClis card={card} baseline={taken} />
     {editing ? <CliDialog key={editing.mode + editing.id} card={card} initial={editing} taken={taken} onClose={() => setEditing(undefined)} /> : null}
   </>
+}
+
+/**
+ * The custom CLIs an agent added with `config.upsert_cli` that the configuration does not hold: they live only in the overlay, so the list
+ * above (which is the configuration) cannot show them. Each carries the same two buttons as in "Agent changes".
+ */
+function AgentClis({ card, baseline }: { card: Card; baseline: readonly string[] }) {
+  const { t } = card
+  const items = card.useWebSearchPro(snapshot => (snapshot.server.overlay.view?.items ?? []).filter(item => item.kind === 'cli' && item.target !== undefined && !baseline.includes(item.target)))
+  if (items.length === 0) return null
+  return <div data-wsp-agent-clis>
+    <SubHead>{t('agentCliTitle')}</SubHead>
+    <p className={css.rowHint}>{t('agentCliNote')}</p>
+    <div className={css.list}>
+      {items.map(item => <Item key={item.key} data={item.target}
+        title={<code>{item.target}</code>}
+        badges={<AgentMark card={card} itemKey={item.key} compact />}
+        meta={<><div><code>{item.summary}</code></div>{item.reason ? <div className={css.muted}>“{item.reason}”</div> : null}</>}
+        actions={<>
+          <Btn primary onClick={() => card.adoptOverlay(item.key)} data="agent-adopt">{t('agentAdopt')}</Btn>
+          <Btn danger onClick={() => card.revokeOverlay([item.key])} data="agent-revoke">{t('agentRevoke')}</Btn>
+        </>} />)}
+    </div>
+  </div>
 }
 
 /** The argument template as one line, for the list's meta text. */
