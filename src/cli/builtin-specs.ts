@@ -2,11 +2,11 @@
  * The built-in CLI adapter specs (dev-plan M12). Every argv, flag and output field was derived from the tool's own
  * `--help` (and, where the help does not show the output shape, from the installed package source or the upstream
  * README), and `verification` records how far each was checked:
- *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach, yt-dlp, wx-search-cli; and Exa through mcporter,
- *    which is not a spec);
+ *  - `live`: a real read-only search was run and its output parsed (bili, gh, omnireach, yt-dlp, wx-search-cli, xhs; the standalone
+ *    opencli for the twitter and zhihu sites, see opencli-sites.ts; and Exa through mcporter, which is not a spec);
  *  - `contract-only`: help and version probed on a real install, output shape taken from the tool's own source,
  *    README or documented output option, because a search needs the user's login or reads browser cookies
- *    (xhs, zhihu, rdt, twitter, opencli sites);
+ *    (zhihu, rdt, twitter, the other opencli sites);
  *  - `docs-only`: not installed here; derived from the upstream README (tanso).
  * Fixtures for the contract-only and docs-only parsers are marked "constructed from help/docs" in test/fixtures/cli.
  * @module web-search-pro/cli/builtin-specs
@@ -139,10 +139,14 @@ const xhs: CliAdapterSpec = {
     argv: ['search', '{query}', '--json'],
     output: {
       format: 'json', itemsPath: 'data.items', expect: ENVELOPE, errorPaths: ['error.message'],
+      // The result list also carries `hot_query` suggestion cards ("大家都在搜": an id and a token, but no note_card): not results.
+      keepWhen: { path: 'model_type', equals: 'note' },
       fields: {
         url: { template: 'https://www.xiaohongshu.com/explore/{id}?xsec_token={xsec_token}&xsec_source=pc_search' },
         title: ['note_card.display_title', 'note_card.title'],
         snippet: { join: [{ path: 'note_card.user.nickname', prefix: '作者: ' }, { path: 'note_card.interact_info.liked_count', prefix: '赞: ' }] },
+        // `corner_tag_info` holds `{ type: 'publish_time', text: '08-26' }` ('2025-12-01' for an older year); read conservatively, a text that is not a known format gives no time.
+        publishedAt: { time: 'note_card.corner_tag_info.type=publish_time.text' },
       },
     },
     notLoggedInPatterns: NOT_LOGGED_IN,
@@ -152,7 +156,7 @@ const xhs: CliAdapterSpec = {
   login: { command: 'xhs login', savedCredentialPaths: ['~/.xiaohongshu-cli/cookies.json'], readsBrowserCookiesWithoutLogin: true },
   timeoutMs: 45_000,
   maxOutputBytes: 4 * MB,
-  verification: { status: 'contract-only', version: '0.6.4', date: SPEC_CHECK_DATE, note: 'help probed; output shape from the installed package source (client response + its own normalizer); no search was run: it needs your login and, without a saved one, reads browser cookies' },
+  verification: { status: 'live', version: '0.6.4', date: '2026-10-27', note: 'a real `xhs search --json` run with the user\'s own saved login and parsed (fixture live-xhs-search.json, synthetic content in the real shape): 22 items for a count of 3, two of the 22 are hot_query suggestion cards (skipped); the publish time is in note_card.corner_tag_info (MM-DD or YYYY-MM-DD). Without a saved login the tool reads browser cookies by itself, so the plugin never runs it then' },
 }
 
 const zhihu: CliAdapterSpec = {

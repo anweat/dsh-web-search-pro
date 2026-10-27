@@ -40,7 +40,7 @@ test('every built-in spec passes the same validation as a user spec, and is read
 
 test('verification records: live only where a real read-only search was run, docs-only where the tool was not available to probe', () => {
   const status = Object.fromEntries(BUILTIN_CLI_SPECS.map(s => [s.id, s.verification!.status]))
-  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'live', twitter: 'contract-only', xhs: 'contract-only', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'live', tanso: 'docs-only' })
+  assert.deepEqual(status, { bili: 'live', 'yt-dlp': 'live', twitter: 'contract-only', xhs: 'live', zhihu: 'contract-only', rdt: 'contract-only', omnireach: 'live', gh: 'live', 'wx-search-cli': 'live', tanso: 'docs-only' })
   for (const s of BUILTIN_CLI_SPECS) {
     if (s.verification!.status === 'live') assert.match(s.verification!.date ?? '', /^\d{4}-\d{2}-\d{2}$/)
     assert.ok(s.verification!.version, s.id + ' records the verified version')

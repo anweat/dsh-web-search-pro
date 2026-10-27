@@ -191,7 +191,7 @@ test('detectDeps reports every adapter CLI: missing, detected with its version, 
     assert.deepEqual([byId.get('gh')!.installation, byId.get('gh')!.version, byId.get('gh')!.available, byId.get('gh')!.verification], ['detected', '2.101.0', true, 'live'])
     assert.deepEqual([byId.get('rdt')!.installation, byId.get('rdt')!.available], ['incompatible', false])
     assert.deepEqual([byId.get('xhs')!.installation, byId.get('xhs')!.available], ['missing', false])
-    assert.deepEqual([byId.get('tanso')!.verification, byId.get('wx-search-cli')!.verification, byId.get('xhs')!.verification], ['docs-only', 'live', 'contract-only'])
+    assert.deepEqual([byId.get('tanso')!.verification, byId.get('wx-search-cli')!.verification, byId.get('xhs')!.verification, byId.get('zhihu')!.verification], ['docs-only', 'live', 'live', 'contract-only'])
     assert.equal(byId.get('custom-cli:demo')!.available, true)
     assert.equal(byId.get('custom-cli:demo')!.verification, undefined, 'user adapters carry no verification')
     assert.ok(byId.get('xhs')!.installs.some(i => i.command === 'uv tool install xiaohongshu-cli'))
@@ -293,6 +293,7 @@ test('sources.status and search.recommend tag a backend whose adapter was never 
       const twitterChain = status.providers.find((p: any) => p.route === 'twitter').chain
       assert.deepEqual(twitterChain.map((e: any) => [e.id, e.verification]), [['opencli', 'live'], ['twitter', 'contract-only'], ['browser-opencli', 'unverified']], 'OpenCLI\'s twitter search was run for real; the twitter-cli fallback was not')
       assert.deepEqual(status.providers.find((p: any) => p.route === 'zhihu').chain.map((e: any) => [e.id, e.verification]), [['opencli', 'live'], ['zhihu', 'contract-only'], ['browser-search', 'unverified']])
+      assert.equal(status.providers.find((p: any) => p.route === 'xiaohongshu').chain[1].verification, 'live', 'xhs was run with a saved login')
       assert.deepEqual(['xiaohongshu', 'reddit'].map(r => status.providers.find((p: any) => p.route === r).chain[0].verification), ['contract-only', 'contract-only'], 'OpenCLI\'s xiaohongshu and reddit searches did not succeed yet')
       const tw = await callAction(defs, 'search.recommend', { task: 'what do people say on twitter about deepseek', platform: 'twitter' })
       assert.deepEqual(checkOutput(findAction('search.recommend')!.output, tw), [])
