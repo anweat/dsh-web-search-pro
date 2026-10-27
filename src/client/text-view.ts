@@ -8,7 +8,7 @@
  */
 
 import { fieldDoc, textViewDocs, type DocLang } from './field-docs.ts'
-import { textGroupOf } from './field-keys.ts'
+import { CONFIG_GROUP_IDS, CONFIG_GROUPS } from '../config-groups.ts'
 import { isPathSpec, type FieldSpec, type Json, type PathSpec } from './form-specs.ts'
 
 interface FieldView { text: string; overridden: boolean }
@@ -52,7 +52,7 @@ function print(node: Node, key: string, depth: number, lang: DocLang | string, o
 export function renderTextView(views: Readonly<Record<string, FieldView | undefined>>, specs: readonly FieldSpec[], lang: DocLang | string = 'en'): string {
   const docs = textViewDocs(lang)
   const lines: string[] = docs.header.map(line => '# ' + line)
-  const top = new Map<string, Leaf[]>()
+  const leaves = new Map<string, Leaf>()
   const roots = new Map<string, Node>()
   for (const spec of specs) {
     const view = views[spec.field]
@@ -70,19 +70,20 @@ export function renderTextView(views: Readonly<Record<string, FieldView | undefi
       }
       node.leaf = leaf
     } else {
-      const group = textGroupOf(spec.field)
-      top.set(group, [...top.get(group) ?? [], leaf])
+      leaves.set(spec.field, leaf)
     }
   }
-  for (const group of Object.keys(docs.group)) {
-    const leaves = top.get(group)
-    if (!leaves?.length) continue
-    lines.push('', '# ── ' + docs.group[group] + ' ──')
-    for (const leaf of leaves) print({ children: new Map(), leaf }, leaf.spec.field, 0, lang, lines)
-  }
-  for (const [root, node] of roots) {
-    lines.push('', '# ── ' + root + ' ──')
-    print(node, root, 0, lang, lines)
+  // Group by group in the order of config-groups.ts, and inside a group key by key in the order of the schema: a plain key is one
+  // leaf, an object key (`sources`, `evidence`, ...) is the tree of its options.
+  for (const group of CONFIG_GROUP_IDS) {
+    const body: string[] = []
+    for (const key of CONFIG_GROUPS[group]) {
+      const leaf = leaves.get(key)
+      if (leaf) print({ children: new Map(), leaf }, key, 0, lang, body)
+      const root = roots.get(key)
+      if (root) print(root, key, 0, lang, body)
+    }
+    if (body.length) lines.push('', '# ── ' + docs.group[group] + ' ──', ...body)
   }
   return lines.join('\n') + '\n'
 }

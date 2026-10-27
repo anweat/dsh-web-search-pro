@@ -1,10 +1,12 @@
 /**
  * The comment printed in front of every key of the text view ("Advanced: text mode"), in the language of the card: what the
  * setting is for, its allowed values or range, its default, and the risk when there is one. Comment lines start with `#`, so
- * the text stays valid YAML and a round trip never reads a comment as data. Pure and free of imports: the text view and the
+ * the text stays valid YAML and a round trip never reads a comment as data. Pure (it imports only config-groups.ts): the text view and the
  * tests read it, and the client bundle includes it. Nothing here names a secret value: keys are only ever referenced by name.
  * @module web-search-pro/client/field-docs
  */
+
+import { CONFIG_GROUP_TITLES } from '../config-groups.ts'
 
 export type DocLang = 'en' | 'zh'
 
@@ -122,7 +124,7 @@ export function textViewDocs(lang: DocLang | string = 'en'): { header: readonly 
         '`键: 值` 表示覆盖默认值；以 # 开头的行是注释，被读取时忽略；每个键上面的注释说明用途、取值、默认值与风险。',
         '被注释的 `# 键: 值` 行是未覆盖的键（显示当前生效的值）；密钥从不出现在这里，只有保存密钥的凭据引用名。这份文本是面板里控件的只读视图：修改请用控件。',
       ],
-      group: { search: '搜索', sources: '来源（API Key 只写引用名）', reading: '读取与证据', judge: '评分模型', route: '内置 web 工具路由', runtime: '运行时与后端', network: '网络与缓存', ranking: '排序加权', platform: '平台与浏览器' },
+      group: CONFIG_GROUP_TITLES.zh,
     }
     : {
       header: [
@@ -130,6 +132,6 @@ export function textViewDocs(lang: DocLang | string = 'en'): { header: readonly 
         '`key: value` overrides the default. A line starting with # is a comment and is ignored when read; the comment above each key says what it is for, the allowed values, the default and any risk.',
         'A commented `# key: value` line is a key you have not overridden (it shows the value in force). Secrets never appear here, only the names of the credentials that hold them. This text is a read-only view of the controls in the panel: edit the controls.',
       ],
-      group: { search: 'Search', sources: 'Sources (API keys by reference name only)', reading: 'Reading and evidence', judge: 'Scoring model', route: 'Built-in web tool route', runtime: 'Runtime and backends', network: 'Network and cache', ranking: 'Ranking weights', platform: 'Platforms and browser' },
+      group: CONFIG_GROUP_TITLES.en,
     }
 }

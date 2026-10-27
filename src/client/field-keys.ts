@@ -4,6 +4,7 @@
  * @module web-search-pro/client/field-keys
  */
 
+import { groupOf, type ConfigGroupId } from '../config-groups.ts'
 import { KEYED_SOURCE_ENVS } from '../providers/keyed-meta.ts'
 
 /** Dictionary key of the label of a field; the hint is `<key>Hint` and the `?` text `<key>Help`. */
@@ -92,23 +93,7 @@ export const JSON_FIELDS: readonly { field: string; group: 'judge' | 'runtime' |
   { field: 'customPlatforms', group: 'platform' }, { field: 'platformRules', group: 'platform' }, { field: 'browserBindings', group: 'platform' },
 ]
 
-/** Group of the text view each plain field is printed under (the others are listed explicitly where they are built). */
-export const TEXT_GROUP: Readonly<Record<string, string>> = {
-  engines: 'search', parallelEngines: 'search', searchMaxResults: 'search', toolSurface: 'search', allowProxyFakeIp: 'network', timeoutMs: 'network',
-  'evidence.sourcePolicy': 'sources', 'sources.priority': 'sources', 'sources.disabled': 'sources', openalexMailto: 'sources', deepseekFetch: 'sources',
-  fetchDefaultChars: 'reading', exaContentsPerUrlChars: 'reading', exaContentsTotalChars: 'reading', 'evidence.autoProviders': 'reading', 'evidence.maxRounds': 'reading', 'evidence.maxQueries': 'reading',
-  registerProvider: 'route', providerId: 'route', 'provider.evidence': 'route', 'provider.deadlineMs': 'route',
-  enableCliBackends: 'runtime', opencliEnabled: 'runtime', agentReachEnabled: 'runtime', twitterAuthTokenEnv: 'runtime', twitterCt0Env: 'runtime', playwright: 'runtime', platformBackends: 'runtime', cliAdapters: 'runtime',
-  customPlatforms: 'platform', platformRules: 'platform', browserBindings: 'platform',
-  ttlSeconds: 'network', memoryCacheEntries: 'network', dbPath: 'network', verbose: 'network',
-  rrfConstant: 'ranking', freshnessBoost: 'ranking', freshnessDays: 'ranking', authorityBoost: 'ranking', authorityDomains: 'ranking',
-}
-
-/** Group of the text view of any field (judge, budget, keyed and rubric families included). */
-export function textGroupOf(field: string): string {
-  const named = TEXT_GROUP[field]
-  if (named) return named
-  if (/^evidence\.(judge|coverage|budget|rubrics)\./.test(field)) return 'judge'
-  if (/^keyedSources\.|^sources\.budget\.|^bocha/.test(field) || /^(exa|jina|github)ApiKeyEnv$|^githubTokenEnv$|^searxngUrl$/.test(field)) return 'sources'
-  return 'search'
+/** Group of the text view of any field: the group of its top-level key (see config-groups.ts, the one list of the layout). */
+export function textGroupOf(field: string): ConfigGroupId {
+  return groupOf(field) ?? 'common'
 }
