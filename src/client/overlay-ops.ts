@@ -46,3 +46,14 @@ export function formatTime(iso: string): string {
   if (Number.isNaN(date.getTime())) return iso
   return date.getFullYear() + '-' + two(date.getMonth() + 1) + '-' + two(date.getDate()) + ' ' + two(date.getHours()) + ':' + two(date.getMinutes())
 }
+
+/**
+ * The custom CLIs an overlay item leans on that only the overlay holds: an engine list or a platform chain that names `custom-cli:<id>`
+ * where `cliAdapters.<id>` is itself an overlay entry. Adopting such an item alone would leave the configuration naming a CLI it does not
+ * define, so the card says to adopt the CLI too.
+ */
+export function overlayCliDependencies(item: Pick<OverlayItem, 'kind' | 'value'>, items: readonly Pick<OverlayItem, 'key'>[]): string[] {
+  if ((item.kind !== 'engines' && item.kind !== 'platform' && item.kind !== 'priority') || !Array.isArray(item.value)) return []
+  const held = new Set(items.map(entry => entry.key))
+  return item.value.filter((id): id is string => typeof id === 'string' && id.startsWith('custom-cli:') && held.has('cliAdapters.' + id.slice('custom-cli:'.length))).map(id => id.slice('custom-cli:'.length))
+}

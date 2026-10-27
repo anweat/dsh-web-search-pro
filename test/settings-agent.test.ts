@@ -11,7 +11,7 @@ import { before, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { parse } from 'node-html-parser'
 import { WebSearchSettingsController } from '../src/client/form.ts'
-import { adoptionOf, formatTime, overlayKeyOfField } from '../src/client/overlay-ops.ts'
+import { adoptionOf, formatTime, overlayCliDependencies, overlayKeyOfField } from '../src/client/overlay-ops.ts'
 import { en, zh } from '../src/client/locales.ts'
 import type { OverlayItem, OverlayView } from '../src/overlay-types.ts'
 import { RPC_CHANNEL } from '../src/rpc-types.ts'
@@ -258,4 +258,35 @@ test('an empty overlay, a loading one and an ignored one render their own state;
 test('both dictionaries carry every agent key', () => {
   for (const key of Object.keys(zh).filter(name => /^(agent|groupAgent|summaryAgent)/.test(name))) assert.ok(key in en, key + ' in en')
   for (const key of Object.keys(en).filter(name => /^(agent|groupAgent|summaryAgent)/.test(name))) assert.ok(key in zh, key + ' in zh')
+})
+
+test('the order group says what a search tries with the agent\'s changes on top of the staged settings, by the same rule', async () => {
+  const { controller } = controllerWith(view(), { base: { engines: ['ddg', 'bing', 'exa'], sources: {}, platformBackends: {}, cliAdapters: {} } })
+  await settle()
+  const root = parse(renderCard!(controller.snapshot(), 'en').html)
+  assert.match(root.querySelector('[data-wsp-effective] [data-wsp-chain]')!.text, /ddg\s*›\s*bing\s*›\s*exa/, 'the baseline preview is unchanged')
+  // The overlay holds engines bing > ddg (exa is not in that list, so the priority entry has nothing to move) and disables jina.
+  assert.equal(root.querySelector('[data-wsp-effective-agent]')!.text.replace(/\s+/g, ''), "Withtheagent'schangesasearchtries:bing›ddg")
+  const none = controllerWith(view([item('sources.disabled', 'disabled', undefined, ['ddg', 'bing', 'exa'])]), { base: { engines: ['ddg', 'bing', 'exa'], sources: {}, platformBackends: {}, cliAdapters: {} } })
+  await settle()
+  assert.match(parse(renderCard!(none.controller.snapshot(), 'en').html).querySelector('[data-wsp-effective-agent]')!.text, /no engine is left/)
+  const quiet = controllerWith(view([item('sources.confidence.exa', 'confidence', 'exa', 0.8)]))
+  await settle()
+  assert.equal(parse(renderCard!(quiet.controller.snapshot(), 'en').html).querySelector('[data-wsp-effective-agent]'), null, 'only the three order keys change the chain')
+  controller.dispose(); none.controller.dispose(); quiet.controller.dispose()
+})
+
+test('an entry that names a CLI only the overlay holds says to adopt the CLI too', async () => {
+  const engines = item('engines', 'engines', undefined, ['bing', 'custom-cli:mine'])
+  const mine = item('cliAdapters.mine', 'cli', 'mine', SPEC)
+  assert.deepEqual(overlayCliDependencies(engines, [engines, mine]), ['mine'])
+  assert.deepEqual(overlayCliDependencies(engines, [engines]), [], 'a CLI the configuration holds is no dependency')
+  assert.deepEqual(overlayCliDependencies(mine, [engines, mine]), [])
+  assert.deepEqual(overlayCliDependencies(item('sources.confidence.exa', 'confidence', 'exa', 0.5), [mine]), [])
+  const { controller } = controllerWith(view([engines, mine]))
+  await settle()
+  const root = parse(renderCard!(controller.snapshot(), 'en').html)
+  assert.match(root.querySelector('[data-wsp-agent-needs]')!.text, /Uses a custom CLI that only the overlay holds: mine/)
+  assert.equal(root.querySelectorAll('[data-wsp-agent-needs]').length, 1)
+  controller.dispose()
 })

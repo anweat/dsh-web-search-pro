@@ -316,14 +316,14 @@ function AgentClis({ card, baseline }: { card: Card; baseline: readonly string[]
     <SubHead>{t('agentCliTitle')}</SubHead>
     <p className={css.rowHint}>{t('agentCliNote')}</p>
     <div className={css.list}>
-      {items.map(item => <Item key={item.key} data={item.target}
+      {items.map(item => <div key={item.key} className="wsp-agent-row"><Item data={item.target}
         title={<code>{item.target}</code>}
         badges={<AgentMark card={card} itemKey={item.key} compact />}
         meta={<><div><code>{item.summary}</code></div>{item.reason ? <div className={css.muted}>“{item.reason}”</div> : null}</>}
         actions={<>
-          <Btn primary onClick={() => card.adoptOverlay(item.key)} data="agent-adopt">{t('agentAdopt')}</Btn>
+          <Btn onClick={() => card.adoptOverlay(item.key)} data="agent-adopt">{t('agentAdopt')}</Btn>
           <Btn danger onClick={() => card.revokeOverlay([item.key])} data="agent-revoke">{t('agentRevoke')}</Btn>
-        </>} />)}
+        </>} /></div>)}
     </div>
   </div>
 }

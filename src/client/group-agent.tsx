@@ -10,7 +10,7 @@
 import type { OverlayItem, OverlayItemKind } from '../overlay-types.ts'
 import { agentTip } from './agent-mark.tsx'
 import { fill, type Card, type LabelKey } from './field-rows.tsx'
-import { formatTime } from './overlay-ops.ts'
+import { formatTime, overlayCliDependencies } from './overlay-ops.ts'
 import { styles as css } from './styles.ts'
 import { AgentTag, Badge, Btn, Fold, Group, Item } from './ui-kit.tsx'
 
@@ -19,21 +19,23 @@ const KIND_LABEL: Record<OverlayItemKind, LabelKey> = {
 }
 
 /** One overlay entry: what it is, the value the agent set against the one in the configuration, why and when, and the two buttons. */
-export function AgentItem({ card, item, busy }: { card: Card; item: OverlayItem; busy: boolean }) {
+export function AgentItem({ card, item, busy, items }: { card: Card; item: OverlayItem; busy: boolean; items: readonly OverlayItem[] }) {
   const { t } = card
+  const needs = overlayCliDependencies(item, items)
   const who = item.actor === 'user' ? t('agentActorUser') : t('agentActorAgent')
-  return <Item data={item.key}
+  return <div className="wsp-agent-row"><Item data={item.key}
     title={<><strong>{t(KIND_LABEL[item.kind])}</strong>{item.target ? <code>{item.target}</code> : null}</>}
     badges={<AgentTag label={t('agentBadge')} tip={agentTip(t, item)} />}
     meta={<>
       <div><span className={css.muted}>{t('agentNow')}</span> <code>{item.summary}</code></div>
       <div><span className={css.muted}>{t('agentConfigHolds')}</span> <code>{item.baseline}</code></div>
+      {needs.length ? <div className="wsp-bad-soft" data-wsp-agent-needs={needs.join(',')}>{fill(t('agentNeedsCli'), { ids: needs.join(', ') })}</div> : null}
       <div className={css.muted}>{item.reason ? '“' + item.reason + '”' : t('agentNoReason')}{item.at ? ' · ' + formatTime(item.at) : ''} · {who}{item.sessionId ? ' · ' + item.sessionId : ''}</div>
     </>}
     actions={<>
-      <Btn primary disabled={busy} onClick={() => card.adoptOverlay(item.key)} data="agent-adopt">{t('agentAdopt')}</Btn>
+      <Btn disabled={busy} onClick={() => card.adoptOverlay(item.key)} data="agent-adopt">{t('agentAdopt')}</Btn>
       <Btn danger disabled={busy} onClick={() => card.revokeOverlay([item.key])} data="agent-revoke">{t('agentRevoke')}</Btn>
-    </>} />
+    </>} /></div>
 }
 
 export function AgentGroup({ card }: { card: Card }) {
@@ -51,7 +53,7 @@ export function AgentGroup({ card }: { card: Card }) {
     <div className={css.list} data-wsp-agent-list>
       {view === undefined ? <p className={css.empty}>{overlay.loading ? t('agentLoading') : t('agentNotLoaded')}</p>
         : items.length === 0 ? <p className={css.empty}>{t('agentEmpty')}</p>
-          : items.map(item => <AgentItem key={item.key} card={card} item={item} busy={state.busy} />)}
+          : items.map(item => <AgentItem key={item.key} card={card} item={item} items={items} busy={state.busy} />)}
     </div>
     <div className={css.actions}>
       <Btn disabled={overlay.loading} onClick={card.refreshOverlay} data="agent-refresh">{overlay.loading ? t('agentRefreshing') : t('agentRefresh')}</Btn>

@@ -10,7 +10,7 @@ import { useState } from 'react'
 import type { ChainReason } from '../default-chain.ts'
 import { explainChain } from '../default-chain.ts'
 import { adaptersOf } from './cli-form.ts'
-import { chainInputOf } from './card-frame.tsx'
+import { agentChainOf, chainInputOf } from './card-frame.tsx'
 import { fill, rowLabels, useField, useOverriddenCount, type Card, type LabelKey } from './field-rows.tsx'
 import { hasHelp, labelKey } from './field-keys.ts'
 import { confidenceField, CONFIDENCE_PREFIX } from './form-specs.ts'
@@ -138,11 +138,13 @@ function whyText(t: Card['t'], reasons: readonly ChainReason[]): string {
 export function EffectiveChain({ card }: { card: Card }) {
   const { t } = card
   const view = card.useWebSearchPro(snapshot => explainChain(chainInputOf(snapshot)))
+  const agent = card.useWebSearchPro(snapshot => agentChainOf(snapshot))
   return <div data-wsp-effective>
     <p className={css.chain} role="status" data-wsp-chain>
       <span>{t('chainNow')}</span>{view.chain?.length ? view.chain.map((id, index) => <span key={id + index}>{index ? '› ' : ''}<code>{id}</code></span>) : <span>{t('chainEmpty')}</span>}
     </p>
     <p className={css.why} data-wsp-why><strong>{t('orderWhy')}</strong> {view.chain ? whyText(t, view.reasons) : t('orderWhyNone')}</p>
+    {agent ? <p className={css.why} data-wsp-effective-agent><strong>{t('orderAgentChain')}</strong> {agent.length ? agent.map((id, index) => <span key={id + index}>{index ? '› ' : ''}<code>{id}</code> </span>) : t('orderAgentChainNone')}</p> : null}
   </div>
 }
 

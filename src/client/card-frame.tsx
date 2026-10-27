@@ -32,6 +32,21 @@ export function chainOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentia
   try { return effectiveChain(chainInputOf(snapshot)) } catch { return undefined }
 }
 
+/**
+ * The chain a plain search tries once the agent's changes (engines, priority, disabled of the overlay) are on top of the staged settings,
+ * by the same rule; undefined while the agent changed none of the three, an empty list when it would leave nothing to try.
+ */
+export function agentChainOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials' | 'server'>): string[] | undefined {
+  const items = snapshot.server.overlay.view?.items ?? []
+  const listOf = (key: string): string[] | undefined => { const value = items.find(item => item.key === key)?.value; return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : undefined }
+  const engines = listOf('engines')
+  const priority = listOf('sources.priority')
+  const disabled = listOf('sources.disabled')
+  if (!engines && !priority && !disabled) return undefined
+  const base = chainInputOf(snapshot)
+  try { return effectiveChain({ ...base, engines: engines ?? base.engines, priority: priority ?? base.priority, disabled: disabled ?? base.disabled }) } catch { return [] }
+}
+
 /** Everything the warnings badge counts: what the validation says about a field, and the rubric problems. */
 export function warningsOf(snapshot: WebSearchCardState, t: Card['t']): string[] {
   const out: string[] = []
