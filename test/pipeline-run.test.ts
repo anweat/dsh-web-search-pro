@@ -306,3 +306,18 @@ test('pipeline: a budget and per-URL limit from the task reach selection', async
   assert.ok(small.pack.stats.excerptChars <= 500)
   assert.equal(new Set(small.pack.evidence.map(e => e.url)).size, small.pack.evidence.length)
 })
+
+test('pipeline: a whole-output custom CLI result (cli:// stand-in link) is a source of the pack but is never fetched', async () => {
+  const wholeUrl = 'cli://echo?q=node%3Asqlite%20busy%20timeout'
+  const h = harness({
+    search: call => call.id === 'bing'
+      ? { state: 'ok', sources: [{ url: wholeUrl, title: 'echo: node:sqlite busy timeout', snippet: 'node:sqlite busy timeout WAL mode: set PRAGMA busy_timeout' }] }
+      : okSources('https://docs.test/busy', 'https://docs.test/wal'),
+  })
+  const { pack } = await runPipeline(TASK, h.deps)
+  assert.ok(!h.fetched.some(url => url.startsWith('cli://')), 'no page fetch for the stand-in link: ' + h.fetched.join(', '))
+  assert.ok(pack.sources.some(source => source.url === wholeUrl), 'it is listed as a source')
+  assert.ok(!pack.notes.some(note => /could not be read/.test(note)), 'and it is not reported as a page that failed to load')
+  assert.ok(pack.evidence.every(item => item.url.startsWith('https://')), 'evidence comes from real pages only')
+  assert.deepEqual(pack.coveredNeeds, ['n1', 'n2'])
+})

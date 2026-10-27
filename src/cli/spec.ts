@@ -26,8 +26,21 @@ export type CliVerification = typeof CLI_VERIFICATIONS[number]
 export function verificationTag(status: string): string | undefined {
   if (status === 'contract-only') return 'contract-only — output parser not verified with a real search'
   if (status === 'docs-only') return 'docs-only — written from upstream docs, tool not run here'
+  if (status === USER_DEFINED) return USER_DEFINED_TAG
   return undefined
 }
+
+/** The verification word of a user-defined spec: it is unverified by definition and says so in every result it returns. */
+export const USER_DEFINED = 'user-defined'
+/** The honest label a custom CLI's results and chain entries carry. */
+export const USER_DEFINED_TAG = 'user-defined, not verified by the plugin (用户自定义，未经插件验证)'
+/** Confidence of a custom CLI whose spec gives none: below the built-in sources (1), because nothing here checked its output. */
+export const DEFAULT_CUSTOM_CONFIDENCE = 0.5
+/** Default and largest size of a whole-output result's text, in characters (`output.lines.maxChars`). */
+export const WHOLE_OUTPUT_DEFAULT_CHARS = 2_000
+export const WHOLE_OUTPUT_MAX_CHARS = 8_000
+/** Scheme of the stand-in link of a whole-output result (`cli://<id>?q=<query>`): not a web page, so nothing fetches it. */
+export const WHOLE_OUTPUT_SCHEME = 'cli://'
 
 export const CLI_ERROR_CODES = ['CLI_NOT_FOUND', 'CLI_CONTRACT_MISMATCH', 'CLI_NOT_LOGGED_IN', 'ENGINE_EMPTY', 'CLI_FAILED'] as const
 export type CliErrorCode = typeof CLI_ERROR_CODES[number]
@@ -70,9 +83,14 @@ export interface CliOutputSpec {
   expect?: readonly { path: string; equals: string | number | boolean }[]
   /** Paths of the tool's own error text, read when `expect` fails (first non-empty one). */
   errorPaths?: readonly string[]
-  /** text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`). */
-  lines?: { mode: 'tsv'; columns: readonly string[] } | { mode: 'url-lines' }
-  fields: { url: FieldSource; title?: FieldSource; snippet?: FieldSource; publishedAt?: FieldSource }
+  /**
+   * text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`; `whole`: the
+   * whole stdout is ONE result, for a tool that prints just a block of text: its text capped at `maxChars` (default
+   * {@link WHOLE_OUTPUT_DEFAULT_CHARS}) with a note when it was cut, the title "<id>: <query>" and the link `cli://<id>?q=<query>`).
+   */
+  lines?: { mode: 'tsv'; columns: readonly string[] } | { mode: 'url-lines' } | { mode: 'whole'; maxChars?: number }
+  /** Required (with `url`) for every mode except `whole`, which maps nothing. */
+  fields?: { url?: FieldSource; title?: FieldSource; snippet?: FieldSource; publishedAt?: FieldSource }
   /** Items whose `path` equals the value are not results at all and are not counted as skipped (xhs: `model_type` is `hot_query` for the suggestion cards its result list also carries). */
   skipWhen?: { path: string; equals: string | number | boolean }
   /** Strip HTML tags from title and snippet. */
@@ -166,8 +184,15 @@ export interface CliAdapterSpec {
   bins: readonly string[]
   /** What the package is called, which can differ from the command (`pip install pyzhihu-cli` runs `zhihu`). */
   packageNote: string
-  /** Platform ids the spec can serve (`search.run platform=`); a user spec's platform is `custom-cli:<id>`. */
+  /**
+   * Platform ids the spec serves: the platforms whose backend chain it may sit in (`platformBackends.<platform>`). A user spec is
+   * also a platform of its own, `custom-cli:<id>`, and may list none when it is a general `engine`.
+   */
   platforms: readonly string[]
+  /** User specs only: also a general search engine, listed in `engines` as `custom-cli:<id>` (fused and de-duplicated with the others). */
+  engine?: boolean
+  /** User specs only: 0..1, default {@link DEFAULT_CUSTOM_CONFIDENCE}. `sources.confidence.custom-cli:<id>` overrides it. */
+  confidence?: number
   probe: CliProbeSpec
   /** Every command word the argv templates use. */
   allowedSubcommands: readonly string[]
@@ -251,7 +276,7 @@ const PLACEHOLDERS = new Set(['query', 'count', 'url', 'terms'])
 const MAX_TIMEOUT_MS = 180_000
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
-const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
+const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'engine', 'confidence', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
 const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
 const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'])
@@ -331,18 +356,23 @@ function checkOutput(value: unknown, where: string, errors: string[]): void {
     const k = value.skipWhen
     if (!(isObject(k) && typeof k.path === 'string' && PATH_RE.test(k.path) && ['string', 'number', 'boolean'].includes(typeof k.equals) && Object.keys(k).every(key => key === 'path' || key === 'equals'))) errors.push(where + '.skipWhen must be { path, equals }')
   }
+  const whole = isObject(value.lines) && value.lines.mode === 'whole'
   if (value.lines !== undefined) {
     const l = value.lines
     if (isObject(l) && l.mode === 'url-lines' && Object.keys(l).length === 1) { /* fine */ }
+    else if (isObject(l) && l.mode === 'whole' && Object.keys(l).every(k => k === 'mode' || k === 'maxChars')) {
+      if (l.maxChars !== undefined && !(Number.isInteger(l.maxChars) && (l.maxChars as number) >= 200 && (l.maxChars as number) <= WHOLE_OUTPUT_MAX_CHARS)) errors.push(where + '.lines.maxChars must be an integer 200..' + WHOLE_OUTPUT_MAX_CHARS)
+    }
     else if (isObject(l) && l.mode === 'tsv' && strList(l.columns, 24, 40) && l.columns.length >= 2 && l.columns.every(c => /^[A-Za-z0-9_]+$/.test(c)) && Object.keys(l).every(k => k === 'mode' || k === 'columns')) { /* fine */ }
-    else errors.push(where + '.lines must be { mode: "url-lines" } or { mode: "tsv", columns: [...] }')
+    else errors.push(where + '.lines must be { mode: "url-lines" }, { mode: "tsv", columns: [...] } or { mode: "whole" }')
   }
   if (value.format === 'text' && value.lines === undefined) errors.push(where + '.lines is required for format text')
   if (value.format !== 'text' && value.lines !== undefined) errors.push(where + '.lines is only for format text')
-  if (!isObject(value.fields)) errors.push(where + '.fields must be an object')
+  if (value.fields === undefined && whole) { /* a whole-output result maps no fields */ }
+  else if (!isObject(value.fields)) errors.push(where + '.fields must be an object')
   else {
     closed(value.fields, FIELD_KEYS, where + '.fields', errors)
-    if (value.fields.url === undefined) errors.push(where + '.fields.url is required')
+    if (value.fields.url === undefined && !whole) errors.push(where + '.fields.url is required')
     for (const key of Object.keys(value.fields)) if (FIELD_KEYS.has(key)) checkFieldSource(value.fields[key], where + '.fields.' + key, errors)
   }
   if (value.stripTags !== undefined && typeof value.stripTags !== 'boolean') errors.push(where + '.stripTags must be a boolean')
@@ -398,7 +428,12 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
   if (typeof raw.id !== 'string' || !ID_RE.test(raw.id)) errors.push(at + '.id must match ' + String(ID_RE))
   if (!Array.isArray(raw.bins) || !raw.bins.length || raw.bins.length > 4 || !raw.bins.every(b => typeof b === 'string' && BIN_RE.test(b))) errors.push(at + '.bins must be 1..4 command names (no paths)')
   if (!isStr(raw.packageNote, 240)) errors.push(at + '.packageNote must be a short string (what the package is called, which can differ from the command)')
-  if (!strList(raw.platforms, 8, 40) || !(raw.platforms as string[]).length) errors.push(at + '.platforms must list 1..8 platform ids')
+  // A user spec may serve no platform at all when it is a general engine; a built-in always names its platforms.
+  const noPlatforms = origin === 'user' && raw.engine === true
+  if (!strList(raw.platforms, 8, 40) || (!(raw.platforms as string[]).length && !noPlatforms)) errors.push(at + (origin === 'user' ? '.platforms must list 1..8 platform ids (or be empty with "engine": true)' : '.platforms must list 1..8 platform ids'))
+  for (const key of ['engine', 'confidence'] as const) if (raw[key] !== undefined && origin !== 'user') errors.push(at + '.' + key + ' is for user-defined specs only')
+  if (raw.engine !== undefined && typeof raw.engine !== 'boolean') errors.push(at + '.engine must be a boolean')
+  if (raw.confidence !== undefined && !(typeof raw.confidence === 'number' && Number.isFinite(raw.confidence) && raw.confidence >= 0 && raw.confidence <= 1)) errors.push(at + '.confidence must be a number 0..1')
   if (typeof raw.needsLogin !== 'boolean') errors.push(at + '.needsLogin must be a boolean')
   if (!(Number.isInteger(raw.timeoutMs) && (raw.timeoutMs as number) >= 1_000 && (raw.timeoutMs as number) <= MAX_TIMEOUT_MS)) errors.push(at + '.timeoutMs must be an integer 1000..' + MAX_TIMEOUT_MS)
   if (!(Number.isInteger(raw.maxOutputBytes) && (raw.maxOutputBytes as number) >= 1_024 && (raw.maxOutputBytes as number) <= MAX_OUTPUT_BYTES)) errors.push(at + '.maxOutputBytes must be an integer 1024..' + MAX_OUTPUT_BYTES)

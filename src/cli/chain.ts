@@ -20,7 +20,7 @@ import { cliSpecEngine, disabledBySettings, probeError, specReadiness, type Spec
 import { listOpencliSites, OPENCLI_PROBE, opencliSiteVerification, planOpencliSearch } from './opencli.ts'
 import { cachedProbe, probeCli } from './probe.ts'
 import { CliAdapterError, runCliSearchDetailed } from './runner.ts'
-import { resolveCliAdapters, type CliAdapterSpec } from './spec.ts'
+import { resolveCliAdapters, USER_DEFINED, type CliAdapterSpec } from './spec.ts'
 
 export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'custom-cli'
 
@@ -76,7 +76,7 @@ function specLeg(id: string, spec: CliAdapterSpec, platform: string, ctx: ChainC
     id, kind: id.startsWith('custom-cli:') ? 'custom-cli' : 'cli', label: spec.bins[0]!,
     engine: cliSpecEngine(spec, platform, ctx.deps, { id, label: spec.bins[0]! }),
     readiness: async () => fromSpec(await specReadiness(spec, ctx.deps)),
-    verification: spec.verification?.status ?? 'unverified',
+    verification: spec.verification?.status ?? (id.startsWith('custom-cli:') ? USER_DEFINED : 'unverified'),
   }
 }
 

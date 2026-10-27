@@ -399,6 +399,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
         const i = next++
         if (i >= pool.length) return
         const candidate = pool[i]!
+        // A stand-in link (`cli://<id>?q=`, the whole output of a custom CLI) is no page: it stays a navigation-only source, its text is its snippet.
+        if (!/^https?:\/\//i.test(candidate.url)) continue
         slots++
         attempted.add(candidate.candidateId)
         let page: PageInput | undefined

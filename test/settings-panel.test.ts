@@ -130,7 +130,7 @@ test('platformBackends and cliAdapters: shared validation blocks what the server
   await controller.save()
   assert.deepEqual(scope.writes, [])
   // A valid adapter and a chain that uses it save, and the chain check knows the custom id.
-  const good = { ...evil, id: 'good', bins: ['good-cli'], allowedSubcommands: ['search'], search: { argv: ['search', '{query}'], output: { format: 'json', fields: { url: 'url' } } } }
+  const good = { ...evil, id: 'good', platforms: ['twitter'], bins: ['good-cli'], allowedSubcommands: ['search'], search: { argv: ['search', '{query}'], output: { format: 'json', fields: { url: 'url' } } } }
   controller.edit('cliAdapters', JSON.stringify({ good }))
   controller.edit('platformBackends', '{"twitter":["custom-cli:good","browser-opencli"]}')
   assert.equal(controller.snapshot().invalid, false, controller.snapshot().fields.platformBackends.message ?? '')

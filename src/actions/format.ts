@@ -1,9 +1,15 @@
 /** Text helpers shared by the action renderers. @module web-search-pro/actions/format */
 
+import { WHOLE_OUTPUT_SCHEME } from '../cli/spec.ts'
 import { qualityTag } from '../pipeline/render.ts'
 
 function sourceLine(s: { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number }): string {
   const label = s.title && s.title.length ? s.title : safeHost(s.url)
+  // The whole output of a custom CLI is a block of text, not a one-line snippet: it goes below the heading, indented.
+  if (s.url.startsWith(WHOLE_OUTPUT_SCHEME)) {
+    const quality = qualityTag(s)
+    return '- ' + label + ' (' + s.url + ')' + (quality ? ' ' + quality : '') + (s.snippet ? '\n' + s.snippet.split('\n').map(line => '    ' + line).join('\n') : '')
+  }
   const meta: string[] = []
   if (s.snippet) meta.push(s.snippet)
   if (s.publishedAt) meta.push('(' + s.publishedAt + ')')

@@ -13,7 +13,7 @@ import { capText, htmlDecode, jsYaml, runCli, stripTags, type CliResult } from '
 import { EngineError } from '../engine-error.ts'
 import { normalizeTimeText } from './time-text.ts'
 import {
-  searchSpecFor, type CliAdapterSpec, type CliErrorCode, type CliErrorCodesSpec, type CliOutputSpec, type CliSearchSpec, type FieldSource, type JoinPart, type TemplateSource,
+  searchSpecFor, WHOLE_OUTPUT_DEFAULT_CHARS, WHOLE_OUTPUT_SCHEME, type CliAdapterSpec, type CliErrorCode, type CliErrorCodesSpec, type CliOutputSpec, type CliSearchSpec, type FieldSource, type JoinPart, type TemplateSource,
 } from './spec.ts'
 
 /** A structured failure of a CLI adapter: `code` is one of {@link CliErrorCode}; `hint` says what the user can do. */
@@ -311,14 +311,15 @@ export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unkno
   for (const item of items) {
     if (!isObject(item)) continue
     if (output.skipWhen && getPath(item, output.skipWhen.path) === output.skipWhen.equals) continue
-    const url = resolveField(output.fields.url, item, empty, now)
+    const fields = output.fields ?? {}
+    const url = resolveField(fields.url, item, empty, now)
     if (!url || !/^https?:\/\//i.test(url)) { skipped++; continue }
     // A title is one line: a multi-line body (a tweet) is folded.
-    const rawTitle = clean(resolveField(output.fields.title, item, empty, now))?.replace(/\s+/g, ' ').trim()
+    const rawTitle = clean(resolveField(fields.title, item, empty, now))?.replace(/\s+/g, ' ').trim()
     const title = rawTitle ? capText(rawTitle, output.titleMax ?? 300) : undefined
     if (output.requireTitle && !title) continue
-    const snippet = clean(resolveField(output.fields.snippet, item, empty, now))
-    const publishedAt = resolveField(output.fields.publishedAt, item, empty, now)
+    const snippet = clean(resolveField(fields.snippet, item, empty, now))
+    const publishedAt = resolveField(fields.publishedAt, item, empty, now)
     sources.push({
       url,
       ...title ? { title } : {},
@@ -332,6 +333,20 @@ export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unkno
 
 export function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number, now?: number): WebSearchSource[] {
   return mapCliItemsDetailed(output, items, count, now).sources
+}
+
+/**
+ * The result of a `lines: { mode: 'whole' }` command: the whole stdout as ONE source. The text is cut at `maxChars` with a note that
+ * says how much was shown; the title is "<id>: <query>"; the link is the stand-in `cli://<id>?q=<query>` (it is no web page, so the
+ * evidence pipeline lists it but never fetches it). Undefined when the tool printed nothing.
+ */
+export function wholeOutputSource(spec: Pick<CliAdapterSpec, 'id'>, output: CliOutputSpec, query: string, stdout: string): WebSearchSource | undefined {
+  const text = stdout.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim()
+  if (!text) return undefined
+  const max = output.lines?.mode === 'whole' ? output.lines.maxChars ?? WHOLE_OUTPUT_DEFAULT_CHARS : WHOLE_OUTPUT_DEFAULT_CHARS
+  const shown = text.length > max ? text.slice(0, max).trimEnd() + '\n… [truncated: ' + max + ' of ' + text.length + ' characters shown]' : text
+  const shortQuery = query.replace(/\s+/g, ' ').trim()
+  return { url: WHOLE_OUTPUT_SCHEME + spec.id + '?q=' + encodeURIComponent(shortQuery.slice(0, 200)), title: capText(spec.id + ': ' + shortQuery, 300), snippet: shown }
 }
 
 /** Parse and map in one go (what the fixtures tests call). */
@@ -473,6 +488,11 @@ export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunIn
 
   let sources: WebSearchSource[]
   let skipped = 0
+  if (search.output.lines?.mode === 'whole') {
+    const whole = wholeOutputSource(spec, search.output, input.query, redact(result.stdout))
+    if (!whole || includesAny(result.stdout, search.emptyWhen)) throw new EngineError(label + ' returned no results' + (whole ? '' : ' (it printed nothing)'), 'ENGINE_EMPTY', false)
+    return { sources: [whole], skipped: 0 }
+  }
   try {
     const items = parseCliItems(spec, search.output, result.stdout)
     ;({ sources, skipped } = mapCliItemsDetailed(search.output, items, Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? input.count), options.now))

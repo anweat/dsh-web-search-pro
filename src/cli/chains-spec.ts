@@ -65,7 +65,9 @@ export function backendServes(id: string, platform: string, specPlatforms: Reado
   if (id === 'rest') return REST_PLATFORMS.includes(platform) ? { ok: true } : { ok: false, why: 'does not serve platform ' + platform }
   const platforms = specPlatforms.get(id)
   if (!platforms) return { ok: false, why: 'is not a known backend (built-in ids: ' + [...specPlatforms.keys()].filter(k => !k.startsWith('custom-cli:')).join(', ') + ', ' + FIXED_BACKENDS.join(', ') + ')' }
-  if (!id.startsWith('custom-cli:') && !platforms.includes(platform)) return { ok: false, why: 'does not serve platform ' + platform + ' (it serves ' + platforms.join(', ') + ')' }
+  // A custom CLI is the platform `custom-cli:<id>` of its own and serves exactly the platforms its spec declares.
+  if (id === platform) return { ok: true }
+  if (!platforms.includes(platform)) return { ok: false, why: 'does not serve platform ' + platform + (platforms.length ? ' (it serves ' + platforms.join(', ') + ')' : ' (it declares no platform' + (id.startsWith('custom-cli:') ? ': add ' + platform + ' to its "platforms"' : '') + ')') }
   return { ok: true }
 }
 
@@ -75,6 +77,17 @@ export function specPlatformsOf(cliAdapters: unknown): { platforms: Map<string, 
   const user = resolveCliAdapters(cliAdapters)
   for (const [id, spec] of user.specs) platforms.set('custom-cli:' + id, spec.platforms)
   return { platforms, diagnostics: user.diagnostics }
+}
+
+/** The declared platforms of the user's CLI adapters that no backend chain exists for (the spec would serve nothing there). */
+export function customCliPlatformIssues(cliAdapters: unknown): string[] {
+  const { specs } = resolveCliAdapters(cliAdapters)
+  const out: string[] = []
+  for (const [id, spec] of specs) {
+    const unknown = spec.platforms.filter(platform => !CHAIN_PLATFORMS.includes(platform))
+    if (unknown.length) out.push('cliAdapters.' + id + '.platforms: no backend chain exists for ' + unknown.join(', ') + ' (platforms with a chain: ' + CHAIN_PLATFORMS.join(', ') + ')')
+  }
+  return out
 }
 
 /**

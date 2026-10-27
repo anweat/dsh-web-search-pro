@@ -16,7 +16,7 @@ import {
 } from './engines.ts'
 import { customCliAdapter, customCliProviderId, customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
 import type { ChainEntryReport, ChainReport } from './cli/chain.ts'
-import { platformBackendIssues } from './cli/chains-spec.ts'
+import { customCliPlatformIssues, platformBackendIssues } from './cli/chains-spec.ts'
 import { resolveCliAdapters } from './cli/spec.ts'
 import { SourceUnavailableError } from './providers/unavailable.ts'
 import { defaultProviderRegistry, costTierOf, routeIdOf, type CostTier, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
@@ -198,7 +198,7 @@ export class SearchRouter {
   cliAdapterProblems(): string[] {
     this.syncCustomPlatforms()
     const cfg = this.dynamic()
-    return [...this.cliAdapterDiagnostics, ...[...this.customCli.values()].flatMap(entry => (entry.problem ? [entry.problem] : [])), ...platformBackendIssues(cfg.platformBackends, cfg.cliAdapters)]
+    return [...this.cliAdapterDiagnostics, ...[...this.customCli.values()].flatMap(entry => (entry.problem ? [entry.problem] : [])), ...customCliPlatformIssues(cfg.cliAdapters), ...platformBackendIssues(cfg.platformBackends, cfg.cliAdapters)]
   }
 
   /** Custom platforms the registry could not take (key clash, bad key), for `sources.status`. */

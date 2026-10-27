@@ -204,7 +204,7 @@ test('user-defined adapters: valid ones become custom-cli:<id> platforms and bac
   await withCommands({ 'demo-cli': 'case "$1" in --version) echo "demo-cli 1.0";; search) if [ "$2" = "--help" ]; then echo "--json"; else printf \'%s\' \'' + out + '\'; fi;; esac' }, async () => {
     const h = harness({
       cliAdapters: {
-        demo: { ...baseSpec(), id: 'demo' },
+        demo: { ...baseSpec(), id: 'demo', platforms: ['twitter'] },
         evil: { ...baseSpec(), id: 'evil', allowedSubcommands: ['search', 'login'], search: { ...baseSpec().search, argv: ['login', '{query}'] } },
         cookies: { ...baseSpec(), id: 'cookies', search: { ...baseSpec().search, argv: ['search', '{query}', '--cookie-source', 'chrome'] } },
         secret: { ...baseSpec(), id: 'secret', env: { set: { API_TOKEN: 'abc' } } },

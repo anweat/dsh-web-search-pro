@@ -12,6 +12,7 @@ import path from 'node:path'
 import crossSpawn from 'cross-spawn'
 import { load as yamlLoad } from 'js-yaml'
 import { parse as parseHtml } from 'node-html-parser'
+import { WHOLE_OUTPUT_SCHEME } from './cli/spec.ts'
 import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect, type ResolvePublicUrlOptions } from './safe-http.ts'
 
 /** js-yaml parser (npm dep). */
@@ -304,7 +305,8 @@ export function shapeSources(
   return sources.slice(0, count).map(s => ({
     url: s.url,
     ...s.title ? { title: s.title } : {},
-    ...s.snippet ? { snippet: capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
+    // A whole-output result (`cli://`) was already cut by the runner, with a note saying so: the generic cap would only cut it again.
+    ...s.snippet ? { snippet: s.url.startsWith(WHOLE_OUTPUT_SCHEME) ? s.snippet : capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
     ...s.publishedAt ? { publishedAt: s.publishedAt } : {},
     // The provider's own quality grade (DeepSeek Search), as source metadata.
     ...typeof s.rerankScore === 'number' && Number.isFinite(s.rerankScore) ? { rerankScore: Math.round(s.rerankScore * 100) / 100 } : {},
