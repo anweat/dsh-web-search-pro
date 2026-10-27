@@ -11,6 +11,7 @@ import path from 'node:path'
 import type { WebSearchSource } from '@deepseek-ai/dsh-web'
 import { capText, htmlDecode, jsYaml, runCli, stripTags, type CliResult } from '../util.ts'
 import { EngineError } from '../engine-error.ts'
+import { normalizeTimeText } from './time-text.ts'
 import {
   searchSpecFor, type CliAdapterSpec, type CliErrorCode, type CliOutputSpec, type CliSearchSpec, type FieldSource, type JoinPart, type TemplateSource,
 } from './spec.ts'
@@ -89,7 +90,10 @@ const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typ
 export function getPath(root: unknown, dotted: string): unknown {
   let node: unknown = root
   for (const key of dotted.split('.')) {
-    if (Array.isArray(node)) node = node[Number(key)]
+    // `field=value` picks the first element of an array whose field is that value (compared as text).
+    const pick = /^([^=]+)=(.+)$/.exec(key)
+    if (pick && Array.isArray(node)) node = node.find(entry => isObject(entry) && String(entry[pick[1]!]) === pick[2])
+    else if (Array.isArray(node)) node = node[Number(key)]
     else if (isObject(node)) node = node[key]
     else return undefined
   }
@@ -104,8 +108,13 @@ function asText(value: unknown, empty: ReadonlySet<string>): string | undefined 
   return undefined
 }
 
-function joinPart(part: JoinPart, item: unknown, empty: ReadonlySet<string>): string | undefined {
+function joinPart(part: JoinPart, item: unknown, empty: ReadonlySet<string>, now: number): string | undefined {
   if (typeof part === 'object' && 'template' in part) return fillTemplate(part, item, empty)
+  if (typeof part === 'object' && 'time' in part) {
+    const raw = asText(getPath(item, part.time), empty)
+    const text = raw === undefined ? undefined : normalizeTimeText(raw, now)
+    return text === undefined ? undefined : (part.prefix ?? '') + text + (part.suffix ?? '')
+  }
   const p = typeof part === 'string' ? { path: part } as { path: string; prefix?: string; suffix?: string } : part
   const text = asText(getPath(item, p.path), empty)
   return text === undefined ? undefined : (p.prefix ?? '') + text + (p.suffix ?? '')
@@ -118,7 +127,7 @@ function fillTemplate(source: TemplateSource, item: unknown, empty: ReadonlySet<
   return missing ? undefined : text
 }
 
-export function resolveField(source: FieldSource | undefined, item: unknown, empty: ReadonlySet<string> = new Set()): string | undefined {
+export function resolveField(source: FieldSource | undefined, item: unknown, empty: ReadonlySet<string> = new Set(), now: number = Date.now()): string | undefined {
   if (source === undefined) return undefined
   if (typeof source === 'string') return asText(getPath(item, source), empty)
   if (Array.isArray(source)) {
@@ -135,8 +144,9 @@ export function resolveField(source: FieldSource | undefined, item: unknown, emp
     return date && !Number.isNaN(date.getTime()) ? date.toISOString() : undefined
   }
   if ('date' in source) return asText(getPath(item, source.date), empty)?.slice(0, 10)
+  if ('time' in source) { const raw = asText(getPath(item, source.time), empty); return raw === undefined ? undefined : normalizeTimeText(raw, now) }
   const joined = source as { join: readonly JoinPart[]; sep?: string }
-  const parts = joined.join.map(part => joinPart(part, item, empty)).filter((v): v is string => v !== undefined)
+  const parts = joined.join.map(part => joinPart(part, item, empty, now)).filter((v): v is string => v !== undefined)
   return parts.length ? parts.join(joined.sep ?? ' | ') : undefined
 }
 
@@ -246,21 +256,22 @@ export function stripMarkup(input: string): string {
  * Map parsed items to sources by the output spec: http(s) URLs only, snippets and titles capped, tags stripped when asked.
  * `skipped` counts the items (objects) that had no usable link, so the caller can say so instead of silently returning fewer.
  */
-export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unknown[], count: number): { sources: WebSearchSource[]; skipped: number } {
+export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unknown[], count: number, now: number = Date.now()): { sources: WebSearchSource[]; skipped: number } {
   const empty = new Set(output.emptyValues ?? [])
   const clean = (text: string | undefined): string | undefined => (text === undefined ? undefined : output.stripTags ? stripMarkup(text) : text)
   const sources: WebSearchSource[] = []
   let skipped = 0
   for (const item of items) {
     if (!isObject(item)) continue
-    const url = resolveField(output.fields.url, item, empty)
+    if (output.keepWhen && getPath(item, output.keepWhen.path) !== output.keepWhen.equals) continue
+    const url = resolveField(output.fields.url, item, empty, now)
     if (!url || !/^https?:\/\//i.test(url)) { skipped++; continue }
     // A title is one line: a multi-line body (a tweet) is folded.
-    const rawTitle = clean(resolveField(output.fields.title, item, empty))?.replace(/\s+/g, ' ').trim()
+    const rawTitle = clean(resolveField(output.fields.title, item, empty, now))?.replace(/\s+/g, ' ').trim()
     const title = rawTitle ? capText(rawTitle, output.titleMax ?? 300) : undefined
     if (output.requireTitle && !title) continue
-    const snippet = clean(resolveField(output.fields.snippet, item, empty))
-    const publishedAt = resolveField(output.fields.publishedAt, item, empty)
+    const snippet = clean(resolveField(output.fields.snippet, item, empty, now))
+    const publishedAt = resolveField(output.fields.publishedAt, item, empty, now)
     sources.push({
       url,
       ...title ? { title } : {},
@@ -272,13 +283,13 @@ export function mapCliItemsDetailed(output: CliOutputSpec, items: readonly unkno
   return { sources, skipped }
 }
 
-export function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number): WebSearchSource[] {
-  return mapCliItemsDetailed(output, items, count).sources
+export function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number, now?: number): WebSearchSource[] {
+  return mapCliItemsDetailed(output, items, count, now).sources
 }
 
 /** Parse and map in one go (what the fixtures tests call). */
-export function parseCliOutput(spec: Pick<CliAdapterSpec, 'bins'>, search: CliSearchSpec, stdout: string, count = 20): WebSearchSource[] {
-  return mapCliItems(search.output, parseCliItems(spec, search.output, stdout), count)
+export function parseCliOutput(spec: Pick<CliAdapterSpec, 'bins'>, search: CliSearchSpec, stdout: string, count = 20, now?: number): WebSearchSource[] {
+  return mapCliItems(search.output, parseCliItems(spec, search.output, stdout), count, now)
 }
 
 // ── argv ────────────────────────────────────────────────────────────────────
@@ -342,6 +353,8 @@ export interface CliRunOptions {
   exists?: (file: string) => boolean
   /** The caller checks the credentials itself (the legacy twitter engine): skip the pre-run credential gate. */
   skipCredentialGate?: boolean
+  /** Test seam: the clock `{ time }` fields read relative texts (`3小时前`) against. */
+  now?: number
 }
 
 function redactor(spec: CliAdapterSpec, source: NodeJS.ProcessEnv): (text: string) => string {
@@ -412,7 +425,7 @@ export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunIn
   let skipped = 0
   try {
     const items = parseCliItems(spec, search.output, result.stdout)
-    ;({ sources, skipped } = mapCliItemsDetailed(search.output, items, Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? input.count)))
+    ;({ sources, skipped } = mapCliItemsDetailed(search.output, items, Math.min(Math.max(Math.trunc(input.count) || 1, 1), search.maxCount ?? input.count), options.now))
   } catch (error) {
     if (error instanceof CliAdapterError && error.code === 'CLI_FAILED' && includesAny(combined, search.notLoggedInPatterns)) throw notLoggedIn()
     if (error instanceof CliAdapterError) throw new CliAdapterError(redact(error.message), error.code as CliErrorCode, error.hint, error.retryable)

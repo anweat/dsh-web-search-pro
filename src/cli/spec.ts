@@ -32,8 +32,11 @@ export function verificationTag(status: string): string | undefined {
 export const CLI_ERROR_CODES = ['CLI_NOT_FOUND', 'CLI_CONTRACT_MISMATCH', 'CLI_NOT_LOGGED_IN', 'ENGINE_EMPTY', 'CLI_FAILED'] as const
 export type CliErrorCode = typeof CLI_ERROR_CODES[number]
 
-/** One piece of a joined field: a path, optionally with text put before / after the value, or a `{ template }` over the item (dropped when a placeholder is empty). */
-export type JoinPart = string | { path: string; prefix?: string; suffix?: string } | { template: string }
+/**
+ * One piece of a joined field: a path, optionally with text put before / after the value, a `{ template }` over the item (dropped
+ * when a placeholder is empty), or a `{ time }` path whose text is read as a time (see {@link FieldSource}) and dropped when it is not one.
+ */
+export type JoinPart = string | { path: string; prefix?: string; suffix?: string } | { template: string } | { time: string; prefix?: string; suffix?: string }
 
 /** `{ template }` fills `{path}` placeholders from the item and yields nothing when one is empty; `when` makes it apply to one kind of item. */
 export interface TemplateSource { template: string; when?: { path: string; equals: string | number | boolean } }
@@ -44,7 +47,11 @@ export interface TemplateSource { template: string; when?: { path: string; equal
  *  - a list of paths and templates: the first non-empty one wins;
  *  - `{ template }`: `{path}` placeholders over the item, dropped when any of them is empty;
  *  - `{ join }`: the non-empty parts joined with `sep` (default ` | `);
- *  - `{ epoch }`: a Unix timestamp (seconds) as an ISO date; `{ date }`: the date part (first 10 characters) of an ISO timestamp.
+ *  - `{ epoch }`: a Unix timestamp (seconds) as an ISO date; `{ date }`: the date part (first 10 characters) of an ISO timestamp;
+ *  - `{ time }`: a time text the tool prints (ISO, the X API's `created_at`, `2026-10-27`, `08-26`, `3小时前`, `昨天 10:20`, ...) as an
+ *    ISO date or timestamp, and nothing when the text is none of the exactly known formats (see cli/time-text.ts).
+ * A dotted path may hold a `key=value` segment that picks the first element of an array with that field value
+ * (`note_card.corner_tag_info.type=publish_time.text`).
  */
 export type FieldSource =
   | string
@@ -53,6 +60,7 @@ export type FieldSource =
   | { join: readonly JoinPart[]; sep?: string }
   | { epoch: string }
   | { date: string }
+  | { time: string }
 
 export interface CliOutputSpec {
   format: OutputFormat
@@ -65,6 +73,8 @@ export interface CliOutputSpec {
   /** text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`). */
   lines?: { mode: 'tsv'; columns: readonly string[] } | { mode: 'url-lines' }
   fields: { url: FieldSource; title?: FieldSource; snippet?: FieldSource; publishedAt?: FieldSource }
+  /** Keep only the items whose `path` equals the value; the others are not results at all and are not counted as skipped (xhs: `model_type` is `note`; its search page also carries `hot_query` suggestion cards). */
+  keepWhen?: { path: string; equals: string | number | boolean }
   /** Strip HTML tags from title and snippet. */
   stripTags?: boolean
   /** Values read as "empty" (`None`). */
@@ -203,7 +213,7 @@ const strList = (v: unknown, maxItems: number, maxLen = 200): v is string[] => A
 const ID_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/
 const BIN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const ENV_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
-const PATH_RE = /^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$/
+const PATH_RE = /^[A-Za-z0-9_$-]+(=[A-Za-z0-9_$-]+)?(\.[A-Za-z0-9_$-]+(=[A-Za-z0-9_$-]+)?)*$/
 const VERSION_RE = /^\d+(\.\d+){0,3}$/
 const PLACEHOLDERS = new Set(['query', 'count', 'url', 'terms'])
 const MAX_TIMEOUT_MS = 180_000
@@ -212,7 +222,7 @@ const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
 const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns'])
-const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
+const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'keepWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
 const ENV_KEYS = new Set(['required', 'passthrough', 'set'])
 const LOGIN_KEYS = new Set(['command', 'savedCredentialPaths', 'readsBrowserCookiesWithoutLogin'])
@@ -240,9 +250,9 @@ function checkFieldSource(value: unknown, where: string, errors: string[]): void
     }
     return
   }
-  if (!isObject(value)) { errors.push(where + ' must be a path, a list, { template }, { join }, { epoch } or { date }'); return }
+  if (!isObject(value)) { errors.push(where + ' must be a path, a list, { template }, { join }, { epoch }, { date } or { time }'); return }
   const keys = Object.keys(value)
-  if (keys.length === 1 && (keys[0] === 'epoch' || keys[0] === 'date')) {
+  if (keys.length === 1 && (keys[0] === 'epoch' || keys[0] === 'date' || keys[0] === 'time')) {
     if (typeof value[keys[0]!] !== 'string' || !PATH_RE.test(value[keys[0]!] as string)) errors.push(where + '.' + keys[0] + ' must be a dotted path')
     return
   }
@@ -262,14 +272,14 @@ function checkFieldSource(value: unknown, where: string, errors: string[]): void
       else if (isObject(part) && typeof part.template === 'string' && Object.keys(part).length === 1) {
         if (!isStr(part.template, 300)) errors.push(where + '.join: a template part must be a string')
         else templateProblems(part.template, where + '.join.template', undefined, errors)
-      } else if (isObject(part) && typeof part.path === 'string' && PATH_RE.test(part.path) && Object.keys(part).every(k => ['path', 'prefix', 'suffix'].includes(k))) {
+      } else if (isObject(part) && (typeof part.path === 'string' ? PATH_RE.test(part.path) : typeof part.time === 'string' && PATH_RE.test(part.time)) && Object.keys(part).every(k => [typeof part.path === 'string' ? 'path' : 'time', 'prefix', 'suffix'].includes(k))) {
         for (const k of ['prefix', 'suffix']) if (part[k] !== undefined && !(typeof part[k] === 'string' && (part[k] as string).length <= 40)) errors.push(where + '.join.' + k + ' must be a short string')
-      } else errors.push(where + '.join: each part is a path or { path, prefix?, suffix? }')
+      } else errors.push(where + '.join: each part is a path, { template }, { time } or { path, prefix?, suffix? }')
     }
     if (value.sep !== undefined && !(typeof value.sep === 'string' && value.sep.length <= 16)) errors.push(where + '.sep must be a short string')
     return
   }
-  errors.push(where + ' must be a path, a list, { template }, { join }, { epoch } or { date }')
+  errors.push(where + ' must be a path, a list, { template }, { join }, { epoch }, { date } or { time }')
 }
 
 function checkOutput(value: unknown, where: string, errors: string[]): void {
@@ -284,6 +294,10 @@ function checkOutput(value: unknown, where: string, errors: string[]): void {
     }
   }
   if (value.errorPaths !== undefined && !(Array.isArray(value.errorPaths) && value.errorPaths.length <= 6 && value.errorPaths.every(p => typeof p === 'string' && PATH_RE.test(p)))) errors.push(where + '.errorPaths must be dotted paths')
+  if (value.keepWhen !== undefined) {
+    const k = value.keepWhen
+    if (!(isObject(k) && typeof k.path === 'string' && PATH_RE.test(k.path) && ['string', 'number', 'boolean'].includes(typeof k.equals) && Object.keys(k).every(key => key === 'path' || key === 'equals'))) errors.push(where + '.keepWhen must be { path, equals }')
+  }
   if (value.lines !== undefined) {
     const l = value.lines
     if (isObject(l) && l.mode === 'url-lines' && Object.keys(l).length === 1) { /* fine */ }
