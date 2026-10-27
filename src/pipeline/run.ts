@@ -18,7 +18,8 @@
 
 import crypto from 'node:crypto'
 import type { SourcePolicy } from '../config-enums.ts'
-import { mergeCandidates, type ProviderOutput, type ProviderSource } from './candidates.ts'
+import { mergeCandidates, provenanceOf, type ProviderOutput, type ProviderSource } from './candidates.ts'
+import { guaranteeSeats } from './confidence.ts'
 import { adaptivePreRankLimit, splitBlocks, preRankBlocks, type SplitOptions } from './blocks.ts'
 import { compileQuery, gapQueryText, type CompiledQuery } from './compile.ts'
 import { fuseCandidates, type FusionOptions } from './fusion.ts'
@@ -370,8 +371,10 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     const answered = new Set(all.filter(o => o.sources.length).map(o => o.providerId))
     const fused = fuseCandidates(merged, { ...deps.fusion, nProviders: Math.max(answered.size, 1), now: ctx.now })
     const gated = gateCandidates(task, fused.map(r => r.candidate))
-    const { kept, added } = applyFloor(gated, options.minKeep ?? DEFAULT_MIN_KEEP)
-    return { merged, answered, kept, floor: { added, of: gated.length } }
+    const floored = applyFloor(gated, options.minKeep ?? DEFAULT_MIN_KEEP)
+    // A source with a confidence below 1 weighs a little less in the fusion; its best result still keeps a place among the pages that get read.
+    const kept = guaranteeSeats(floored.kept, Math.max(topK, 0), candidate => candidate.contributions)
+    return { merged, answered, kept, floor: { added: floored.added, of: gated.length } }
   }
   let allOutputs: readonly ProviderOutput[] = outputs
   let { merged, answered, kept, floor } = retrieve(allOutputs)
@@ -435,7 +438,8 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     for (const { candidate, page, blocks: split } of fresh) {
       const providers = [...new Set(candidate.contributions.map(c => c.providerId))]
       const low = candidate.gate?.lowConfidence === true
-      for (const block of split) blocks.push({ candidateId: candidate.candidateId, url: candidate.url, title: candidate.title || page.title || '', ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}, providers, ...low ? { lowConfidence: true as const } : {}, block })
+      const origin = provenanceOf(candidate)
+      for (const block of split) blocks.push({ candidateId: candidate.candidateId, url: candidate.url, title: candidate.title || page.title || '', ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}, providers, ...low ? { lowConfidence: true as const } : {}, ...Object.keys(origin).length ? { origin } : {}, block })
     }
     pageBlocks.push(...blocks)
     const longestPage = Math.max(0, ...fresh.map(p => p.blocks.length))
@@ -625,6 +629,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
       ...s.block.publishedAt ? { publishedAt: s.block.publishedAt } : {},
       needIds: s.needIds, grade: Number(s.grade.toFixed(2)), source: s.block.providers.join('+'),
       ...s.block.lowConfidence ? { lowConfidence: true as const } : {},
+      ...s.block.origin,
     })
     evidenceBlocks.push({ evidenceId, url: s.block.url, blockId: s.block.block.blockId, ...heading ? { heading } : {}, text: s.block.block.text, hash: s.block.block.hash, grade: Number(s.grade.toFixed(3)), scorer, ...scorer !== 'rule' && scorer !== 'none' && control.rubricRef ? { rubric: control.rubricRef.key } : {}, ...scorer !== 'rule' && scorer !== 'none' && judgeKey(control) ? { judge: judgeKey(control)! } : {} })
   }
@@ -642,7 +647,7 @@ export async function runEvidenceStages(task: TaskSpec, outputs: readonly Provid
     coveredNeeds: coverage.covered,
     gaps: coverage.gaps,
     ...uncertain.length ? { uncertainNeeds: uncertain } : {},
-    sources: kept.slice(0, sourcesCount).map(c => ({ url: c.url, ...c.title ? { title: c.title } : {}, ...c.snippet ? { snippet: c.snippet } : {}, ...c.publishedAt ? { publishedAt: c.publishedAt } : {}, ...c.signals?.rerankScore !== undefined ? { rerankScore: c.signals.rerankScore } : {}, ...c.signals?.authority !== undefined ? { authority: c.signals.authority } : {}, ...c.gate?.lowConfidence ? { lowConfidence: true as const } : {} })),
+    sources: kept.slice(0, sourcesCount).map(c => ({ url: c.url, ...c.title ? { title: c.title } : {}, ...c.snippet ? { snippet: c.snippet } : {}, ...c.publishedAt ? { publishedAt: c.publishedAt } : {}, ...c.signals?.rerankScore !== undefined ? { rerankScore: c.signals.rerankScore } : {}, ...c.signals?.authority !== undefined ? { authority: c.signals.authority } : {}, ...c.gate?.lowConfidence ? { lowConfidence: true as const } : {}, ...provenanceOf(c) })),
     engine: 'pipeline(' + (used.length ? used.join('+') : 'none') + ')',
     enginesTried: [...new Set([...ctx.plan.providers.map(p => p.id), ...extraEngines])],
     partial,

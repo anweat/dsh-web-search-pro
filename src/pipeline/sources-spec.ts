@@ -1,5 +1,5 @@
 /**
- * Validation of the user's source preferences (`sources.priority`, `sources.disabled`, `sources.budget`), with no Node
+ * Validation of the user's source preferences (`sources.priority`, `sources.disabled`, `sources.budget`, `sources.confidence`), with no Node
  * imports so the settings panel validates them with the code the server uses; the request counters live in ./ledger.ts.
  * @module web-search-pro/pipeline/sources-spec
  */
@@ -12,12 +12,15 @@ export interface SourcesInput {
   priority?: readonly string[]
   disabled?: readonly string[]
   budget?: Record<string, SourceBudgetInput>
+  /** Confidence (0..1) per source or platform-backend id; absent = 1 for a built-in source, the spec's own for a custom CLI. */
+  confidence?: Record<string, number>
 }
 
 export interface SourcesResolved {
   priority: string[]
   disabled: string[]
   budget: Record<string, SourceBudgetInput>
+  confidence: Record<string, number>
   /** Entries ignored, each saying why (surfaced by `sources.status` and the settings card). */
   diagnostics: string[]
 }
@@ -41,7 +44,7 @@ function idList(value: unknown, name: string, diagnostics: string[], known?: (id
  * Validate the preferences; invalid entries are dropped and reported, never thrown. `known` (optional) tells whether an
  * id is a registered provider: unknown ids are reported and dropped, so a typo cannot silently disable nothing.
  */
-export function resolveSources(input: SourcesInput | undefined, known?: (id: string) => boolean): SourcesResolved {
+export function resolveSources(input: SourcesInput | undefined, known?: (id: string) => boolean, knownBackend?: (id: string) => boolean): SourcesResolved {
   const diagnostics: string[] = []
   const priority = idList(input?.priority, 'priority', diagnostics, known)
   const disabled = idList(input?.disabled, 'disabled', diagnostics, known)
@@ -62,5 +65,13 @@ export function resolveSources(input: SourcesInput | undefined, known?: (id: str
     const daily = cap((entry as SourceBudgetInput).daily, 'daily')
     if (total !== undefined || daily !== undefined) budget[id] = { ...total !== undefined ? { total } : {}, ...daily !== undefined ? { daily } : {} }
   }
-  return { priority, disabled, budget, diagnostics }
+  const confidence: Record<string, number> = {}
+  const rawConfidence = input?.confidence
+  if (rawConfidence !== undefined && rawConfidence !== null && (typeof rawConfidence !== 'object' || Array.isArray(rawConfidence))) diagnostics.push('sources.confidence ignored: must be an object keyed by source id')
+  else for (const [id, value] of Object.entries(rawConfidence ?? {})) {
+    if (known && !known(id) && !knownBackend?.(id)) { diagnostics.push('sources.confidence.' + id + ' ignored: not a registered source or platform backend'); continue }
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) { diagnostics.push('sources.confidence.' + id + ' ignored: must be a number 0..1'); continue }
+    confidence[id] = value
+  }
+  return { priority, disabled, budget, confidence, diagnostics }
 }

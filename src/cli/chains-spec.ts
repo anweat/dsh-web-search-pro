@@ -52,6 +52,11 @@ export const REST_PLATFORMS: readonly string[] = ['github', 'github-issues', 'gi
 /** Backend ids that are not CLI specs. */
 export const FIXED_BACKENDS = ['opencli', 'browser-opencli', 'browser-search', 'rest'] as const
 
+/** Whether `id` names a platform backend: a built-in CLI spec, a fixed backend, or a custom CLI (`custom-cli:<id>`). */
+export function isBackendId(id: string): boolean {
+  return (FIXED_BACKENDS as readonly string[]).includes(id) || BUILTIN_CLI_SPECS.some(spec => spec.id === id) || id.startsWith('custom-cli:')
+}
+
 export interface BackendServing { ok: boolean; why?: string }
 
 /**

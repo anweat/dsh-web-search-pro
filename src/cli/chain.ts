@@ -74,7 +74,7 @@ const fromSpec = (r: SpecReadiness): LegReadiness => ({
 function specLeg(id: string, spec: CliAdapterSpec, platform: string, ctx: ChainContext): ChainLeg {
   return {
     id, kind: id.startsWith('custom-cli:') ? 'custom-cli' : 'cli', label: spec.bins[0]!,
-    engine: cliSpecEngine(spec, platform, ctx.deps, { id, label: spec.bins[0]! }),
+    engine: cliSpecEngine(spec, platform, ctx.deps, { id, label: spec.bins[0]!, ...id.startsWith('custom-cli:') ? { userDefined: true } : {} }),
     readiness: async () => fromSpec(await specReadiness(spec, ctx.deps)),
     verification: spec.verification?.status ?? (id.startsWith('custom-cli:') ? USER_DEFINED : 'unverified'),
   }

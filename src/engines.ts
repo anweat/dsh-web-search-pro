@@ -27,6 +27,12 @@ export interface EngineSource extends WebSearchSource {
   readonly rerankScore?: number
   /** The provider's source-authority grade, 0..4 (unknown = absent). */
   readonly authority?: number
+  /** The user-defined CLI that returned the row (`custom-cli:echo`): set by the adapter, shown with the result. */
+  readonly via?: string
+  /** The honest label of a user-defined source ("user-defined, not verified by the plugin"). */
+  readonly tag?: string
+  /** The source's confidence (0..1), below 1 only: set by the router from the spec / `sources.confidence`, never by an engine. */
+  readonly confidence?: number
 }
 
 export interface SearchOutcome {

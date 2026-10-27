@@ -35,6 +35,7 @@ test('every leaf of the Config schema is a control, a derived control, or a secr
       continue
     }
     if (leaf === 'evidence.rubrics') continue
+    if (leaf === 'sources.confidence') continue // one dynamic field per source id: sources.confidence.<id>
     if (leaf === 'sources.budget') {
       assert.deepEqual(Object.keys(node.inner!.dict!), ['total', 'daily'])
       assert.deepEqual(BUDGET_SPECS.map(spec => spec.field), BUDGETED_SOURCES.flatMap(id => [`sources.budget.${id}.total`, `sources.budget.${id}.daily`]))

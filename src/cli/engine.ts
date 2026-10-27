@@ -8,7 +8,7 @@
 import type { Engine, EngineDeps } from '../engines.ts'
 import { CliAdapterError, loginHint, missingEnv, runCliSearchDetailed, savedLoginPresent, type CliRunOptions } from './runner.ts'
 import { cachedProbe, probeCli, type CliProbeResult } from './probe.ts'
-import type { CliAdapterSpec } from './spec.ts'
+import { USER_DEFINED_TAG, type CliAdapterSpec } from './spec.ts'
 import type { runCli } from '../util.ts'
 
 /** Settings that gate a spec on top of `enableCliBackends` (twitter-cli kept its own `agentReachEnabled` switch). */
@@ -41,6 +41,8 @@ export interface CliLegOptions {
   home?: string
   /** The credentials are checked by the caller (the legacy twitter engine). */
   skipCredentialGate?: boolean
+  /** A user-defined spec: every row it returns says which CLI it came from and that nothing here verified it. */
+  userDefined?: boolean
 }
 
 /** The probe verdict as the structured error a search would raise, or undefined when the command is usable. */
@@ -84,7 +86,8 @@ export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick
         ...options.skipCredentialGate ? { skipCredentialGate: true } : {},
       }
       const { sources, skipped } = await runCliSearchDetailed(spec, { query, count, signal }, runOptions)
-      return { sources, via: options.id ?? spec.id, backend: options.id ?? spec.id, ...skipped ? { notes: [skipped + ' result' + (skipped === 1 ? '' : 's') + ' without a link skipped'] } : {} }
+      const rows = options.userDefined ? sources.map(source => ({ ...source, via: options.id ?? spec.id, tag: USER_DEFINED_TAG })) : sources
+      return { sources: rows, via: options.id ?? spec.id, backend: options.id ?? spec.id, ...skipped ? { notes: [skipped + ' result' + (skipped === 1 ? '' : 's') + ' without a link skipped'] } : {} }
     },
   }
 }

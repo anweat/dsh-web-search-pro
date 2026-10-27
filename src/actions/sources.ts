@@ -31,9 +31,10 @@ const PROVIDER_REPORT_SCHEMA: OutputNode = {
     } },
     unverified: { type: 'boolean' },
     common: { type: 'boolean' },
+    confidence: { type: 'number' },
     chain: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
       id: { type: 'string', required: true }, kind: { type: 'string', required: true }, label: { type: 'string', required: true }, order: { type: 'number', required: true }, state: { type: 'string', required: true },
-      installation: { type: 'string' }, version: { type: 'string' }, credential: { type: 'string' }, reason: { type: 'string' }, verification: { type: 'string', required: true },
+      installation: { type: 'string' }, version: { type: 'string' }, credential: { type: 'string' }, reason: { type: 'string' }, verification: { type: 'string', required: true }, confidence: { type: 'number' },
     } } },
     readiness: { type: 'object', additionalProperties: false, properties: {
       available: { type: 'boolean', required: true }, state: { type: 'string' }, installation: { type: 'string' }, credential: { type: 'string' }, health: { type: 'string' }, reason: { type: 'string' }, diagnosticCode: { type: 'string' },
@@ -128,7 +129,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
         webRoute: WEB_ROUTE_SCHEMA,
         notes: { type: 'array', items: { type: 'string' } },
-        sources: { type: 'object', additionalProperties: false, properties: { policy: { type: 'string', required: true }, priority: { type: 'array', required: true, items: { type: 'string' } }, disabled: { type: 'array', required: true, items: { type: 'string' } }, common: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, ready: { type: 'boolean', required: true }, setup: { type: 'string' } } } } } },
+        sources: { type: 'object', additionalProperties: false, properties: { policy: { type: 'string', required: true }, priority: { type: 'array', required: true, items: { type: 'string' } }, disabled: { type: 'array', required: true, items: { type: 'string' } }, confidence: { type: 'object', additionalProperties: true }, common: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, ready: { type: 'boolean', required: true }, setup: { type: 'string' } } } } } },
         evidence: EVIDENCE_STATUS_SCHEMA,
       },
     },
@@ -170,24 +171,24 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         browser: browserState(ctx.browser()),
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
         ...problems.length ? { notes: problems } : {},
-        sources: { policy: ev.sourcePolicy ?? 'default', priority: cfg.sources?.priority ?? [], disabled: cfg.sources?.disabled ?? [], ...commonSources(providers) },
+        sources: { policy: ev.sourcePolicy ?? 'default', priority: cfg.sources?.priority ?? [], disabled: cfg.sources?.disabled ?? [], ...Object.keys(cfg.sources?.confidence ?? {}).length ? { confidence: cfg.sources.confidence } : {}, ...commonSources(providers) },
         evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.coverage ? { coverage: judge.coverage } : {}, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; sources?: { policy: string; priority: string[]; disabled: string[]; common?: { id: string; label: string; ready: boolean; setup?: string }[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; sources?: { policy: string; priority: string[]; disabled: string[]; confidence?: Record<string, number>; common?: { id: string; label: string; ready: boolean; setup?: string }[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
       const mark = (e: { available: boolean; state: string }): string => (e.state === 'login_unverified' || e.state === 'needs_login' ? '⚠ ' : e.available ? '✅ ' : '❌ ')
       const lines = v.engines.map(e => mark(e) + e.id + ' [' + e.state.replace('_', ' ') + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health, r.state && 'state=' + r.state].filter(Boolean).join(' ')
-        lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.common ? ' · 常用 (common)' : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
-        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + (verificationTag(leg.verification) ?? leg.verification) + (leg.reason ? ' — ' + leg.reason : ''))
+        lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.common ? ' · 常用 (common)' : '') + (p.confidence !== undefined && p.confidence < 1 ? ' · confidence ' + p.confidence : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
+        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + (verificationTag(leg.verification) ?? leg.verification) + (leg.confidence !== undefined && leg.confidence < 1 ? ' · confidence ' + leg.confidence : '') + (leg.reason ? ' — ' + leg.reason : ''))
         const b = p.budget
         if (b) lines.push('    request budget ' + p.route + ': ' + [b.total && 'total ' + b.total.used + '/' + b.total.limit + ' (' + b.total.remaining + ' left)', b.daily && 'today ' + b.daily.used + '/' + b.daily.limit + ' (' + b.daily.remaining + ' left)'].filter(Boolean).join(', ') + (b.exhausted ? ' — used up: skipped, the plan falls back to other sources' : ''))
       }
       for (const c of v.sources?.common ?? []) lines.push('常用 (common) source ' + c.id + ' (' + c.label + '): ' + (c.ready ? 'key found, leads the default order unless you set sources.priority / disabled or pass engines' : 'no key, not in the default chain' + (c.setup ? ' — ' + c.setup : '')))
-      if (v.sources) lines.push('source strategy: policy=' + v.sources.policy + (v.sources.priority.length ? ', priority: ' + v.sources.priority.join(' > ') : '') + (v.sources.disabled.length ? ', disabled: ' + v.sources.disabled.join(', ') : ''))
+      if (v.sources) lines.push('source strategy: policy=' + v.sources.policy + (v.sources.priority.length ? ', priority: ' + v.sources.priority.join(' > ') : '') + (v.sources.disabled.length ? ', disabled: ' + v.sources.disabled.join(', ') : '') + (v.sources.confidence ? ', confidence: ' + Object.entries(v.sources.confidence).map(([id, c]) => id + '=' + c).join(', ') : ''))
       lines.push(...(v.notes ?? []).map(n => '  ⚠ ' + n))
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.installation && e.installation !== 'detected' ? ' [' + e.installation + ']' : '') + (e.version ? ' ' + e.version : '') + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
       if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + (v.browser.state === 'legacy' ? 'legacy (unsupported)' : v.browser.state) + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))

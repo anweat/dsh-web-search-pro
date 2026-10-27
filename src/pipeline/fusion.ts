@@ -20,9 +20,14 @@
  * {@link PROVIDER_SIGNAL_BOOST}) is, like the others, a fraction of ONE top-rank step: with the default boosts the three
  * bonuses together can never reach one rank position (0.2 + 0.25 + 0.3 = 0.75). A provider that grades its own results already
  * orders them, so the signal mostly arbitrates between providers; it never lifts a rank-10 result over a rank-1 one.
+ *
+ * Source confidence (confidence.ts) scales each provider's RRF term by `factor(c)` in [0.8, 1] and the bonus of a URL by the best factor
+ * among the providers that returned it; a provider without a confidence, which is every built-in source, has factor exactly 1 and the
+ * scores are what they were without it.
  * @module web-search-pro/pipeline/fusion
  */
 
+import { confidenceFactor } from './confidence.ts'
 import type { Candidate } from './types.ts'
 
 export const AUTHORITY_DOMAINS_BUILTIN: readonly string[] = ['github.com', 'wikipedia.org', 'arxiv.org', 'pubmed.ncbi.nlm.nih.gov', 'stackoverflow.com', 'developer.mozilla.org']
@@ -74,6 +79,13 @@ export function providerSignal(candidate: Pick<Candidate, 'signals'>): number {
   return rerank ?? authority ?? 0
 }
 
+/** The fusion factor of each provider that returned the candidate: its confidence factor (1 when it has none). */
+function providerFactors(candidate: Pick<Candidate, 'contributions'>): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const { providerId, confidence } of candidate.contributions) out.set(providerId, confidenceFactor(confidence))
+  return out
+}
+
 /** Best (lowest) rank per provider: one RRF term per provider per URL. */
 export function bestRanks(candidate: Pick<Candidate, 'contributions'>): Map<string, number> {
   const best = new Map<string, number>()
@@ -112,7 +124,13 @@ export function fuseCandidates(candidates: readonly Candidate[], options: Fusion
 
   const ranked = candidates.map((candidate): RankedCandidate => {
     let rrf = 0
-    for (const rank of bestRanks(candidate).values()) rrf += 1 / (k + rank)
+    const factors = providerFactors(candidate)
+    let bestFactor = 0
+    for (const [providerId, rank] of bestRanks(candidate)) {
+      const factor = factors.get(providerId) ?? 1
+      rrf += factor === 1 ? 1 / (k + rank) : factor / (k + rank)
+      bestFactor = Math.max(bestFactor, factor)
+    }
     const normalized = Math.min(rrf / maxRrf, 1)
     let bonus = 0
     if (freshnessBoost > 0) bonus += freshnessBoost * freshnessFactor(candidate.publishedAt, options.freshnessDays, now)
@@ -123,6 +141,8 @@ export function fuseCandidates(candidates: readonly Candidate[], options: Fusion
     }
     if (signalBoost > 0) bonus += signalBoost * providerSignal(candidate)
     bonus *= unit
+    // A URL only doubted sources returned earns less of the tie-break bonuses; one any full-confidence source returned earns all of them.
+    if (bestFactor > 0 && bestFactor < 1) bonus *= bestFactor
     return { candidate, score: normalized + bonus, rrf, normalized, bonus }
   })
   // Array#sort is stable, so equal scores keep first-seen order.

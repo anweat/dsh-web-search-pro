@@ -133,6 +133,12 @@ export interface SourcesConfig {
    * `budget: { bocha: { total: 1000, daily: 50 } }`.
    */
   budget?: Record<string, SourceBudgetInput>
+  /**
+   * Confidence (0..1) per source id, including the platform backends of a chain (`xhs`, `browser-search`, `custom-cli:<id>`).
+   * Built-in sources have 1; a custom CLI has the `confidence` of its spec (default 0.5) unless it is set here. It scales the
+   * source's weight in rank fusion a little (pipeline/confidence.ts) and is printed with its results; 1 changes nothing.
+   */
+  confidence?: Record<string, number>
 }
 
 export interface Config {
@@ -352,6 +358,7 @@ export const Config = z.object({
     priority: z.array(z.string()).volatile(),
     disabled: z.array(z.string()).volatile(),
     budget: z.dict(z.object({ total: z.number(), daily: z.number() })).volatile(),
+    confidence: z.dict(z.number()).volatile(),
   }),
   evidence: z.object({
     scorer: z.union(['rule', 'jev']).default('rule').volatile(),
@@ -531,6 +538,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
       priority: vOr(sv.priority, [] as string[]) as string[],
       disabled: vOr(sv.disabled, [] as string[]) as string[],
       budget: vOr(sv.budget, {} as Record<string, SourceBudgetInput>) as Record<string, SourceBudgetInput>,
+      confidence: vOr(sv.confidence, {} as Record<string, number>) as Record<string, number>,
     },
     verbose: vOr(config.verbose, false) as boolean,
   }

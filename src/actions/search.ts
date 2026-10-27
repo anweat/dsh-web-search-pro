@@ -19,6 +19,7 @@ const EVIDENCE_ITEM_SCHEMA: OutputNode = {
   properties: {
     evidenceId: { type: 'string', required: true }, blockId: { type: 'string' }, url: { type: 'string', required: true }, title: { type: 'string' },
     excerpt: { type: 'string', required: true }, heading: { type: 'string' }, publishedAt: { type: 'string' }, lowConfidence: { type: 'boolean' },
+    via: { type: 'string' }, confidence: { type: 'number' }, tag: { type: 'string' },
     needIds: { type: 'array', required: true, items: { type: 'string' } }, grade: { type: 'number', required: true }, source: { type: 'string', required: true },
   },
 }
@@ -64,7 +65,7 @@ const RECOMMEND_PROPERTIES: Record<string, OutputNode> = {
 const EXA_FIELDS = ['exaType', 'includeDomains', 'excludeDomains', 'startPublishedDate', 'endPublishedDate', 'category'] as const
 const EVIDENCE_FIELDS = ['task', 'profile', 'needs', 'constraints', 'budget'] as const
 
-type SourceRow = { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean }
+type SourceRow = { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean; via?: string; confidence?: number; tag?: string }
 
 export const SEARCH_ACTIONS: ActionDef[] = [
   {
@@ -101,7 +102,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
         ...EVIDENCE_OUTPUT_PROPERTIES,
         content: { type: 'string' },
         platform: { type: 'string' },
-        sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, rerankScore: { type: 'number' }, authority: { type: 'number' }, lowConfidence: { type: 'boolean' } } } },
+        sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, rerankScore: { type: 'number' }, authority: { type: 'number' }, lowConfidence: { type: 'boolean' }, via: { type: 'string' }, confidence: { type: 'number' }, tag: { type: 'string' } } } },
         engine: { type: 'string', required: true },
         backend: { type: 'string' },
         enginesTried: { type: 'array', items: { type: 'string' } },

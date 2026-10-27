@@ -16,8 +16,8 @@ import {
 } from './engines.ts'
 import { customCliAdapter, customCliProviderId, customKeyProblem, customPlatformAdapter } from './providers/platforms.ts'
 import type { ChainEntryReport, ChainReport } from './cli/chain.ts'
-import { customCliPlatformIssues, platformBackendIssues } from './cli/chains-spec.ts'
-import { resolveCliAdapters } from './cli/spec.ts'
+import { customCliPlatformIssues, isBackendId, platformBackendIssues } from './cli/chains-spec.ts'
+import { DEFAULT_CUSTOM_CONFIDENCE, resolveCliAdapters } from './cli/spec.ts'
 import { SourceUnavailableError } from './providers/unavailable.ts'
 import { defaultProviderRegistry, costTierOf, routeIdOf, type CostTier, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
@@ -35,7 +35,8 @@ import { createPlatformCacheKey, createSearchCacheKey } from './cache-key.ts'
 import { allAttemptsBenign, allAttemptsEmpty, BackendRegistry, NoBackendError, type Backend, type BackendAttempt, type BackendDiagnostic } from './backend-registry.ts'
 import { ExaClient, type ExaResult } from './exa-client.ts'
 import { SingleFlight } from './singleflight.ts'
-import { mergeCandidates, type ProviderOutput } from './pipeline/candidates.ts'
+import { mergeCandidates, provenanceOf, type ProviderOutput } from './pipeline/candidates.ts'
+import { guaranteeSeats } from './pipeline/confidence.ts'
 import { fuseCandidates } from './pipeline/fusion.ts'
 import type { ProviderCall, ProviderOutcome } from './pipeline/run.ts'
 import type { ProviderStatus } from './pipeline/plan.ts'
@@ -71,9 +72,12 @@ export interface PlatformRequest {
   rulePack?: string
 }
 
+/** A result row as the router returns it; `via`, `confidence` and `tag` appear for custom CLIs and for sources with a confidence below 1. */
+export type RouterSource = { url: string; title?: string; snippet?: string; publishedAt?: string; via?: string; confidence?: number; tag?: string }
+
 export interface RouterSearchResult {
   content?: string
-  sources: { url: string; title?: string; snippet?: string; publishedAt?: string }[]
+  sources: RouterSource[]
   engine: string
   enginesTried: string[]
   fromCache: boolean
@@ -83,6 +87,23 @@ export interface RouterSearchResult {
   fallbackNote?: string
   /** Platform search: the backend of its chain that answered (`bili`, `browser-opencli`). */
   backend?: string
+}
+
+/** Where a result came from, as it is stored in `results.extra` and read back on a cache hit. */
+type RowOrigin = { via?: string; tag?: string; confidence?: number }
+
+function originExtra(origin: RowOrigin): { origin?: RowOrigin } {
+  return origin.via || origin.tag || origin.confidence !== undefined ? { origin } : {}
+}
+
+function originFromExtra(extra: string | null | undefined): RowOrigin {
+  if (!extra) return {}
+  try {
+    const origin = (JSON.parse(extra) as { origin?: RowOrigin }).origin
+    return origin && typeof origin === 'object'
+      ? { ...typeof origin.via === 'string' ? { via: origin.via } : {}, ...typeof origin.tag === 'string' ? { tag: origin.tag } : {}, ...typeof origin.confidence === 'number' ? { confidence: origin.confidence } : {} }
+      : {}
+  } catch { return {} }
 }
 
 type SearchInput = { query: string; count: number; signal?: AbortSignal; skipSeam: boolean; options?: EngineSearchOptions }
@@ -117,8 +138,10 @@ export interface ProviderReport {
   unverified?: boolean
   /** "常用": the plugin's recommended source (descriptor.common). With a resolved key it leads the default order. */
   common?: boolean
+  /** Confidence (0..1) of what this source returns: 1 for a built-in source unless `sources.confidence` says otherwise; a custom CLI has its spec's. */
+  confidence: number
   /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
-  chain?: ChainEntryReport[]
+  chain?: (ChainEntryReport & { confidence: number })[]
   readiness: Readiness & { state?: ChainReport['state']; lastLocalCheck: string; lastRemoteSuccess?: string; lastError?: string; cooldownUntil?: string }
 }
 
@@ -135,6 +158,8 @@ export class SearchRouter {
   /** User-defined CLI adapters (settings `cliAdapters`) this router registered as `custom-cli:<id>` platforms, with the diagnostics of the entries it ignored. */
   private readonly customCli = new Map<string, { sig: string; off: () => void; problem?: string }>()
   private cliAdapterDiagnostics: string[] = []
+  /** Confidence of each registered custom CLI by route id (its spec's, default 0.5), rebuilt with the registrations. */
+  private customConfidence = new Map<string, number>()
   /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
   private readonly readiness = new Map<string, Readiness>()
   /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -186,6 +211,7 @@ export class SearchRouter {
   private syncCustomCliAdapters(): void {
     const { specs, diagnostics } = resolveCliAdapters(this.dynamic().cliAdapters)
     this.cliAdapterDiagnostics = diagnostics
+    this.customConfidence = new Map([...specs].map(([id, spec]) => [customCliProviderId(id), spec.confidence ?? DEFAULT_CUSTOM_CONFIDENCE] as const))
     const next = new Map([...specs].map(([id, spec]) => [id, JSON.stringify(spec)] as const))
     for (const [id, entry] of [...this.customCli]) if (next.get(id) !== entry.sig) { entry.off(); this.customCli.delete(id) }
     for (const [id, sig] of next) {
@@ -248,7 +274,9 @@ export class SearchRouter {
           const outcome = await engine.search(input.query, input.count, input.signal, this.withBindings(id, input.options))
           ticket?.settle(1, 'request counted by the router (the adapter booked none)')
           this.outcomes.set(id, { ok: true, at: new Date().toISOString() })
-          return { ...outcome, via: outcome.via ?? engine.id }
+          // The source's confidence rides with every row it returned (only when below 1: the built-in sources add nothing).
+          const confidence = this.confidenceOf(id, outcome.backend)
+          return { ...outcome, via: outcome.via ?? engine.id, ...confidence < 1 ? { sources: outcome.sources.map(source => ({ ...source, confidence })) } : {} }
         } catch (error) {
           const code = (error as { code?: unknown } | null)?.code
           // An empty answer is a request the service served; any other failure did not book one (the adapters count only 2xx answers).
@@ -619,8 +647,34 @@ export class SearchRouter {
 
   /** Problems of the `sources.*` settings (unknown ids, bad numbers), for `sources.status`. */
   sourceDiagnostics(): string[] {
+    this.syncCustomPlatforms()
     const src = this.dynamic().sources
-    return resolveSources({ priority: src?.priority, disabled: src?.disabled, budget: src?.budget }, id => this.registry.routeId(id) !== undefined).diagnostics
+    return resolveSources({ priority: src?.priority, disabled: src?.disabled, budget: src?.budget, confidence: src?.confidence }, id => this.registry.routeId(id) !== undefined, isBackendId).diagnostics
+  }
+
+  /** The confidence of one platform backend as a leg of a chain (`xhs`, `custom-cli:echo`): its own, without the provider's. */
+  backendConfidenceOf(id: string): number {
+    return this.confidenceOf(id)
+  }
+
+  /** `sources.confidence` by canonical id (a provider's route id; a platform backend id as written), valid entries only. */
+  private confidenceOverrides(): Map<string, number> {
+    const resolved = resolveSources({ confidence: this.dynamic().sources?.confidence }, id => this.registry.routeId(id) !== undefined, isBackendId)
+    return new Map(Object.entries(resolved.confidence).map(([id, value]) => [this.registry.routeId(id) ?? id, value] as const))
+  }
+
+  /**
+   * The confidence (0..1) of what `route` returned, through `backend` when it is a platform chain: `sources.confidence` of the
+   * provider times that of the backend that answered, each defaulting to the custom CLI's own (spec `confidence`, 0.5) and to 1
+   * for every built-in source, so the built-in ones are 1 unless the user set something.
+   */
+  confidenceOf(route: string, backend?: string): number {
+    this.syncCustomPlatforms()
+    const overrides = this.confidenceOverrides()
+    const own = (id: string): number => overrides.get(id) ?? this.customConfidence.get(id) ?? 1
+    const provider = this.registry.routeId(route) ?? route
+    const via = backend === undefined || backend === provider ? undefined : this.registry.routeId(backend) ?? backend
+    return Math.round(own(provider) * (via === undefined ? 1 : own(via)) * 10_000) / 10_000
   }
 
   /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
@@ -676,9 +730,9 @@ export class SearchRouter {
       const health = cooling ? 'cooldown' as const : last ? (last.ok ? 'ready' as const : 'error' as const) : 'unknown' as const
       const credential = last?.code === 'ENGINE_AUTH' ? 'rejected' as const : local.credential
       const reason = !available ? (diag?.reason ?? local.reason) : undefined
-      let chain: ChainEntryReport[] | undefined
+      let chain: (ChainEntryReport & { confidence: number })[] | undefined
       let chainReport: ChainReport | undefined
-      if (adapter.chain) { try { chainReport = await adapter.chain(env); chain = chainReport.entries } catch { chain = undefined } }
+      if (adapter.chain) { try { chainReport = await adapter.chain(env); chain = chainReport.entries.map(entry => ({ ...entry, confidence: this.backendConfidenceOf(entry.id) })) } catch { chain = undefined } }
       out.push({
         id: d.id, route, aliases: [...d.aliases], label: d.label, kind: d.kind ?? 'web', ...d.domains?.length ? { domains: [...d.domains] } : {}, ...d.needsBrowser ? { needsBrowser: d.needsBrowser } : {}, operations: [...d.operations], taskProfiles: [...d.taskProfiles],
         languages: [...d.languages], regions: [...d.regions], resultKinds: [...d.resultKinds],
@@ -686,6 +740,7 @@ export class SearchRouter {
         requirements: d.requirements.map(({ env, ...r }) => ({ ...r, ...env ? { env: [...env] } : {} })), supportedFilters: [...d.supportedFilters], costModel: { ...d.costModel }, costTier: local.costTier ?? costTierOf(d),
         ...d.verification?.live ? {} : { unverified: true },
         ...d.common ? { common: true } : {},
+        confidence: this.confidenceOf(route),
         ...chain ? { chain } : {},
         ...this.requestBudgetOf(route) ? { budget: this.requestBudgetOf(route)! } : {},
         readiness: {
@@ -765,7 +820,7 @@ export class SearchRouter {
         if (detail?.requestedCount === undefined || detail.requestedCount >= count) {
           const result: RouterSearchResult = {
             ...detail?.content ? { content: detail.content } : {},
-            sources: shapeSources(cached.rows.map(r => ({ url: r.url, title: r.title, snippet: r.snippet, publishedAt: r.published })), count),
+            sources: shapeSources(cached.rows.map(r => ({ url: r.url, title: r.title, snippet: r.snippet, publishedAt: r.published, ...originFromExtra(r.extra) })), count),
             engine: detail?.engine ?? ids[0] ?? 'unknown',
             enginesTried: detail?.enginesTried ?? ids,
             fromCache: true,
@@ -812,18 +867,19 @@ export class SearchRouter {
         throw new Error('all engines failed: ' + failures)
       }
       const merged = mergeCandidates(outputs)
-      const ranked = fuseCandidates(merged, {
+      // A source with a confidence below 1 weighs a little less in the fusion, and its best result keeps a place in the list (confidence.ts).
+      const ranked = guaranteeSeats(fuseCandidates(merged, {
         k: cfg.rrfConstant,
         freshnessBoost: cfg.freshnessBoost,
         freshnessDays: cfg.freshnessDays,
         authorityBoost: cfg.authorityBoost,
         authorityDomains: cfg.authorityDomains,
         nProviders: outputs.length,
-      }).slice(0, count)
+      }), count, ranked => ranked.candidate.contributions).slice(0, count)
       availableCount = merged.length
-      outcome = { sources: ranked.map(({ candidate }) => ({ url: candidate.url, ...candidate.title ? { title: candidate.title } : {}, ...candidate.snippet ? { snippet: candidate.snippet } : {}, ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {} })) }
-      // Per-source provenance survives in results.extra (no schema change); the cache-hit path ignores it.
-      persistExtras = ranked.map(({ candidate, score }) => JSON.stringify({ contributions: candidate.contributions, score: Number(score.toFixed(6)) }))
+      outcome = { sources: ranked.map(({ candidate }) => ({ url: candidate.url, ...candidate.title ? { title: candidate.title } : {}, ...candidate.snippet ? { snippet: candidate.snippet } : {}, ...candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}, ...provenanceOf(candidate) })) }
+      // Per-source provenance survives in results.extra (no schema change); a cache hit reads back the origin (`via`, `tag`, `confidence`) from it.
+      persistExtras = ranked.map(({ candidate, score }) => JSON.stringify({ contributions: candidate.contributions, score: Number(score.toFixed(6)), ...originExtra(provenanceOf(candidate)) }))
       usedId = 'multi(' + ids.join('+') + ')'
     } else {
       try {
@@ -883,7 +939,10 @@ export class SearchRouter {
       status: 'ok',
       cacheKey,
       detail: JSON.stringify({ ...finalOutcome.content ? { content: finalOutcome.content } : {}, engine: finalId, ...backendId ? { backend: backendId } : {}, enginesTried, requestedCount: count, ...fallbackNote ? { fallbackNote } : {} }),
-    }, persistExtras ? finalOutcome.sources.map((source, i) => ({ ...source, extra: persistExtras![i]! })) : finalOutcome.sources, platform ? 'platform-' + platform.id : finalId))
+    }, finalOutcome.sources.map((source, i) => {
+      const extra = persistExtras ? persistExtras[i]! : JSON.stringify(originExtra({ ...source.via ? { via: source.via } : {}, ...source.tag ? { tag: source.tag } : {}, ...source.confidence !== undefined ? { confidence: source.confidence } : {} }))
+      return extra === '{}' ? source : { ...source, extra }
+    }), platform ? 'platform-' + platform.id : finalId))
 
     const result: RouterSearchResult = {
       ...outcome.content ? { content: outcome.content } : {},

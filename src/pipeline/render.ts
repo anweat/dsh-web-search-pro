@@ -7,13 +7,19 @@
 
 import type { EvidencePack } from './types.ts'
 
-export interface RenderSource { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean }
+export interface RenderSource { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean; via?: string; confidence?: number; tag?: string }
 
-/** `[rerank 2.4/3, authority 3/4]`: the provider's own grades of a source (DeepSeek Search), empty when it gave none. */
-export function qualityTag(s: { rerankScore?: number; authority?: number }): string {
+/**
+ * `[rerank 2.4/3, authority 3/4]`: the provider's own grades of a source (DeepSeek Search); for a custom CLI or a source the user gave a
+ * confidence below 1 also `via custom-cli:echo, confidence 0.5` and the honest label (user-defined, not verified). Empty when there is none of it.
+ */
+export function qualityTag(s: { rerankScore?: number; authority?: number; via?: string; confidence?: number; tag?: string }): string {
   const bits: string[] = []
   if (typeof s.rerankScore === 'number') bits.push('rerank ' + s.rerankScore + '/3')
   if (typeof s.authority === 'number') bits.push('authority ' + s.authority + '/4')
+  if (s.via) bits.push('via ' + s.via)
+  if (typeof s.confidence === 'number') bits.push('confidence ' + s.confidence)
+  if (s.tag) bits.push(s.tag)
   return bits.length ? '[' + bits.join(', ') + ']' : ''
 }
 
@@ -35,7 +41,7 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
       const lines = ['[' + (i + 1) + '] ' + e.evidenceId + ' — ' + (e.title ? e.title + ' — ' : '') + e.url + (e.publishedAt ? ' (' + e.publishedAt + ')' : '') + (e.lowConfidence ? LOW_RELEVANCE : '')]
       if (e.heading) lines.push('    § ' + e.heading)
       lines.push('    ' + e.excerpt.replace(/\n+/g, '\n    '))
-      lines.push('    needs ' + e.needIds.join(',') + ' · grade ' + e.grade + (e.source ? ' · via ' + e.source : ''))
+      lines.push('    needs ' + e.needIds.join(',') + ' · grade ' + e.grade + (e.source ? ' · via ' + e.source : '') + (e.confidence !== undefined ? ' · confidence ' + e.confidence : '') + (e.tag ? ' · ' + e.tag : ''))
       return lines.join('\n')
     }).join('\n\n'))
   } else {

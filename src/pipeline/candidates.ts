@@ -19,7 +19,13 @@ const MIN_APPEND_CHARS = 40
 /** Share of a snippet's terms already present in the other before it counts as a repeat. */
 const REPEAT_OVERLAP = 0.8
 
-export interface ProviderSource { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; rerankScore?: number | null; authority?: number | null }
+export interface ProviderSource {
+  url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; rerankScore?: number | null; authority?: number | null
+  /** The user-defined CLI that returned the row (`custom-cli:echo`) and the label it carries. */
+  via?: string | null; tag?: string | null
+  /** The source's confidence (0..1) when it is below 1 (see confidence.ts). */
+  confidence?: number | null
+}
 
 /** One provider's ordered result list for one query (index 0 = rank 1). */
 export interface ProviderOutput {
@@ -71,6 +77,20 @@ export function mergeSnippets(current: string, next: string | null | undefined, 
 }
 
 /**
+ * What a result says about where it came from, for the exit: the custom CLIs that returned it (`via`) with their honest label (`tag`),
+ * and `confidence` = the best confidence among the providers that returned it, only when it is below 1 (a URL a full-confidence
+ * source also returned is as sure as that source). Empty for a result of built-in sources only.
+ */
+export function provenanceOf(candidate: Pick<Candidate, 'contributions' | 'origin'>): { via?: string; tag?: string; confidence?: number } {
+  const best = candidate.contributions.length ? Math.max(...candidate.contributions.map(c => c.confidence ?? 1)) : 1
+  return {
+    ...candidate.origin?.via.length ? { via: candidate.origin.via.join(', ') } : {},
+    ...candidate.origin?.tag ? { tag: candidate.origin.tag } : {},
+    ...best < 1 ? { confidence: Math.round(best * 10_000) / 10_000 } : {},
+  }
+}
+
+/**
  * Merge provider outputs into candidates keyed by canonical URL, in first-seen
  * order (outputs in the given order, sources by rank). Sources without a URL
  * are skipped; their rank positions still count.
@@ -88,7 +108,13 @@ export function mergeCandidates(outputs: readonly ProviderOutput[], options: Mer
         candidate = { candidateId: candidateIdOf(key), canonicalUrl: key, url, title: '', snippet: '', contributions: [] }
         byKey.set(key, candidate)
       }
-      candidate.contributions.push({ providerId: output.providerId, rank: index + 1, query: output.query })
+      const confidence = typeof source.confidence === 'number' && Number.isFinite(source.confidence) && source.confidence < 1 ? Math.max(source.confidence, 0) : undefined
+      candidate.contributions.push({ providerId: output.providerId, rank: index + 1, query: output.query, ...confidence !== undefined ? { confidence } : {} })
+      if (source.via) {
+        const origin = candidate.origin ?? (candidate.origin = { via: [], tag: source.tag || '' })
+        if (!origin.via.includes(source.via)) origin.via.push(source.via)
+        if (!origin.tag && source.tag) origin.tag = source.tag
+      }
       const title = squash(source.title ?? '')
       if (title.length > candidate.title.length) candidate.title = title
       candidate.snippet = mergeSnippets(candidate.snippet, source.snippet, cap)
