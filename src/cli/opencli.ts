@@ -10,7 +10,7 @@
 import { runCli } from '../util.ts'
 import { buildCliEnv } from './runner.ts'
 import { findOnPath, probeCli, type ProbeSubject } from './probe.ts'
-import { validateCliAdapterSpec, type CliAdapterSpec } from './spec.ts'
+import { validateCliAdapterSpec, type CliAdapterSpec, type CliErrorCodesSpec } from './spec.ts'
 import { GENERIC_OUTPUT, opencliSiteVerification, SITE_OUTPUT } from './opencli-sites.ts'
 export { OPENCLI_SITE_OF } from './chains-spec.ts'
 export { opencliSiteVerification }
@@ -101,6 +101,30 @@ export async function listOpencliSites(options: { run?: typeof runCli; ttlMs?: n
   }
 }
 
+/**
+ * The failure format of OpenCLI 1.8.8 (dist/src/errors.js `toEnvelope`, printed as YAML on stderr whatever `-f` says):
+ * `ok: false` / `error: { code, message, help?, exitCode }`. Codes, from that file and the site adapters:
+ *  - AUTH_REQUIRED (exit 77): the Chrome has no login for the site -> not logged in (measured on xiaohongshu);
+ *  - LOGIN_WALL (77), SECURITY_BLOCK, RATE_LIMITED, FORBIDDEN: an HTML page where JSON was expected, a risk-control block -> blocked;
+ *    UNKNOWN with a JSON parse error on an HTML body (`Unexpected token '<'`) is the same thing from an adapter that does not
+ *    check (measured on reddit through a proxy);
+ *  - EMPTY_RESULT (66), NO_DATA, EMPTY_RESPONSE: nothing found; BROWSER_CONNECT (69): no Chrome / bridge; TIMEOUT (75);
+ *  - ARGUMENT, INVALID_ARGUMENT, ...: the arguments of this adapter are not accepted by that version.
+ * Anything else (COMMAND_EXEC, FETCH_ERROR, HTTP_ERROR, ...) keeps OpenCLI's own message.
+ */
+export const OPENCLI_ERROR_CODES: CliErrorCodesSpec = {
+  codePath: 'error.code',
+  messagePath: 'error.message',
+  notLoggedIn: ['AUTH_REQUIRED'],
+  notLoggedInExit: [77],
+  blocked: ['LOGIN_WALL', 'SECURITY_BLOCK', 'RATE_LIMITED', 'FORBIDDEN'],
+  blockedPatterns: ["unexpected token '<'", 'is not valid json', '<!doctype', '<html', '<body'],
+  empty: ['EMPTY_RESULT', 'NO_DATA', 'EMPTY_RESPONSE'],
+  unavailable: ['BROWSER_CONNECT'],
+  timeout: ['TIMEOUT'],
+  usage: ['ARGUMENT', 'INVALID_ARGUMENT', 'INVALID_ARG', 'INVALID_ARGS', 'INVALID_INPUT'],
+}
+
 const NOT_LOGGED_IN = ['not logged in', 'login required', 'please log in', 'please login', 'sign in', 'auth_required', 'requires login', '未登录', '请先登录']
 
 /** The spec that runs `opencli <site> search` for one platform, or undefined when the generated spec is invalid (a site named like a write command). */
@@ -117,10 +141,12 @@ export function opencliSearchSpec(platform: string, entry: OpencliSite, options:
       maxCount: 20,
       output: SITE_OUTPUT[entry.site] ?? GENERIC_OUTPUT,
       notLoggedInPatterns: NOT_LOGGED_IN,
+      errorCodes: OPENCLI_ERROR_CODES,
     },
     env: {},
     needsLogin: entry.strategy !== 'public',
-    ...entry.strategy !== 'public' ? { login: { command: 'opencli doctor' } } : {},
+    // The login is the one of the user's own Chrome; the plugin never suggests a login command for it.
+    ...entry.strategy !== 'public' ? { login: { hint: '在你的 Chrome 里登录 ' + (entry.domain ?? entry.site) + ' 后重试（opencli 使用 Chrome 的登录态）' } } : {},
     timeoutMs: 60_000,
     maxOutputBytes: 8 * 1024 * 1024,
     verification: opencliSiteVerification(entry.site),

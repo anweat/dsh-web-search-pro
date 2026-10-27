@@ -136,7 +136,7 @@ export const platformAdapters: readonly ProviderAdapter[] = [
     languages: ['zh'], regions: ['cn'], domains: ['xiaohongshu.com'], taskProfiles: ['experience'], resultKinds: ['social'],
     requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('xhs', 'optional fallback: xiaohongshu-cli (`xhs login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs your login; command contracts probed locally, no search run' },
+    verification: { live: false, note: 'log in to xiaohongshu.com in your own Chrome (OpenCLI) or log xhs in yourself; the xhs search was measured live on 2026-10-27, the OpenCLI one answered AUTH_REQUIRED without a login so its mapping is not measured; command contracts probed locally' },
   }),
 
   // One provider, three backends in order: the standalone OpenCLI (your Chrome's login), twitter-cli (optional fallback), the dsh-browser OpenCLI bridge.
@@ -150,14 +150,14 @@ export const platformAdapters: readonly ProviderAdapter[] = [
       BROWSER_REQ,
     ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs a logged-in session or twitter-cli tokens; not verified live' },
+    verification: { live: true, note: 'OpenCLI twitter search measured live on 2026-10-27 (needs an x.com login in your own Chrome); the twitter-cli fallback (tokens) is contract-only' },
   }),
 
   cliPlatform('reddit', 'Reddit', {
     languages: ['en'], domains: ['reddit.com'], taskProfiles: ['experience'], resultKinds: ['social'],
     requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('rdt', 'optional fallback: rdt-cli (`rdt login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs your login; command contracts probed locally, no search run' },
+    verification: { live: false, note: 'OpenCLI reddit was not measured (Reddit answered a web page, likely an IP block on a proxied network; mapped as such); rdt is contract-only; log in in your own Chrome or log rdt in yourself' },
   }),
   opencliPlatform('instagram', 'Instagram', { domains: ['instagram.com'] }),
   opencliPlatform('facebook', 'Facebook', { domains: ['facebook.com'] }),
@@ -180,7 +180,7 @@ export const platformAdapters: readonly ProviderAdapter[] = [
     languages: ['zh'], regions: ['cn'], resultKinds: ['qa'], taskProfiles: ['experience', 'compare'], domains: ['zhihu.com'],
     requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('zhihu', 'optional fallback: zhihu-cli (`zhihu login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs your login; command contract probed locally, no search run' },
+    verification: { live: true, note: 'OpenCLI zhihu search measured live on 2026-10-27 (needs a zhihu.com login in your own Chrome; no excerpt or time in its output); zhihu-cli is contract-only' },
   }),
   browserPlatform('weibo', '微博', { resultKinds: ['social'], taskProfiles: ['experience', 'news_fact'], domains: ['weibo.com', 'weibo.cn'] }),
   browserPlatform('douban', '豆瓣', { taskProfiles: ['experience', 'compare'], domains: ['douban.com'] }),

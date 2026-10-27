@@ -90,7 +90,7 @@ test('every earlier backend failing is reported in order, and the last leg answe
       assert.equal(out.sources[0]!.title, 'browser reddit hit')
       assert.equal(h.history().engine, 'opencli-reddit', 'the dsh-browser leg answered')
       const detail = JSON.stringify(h.history().detail)
-      assert.match(detail, /skipped backends: opencli: .*; rdt: the rdt command is not installed/)
+      assert.match(detail, /skipped backends: opencli: opencli: the site returned a web page instead of data, or blocked the request.*Unexpected token.*; rdt: the rdt command is not installed/)
     } finally { h.cleanup() }
   })
 })

@@ -13,7 +13,7 @@ import { capText, htmlDecode, jsYaml, runCli, stripTags, type CliResult } from '
 import { EngineError } from '../engine-error.ts'
 import { normalizeTimeText } from './time-text.ts'
 import {
-  searchSpecFor, type CliAdapterSpec, type CliErrorCode, type CliOutputSpec, type CliSearchSpec, type FieldSource, type JoinPart, type TemplateSource,
+  searchSpecFor, type CliAdapterSpec, type CliErrorCode, type CliErrorCodesSpec, type CliOutputSpec, type CliSearchSpec, type FieldSource, type JoinPart, type TemplateSource,
 } from './spec.ts'
 
 /** A structured failure of a CLI adapter: `code` is one of {@link CliErrorCode}; `hint` says what the user can do. */
@@ -78,6 +78,7 @@ export function loginHint(spec: Pick<CliAdapterSpec, 'bins' | 'login' | 'env'>):
   const where = required.length && required.every(name => SETTINGS_BACKED_ENV[name])
     ? 'in DSH credentials (plugin settings ' + required.map(name => SETTINGS_BACKED_ENV[name]).join(' / ') + ') or in the Host process environment; a shell profile alone is not enough'
     : 'in the Host process environment (a shell profile alone is not enough)'
+  if (spec.login?.hint) return spec.login.hint + (required.length ? ' (or set ' + required.join(' / ') + ' ' + where + ')' : '')
   if (spec.login?.command) return 'run `' + spec.login.command + '` yourself' + (required.length ? ' (or set ' + required.join(' / ') + ' ' + where + ')' : '')
   if (required.length) return 'set ' + required.join(' / ') + ' ' + where
   return 'run `' + spec.bins[0] + ' login` yourself'
@@ -208,6 +209,8 @@ export function parseCliItems(spec: Pick<CliAdapterSpec, 'bins'>, output: CliOut
     // A record has at least two cells; a notice or progress line on stdout (no tab) is not one.
     return lines.filter(line => line.includes('\t')).map(line => Object.fromEntries(line.split('\t').map((cell, index) => [columns[index] ?? 'c' + index, cell])))
   }
+  // A web page where data was expected (a login wall, a risk-control or captcha page, a proxy error page): the site did not answer with data.
+  if ((output.format === 'json' || output.format === 'yaml') && /^\s*<(?:!doctype|html|head|body|\?xml)/i.test(text)) throw blockedPageError(label, 'it printed a web page (HTML)')
   let parsed: unknown
   if (output.format === 'ndjson') {
     const rows: unknown[] = []
@@ -233,6 +236,50 @@ export function parseCliItems(spec: Pick<CliAdapterSpec, 'bins'>, output: CliOut
   const items = output.itemsPath !== undefined ? getPath(parsed, output.itemsPath) : firstArray(parsed)
   if (!Array.isArray(items)) throw new CliAdapterError(label + ' output has no result list' + (output.itemsPath ? ' at ' + output.itemsPath : ''), 'CLI_CONTRACT_MISMATCH', 'the installed ' + label + ' does not match this adapter: check `sources.deps`')
   return items
+}
+
+const BLOCKED_TEXT = 'the site returned a web page instead of data, or blocked the request (站点返回了网页而不是数据，可能是风控、IP 被拦或需要登录)'
+const BLOCKED_HINT = 'open the site in your own Chrome and check that it loads and you are logged in, without a verification page; a proxied or shared IP address is often blocked: try another network exit or retry later, or use the next backend of the chain (platformBackends)'
+
+/** The failure for a web page or a block where data was expected: said as such, with what the user can check. */
+function blockedPageError(label: string, detail: string): CliAdapterError {
+  return new CliAdapterError(label + ': ' + BLOCKED_TEXT + '; ' + detail, 'CLI_FAILED', BLOCKED_HINT, true)
+}
+
+/** The failure payload (`ok: false`, `error: { code, message }`) a tool prints on stderr or stdout: JSON, or a YAML document after any notices. */
+export function parseFailurePayload(text: string): unknown {
+  const trimmed = text.trim()
+  if (!trimmed) return undefined
+  if (trimmed.startsWith('{')) { try { return JSON.parse(trimmed) as unknown } catch { return undefined } }
+  const start = /^ok:\s*false\s*$/m.exec(trimmed)
+  if (!start) return undefined
+  // The document ends at the first blank line (an update notice or a hint can follow it).
+  const block = trimmed.slice(start.index).split(/\r?\n\s*\r?\n/)[0]!
+  try { const parsed: unknown = jsYaml.load(block); return isObject(parsed) ? parsed : undefined } catch { return undefined }
+}
+
+/**
+ * A failed command run (non-zero exit) as the structured error its own code and message call for, or undefined when the
+ * spec lists no codes or the output carries nothing readable (the generic handling then applies).
+ */
+export function mapToolFailure(codes: CliErrorCodesSpec | undefined, result: Pick<CliResult, 'code' | 'stdout' | 'stderr'>, spec: Pick<CliAdapterSpec, 'bins' | 'login' | 'env'>, redact: (text: string) => string = text => text): CliAdapterError | EngineError | undefined {
+  if (!codes) return undefined
+  const label = labelOf(spec)
+  const payload = parseFailurePayload(result.stderr) ?? parseFailurePayload(result.stdout)
+  const code = payload === undefined ? undefined : asText(getPath(payload, codes.codePath), new Set())
+  const message = payload === undefined || !codes.messagePath ? undefined : asText(getPath(payload, codes.messagePath), new Set())
+  const shown = message ? redact(capText(message, 200)) : undefined
+  const has = (list: readonly string[] | undefined): boolean => code !== undefined && !!list?.includes(code)
+  const notLoggedIn = (): CliAdapterError => new CliAdapterError(label + ' is not logged in' + (shown ? ': ' + shown : ''), 'CLI_NOT_LOGGED_IN', loginHint(spec))
+  if (has(codes.notLoggedIn)) return notLoggedIn()
+  if (has(codes.empty)) return new EngineError(label + ' returned no results', 'ENGINE_EMPTY', false)
+  if (has(codes.blocked) || (message !== undefined && includesAny(message, codes.blockedPatterns))) return blockedPageError(label, (code ? code + ': ' : '') + (shown ?? 'no message'))
+  if (has(codes.unavailable)) return new CliAdapterError(label + ' could not reach its browser: ' + (shown ?? code), 'CLI_FAILED', 'check that the browser the tool drives is running and its bridge / extension is connected (opencli: OpenCLI Browser Bridge in your own Chrome; `opencli doctor` checks it)', false)
+  if (has(codes.timeout)) return new EngineError(label + ' timed out' + (shown ? ': ' + shown : ''), 'ENGINE_TIMEOUT', true)
+  if (has(codes.usage)) return new CliAdapterError(label + ' rejected the command arguments of this adapter: ' + (shown ?? code), 'CLI_CONTRACT_MISMATCH', 'the installed ' + label + ' does not match this adapter: check `sources.deps`')
+  if (code === undefined && codes.notLoggedInExit?.includes(result.code)) return notLoggedIn()
+  if (code !== undefined || shown !== undefined) return new CliAdapterError(label + ' search failed: ' + (code ? '[' + code + '] ' : '') + (shown ?? 'no message'), 'CLI_FAILED', undefined, true)
+  return undefined
 }
 
 /** The tool's own error text from a parsed json / yaml payload (`errorPaths`), when it carries one. */
@@ -414,6 +461,9 @@ export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunIn
   const combined = result.stderr + '\n' + result.stdout
   const notLoggedIn = (): CliAdapterError => new CliAdapterError(label + ' is not logged in', 'CLI_NOT_LOGGED_IN', loginHint(spec))
   if (result.code !== 0) {
+    // The tool's own error code, when the spec knows its failure format.
+    const mapped = mapToolFailure(search.errorCodes, result, spec, redact)
+    if (mapped) throw mapped
     if (includesAny(combined, search.notLoggedInPatterns)) throw notLoggedIn()
     if (includesAny(combined, search.emptyWhen)) throw new EngineError(label + ' returned no results', 'ENGINE_EMPTY', false)
     // A tool that answers failures in its machine-readable format (`{ ok: false, error: { message } }`) is quoted by that message, not by the raw payload.

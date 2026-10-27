@@ -87,6 +87,34 @@ export interface CliOutputSpec {
   requireTitle?: boolean
 }
 
+/**
+ * How a tool reports a failed command in its machine-readable format (a YAML / JSON payload on stderr, else stdout), and what
+ * each of its error codes means. A listed code is mapped to a structured plugin error; a code that is not listed keeps the
+ * tool's own message (`<tool> search failed: [CODE] message`).
+ */
+export interface CliErrorCodesSpec {
+  /** Dotted path of the tool's error code in the failure payload (`error.code`). */
+  codePath: string
+  /** Dotted path of its message (`error.message`). */
+  messagePath?: string
+  /** Codes that mean "not logged in" (CLI_NOT_LOGGED_IN). */
+  notLoggedIn?: readonly string[]
+  /** Exit codes that mean "not logged in" when the output carries no readable code. */
+  notLoggedInExit?: readonly number[]
+  /** Codes that mean "no results" (ENGINE_EMPTY). */
+  empty?: readonly string[]
+  /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
+  blocked?: readonly string[]
+  /** Case-insensitive fragments of the tool's message that mean the same (a JSON parse error on an HTML page: `Unexpected token '<'`). */
+  blockedPatterns?: readonly string[]
+  /** Codes that mean the tool cannot reach its browser (CLI_FAILED, not retryable). */
+  unavailable?: readonly string[]
+  /** Codes that mean a timeout (ENGINE_TIMEOUT). */
+  timeout?: readonly string[]
+  /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
+  usage?: readonly string[]
+}
+
 export interface CliSearchSpec {
   /**
    * Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`).
@@ -106,6 +134,8 @@ export interface CliSearchSpec {
   emptyWhen?: readonly string[]
   /** Case-insensitive fragments of the tool's output that mean "not logged in" (maps to CLI_NOT_LOGGED_IN). */
   notLoggedInPatterns?: readonly string[]
+  /** The tool's structured error codes (checked before the fragments above). */
+  errorCodes?: CliErrorCodesSpec
 }
 
 export interface CliProbeSpec {
@@ -121,7 +151,9 @@ export interface CliProbeSpec {
 
 export interface CliLoginSpec {
   /** What the user runs themselves (`xhs login`); never run by the plugin. */
-  command: string
+  command?: string
+  /** What the user does, in words, when the tool takes its login from somewhere the plugin cannot run (the login of the user's own Chrome): shown instead of a command. One of `command` / `hint` is required. */
+  hint?: string
   /** Home-relative files that exist once the user has logged in. Only their existence is checked, never their content. */
   savedCredentialPaths?: readonly string[]
   /** The tool reads the browser's cookies by itself when it has no saved login: then it is never run without one. */
@@ -221,11 +253,12 @@ const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
 const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
 const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
-const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns'])
+const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
+const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'])
 const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'keepWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
 const ENV_KEYS = new Set(['required', 'passthrough', 'set'])
-const LOGIN_KEYS = new Set(['command', 'savedCredentialPaths', 'readsBrowserCookiesWithoutLogin'])
+const LOGIN_KEYS = new Set(['command', 'hint', 'savedCredentialPaths', 'readsBrowserCookiesWithoutLogin'])
 
 function closed(obj: Record<string, unknown>, keys: Set<string>, where: string, errors: string[]): void {
   for (const key of Object.keys(obj)) if (!keys.has(key)) errors.push(where + '.' + key + ' is not a spec field')
@@ -334,6 +367,16 @@ function checkSearch(value: unknown, where: string, allowed: readonly string[], 
   if (value.overfetch !== undefined && !(Number.isInteger(value.overfetch) && (value.overfetch as number) >= 0 && (value.overfetch as number) <= 10)) errors.push(where + '.overfetch must be an integer 0..10')
   checkOutput(value.output, where + '.output', errors)
   for (const key of ['emptyWhen', 'notLoggedInPatterns'] as const) if (value[key] !== undefined && !strList(value[key], 12, 120)) errors.push(where + '.' + key + ' must be a list of short strings')
+  if (value.errorCodes !== undefined) checkErrorCodes(value.errorCodes, where + '.errorCodes', errors)
+}
+
+function checkErrorCodes(value: unknown, where: string, errors: string[]): void {
+  if (!isObject(value)) { errors.push(where + ' must be an object'); return }
+  closed(value, ERROR_CODES_KEYS, where, errors)
+  if (!(typeof value.codePath === 'string' && PATH_RE.test(value.codePath))) errors.push(where + '.codePath must be a dotted path')
+  if (value.messagePath !== undefined && !(typeof value.messagePath === 'string' && PATH_RE.test(value.messagePath))) errors.push(where + '.messagePath must be a dotted path')
+  for (const key of ['notLoggedIn', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
+  if (value.notLoggedInExit !== undefined && !(Array.isArray(value.notLoggedInExit) && value.notLoggedInExit.length <= 8 && value.notLoggedInExit.every(c => Number.isInteger(c) && (c as number) > 0 && (c as number) < 256))) errors.push(where + '.notLoggedInExit must be exit codes 1..255')
 }
 
 export interface CliSpecValidation {
@@ -410,7 +453,9 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
     if (!isObject(l)) errors.push(at + '.login must be an object')
     else {
       closed(l, LOGIN_KEYS, at + '.login', errors)
-      if (!isStr(l.command, 120)) errors.push(at + '.login.command must be a short string (what the user runs themselves)')
+      if (l.command === undefined && l.hint === undefined) errors.push(at + '.login needs a command (what the user runs themselves) or a hint (what the user does)')
+      if (l.command !== undefined && !isStr(l.command, 120)) errors.push(at + '.login.command must be a short string (what the user runs themselves)')
+      if (l.hint !== undefined && !isStr(l.hint, 200)) errors.push(at + '.login.hint must be a short string (what the user does)')
       if (l.savedCredentialPaths !== undefined && !(strList(l.savedCredentialPaths, 4, 160) && (l.savedCredentialPaths as string[]).every(p => /^~\/[^\0]+$/.test(p) && !p.includes('..')))) errors.push(at + '.login.savedCredentialPaths must be paths starting with ~/ (no ..)')
       if (l.readsBrowserCookiesWithoutLogin !== undefined && typeof l.readsBrowserCookiesWithoutLogin !== 'boolean') errors.push(at + '.login.readsBrowserCookiesWithoutLogin must be a boolean')
       if (l.readsBrowserCookiesWithoutLogin === true && !(Array.isArray(l.savedCredentialPaths) && l.savedCredentialPaths.length)) errors.push(at + '.login: a tool that reads browser cookies without a login needs savedCredentialPaths, so the plugin can refuse to run it without one')
