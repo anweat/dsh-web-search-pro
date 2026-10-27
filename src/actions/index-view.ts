@@ -27,13 +27,13 @@ export const COMPACT_GUIDE = [
   '(2) Coverage is heuristic: read gaps; expand an excerpt with history.expand {evidenceId} or read.fetch {url} before concluding something is absent.',
   '(3) Use 1-2 sources: search.recommend {task} names them (search.run engines=<id>); never query every source. Add constraints (JSON) for must-have terms, sites, versions, time windows.',
   '(4) Long pages: read.fetch continues with offset=nextOffset. Rendering or login pages need the dsh-browser plugin (read.snapshot, search.run platform=...).',
-  '(5) Errors carry code+hint; INVALID_ARGS includes the schema. cache.clear, history.delete, rules.upsert|remove|import and sources.install ask the user first.',
+  '(5) Errors carry code+hint; INVALID_ARGS includes the schema. cache.clear, history.delete, rules.upsert|remove|import, sources.install and config.upsert_cli ask the user first.',
 ].join('\n')
 
 const MAX_LINE = 170
 
 function approvalNote(action: ActionDef): string {
-  const notes: Record<ApprovalClass, string> = { none: '', install: 'asks', 'local-write': 'asks' }
+  const notes: Record<ApprovalClass, string> = { none: '', install: 'asks', 'local-write': 'asks', config: '', 'run-program': 'asks' }
   return notes[action.approval]
 }
 

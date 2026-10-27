@@ -20,7 +20,7 @@ import type { ProviderState } from '../provider.ts'
 import type { OverlayStore } from '../overlay.ts'
 import type { PendingRestart } from '../restart.ts'
 
-export const ACTION_GROUPS = ['search', 'read', 'history', 'sources', 'rules', 'cache'] as const
+export const ACTION_GROUPS = ['search', 'read', 'history', 'sources', 'rules', 'cache', 'config'] as const
 export type ActionGroup = typeof ACTION_GROUPS[number]
 
 /**
@@ -60,8 +60,10 @@ export interface OutputSchema {
  * - `none`: runs directly.
  * - `install`: runs an external installer (`sources.install`).
  * - `local-write`: changes or deletes locally stored data (cache, history rows, extraction rules).
+ * - `config`: changes the agent overlay (search order, confidence, platform chains); runs without asking, denied in read-only mode.
+ * - `run-program`: lets the plugin run a local program (a custom CLI spec); always asks the user, denied in read-only mode.
  */
-export type ApprovalClass = 'none' | 'install' | 'local-write'
+export type ApprovalClass = 'none' | 'install' | 'local-write' | 'config' | 'run-program'
 
 export interface ActionExample {
   args: Record<string, unknown>

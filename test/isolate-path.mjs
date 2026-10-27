@@ -8,3 +8,14 @@ if (process.platform !== 'win32') {
   process.env.WSP_REAL_PATH ??= process.env.PATH
   process.env.PATH = '/usr/bin:/bin'
 }
+
+// The plugin puts its database and the agent overlay under $DSH_HOME when a test does not give a dbPath. A test must never
+// open the real home of the person running it, so point the suite at a throw-away one (the live tests may still set their own).
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+if (!process.env.WSP_TEST_KEEP_HOME) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-test-home-'))
+  process.env.DSH_HOME = home
+  process.on('exit', () => { try { fs.rmSync(home, { recursive: true, force: true }) } catch { /* best effort */ } })
+}

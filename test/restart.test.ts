@@ -31,8 +31,10 @@ test('a static read of the configuration anywhere in the plugin is a restart fie
   for (const [file, re] of [['index.ts', /\bresolved\.(\w+)/g], ['tools.ts', /(?<![/'"\w])config\.(\w+)/g], ['router.ts', /\bconfig\.(memoryCacheEntries)\b/g]] as const) {
     for (const match of read(file).matchAll(re)) note(file, match[1]!)
   }
-  for (const file of fs.readdirSync(path.join(root, 'actions')).filter(name => name.endsWith('.ts'))) {
-    for (const match of read('actions/' + file).matchAll(/(?:\bctx\.config|(?<![/'"\w])config)\.(\w+)/g)) note('actions/' + file, match[1]!)
+  // Actions read the start-up copy as `ctx.config.<field>` and, for their deadline, in `config => config.<field> + ...` (the config group's
+  // `config` parameters are the effective configuration handed in, not the start-up copy, and are not scanned).
+  for (const file of fs.readdirSync(path.join(root, 'actions')).filter(name => name.endsWith('.ts') && name !== 'config.ts')) {
+    for (const match of read('actions/' + file).matchAll(/\b(?:ctx|services)\.config\.(\w+)|\bconfig => config\.(\w+)/g)) note('actions/' + file, (match[1] ?? match[2])!)
   }
   const allowed = new Set<string>([...RESTART_FIELD_LIST, 'playwright', 'engines' /* the load marker and the log line print it */, 'toolSurface'])
   const diagnostic = new Set(['engines'])
