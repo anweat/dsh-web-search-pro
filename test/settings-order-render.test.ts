@@ -73,7 +73,12 @@ test('the engine list: one row per engine in the order stored, with its place, r
   assert.ok(!buttons(rows[1]!, 'order-up').hasAttribute('disabled') && !buttons(rows[1]!, 'order-down').hasAttribute('disabled'))
   assert.ok(buttons(rows[2]!, 'order-down').hasAttribute('disabled'), 'the last cannot go down')
   for (const row of rows) for (const action of ['order-up', 'order-down', 'order-remove']) assert.ok(buttons(row, action).getAttribute('aria-label'), action + ' has an accessible name')
-  assert.equal(list.querySelector('input.wsp-sm')!.getAttribute('aria-label'), 'Confidence of DuckDuckGo')
+  // Confidence is 1 for a built-in source: a quiet "Confidence default 1" that opens on a click, with a `?` that says what it does.
+  const quiet = rows[0]!.querySelector('[data-wsp-confidence="quiet"]')!
+  assert.match(quiet.text, /Confidence\s*default 1/)
+  assert.equal(quiet.querySelector('button.wsp-conf-quiet')!.getAttribute('aria-label'), 'Confidence of DuckDuckGo')
+  assert.ok(quiet.querySelector('[data-wsp-help]'), 'the confidence has a ? beside it')
+  assert.equal(rows[0]!.querySelector('input.wsp-sm'), null, 'no box while it is the default 1')
   // The add box offers what is not in the list yet, and never what is.
   const options = list.querySelectorAll('[data-wsp-add="engine"] option').map(option => option.getAttribute('value'))
   assert.ok(options.includes('bing') && options.includes('deepseek') && options.includes('seam'))
@@ -94,8 +99,11 @@ test('restore default is a button that is live only while the list is overridden
   const rows = group(withCustom.root, 'order').querySelectorAll('[data-wsp-order="engines"] [data-wsp-order-item]')
   assert.match(rows[1]!.text, /Custom/)
   assert.match(rows[1]!.text, /Spec valid/)
-  assert.match(rows[1]!.text, /confidence 0\.6/)
-  assert.equal(rows[1]!.querySelector('input.wsp-sm')!.getAttribute('placeholder'), '0.6', 'the box shows the default it would have')
+  const box = rows[1]!.querySelector('[data-wsp-confidence="set"]')!
+  assert.ok(box.classList.contains('wsp-conf-on'), 'a value other than 1 is picked out')
+  assert.match(box.text, /Confidence/)
+  assert.equal(box.querySelector('input.wsp-sm')!.getAttribute('placeholder'), '0.6', 'the box shows the default it would have')
+  assert.equal(box.querySelector('input.wsp-sm')!.getAttribute('aria-label'), 'Confidence of echo')
   assert.match(rows[2]!.text, /No such custom CLI/, 'an id with no spec is flagged')
 })
 
@@ -141,8 +149,9 @@ test('the three-way relation is written out, with the current priority and disab
 
 test('platforms: one row each with its chain, the built-in default shown as such, an override marked; the dialog body lists the chain and what can still be added', async () => {
   const { root, formsRoot } = await page('en', { platformBackends: { xiaohongshu: ['xhs', 'opencli'] }, cliAdapters: { mine: jsonTool() } })
-  const rows = group(root, 'order').querySelectorAll('[data-wsp-platform-list] [data-wsp-item]')
-  assert.deepEqual(rows.map(row => row.getAttribute('data-wsp-item')), [...ORDER_PLATFORMS])
+  const order = group(root, 'order')
+  const rows = order.querySelectorAll('[data-wsp-platform-list] [data-wsp-item], [data-wsp-platform-rest] [data-wsp-item]')
+  assert.deepEqual(rows.map(row => row.getAttribute('data-wsp-item')).sort(), [...ORDER_PLATFORMS].sort(), 'every platform is on the page, the less used ones inside the fold')
   const byId = (id: string) => rows.find(row => row.getAttribute('data-wsp-item') === id)!
   assert.match(byId('xiaohongshu').text, /Overridden/)
   assert.match(byId('xiaohongshu').text, /xhs › OpenCLI/)
@@ -231,4 +240,54 @@ test('the dialog dictionaries cover the new groups in both languages', async () 
     assert.deepEqual(missingKeys, [], lang)
     assert.ok(group(root, 'order') && group(root, 'cli') && formsRoot.querySelector('[data-form="cli"]'))
   }
+})
+
+test('platforms: by default only the changed ones, those a custom CLI serves and the common ones are listed; the rest is folded under a count, with a filter above', async () => {
+  const shownOf = (root: ReturnType<typeof parse>) => group(root, 'order').querySelectorAll('[data-wsp-platform-list] [data-wsp-item]').map(row => row.getAttribute('data-wsp-item'))
+  const restOf = (root: ReturnType<typeof parse>) => group(root, 'order').querySelectorAll('[data-wsp-platform-rest] [data-wsp-item]').map(row => row.getAttribute('data-wsp-item'))
+  const plain = await page('en')
+  assert.deepEqual(shownOf(plain.root), ['xiaohongshu', 'reddit', 'twitter', 'zhihu', 'bilibili', 'youtube', 'github', 'wechat'])
+  assert.equal(restOf(plain.root).length, ORDER_PLATFORMS.length - 8)
+  const fold = group(plain.root, 'order').querySelector('details[data-wsp-fold="platforms-more"]')!
+  assert.ok(!fold.hasAttribute('open'), 'the fold is closed')
+  assert.match(fold.querySelector('summary')!.text, new RegExp(`Show the other ${ORDER_PLATFORMS.length - 8} platforms`))
+  const input = group(plain.root, 'order').querySelector('[data-wsp-platform-filter] input')!
+  assert.equal(input.getAttribute('aria-label'), 'Filter platforms')
+  assert.match(input.getAttribute('placeholder')!, /platform name or id/)
+  // A changed chain and a custom CLI that declares a platform lift it out of the fold.
+  const lifted = await page('en', { platformBackends: { weibo: ['browser-search'] }, cliAdapters: { mine: jsonTool({ platforms: ['douban'] }), bad: jsonTool({ platforms: ['tieba'], bins: ['/usr/bin/x'] }) } })
+  assert.deepEqual(shownOf(lifted.root).sort(), ['bilibili', 'douban', 'github', 'reddit', 'twitter', 'weibo', 'wechat', 'xiaohongshu', 'youtube', 'zhihu'].sort())
+  assert.ok(restOf(lifted.root).includes('tieba'), 'a CLI whose spec is invalid does not count as serving the platform')
+  const zh = await page('zh')
+  assert.match(group(zh.root, 'order').querySelector('details[data-wsp-fold="platforms-more"] summary')!.text, /显示其余 \d+ 个平台/)
+})
+
+test('confidence box: quiet "default 1" until opened; any other value, or a wrong one, is labelled and picked out; the dialog rows have the same box; the ? says what it does', async () => {
+  const { root, formsRoot } = await page('en', { engines: ['ddg', 'bing', 'exa', 'jina'], sources: { confidence: { bing: 0.8, exa: 1, ddg: 0.5 } }, platformBackends: { xiaohongshu: ['xhs', 'opencli'] } })
+  const boxOf = (id: string) => group(root, 'order').querySelector(`[data-wsp-order="engines"] [data-wsp-order-item="${id}"] [data-wsp-confidence]`)!
+  assert.equal(boxOf('jina').getAttribute('data-wsp-confidence'), 'quiet')
+  assert.match(boxOf('jina').text, /default 1/)
+  const bing = boxOf('bing')
+  assert.equal(bing.getAttribute('data-wsp-confidence'), 'set')
+  assert.ok(bing.classList.contains('wsp-conf-on'))
+  assert.equal(bing.querySelector('label')!.text, 'Confidence')
+  assert.equal(bing.querySelector('input')!.getAttribute('value'), '0.8')
+  assert.equal(bing.querySelector('label')!.getAttribute('for'), bing.querySelector('input')!.getAttribute('id'))
+  assert.equal(boxOf('exa').getAttribute('data-wsp-confidence'), 'quiet', 'an explicit 1 changes nothing, so it stays quiet')
+  assert.match(boxOf('exa').text, /Confidence\s*1/)
+  assert.equal(boxOf('ddg').querySelector('input')!.getAttribute('value'), '0.5')
+  // The platform dialog uses the same row, so the same box.
+  const xhs = formsRoot.querySelector('[data-form="platform"][data-id="xiaohongshu"]')!
+  assert.ok(xhs.querySelector('[data-wsp-order-item] [data-wsp-confidence]'), 'the dialog rows carry the confidence box')
+  assert.equal(xhs.querySelectorAll('input.wsp-sm').length, 0, 'and show no bare number box while the value is 1')
+  // An invalid draft stays open, marked invalid.
+  const bad = await page('en', { engines: ['ddg'] }, {}, undefined, controller => controller.edit('sources.confidence.ddg' as never, '7'))
+  const badBox = group(bad.root, 'order').querySelector('[data-wsp-order-item="ddg"] [data-wsp-confidence]')!
+  assert.equal(badBox.getAttribute('data-wsp-confidence'), 'set')
+  assert.equal(badBox.querySelector('input')!.getAttribute('aria-invalid'), 'true')
+  // The ? is there and the dictionaries say the same thing in both languages.
+  assert.ok(boxOf('jina').querySelector('[data-wsp-help]'))
+  const { en, zh } = await import('../src/client/locales.ts')
+  assert.match(en.orderConfidenceHelp, /1 = no adjustment/)
+  assert.equal(zh.orderConfidenceHelp, '只在多个来源融合排名时略微降低它的权重；1 = 不调整。')
 })

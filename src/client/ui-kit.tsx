@@ -127,10 +127,10 @@ export function Select(props: { id?: string; value: string; options: readonly Se
 }
 
 /** A single-line text input; `muted` greys the value while it is only the inherited default. */
-export function TextInput(props: { id?: string; value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean; muted?: boolean; invalid?: boolean; list?: string; numeric?: boolean; ariaLabel?: string; code?: boolean; small?: boolean }) {
+export function TextInput(props: { id?: string; value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean; muted?: boolean; invalid?: boolean; list?: string; numeric?: boolean; ariaLabel?: string; code?: boolean; small?: boolean; autoFocus?: boolean; onBlur?: () => void }) {
   return <input id={props.id} type="text" className={`${css.input} ${props.muted ? css.muted : ''} ${props.invalid ? css.invalidInput : ''} ${props.code ? css.code : ''} ${props.numeric ? 'wsp-num' : ''} ${props.small ? 'wsp-sm' : ''}`}
     value={props.value} placeholder={props.placeholder} disabled={props.disabled} list={props.list} inputMode={props.numeric ? 'numeric' : undefined} spellCheck={false}
-    aria-label={props.ariaLabel} aria-invalid={props.invalid || undefined} onChange={event => props.onChange(event.currentTarget.value)} />
+    aria-label={props.ariaLabel} aria-invalid={props.invalid || undefined} autoFocus={props.autoFocus} onBlur={props.onBlur} onChange={event => props.onChange(event.currentTarget.value)} />
 }
 
 /** A text input followed by a fixed unit. */

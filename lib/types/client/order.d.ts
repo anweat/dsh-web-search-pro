@@ -75,3 +75,28 @@ export interface CustomRow {
 }
 /** One row per custom CLI of the staged `cliAdapters` value: what the list shows, with the server's own validation. */
 export declare function customRows(cliAdapters: unknown): CustomRow[];
+/** The platforms people reach for most: listed even when nothing was changed for them. */
+export declare const COMMON_PLATFORMS: readonly string[];
+/**
+ * Which platforms the list shows up front, and which fold into "show the rest": a platform is shown when its chain was changed
+ * (`platformBackends` has its key), when a valid custom CLI declares it, or when it is one of the common ones. Both halves keep the
+ * order of `platforms`. `platformBackends` is the staged text; when it is not valid JSON nothing counts as changed.
+ */
+export declare function splitPlatforms(platforms: readonly string[], platformBackends: string, cliAdapters: unknown): {
+    shown: string[];
+    rest: string[];
+};
+/** The platforms whose display name or id contains `query` (case-insensitive, surrounding spaces ignored); an empty query keeps all. */
+export declare function filterPlatforms(platforms: readonly string[], query: string): string[];
+export interface ConfidenceView {
+    /** The value the row runs with: the typed override when it is a number, else the source's default. */
+    effective: number;
+    /** The text is not a number in 0-1. */
+    invalid: boolean;
+    /** Whether the row has its own value in the draft (the box is not empty). */
+    typed: boolean;
+    /** The value changes nothing (it is 1) and is not wrong: the row shows it as a quiet "default" until someone opens it. */
+    quiet: boolean;
+}
+/** What the confidence box of a row shows, from the staged text of `sources.confidence.<id>` and the default of the source. */
+export declare function confidenceView(text: string, defaultValue: number): ConfidenceView;

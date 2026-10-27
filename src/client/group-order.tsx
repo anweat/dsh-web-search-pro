@@ -15,12 +15,12 @@ import { fill, rowLabels, useField, useOverriddenCount, type Card, type LabelKey
 import { hasHelp, labelKey } from './field-keys.ts'
 import { confidenceField, CONFIDENCE_PREFIX } from './form-specs.ts'
 import {
-  addId, backendChoices, backendName, chainsOf, customEntries, customRows, defaultChainOf, engineChoices, idsOf, isCustomId, moveId, ORDER_PLATFORMS, PLATFORM_NAMES, removeId,
-  sourceInfo, textOf, withChain, type SourceInfo,
+  addId, backendChoices, backendName, chainsOf, confidenceView, customEntries, customRows, defaultChainOf, engineChoices, filterPlatforms, idsOf, isCustomId, moveId, ORDER_PLATFORMS, PLATFORM_NAMES, removeId,
+  sourceInfo, splitPlatforms, textOf, withChain, type SourceInfo,
 } from './order.ts'
 import type { WebSearchCardState } from './form.ts'
 import { styles as css } from './styles.ts'
-import { Badge, Btn, Dialog, Group, Item, Row, Select, SubHead, TextInput, type Tone } from './ui-kit.tsx'
+import { Badge, Btn, Dialog, Fold, Group, Help, Item, Row, Select, SubHead, TextInput, type Tone } from './ui-kit.tsx'
 import { DEFAULT_CUSTOM_CONFIDENCE } from '../cli/spec.ts'
 
 /** The fields of this group, for its "N overridden" badge (the confidence entries are counted by their prefix). */
@@ -60,17 +60,38 @@ const defaultConfidence = (info: SourceInfo, adapters: unknown): number => {
   return typeof raw?.confidence === 'number' ? raw.confidence : DEFAULT_CUSTOM_CONFIDENCE
 }
 
-function ConfidenceBox({ card, info, adapters }: { card: Card; info: SourceInfo; adapters: unknown }) {
+/**
+ * The confidence of a source, as a labelled box. While it is 1 (the built-in default, which changes nothing) it is only a quiet
+ * "Confidence · default 1" that opens into the box on a click; any other value, or a wrong one, keeps the box open and picked out.
+ */
+function ConfidenceBox({ card, info, adapters, fallback }: { card: Card; info: SourceInfo; adapters: unknown; fallback?: number }) {
   const { t } = card
+  const [open, setOpen] = useState(false)
   const field = confidenceField(info.id)
   const text = card.useWebSearchPro(snapshot => snapshot.fields[field]?.text ?? '')
   const invalid = card.useWebSearchPro(snapshot => snapshot.fields[field]?.invalid ?? false)
   const disabled = card.useWebSearchPro(snapshot => !snapshot.writable || snapshot.saving)
-  return <TextInput small numeric value={text} placeholder={String(defaultConfidence(info, adapters))} invalid={invalid} disabled={disabled} ariaLabel={fill(t('orderConfidenceOf'), { name: info.name })} onChange={value => card.edit(field as never, value)} />
+  const dflt = fallback ?? defaultConfidence(info, adapters)
+  const view = confidenceView(text, dflt)
+  const name = fill(t('orderConfidenceOf'), { name: info.name })
+  const help = <Help label={t('helpLabel')} text={t('orderConfidenceHelp')} />
+  if (view.quiet && !open && !invalid) {
+    return <span className="wsp-conf" data-wsp-confidence="quiet">
+      <button type="button" className="wsp-conf-quiet" disabled={disabled} aria-label={name} title={t('orderConfidenceEdit')} onClick={() => setOpen(true)}>
+        {t('orderConfidenceLabel')} <span>{view.typed ? view.effective : fill(t('orderConfidenceDefault'), { c: view.effective })}</span>
+      </button>{help}
+    </span>
+  }
+  return <span className={view.quiet && !invalid ? 'wsp-conf' : 'wsp-conf wsp-conf-on'} data-wsp-confidence="set">
+    <label className="wsp-conf-label" htmlFor={'wsp-conf-' + info.id}>{t('orderConfidenceLabel')}</label>
+    <TextInput id={'wsp-conf-' + info.id} small numeric value={text} placeholder={String(dflt)} invalid={invalid || view.invalid} disabled={disabled} ariaLabel={name} autoFocus={open}
+      onBlur={() => setOpen(false)} onChange={value => card.edit(field as never, value)} />
+    {help}
+  </span>
 }
 
 /** One row of an ordered list: its place, name, readiness and confidence, and the buttons that move it. */
-function OrderItem(props: { card: Card; info: SourceInfo; index: number; count: number; adapters: unknown; state: RowState; confidence: number; muted?: boolean; onMove: (delta: -1 | 1) => void; onRemove: () => void; disabled: boolean; withConfidence?: boolean }) {
+function OrderItem(props: { card: Card; info: SourceInfo; index: number; count: number; adapters: unknown; state: RowState; fallback?: number; muted?: boolean; onMove: (delta: -1 | 1) => void; onRemove: () => void; disabled: boolean }) {
   const { card, info, index, count, state } = props
   const { t } = card
   return <div className={props.muted ? 'wsp-order-row wsp-order-default' : 'wsp-order-row'} data-wsp-order-item={info.id}>
@@ -79,11 +100,10 @@ function OrderItem(props: { card: Card; info: SourceInfo; index: number; count: 
       badges={<>
         {info.kind === 'custom' ? <Badge tone="outline">{t('kindCustom')}</Badge> : null}
         <Badge tone={state.tone}>{state.label}</Badge>
-        {props.confidence < 1 ? <Badge tone="neutral">{fill(t('orderConfidenceBadge'), { c: props.confidence })}</Badge> : null}
       </>}
       meta={state.reason}
       actions={<>
-        {props.withConfidence === false ? null : <ConfidenceBox card={card} info={info} adapters={props.adapters} />}
+        {<ConfidenceBox card={card} info={info} adapters={props.adapters} fallback={props.fallback} />}
         <Btn ariaLabel={t('orderUp')} title={t('orderUp')} disabled={props.disabled || index === 0} onClick={() => props.onMove(-1)} data="order-up">↑</Btn>
         <Btn ariaLabel={t('orderDown')} title={t('orderDown')} disabled={props.disabled || index === count - 1} onClick={() => props.onMove(1)} data="order-down">↓</Btn>
         <Btn ariaLabel={t('orderRemove')} title={t('orderRemove')} danger disabled={props.disabled} onClick={props.onRemove} data="order-remove">×</Btn>
@@ -155,10 +175,7 @@ function EngineRow({ card, id, index, ids, adapters, disabled, onChange }: { car
   const { t } = card
   const info = sourceInfo(id, adapters)
   const state = card.useWebSearchPro(snapshot => sourceState(snapshot, info, t))
-  const override = card.useWebSearchPro(snapshot => snapshot.fields[confidenceField(id)]?.text ?? '')
-  const typed = Number(override)
-  const confidence = override.trim() !== '' && Number.isFinite(typed) ? typed : defaultConfidence(info, adapters)
-  return <OrderItem card={card} info={info} index={index} count={ids.length} adapters={adapters} state={state} confidence={confidence} disabled={disabled}
+  return <OrderItem card={card} info={info} index={index} count={ids.length} adapters={adapters} state={state} disabled={disabled}
     onMove={delta => onChange(moveId(ids, id, delta))} onRemove={() => onChange(removeId(ids, id))} />
 }
 
@@ -218,20 +235,31 @@ function BackendRow({ card, platform, id, index, ids, muted, adapters, disabled,
     if (custom) return sourceState(snapshot, info, t)
     return leg ? (leg.ready ? { tone: 'success', label: t('stateReady') } : { tone: 'warning', label: t('stateNotReady'), ...leg.reason ? { reason: leg.reason } : {} }) : { tone: 'neutral', label: t('backendUnknown') }
   })
-  const override = card.useWebSearchPro(snapshot => snapshot.fields[confidenceField(id)]?.text ?? '')
-  const typed = Number(override)
-  const confidence = override.trim() !== '' && Number.isFinite(typed) ? typed : (leg?.confidence ?? defaultConfidence(info, adapters))
-  return <OrderItem card={card} info={info} index={index} count={ids.length} adapters={adapters} state={state} confidence={confidence} muted={muted} disabled={disabled}
+  return <OrderItem card={card} info={info} index={index} count={ids.length} adapters={adapters} state={state} fallback={leg?.confidence} muted={muted} disabled={disabled}
     onMove={delta => onChange(moveId(ids, id, delta))} onRemove={() => onChange(removeId(ids, id))} />
 }
 
 export function PlatformList({ card }: { card: Card }) {
   const { t } = card
   const [editing, setEditing] = useState<string | undefined>()
+  const [query, setQuery] = useState('')
+  const split = card.useWebSearchPro(snapshot => splitPlatforms(ORDER_PLATFORMS, snapshot.fields.platformBackends.text, adaptersOf(snapshot.fields.cliAdapters.text)))
+  const row = (platform: string) => <PlatformItem key={platform} card={card} platform={platform} onEdit={() => setEditing(platform)} />
+  const filtering = query.trim() !== ''
+  const found = filterPlatforms(ORDER_PLATFORMS, query)
   return <>
-    <div className={css.list} data-wsp-platform-list>
-      {ORDER_PLATFORMS.map(platform => <PlatformItem key={platform} card={card} platform={platform} onEdit={() => setEditing(platform)} />)}
+    <div className="wsp-filter" data-wsp-platform-filter>
+      <TextInput value={query} onChange={setQuery} placeholder={t('orderPlatformFilter')} ariaLabel={t('orderPlatformFilterLabel')} />
+      {filtering ? <span className={css.rowHint}>{fill(t('orderPlatformFound'), { n: found.length, total: ORDER_PLATFORMS.length })}</span> : null}
     </div>
+    {filtering
+      ? <div className={css.list} data-wsp-platform-list>{found.length ? found.map(row) : <p className={css.empty}>{t('orderPlatformNone')}</p>}</div>
+      : <>
+        <div className={css.list} data-wsp-platform-list>{split.shown.map(row)}</div>
+        {split.rest.length ? <Fold id="platforms-more" title={fill(t('orderPlatformsMore'), { n: split.rest.length })} hint={t('orderPlatformsMoreHint')}>
+          <div className={css.list} data-wsp-platform-rest>{split.rest.map(row)}</div>
+        </Fold> : null}
+      </>}
     {editing ? <Dialog open title={fill(t('platformDialogTitle'), { name: PLATFORM_NAMES[editing] ?? editing })} closeLabel={t('close')} description={t('platformDialogNote')} onClose={() => setEditing(undefined)}
       footer={<Btn primary onClick={() => setEditing(undefined)} data="platform-done">{t('done')}</Btn>}>
       <p className={css.rowHint}>{t('dialogStagesNote')}</p>

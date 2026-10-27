@@ -6,8 +6,8 @@ import { DEFAULT_ENGINES, explainChain } from '../src/default-chain.ts'
 import { createBuiltinRegistry } from '../src/providers/index.ts'
 import { dynamicSpecsOf } from '../src/client/form.ts'
 import {
-  addId, backendChoices, backendName, BUILTIN_ENGINE_IDS, chainsOf, customRows, defaultChainOf, engineChoices, idsOf, moveId, ORDER_PLATFORMS, PLATFORM_NAMES, removeId,
-  sourceInfo, textOf, withChain,
+  addId, backendChoices, backendName, BUILTIN_ENGINE_IDS, chainsOf, COMMON_PLATFORMS, confidenceView, customRows, defaultChainOf, engineChoices, filterPlatforms, idsOf, moveId, ORDER_PLATFORMS, PLATFORM_NAMES, removeId,
+  sourceInfo, splitPlatforms, textOf, withChain,
 } from '../src/client/order.ts'
 import { BASE, harness } from './settings-harness.ts'
 
@@ -187,4 +187,44 @@ test('sources.confidence.<id>: a field for any source id, validated 0..1, writte
   // The text view prints them next to the fixed fields.
   assert.ok(dynamicSpecsOf(controller.snapshot().fields).some(spec => spec.field === 'sources.confidence.bing'))
   controller.dispose()
+})
+
+test('splitPlatforms: shown = changed, served by a valid custom CLI, or common; the rest folds; both keep the platform order', () => {
+  assert.deepEqual([...COMMON_PLATFORMS].sort(), ['bilibili', 'github', 'reddit', 'twitter', 'wechat', 'xiaohongshu', 'youtube', 'zhihu'])
+  for (const id of COMMON_PLATFORMS) assert.ok(ORDER_PLATFORMS.includes(id), id + ' is a platform with a chain')
+  const plain = splitPlatforms(ORDER_PLATFORMS, '', undefined)
+  assert.deepEqual(plain.shown, ORDER_PLATFORMS.filter(id => COMMON_PLATFORMS.includes(id)))
+  assert.deepEqual([...plain.shown, ...plain.rest].sort(), [...ORDER_PLATFORMS].sort(), 'nothing is lost')
+  assert.ok(plain.rest.includes('weibo') && plain.rest.includes('github-issues'))
+  // changed: a key of platformBackends, whatever the chain
+  assert.ok(splitPlatforms(ORDER_PLATFORMS, JSON.stringify({ weibo: ['browser-search'] }), undefined).shown.includes('weibo'))
+  assert.ok(splitPlatforms(ORDER_PLATFORMS, JSON.stringify({ douban: [] }), undefined).shown.includes('douban'), 'an emptied chain is a change too')
+  assert.ok(splitPlatforms(ORDER_PLATFORMS, '{ not json', undefined).rest.includes('weibo'), 'broken text counts nothing as changed')
+  // served by a custom CLI: only a spec that validates
+  const adapters = { mine: echo({ engine: false, platforms: ['douban', 'weibo'] }), bad: echo({ engine: false, platforms: ['tieba'], bins: ['/usr/bin/x'] }) }
+  const withCli = splitPlatforms(ORDER_PLATFORMS, '', adapters)
+  assert.ok(withCli.shown.includes('douban') && withCli.shown.includes('weibo'))
+  assert.ok(withCli.rest.includes('tieba'), 'an invalid spec serves nothing')
+  assert.deepEqual(withCli.shown, ORDER_PLATFORMS.filter(id => withCli.shown.includes(id)), 'platform order kept')
+})
+
+test('filterPlatforms: by display name or id, any case, surrounding spaces ignored; an empty query keeps everything', () => {
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, ''), [...ORDER_PLATFORMS])
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, '   '), [...ORDER_PLATFORMS])
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, 'GitHub'), ['github', 'github-issues', 'github-code'])
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, ' issues '), ['github-issues'])
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, '知乎'), ['zhihu'])
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, '贴吧'), ['tieba'])
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, 'x'), ORDER_PLATFORMS.filter(id => id.includes('x') || (PLATFORM_NAMES[id] ?? '').toLowerCase().includes('x')))
+  assert.deepEqual(filterPlatforms(ORDER_PLATFORMS, 'no such platform'), [])
+  assert.deepEqual(filterPlatforms(['a', 'b'], 'A'), ['a'])
+})
+
+test('confidenceView: empty = the source\'s default; 1 is quiet; anything else in 0-1 is shown; text outside 0-1 is invalid and never quiet', () => {
+  assert.deepEqual(confidenceView('', 1), { effective: 1, invalid: false, typed: false, quiet: true })
+  assert.deepEqual(confidenceView('  ', 0.5), { effective: 0.5, invalid: false, typed: false, quiet: false }, 'a custom CLI defaults to 0.5, which is not neutral')
+  assert.deepEqual(confidenceView('1', 0.5), { effective: 1, invalid: false, typed: true, quiet: true })
+  assert.deepEqual(confidenceView('0.8', 1), { effective: 0.8, invalid: false, typed: true, quiet: false })
+  assert.deepEqual(confidenceView('0', 1), { effective: 0, invalid: false, typed: true, quiet: false })
+  for (const text of ['7', '-0.1', 'abc', '1.5', '0..5']) assert.deepEqual(confidenceView(text, 1), { effective: 1, invalid: true, typed: true, quiet: false }, text)
 })

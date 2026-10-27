@@ -111,6 +111,8 @@ export declare function TextInput(props: {
     ariaLabel?: string;
     code?: boolean;
     small?: boolean;
+    autoFocus?: boolean;
+    onBlur?: () => void;
 }): import("react").JSX.Element;
 /** A text input followed by a fixed unit. */
 export declare function UnitInput(props: {
