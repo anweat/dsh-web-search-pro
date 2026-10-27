@@ -23,6 +23,7 @@ export function labelKey(field: string): string {
   if (/^keyedSources\..+\.baseUrl$/.test(field)) return 'keyedBaseUrl'
   if (/^sources\.budget\..+\.total$/.test(field)) return 'reqTotal'
   if (/^sources\.budget\..+\.daily$/.test(field)) return 'reqDaily'
+  if (/^sources\.confidence\..+$/.test(field)) return 'srcConfidence'
   return field
 }
 

@@ -35,3 +35,53 @@ export function effectiveChain(input: ChainInput): string[] {
   const lead = customised || input.anonymousOnly ? [] : (input.commonReady ?? []).filter(id => !disabled.has(id) && !kept.includes(id))
   return [...new Set([...first, ...lead, ...kept.filter(id => !first.includes(id))])]
 }
+
+/** One reason the effective chain differs from the `engines` list as written. */
+export type ChainReason =
+  /** `sources.disabled` removed these from the list. */
+  | { kind: 'disabled'; ids: string[] }
+  /** `sources.priority` moved these to the front. */
+  | { kind: 'priority'; ids: string[] }
+  /** The default rule put these ready common ("常用") sources in front of the list. */
+  | { kind: 'common'; ids: string[] }
+  /** `evidence.sourcePolicy: anonymous-only` kept these ready common sources out (they need a key). */
+  | { kind: 'anonymous-only'; ids: string[] }
+  /** The list is the user's own, so these ready common sources are not added (they keep their place only if the list names them). */
+  | { kind: 'own-list'; ids: string[] }
+
+export interface ChainExplanation {
+  /** What a plain search would try, in order ({@link effectiveChain}); undefined when everything is disabled. */
+  chain: string[] | undefined
+  reasons: ChainReason[]
+}
+
+/**
+ * {@link effectiveChain} plus why it differs from the list: the preview of the settings card says it in one sentence per reason, so
+ * a person who sees `deepseek` first in a list that does not begin with it knows which rule did that. Same inputs, same rule.
+ */
+export function explainChain(input: ChainInput): ChainExplanation {
+  let chain: string[] | undefined
+  try { chain = effectiveChain(input) } catch { chain = undefined }
+  const reasons: ChainReason[] = []
+  const disabled = new Set(input.disabled ?? [])
+  const removed = [...new Set(input.engines.filter(id => disabled.has(id)))]
+  if (removed.length) reasons.push({ kind: 'disabled', ids: removed })
+  if (!chain) return { chain, reasons }
+  const customised = input.engines.length !== DEFAULT_ENGINES.length || input.engines.some((id, i) => id !== DEFAULT_ENGINES[i])
+  const ready = (input.commonReady ?? []).filter(id => !disabled.has(id))
+  const led = chain.filter(id => !input.engines.includes(id))
+  if (led.length) reasons.push({ kind: 'common', ids: led })
+  const kept = input.engines.filter(id => !disabled.has(id))
+  const first = (input.priority ?? []).filter(id => kept.includes(id))
+  // Priority ids that actually changed place: those not already at the position priority gives them.
+  const moved = first.filter((id, index) => kept.indexOf(id) !== index)
+  if (moved.length) reasons.push({ kind: 'priority', ids: moved })
+  if (input.anonymousOnly) {
+    const skipped = ready.filter(id => !input.engines.includes(id))
+    if (skipped.length) reasons.push({ kind: 'anonymous-only', ids: skipped })
+  } else if (customised) {
+    const skipped = ready.filter(id => !input.engines.includes(id))
+    if (skipped.length) reasons.push({ kind: 'own-list', ids: skipped })
+  }
+  return { chain, reasons }
+}

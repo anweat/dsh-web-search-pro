@@ -4,7 +4,7 @@ import { normalizeCoverage, normalizeJudge, normalizeRubrics } from '../config-f
 import { BUILTIN_RUBRIC_IDS, builtinDef, type RubricKind } from '../pipeline/rubrics-spec.ts'
 import type { Context } from './context-types.ts'
 import {
-  BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, applyOps, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
+  BUDGET_SPECS, CREDENTIAL_IDS, CONFIDENCE_PREFIX, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, applyOps, confidenceSpec, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
@@ -98,6 +98,23 @@ const SPECS: readonly FieldSpec[] = [...FIELD_SPECS, ...PATH_SPECS, ...KEYED_SPE
 /** Every field spec of the form model, in display order. */
 export const ALL_SPECS: readonly FieldSpec[] = SPECS
 const SPEC_BY_FIELD = new Map<SettingField, FieldSpec>(SPECS.map(spec => [spec.field, spec]))
+/** The dynamic fields (one `sources.confidence.<id>` per source id) made so far: a field is the same object every time it is asked for. */
+const DYNAMIC_SPECS = new Map<string, FieldSpec>()
+
+/** The spec of a field that is not in the fixed list: `sources.confidence.<id>`; undefined for any other name. */
+function dynamicSpec(field: string): FieldSpec | undefined {
+  if (!field.startsWith(CONFIDENCE_PREFIX) || field.length === CONFIDENCE_PREFIX.length) return undefined
+  const known = DYNAMIC_SPECS.get(field)
+  if (known) return known
+  const spec = confidenceSpec(field.slice(CONFIDENCE_PREFIX.length))
+  DYNAMIC_SPECS.set(field, spec)
+  return spec
+}
+
+/** The specs of the dynamic fields among `fields` (the text view prints them next to the fixed ones). */
+export function dynamicSpecsOf(fields: Readonly<Record<string, unknown>>): FieldSpec[] {
+  return Object.keys(fields).filter(field => !SPEC_BY_FIELD.has(field as SettingField)).flatMap(field => dynamicSpec(field) ?? [])
+}
 
 function createLocalStore<T>(initial: T): SnapshotStore<T> {
   let snapshot = initial
@@ -327,6 +344,7 @@ export class WebSearchSettingsController {
     const analysis = this.analyze()
     const fields = {} as Record<SettingField, CardFieldState>
     for (const spec of SPECS) fields[spec.field] = this.decorate(spec.field, this.fieldState(spec.field), analysis)
+    for (const field of this.dynamicFields()) fields[field] = this.decorate(field, this.fieldState(field), analysis)
     const credentialsDirty = this.credentialPlan().length > 0
     return {
       available: this.scope.getSnapshot().status === 'ready',
@@ -534,8 +552,15 @@ export class WebSearchSettingsController {
     })) as Record<CredentialId, string>
   }
 
+  /** The `sources.confidence.<id>` fields that hold a value now or in the draft: the card shows these ids with their values. */
+  private dynamicFields(): SettingField[] {
+    const stored = this.scope.getSnapshot().value?.sources
+    const ids = isRecord(stored) && isRecord(stored.confidence) ? Object.keys(stored.confidence) : []
+    return [...new Set([...ids.map(id => CONFIDENCE_PREFIX + id), ...[...this.staged.keys()].filter(field => field.startsWith(CONFIDENCE_PREFIX))])] as SettingField[]
+  }
+
   private spec(field: SettingField): FieldSpec {
-    const spec = SPEC_BY_FIELD.get(field)
+    const spec = SPEC_BY_FIELD.get(field) ?? dynamicSpec(field)
     if (!spec) throw new Error(`unknown web-search-pro settings field: ${field}`)
     return spec
   }

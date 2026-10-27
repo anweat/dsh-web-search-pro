@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react'
-import { ALL_SPECS } from './form.ts'
+import { ALL_SPECS, dynamicSpecsOf } from './form.ts'
 import type { Card } from './field-rows.tsx'
 import { renderTextView } from './text-view.ts'
 import { styles as css } from './styles.ts'
@@ -15,7 +15,7 @@ export function AdvancedGroup({ card }: { card: Card }) {
   const { t } = card
   const fields = card.useWebSearchPro(snapshot => snapshot.fields)
   const [copied, setCopied] = useState(false)
-  const text = renderTextView(fields, ALL_SPECS, t('lang'))
+  const text = renderTextView(fields, [...ALL_SPECS, ...dynamicSpecsOf(fields)], t('lang'))
   const id = 'web-search-pro-text-view'
   return <Group id="advanced" title={t('groupAdvanced')} summary={t('groupAdvancedSub')}>
     <div className={css.stack} data-wsp-text-view>

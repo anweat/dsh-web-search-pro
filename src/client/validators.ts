@@ -167,6 +167,8 @@ export function sourcesIssues(sources: Json): Issue[] {
   const issues: Issue[] = []
   for (const message of resolveSources(sources as SourcesInput).diagnostics) {
     if (message.includes('both prioritised and disabled')) { for (const field of ['sources.priority', 'sources.disabled'] as const) issues.push({ field, message, level: 'warning', related: ['sources.priority', 'sources.disabled'] }); continue }
+    const confidence = /^sources\.confidence\.(\S+) ignored/.exec(message)
+    if (confidence) { issues.push({ field: `sources.confidence.${confidence[1]!}`, message, level: 'error' }); continue }
     const budget = /^sources\.budget\.([^.\s]+)\.(total|daily)\b/.exec(message)
     const field: SettingField = budget ? `sources.budget.${budget[1]!}.${budget[2] as 'total' | 'daily'}` : message.includes('sources.disabled') ? 'sources.disabled' : 'sources.priority'
     issues.push({ field, message, level: 'error' })

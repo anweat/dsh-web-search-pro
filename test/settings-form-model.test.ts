@@ -5,7 +5,7 @@ import { configuredDecider } from '../src/pipeline/judge-status.ts'
 import { BUILTIN_RUBRIC_IDS } from '../src/pipeline/rubrics-spec.ts'
 import { resolveAllRubrics } from '../src/pipeline/rubrics.ts'
 import { resolveProviders } from '../src/pipeline/judges/providers.ts'
-import { BUDGET_SPECS, BUDGETED_SOURCES, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
+import { BUDGET_SPECS, BUDGETED_SOURCES, confidenceSpec, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
 import { isPathSpec } from '../src/client/form-specs.ts'
 import { ALL_SPECS } from '../src/client/form.ts'
 import { BASE, harness, isVolatilePath, type SchemaNode as VolatileNode } from './settings-harness.ts'
@@ -35,7 +35,12 @@ test('every leaf of the Config schema is a control, a derived control, or a secr
       continue
     }
     if (leaf === 'evidence.rubrics') continue
-    if (leaf === 'sources.confidence') continue // one dynamic field per source id: sources.confidence.<id>
+    if (leaf === 'sources.confidence') { // a dict of numbers: one dynamic field per source id, sources.confidence.<id>
+      assert.equal(node.inner!.meta?.volatile ?? node.meta?.volatile, true)
+      assert.deepEqual([confidenceSpec('ddg').field, confidenceSpec('custom-cli:echo').parse('0.4')], ['sources.confidence.ddg', { kind: 'set', value: 0.4 }])
+      assert.equal(confidenceSpec('ddg').parse('1.2'), undefined)
+      continue
+    }
     if (leaf === 'sources.budget') {
       assert.deepEqual(Object.keys(node.inner!.dict!), ['total', 'daily'])
       assert.deepEqual(BUDGET_SPECS.map(spec => spec.field), BUDGETED_SOURCES.flatMap(id => [`sources.budget.${id}.total`, `sources.budget.${id}.daily`]))
