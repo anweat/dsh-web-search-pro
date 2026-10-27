@@ -108,7 +108,7 @@ export function unknownActionFailure(name: unknown, args?: unknown): ActionEnvel
  * Run one action and return the envelope. Never throws: every failure is a
  * structured error the model can act on.
  */
-export async function runAction(name: unknown, rawArgs: unknown, services: ActionServices & { signal: AbortSignal }): Promise<ActionEnvelope> {
+export async function runAction(name: unknown, rawArgs: unknown, services: ActionServices & { signal: AbortSignal; sessionId?: string }): Promise<ActionEnvelope> {
   const action = findAction(name)
   if (!action) return unknownActionFailure(name, rawArgs)
   const validation = validateArgs(action.params, rawArgs)

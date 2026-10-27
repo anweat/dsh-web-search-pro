@@ -13,6 +13,9 @@ import type { ProviderReport } from '../router.ts'
 import { renderProviderState, type ProviderState } from '../provider.ts'
 import type { ResolvedConfig } from '../config.ts'
 import { ActionArgError, type ActionDef, type OutputNode } from './types.ts'
+import type { OverlayStore } from '../overlay.ts'
+import { overlayKeys } from '../overlay-types.ts'
+import { pendingRestartLine, type PendingRestart } from '../restart.ts'
 
 /** One registry provider in `sources.status` (all fields beyond id / label / readiness.available are optional extensions). */
 const PROVIDER_REPORT_SCHEMA: OutputNode = {
@@ -65,6 +68,17 @@ const EVIDENCE_STATUS_SCHEMA: OutputNode = {
   },
 }
 
+/** Settings changed in the configuration that the running plugin only reads at start-up (restart.ts). */
+export const PENDING_RESTART_SCHEMA: OutputNode = {
+  type: 'array', items: { type: 'object', additionalProperties: false, properties: { field: { type: 'string', required: true }, running: { type: 'string', required: true }, configured: { type: 'string', required: true } } },
+}
+
+/** The state of the agent overlay in one line of data: revision, the overridden keys, and why it is ignored when it is. */
+export const OVERLAY_STATE_SCHEMA: OutputNode = {
+  type: 'object', additionalProperties: false,
+  properties: { revision: { type: 'number', required: true }, keys: { type: 'array', required: true, items: { type: 'string' } }, valid: { type: 'boolean', required: true }, problem: { type: 'string' } },
+}
+
 const SELECTION_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, properties: { pinned: { type: 'string' }, via: { type: 'string', required: true }, state: { type: 'string', required: true } } }
 
 /** The ctx.web provider route: registered by this plugin, and whether the Host is pinned to it (M8c). */
@@ -107,6 +121,13 @@ export function commonSources(providers: ProviderReport[] | undefined): { common
   }
 }
 
+/** Revision, overridden keys and validity of the agent overlay, for `sources.status`. */
+export function overlayState(overlay: OverlayStore): { revision: number; keys: string[]; valid: boolean; problem?: string } {
+  const problem = overlay.problem
+  const current = overlay.current()
+  return { revision: current.revision, keys: overlayKeys(current.values), valid: problem === undefined, ...problem ? { problem } : {} }
+}
+
 function defaultInstallerFor(backend: string): string {
   try { return defaultInstaller(backend) } catch (error) { throw new ActionArgError(error instanceof Error ? error.message : String(error), 'sources.deps lists the backend ids.') }
 }
@@ -129,6 +150,8 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
         webRoute: WEB_ROUTE_SCHEMA,
         notes: { type: 'array', items: { type: 'string' } },
+        pendingRestart: PENDING_RESTART_SCHEMA,
+        overlay: OVERLAY_STATE_SCHEMA,
         sources: { type: 'object', additionalProperties: false, properties: { policy: { type: 'string', required: true }, priority: { type: 'array', required: true, items: { type: 'string' } }, disabled: { type: 'array', required: true, items: { type: 'string' } }, confidence: { type: 'object', additionalProperties: true }, common: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, ready: { type: 'boolean', required: true }, setup: { type: 'string' } } } } } },
         evidence: EVIDENCE_STATUS_SCHEMA,
       },
@@ -152,6 +175,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         ...typeof (router as { sourceDiagnostics?: unknown }).sourceDiagnostics === 'function' ? router.sourceDiagnostics() : [],
         ...typeof (router as { cliAdapterProblems?: unknown }).cliAdapterProblems === 'function' ? router.cliAdapterProblems() : [],
       ]
+      const restart = ctx.pendingRestart?.() ?? []
       const providers = typeof (router as { providerReport?: unknown }).providerReport === 'function' ? await router.providerReport(availability) : undefined
       // A platform chain is only `ready` when a backend can run with its login satisfied (or not needed); otherwise the line says
       // what it really is (`login_unverified`, `needs_login`, `unavailable`) and what to do next, the same word as the provider report.
@@ -171,12 +195,14 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         browser: browserState(ctx.browser()),
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
         ...problems.length ? { notes: problems } : {},
+        ...restart.length ? { pendingRestart: restart } : {},
+        ...ctx.overlay ? { overlay: overlayState(ctx.overlay) } : {},
         sources: { policy: ev.sourcePolicy ?? 'default', priority: cfg.sources?.priority ?? [], disabled: cfg.sources?.disabled ?? [], ...Object.keys(cfg.sources?.confidence ?? {}).length ? { confidence: cfg.sources.confidence } : {}, ...commonSources(providers) },
         evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.coverage ? { coverage: judge.coverage } : {}, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; sources?: { policy: string; priority: string[]; disabled: string[]; confidence?: Record<string, number>; common?: { id: string; label: string; ready: boolean; setup?: string }[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; pendingRestart?: PendingRestart[]; overlay?: { revision: number; keys: string[]; valid: boolean; problem?: string }; sources?: { policy: string; priority: string[]; disabled: string[]; confidence?: Record<string, number>; common?: { id: string; label: string; ready: boolean; setup?: string }[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
       const mark = (e: { available: boolean; state: string }): string => (e.state === 'login_unverified' || e.state === 'needs_login' ? '⚠ ' : e.available ? '✅ ' : '❌ ')
       const lines = v.engines.map(e => mark(e) + e.id + ' [' + e.state.replace('_', ' ') + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
@@ -190,6 +216,8 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       for (const c of v.sources?.common ?? []) lines.push('常用 (common) source ' + c.id + ' (' + c.label + '): ' + (c.ready ? 'key found, leads the default order unless you set sources.priority / disabled or pass engines' : 'no key, not in the default chain' + (c.setup ? ' — ' + c.setup : '')))
       if (v.sources) lines.push('source strategy: policy=' + v.sources.policy + (v.sources.priority.length ? ', priority: ' + v.sources.priority.join(' > ') : '') + (v.sources.disabled.length ? ', disabled: ' + v.sources.disabled.join(', ') : '') + (v.sources.confidence ? ', confidence: ' + Object.entries(v.sources.confidence).map(([id, c]) => id + '=' + c).join(', ') : ''))
       lines.push(...(v.notes ?? []).map(n => '  ⚠ ' + n))
+      lines.push(...(v.pendingRestart ?? []).map(entry => '  ⚠ ' + pendingRestartLine(entry) + '；重启插件后生效'))
+      if (v.overlay) lines.push('agent overlay: revision ' + v.overlay.revision + (v.overlay.keys.length ? ', ' + v.overlay.keys.length + ' key(s): ' + v.overlay.keys.join(', ') : ', empty') + (v.overlay.valid ? '' : ' — IGNORED: ' + (v.overlay.problem ?? 'invalid') + ' (the configuration applies as written)'))
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.installation && e.installation !== 'detected' ? ' [' + e.installation + ']' : '') + (e.version ? ' ' + e.version : '') + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
       if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + (v.browser.state === 'legacy' ? 'legacy (unsupported)' : v.browser.state) + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
       if (v.webRoute) lines.push(...renderProviderState(v.webRoute))

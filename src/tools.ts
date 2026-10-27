@@ -24,6 +24,8 @@ import type { BrowserService } from './browser-service.ts'
 import type { ResolvedConfig, ToolSurface } from './config.ts'
 import { EvidenceService } from './pipeline/service.ts'
 import type { ProviderState } from './provider.ts'
+import type { OverlayStore } from './overlay.ts'
+import type { PendingRestart } from './restart.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
 import { renderIndex, type IndexEnvironment } from './actions/index-view.ts'
 import { renderEnvelope, runAction } from './actions/run.ts'
@@ -50,6 +52,10 @@ export interface ToolDeps {
   providerState?: () => ProviderState
   /** Whether the `dsh-web-search-pro` skill is currently registered; read at call time. */
   skillAvailable?: () => boolean
+  /** The agent overlay behind the `config.*` actions. */
+  overlay?: OverlayStore
+  /** Settings changed in the configuration that only take effect at the next start. */
+  pendingRestart?: () => PendingRestart[]
 }
 
 const ENVELOPE_SCHEMA = {
@@ -86,17 +92,23 @@ export function registerTools(deps: ToolDeps): void {
   const services: ActionServices = {
     config, dynamic, store, router, fetch: fetchSvc, browser: getBrowser,
     ...deps.providerState ? { providerState: deps.providerState } : {},
+    ...deps.overlay ? { overlay: deps.overlay } : {},
+    ...deps.pendingRestart ? { pendingRestart: deps.pendingRestart } : {},
     evidence: () => (evidenceService ??= new EvidenceService({ router, fetch: fetchSvc, store, dynamic })),
     /** Default characters one text exit may return (config `fetchDefaultChars`). */
     outputCap: () => dynamic().fetchDefaultChars ?? DEFAULT_FETCH_CHARS,
   }
   const register = (tool: unknown): void => { ctx.tools.register(tool as never) }
   const signalOf = (exec: unknown): AbortSignal => (exec as { signal?: AbortSignal } | undefined)?.signal ?? new AbortController().signal
+  const sessionOf = (exec: unknown): string | undefined => {
+    const id = (exec as { agent?: { session?: { id?: unknown } } } | undefined)?.agent?.session?.id
+    return typeof id === 'string' && id ? id : undefined
+  }
   const surface = deps.toolSurface ?? config.toolSurface ?? 'indexed'
   const render = (args: { args?: Record<string, unknown> } | undefined, value: unknown): { type: 'text'; text: string }[] => [{ type: 'text', text: renderEnvelope(value as ActionEnvelope, args?.args ?? {}) }]
 
   if (surface === 'flat') {
-    for (const action of ACTIONS) register(flatTool(action, services, config, signalOf))
+    for (const action of ACTIONS) register(flatTool(action, services, config, signalOf, sessionOf))
     return
   }
 
@@ -128,13 +140,13 @@ export function registerTools(deps: ToolDeps): void {
     isConcurrencySafe: (args: { action?: string }) => findAction(args?.action)?.concurrencySafe ?? false,
     presentCall: (args: { action?: string; args?: { query?: string } }) => args?.action === 'search.run' ? presentSearch(args.args) : undefined,
     async execute(args: { action: string; args?: Record<string, unknown> }, exec: unknown) {
-      return runAction(args.action, args.args, { ...services, signal: signalOf(exec) }) as Promise<ActionEnvelope> as never
+      return runAction(args.action, args.args, { ...services, signal: signalOf(exec), ...sessionOf(exec) ? { sessionId: sessionOf(exec)! } : {} }) as Promise<ActionEnvelope> as never
     },
   } as never))
 }
 
 /** One flat tool for one action: the same registry entry, projected as a native tool. */
-function flatTool(action: ActionDef, services: ActionServices, config: ResolvedConfig, signalOf: (exec: unknown) => AbortSignal): unknown {
+function flatTool(action: ActionDef, services: ActionServices, config: ResolvedConfig, signalOf: (exec: unknown) => AbortSignal, sessionOf: (exec: unknown) => string | undefined): unknown {
   return defineTool({
     name: flatToolName(action),
     description: action.summary + (action.notes ? ' ' + action.notes : ''),
@@ -144,7 +156,7 @@ function flatTool(action: ActionDef, services: ActionServices, config: ResolvedC
     isConcurrencySafe: () => action.concurrencySafe,
     ...action.name === 'search.run' ? { presentCall: presentSearch } : {},
     async execute(args: Record<string, unknown>, exec: unknown) {
-      return runAction(action.name, args, { ...services, signal: signalOf(exec) }) as never
+      return runAction(action.name, args, { ...services, signal: signalOf(exec), ...sessionOf(exec) ? { sessionId: sessionOf(exec)! } : {} }) as never
     },
   } as never)
 }

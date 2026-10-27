@@ -85,15 +85,6 @@ export interface OverlayView {
   audit: AuditEntry[]
 }
 
-/** One setting that was changed in the configuration but the running plugin still uses the value it started with. */
-export interface PendingRestart {
-  field: string
-  /** The value in force (what the plugin started with), as short text. */
-  running: string
-  /** The value in the configuration now, as short text. */
-  configured: string
-}
-
 /** The keys an overlay holds, in a stable order. */
 export function overlayKeys(values: OverlayValues): string[] {
   const keys: string[] = []

@@ -290,6 +290,8 @@ export interface OverlayStoreOptions {
   /** The configuration the user owns (the profile), re-read on every call. */
   baseline: () => ResolvedConfig
   known: KnownSource
+  /** Changes whenever the answer of `known` can have changed (the router's registry revision), so a cached verdict is not kept past it. */
+  knownSignature?: () => string
   now?: () => Date
 }
 
@@ -363,7 +365,7 @@ export class OverlayStore {
   private incompatibility(): string | undefined {
     if (this.loadProblem || overlayKeys(this.overlay.values).length === 0) return undefined
     const base = this.options.baseline()
-    const signature = this.overlay.revision + '|' + JSON.stringify(partsOf(base, {}))
+    const signature = this.overlay.revision + '|' + (this.options.knownSignature?.() ?? '') + '|' + JSON.stringify(partsOf(base, {}))
     if (this.compat?.signature !== signature) this.compat = { signature, errors: overlayErrors(base, this.overlay.values, this.options.known) }
     return this.compat.errors.length
       ? 'the overlay (revision ' + this.overlay.revision + ') no longer agrees with the configuration and is ignored as a whole: ' + this.compat.errors.slice(0, 3).join('; ') + (this.compat.errors.length > 3 ? ' (+' + (this.compat.errors.length - 3) + ' more)' : '')

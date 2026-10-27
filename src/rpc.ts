@@ -9,6 +9,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ResolvedConfig } from './config.ts'
 import type { SearchRouter } from './router.ts'
+import type { OverlayStore } from './overlay.ts'
+import type { PendingRestart } from './restart.ts'
 import { trialCli } from './cli/trial.ts'
 import { RPC_CHANNEL, type StatusView, type TrialRequest } from './rpc-types.ts'
 
@@ -17,6 +19,10 @@ type Handler = (endpoint: string, payload: unknown, context?: { signal?: AbortSi
 export interface RpcServices {
   router: Pick<SearchRouter, 'providerReport'>
   dynamic: () => ResolvedConfig
+  /** The agent overlay (read and revoke endpoints); absent in tests of the older endpoints. */
+  overlay?: OverlayStore
+  /** Settings changed in the configuration that only take effect at the next start. */
+  pendingRestart?: () => PendingRestart[]
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)

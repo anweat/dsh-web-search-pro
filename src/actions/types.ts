@@ -17,6 +17,8 @@ import type { Store } from '../store.ts'
 import type { EvidenceService } from '../pipeline/service.ts'
 import type { BrowserGetter } from '../browser-access.ts'
 import type { ProviderState } from '../provider.ts'
+import type { OverlayStore } from '../overlay.ts'
+import type { PendingRestart } from '../restart.ts'
 
 export const ACTION_GROUPS = ['search', 'read', 'history', 'sources', 'rules', 'cache'] as const
 export type ActionGroup = typeof ACTION_GROUPS[number]
@@ -83,10 +85,16 @@ export interface ActionServices {
   providerState?: () => ProviderState
   /** Default characters one text exit may return (config `fetchDefaultChars`). */
   outputCap: () => number
+  /** The agent overlay (run-time settings an agent may change); absent where the host of the actions has none (`config.*` then reports it). */
+  overlay?: OverlayStore
+  /** Settings changed in the configuration that the running plugin only reads at start-up. */
+  pendingRestart?: () => PendingRestart[]
 }
 
 export interface ActionContext extends ActionServices {
   signal: AbortSignal
+  /** The session the call belongs to (recorded in the overlay audit trail); undefined outside a session. */
+  sessionId?: string
 }
 
 export interface ActionDef {
