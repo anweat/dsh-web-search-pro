@@ -22,6 +22,8 @@ import type { BrowserService } from './browser-service.ts';
 import type { ResolvedConfig, ToolSurface } from './config.ts';
 import { EvidenceService } from './pipeline/service.ts';
 import type { ProviderState } from './provider.ts';
+import type { OverlayStore } from './overlay.ts';
+import type { PendingRestart } from './restart.ts';
 export interface ToolDeps {
     ctx: Context;
     config: ResolvedConfig;
@@ -40,5 +42,9 @@ export interface ToolDeps {
     providerState?: () => ProviderState;
     /** Whether the `dsh-web-search-pro` skill is currently registered; read at call time. */
     skillAvailable?: () => boolean;
+    /** The agent overlay behind the `config.*` actions. */
+    overlay?: OverlayStore;
+    /** Settings changed in the configuration that only take effect at the next start. */
+    pendingRestart?: () => PendingRestart[];
 }
 export declare function registerTools(deps: ToolDeps): void;

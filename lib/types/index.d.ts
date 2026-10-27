@@ -29,34 +29,36 @@ declare const _default: {
     name: string;
     inject: string[];
     Config: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
-        dbPath: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        toolSurface: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        ttlSeconds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        memoryCacheEntries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        rrfConstant: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        freshnessBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        freshnessDays: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        authorityBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        authorityDomains: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
         searchMaxResults: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        fetchDefaultChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        exaContentsPerUrlChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        exaContentsTotalChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        timeoutMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        allowProxyFakeIp: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        engines: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
         parallelEngines: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        exaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        exaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        jinaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        jinaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        bochaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        toolSurface: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        allowProxyFakeIp: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         deepseekFetch: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        engines: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+        sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, "plain">;
+        platformBackends: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
         keyedSources: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             apiKey?: string | null | undefined;
             apiKeyEnv?: string | null | undefined;
@@ -66,91 +68,19 @@ declare const _default: {
             apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "plain">;
             baseUrl: import("@deepseek-ai/schemastery").default<string, string, "plain">;
         }>>, string>>, "volatile">;
+        exaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        exaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        jinaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        jinaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        twitterAuthToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        twitterAuthTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        twitterCt0: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        twitterCt0Env: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        opencliEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        providerId: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        registerProvider: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        provider: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
-            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        }>>, Schemastery.ObjectT<NoInfer<{
-            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        }>>, "plain">;
-        platformRules: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            item?: string | null | undefined;
-            title?: string | null | undefined;
-            link?: string | null | undefined;
-            text?: string | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-        }>>, string>>, "volatile">;
-        customPlatforms: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            name?: string | null | undefined;
-            url?: string | null | undefined;
-            item?: string | null | undefined;
-            title?: string | null | undefined;
-            link?: string | null | undefined;
-            text?: string | null | undefined;
-            cookie?: string | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            name: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            url: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            cookie: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-        }>>, string>>, "volatile">;
-        browserBindings: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            authProfile?: string | null | undefined;
-            rulePack?: string | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            authProfile: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            rulePack: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-        }>>, string>>, "volatile">;
-        platformBackends: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+        searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
-        playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
-            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        }>>, Schemastery.ObjectT<NoInfer<{
-            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        }>>, "plain">;
-        sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
-            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-                total?: number | null | undefined;
-                daily?: number | null | undefined;
-            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-            }>>, string>>, "volatile">;
-            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
-        }>>, Schemastery.ObjectT<NoInfer<{
-            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-                total?: number | null | undefined;
-                daily?: number | null | undefined;
-            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-            }>>, string>>, "volatile">;
-            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
-        }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
@@ -494,36 +424,108 @@ declare const _default: {
                 }>>, string>, "plain">;
             }>>>, "volatile">;
         }>>, "plain">;
+        fetchDefaultChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsPerUrlChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsTotalChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        opencliEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        twitterAuthToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterAuthTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        twitterCt0: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterCt0Env: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        }>>, "plain">;
+        customPlatforms: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            name?: string | null | undefined;
+            url?: string | null | undefined;
+            item?: string | null | undefined;
+            title?: string | null | undefined;
+            link?: string | null | undefined;
+            text?: string | null | undefined;
+            cookie?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            name: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            url: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            cookie: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
+        platformRules: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            item?: string | null | undefined;
+            title?: string | null | undefined;
+            link?: string | null | undefined;
+            text?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
+        browserBindings: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            authProfile?: string | null | undefined;
+            rulePack?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            authProfile: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            rulePack: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
+        providerId: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        registerProvider: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        provider: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, "plain">;
+        timeoutMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        ttlSeconds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        memoryCacheEntries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        rrfConstant: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        freshnessBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        freshnessDays: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        authorityBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        authorityDomains: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+        dbPath: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         verbose: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
     }>>, Schemastery.ObjectT<NoInfer<{
-        dbPath: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        toolSurface: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        ttlSeconds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        memoryCacheEntries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        rrfConstant: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        freshnessBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        freshnessDays: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        authorityBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        authorityDomains: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
         searchMaxResults: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        fetchDefaultChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        exaContentsPerUrlChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        exaContentsTotalChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        timeoutMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        allowProxyFakeIp: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        engines: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
         parallelEngines: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        exaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        exaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        jinaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        jinaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        bochaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        toolSurface: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        allowProxyFakeIp: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         deepseekFetch: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        engines: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+        sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+                total?: number | null | undefined;
+                daily?: number | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
+            }>>, string>>, "volatile">;
+        }>>, "plain">;
+        platformBackends: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
         keyedSources: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
             apiKey?: string | null | undefined;
             apiKeyEnv?: string | null | undefined;
@@ -533,91 +535,19 @@ declare const _default: {
             apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "plain">;
             baseUrl: import("@deepseek-ai/schemastery").default<string, string, "plain">;
         }>>, string>>, "volatile">;
+        exaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        exaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        jinaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        jinaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaApiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        bochaApiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaBaseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        bochaSummary: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
         githubToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        twitterAuthToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        twitterAuthTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        twitterCt0: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        twitterCt0Env: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        opencliEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        providerId: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-        registerProvider: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-        provider: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
-            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        }>>, Schemastery.ObjectT<NoInfer<{
-            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
-            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
-        }>>, "plain">;
-        platformRules: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            item?: string | null | undefined;
-            title?: string | null | undefined;
-            link?: string | null | undefined;
-            text?: string | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-        }>>, string>>, "volatile">;
-        customPlatforms: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            name?: string | null | undefined;
-            url?: string | null | undefined;
-            item?: string | null | undefined;
-            title?: string | null | undefined;
-            link?: string | null | undefined;
-            text?: string | null | undefined;
-            cookie?: string | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            name: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            url: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            cookie: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-        }>>, string>>, "volatile">;
-        browserBindings: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            authProfile?: string | null | undefined;
-            rulePack?: string | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            authProfile: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-            rulePack: import("@deepseek-ai/schemastery").default<string, string, "plain">;
-        }>>, string>>, "volatile">;
-        platformBackends: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+        searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
-        playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
-            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        }>>, Schemastery.ObjectT<NoInfer<{
-            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
-            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
-        }>>, "plain">;
-        sources: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
-            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-                total?: number | null | undefined;
-                daily?: number | null | undefined;
-            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-            }>>, string>>, "volatile">;
-            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
-        }>>, Schemastery.ObjectT<NoInfer<{
-            priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-            budget: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-                total?: number | null | undefined;
-                daily?: number | null | undefined;
-            } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-                total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-                daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
-            }>>, string>>, "volatile">;
-            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
-        }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
             jevMode: import("@deepseek-ai/schemastery").default<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
@@ -961,6 +891,76 @@ declare const _default: {
                 }>>, string>, "plain">;
             }>>>, "volatile">;
         }>>, "plain">;
+        fetchDefaultChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsPerUrlChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        exaContentsTotalChars: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        enableCliBackends: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        opencliEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        agentReachEnabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        twitterAuthToken: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterAuthTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        twitterCt0: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        twitterCt0Env: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        playwright: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+            snapshotDir: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        }>>, "plain">;
+        customPlatforms: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            name?: string | null | undefined;
+            url?: string | null | undefined;
+            item?: string | null | undefined;
+            title?: string | null | undefined;
+            link?: string | null | undefined;
+            text?: string | null | undefined;
+            cookie?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            name: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            url: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            cookie: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
+        platformRules: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            item?: string | null | undefined;
+            title?: string | null | undefined;
+            link?: string | null | undefined;
+            text?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            item: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            title: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            link: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            text: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
+        browserBindings: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            authProfile?: string | null | undefined;
+            rulePack?: string | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            authProfile: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+            rulePack: import("@deepseek-ai/schemastery").default<string, string, "plain">;
+        }>>, string>>, "volatile">;
+        providerId: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+        registerProvider: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+        provider: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            evidence: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+            deadlineMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        }>>, "plain">;
+        timeoutMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        ttlSeconds: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        memoryCacheEntries: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        rrfConstant: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        freshnessBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        freshnessDays: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        authorityBoost: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+        authorityDomains: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+        dbPath: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         verbose: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
     }>>, "plain">;
     apply: typeof apply;

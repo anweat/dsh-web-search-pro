@@ -29,6 +29,7 @@ export declare function unknownActionFailure(name: unknown, args?: unknown): Act
  */
 export declare function runAction(name: unknown, rawArgs: unknown, services: ActionServices & {
     signal: AbortSignal;
+    sessionId?: string;
 }): Promise<ActionEnvelope>;
 /** Text of an envelope for the model: the action's own rendering of a result, or the error as compact JSON. */
 export declare function renderEnvelope(envelope: ActionEnvelope, args?: Record<string, unknown>): string;

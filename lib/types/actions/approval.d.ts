@@ -36,6 +36,8 @@ export type ResolvedWebCall =
 };
 /** Maps a model-visible tool call to the action it will run; undefined for tools that are not ours. */
 export declare function resolveWebCall(toolName: string, rawArgs: unknown): ResolvedWebCall | undefined;
+/** The command and argument templates of a custom CLI spec, for the prompt the user answers: what the plugin would be allowed to run. */
+export declare function describeCliSpec(spec: unknown): string;
 export declare function webPolicyDecision(actionName: string, args: unknown, mode: AutomationMode | undefined): PolicyDecision;
 /** The dsh-browser automationMode, when the optional service is present and reports one. */
 export declare function automationModeOf(browser: unknown): Promise<AutomationMode | undefined>;

@@ -1,7 +1,7 @@
 /**
  * The comment printed in front of every key of the text view ("Advanced: text mode"), in the language of the card: what the
  * setting is for, its allowed values or range, its default, and the risk when there is one. Comment lines start with `#`, so
- * the text stays valid YAML and a round trip never reads a comment as data. Pure and free of imports: the text view and the
+ * the text stays valid YAML and a round trip never reads a comment as data. Pure (it imports only config-groups.ts): the text view and the
  * tests read it, and the client bundle includes it. Nothing here names a secret value: keys are only ever referenced by name.
  * @module web-search-pro/client/field-docs
  */

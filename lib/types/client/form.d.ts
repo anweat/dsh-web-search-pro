@@ -3,7 +3,7 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import { type RubricKind } from '../pipeline/rubrics-spec.ts';
 import type { Context } from './context-types.ts';
 import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, type CredentialId, type FieldSpec, type SettingField } from './form-specs.ts';
-import { type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts';
+import { type OverlayView, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts';
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS };
 export type { CredentialId, SettingField };
 export interface CardFieldState {
@@ -46,6 +46,20 @@ export interface RubricCardState {
     invalid: boolean;
     problems: string[];
 }
+/** What the card knows of the agent overlay (the settings an agent changed with `config.*`), read over the RPC channel. */
+export interface OverlayCardState {
+    loading: boolean;
+    /** The channel answered with an error, or there is none. */
+    failed: boolean;
+    /** An adopt or revoke is running: the buttons wait. */
+    busy: boolean;
+    /** The last adopt / revoke that did not go through, as a dictionary key with its `{why}`. */
+    error?: {
+        key: 'agentAdoptFailed' | 'agentAdoptHalf' | 'agentRevokeFailed';
+        why?: string;
+    };
+    view?: OverlayView;
+}
 /** What the card knows from the running plugin over its private RPC channel (rpc-types.ts); empty where the Host has no transport. */
 export interface ServerState {
     /** The Host has the transport: live readiness and "Try it" are possible. */
@@ -60,6 +74,7 @@ export interface ServerState {
         result?: TrialResult;
         error?: string;
     };
+    overlay: OverlayCardState;
 }
 export interface WebSearchCardState {
     available: boolean;
@@ -75,6 +90,8 @@ export interface WebSearchCardState {
     /** Ids the judge / coverage provider controls offer: the presets plus the valid custom entries of the draft. */
     providerChoices: string[];
     rubrics: RubricCardState[];
+    /** Settings read only when the plugin starts (restart.ts) that have an edit waiting to be saved: a save would not take effect until a restart. */
+    restartTouched: string[];
     /** Overrides in settings that name no built-in rubric. */
     unknownRubrics: string[];
     server: ServerState;
@@ -105,6 +122,16 @@ export declare class WebSearchSettingsController {
     private rpc;
     /** Ask the plugin what is ready now (the same local probes as `sources.status`). Silent when the Host has no transport. */
     refreshStatus(): Promise<void>;
+    private setOverlay;
+    /** Read what the agent overlay holds (once when the panel opens, and on the refresh button). Silent where the Host has no transport. */
+    refreshOverlay(): Promise<void>;
+    /** Drop overlay entries (keys, or `'all'`) as the user. The plugin audits it; the card shows the overlay as it is afterwards. */
+    revokeOverlay(keys: readonly string[] | 'all', adopted?: boolean): Promise<boolean>;
+    /**
+     * "Adopt into configuration": write the overlay item's value into the profile with the Host's atomic `mutate` (the same call the save bar
+     * makes, at the leaf the item is about), and only when that landed ask the plugin to drop the entry. A failed write leaves both as they were.
+     */
+    adoptOverlay(key: string): Promise<boolean>;
     /** Run one search of a custom CLI draft (rpc-types.ts `trial`). The outcome lands in `server.trial`. */
     runTrial(request: TrialRequest): Promise<void>;
     clearTrial(): void;
@@ -122,6 +149,9 @@ export declare class WebSearchSettingsController {
         discard: () => void;
         refreshCredentials: () => void;
         refreshStatus: () => void;
+        refreshOverlay: () => void;
+        revokeOverlay: (keys: readonly string[] | "all") => void;
+        adoptOverlay: (key: string) => void;
         runTrial: (request: TrialRequest) => void;
         clearTrial: () => void;
     };
@@ -142,6 +172,10 @@ export declare class WebSearchSettingsController {
     refreshCredentials(): Promise<void>;
     dispose(): void;
     private project;
+    /** The start-up-only settings (restart.ts) whose staged edit differs from what is stored. */
+    private restartTouched;
+    /** `playwright` is one JSON field; only its `snapshotDir` is a start-up setting (`enabled` is live). */
+    private snapshotDirTouched;
     /** Staged fields that differ from what is stored (a pending reset counts only when something is stored). */
     private changedFields;
     private decorate;

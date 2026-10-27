@@ -8,6 +8,8 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { ResolvedConfig } from './config.ts';
 import type { SearchRouter } from './router.ts';
+import type { OverlayStore } from './overlay.ts';
+import type { PendingRestart } from './restart.ts';
 import { type StatusView } from './rpc-types.ts';
 type Handler = (endpoint: string, payload: unknown, context?: {
     signal?: AbortSignal;
@@ -25,9 +27,13 @@ type Handler = (endpoint: string, payload: unknown, context?: {
 export interface RpcServices {
     router: Pick<SearchRouter, 'providerReport'>;
     dynamic: () => ResolvedConfig;
+    /** The agent overlay (read and revoke endpoints); absent in tests of the older endpoints. */
+    overlay?: OverlayStore;
+    /** Settings changed in the configuration that only take effect at the next start. */
+    pendingRestart?: () => PendingRestart[];
 }
 /** Readiness for the card, from the report `sources.status` is made of (local probes; never a search). */
-export declare function statusView(router: Pick<SearchRouter, 'providerReport'>): Promise<StatusView>;
+export declare function statusView(router: Pick<SearchRouter, 'providerReport'>, extras?: Pick<RpcServices, 'overlay' | 'pendingRestart'>): Promise<StatusView>;
 /** The handler of the channel: `status` and `trial`. A failure is a value (`ok: false`), never a throw into the transport. */
 export declare function createHandler(services: RpcServices): Handler;
 /** Register the channel when the Host has the transport; the effect unregisters it with the plugin. */

@@ -8,12 +8,12 @@
  */
 import type { SettingsCardProps } from './index.ts';
 import type { CardFieldState, WebSearchCardState } from './form.ts';
+import { fill } from './fill.ts';
 import { type RowLabels, type SelectOption } from './ui-kit.tsx';
 export type Card = SettingsCardProps;
 export type Translator = Card['t'];
 export type LabelKey = Parameters<Translator>[0];
-/** Fill `{name}` placeholders of a dictionary entry. */
-export declare const fill: (text: string, values: Record<string, string | number>) => string;
+export { fill };
 export declare function rowLabels(t: Translator): RowLabels;
 /** The id of a field's control, tied to its label. */
 export declare const controlId: (field: string) => string;

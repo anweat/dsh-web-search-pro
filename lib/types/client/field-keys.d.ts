@@ -3,11 +3,14 @@
  * card lists. Pure data (no imports): the rows, the text view and the tests all read it.
  * @module web-search-pro/client/field-keys
  */
+import { type ConfigGroupId } from '../config-groups.ts';
 export declare function labelKey(field: string): string;
 /** The fields whose dictionary has a `<key>Help` text (a longer explanation behind the `?`). */
 export declare const WITH_HELP: ReadonlySet<string>;
 /** `?` text applies to the generic budget keys too. */
 export declare const hasHelp: (field: string) => boolean;
+/** Dictionary key of the sentence saying why a start-up-only field needs a plugin restart (restart.ts lists the fields). */
+export declare function restartWhyKey(field: string): string;
 export type SourceTier = 'paid' | 'free-quota' | 'anonymous';
 /** One source the "Sources" list shows and its edit dialog is made of. */
 export interface SourceDef {
@@ -34,7 +37,5 @@ export declare const JSON_FIELDS: readonly {
     field: string;
     group: 'judge' | 'runtime' | 'platform' | 'advanced';
 }[];
-/** Group of the text view each plain field is printed under (the others are listed explicitly where they are built). */
-export declare const TEXT_GROUP: Readonly<Record<string, string>>;
-/** Group of the text view of any field (judge, budget, keyed and rubric families included). */
-export declare function textGroupOf(field: string): string;
+/** Group of the text view of any field: the group of its top-level key (see config-groups.ts, the one list of the layout). */
+export declare function textGroupOf(field: string): ConfigGroupId;

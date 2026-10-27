@@ -15,6 +15,11 @@ export declare function Badge(props: {
     tone?: Tone;
     children: ReactNode;
 }): import("react").JSX.Element;
+/** The mark of a setting an agent changed: a warning badge whose tooltip carries the value, the reason and the time. */
+export declare function AgentTag(props: {
+    label: string;
+    tip: string;
+}): import("react").JSX.Element;
 /** The `?` button: its text opens on click, so a long explanation costs one glyph until someone asks. */
 export declare function Help(props: {
     label: string;
@@ -46,6 +51,14 @@ export interface RowProps {
     meta?: string;
     /** A short warning badge beside the label, for a setting that widens what an agent may do. */
     risk?: string;
+    /** The setting is read when the plugin starts: a badge saying so, with a `?` explaining why; `touched` picks it out while an edit of it is waiting to be saved. */
+    restart?: {
+        badge: string;
+        why: string;
+        touched?: boolean;
+    };
+    /** Extra controls beside the label (the "changed by the agent" mark with its adopt / revoke buttons). */
+    mark?: ReactNode;
     disabled?: boolean;
     labels: RowLabels;
     onReset?: () => void;
