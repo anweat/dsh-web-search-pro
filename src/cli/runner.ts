@@ -417,6 +417,8 @@ export interface CliRunOptions {
   skipCredentialGate?: boolean
   /** Test seam: the clock `{ time }` fields read relative texts (`3小时前`) against. */
   now?: number
+  /** Sees what the command printed (secrets redacted) before it is interpreted: the settings card's trial shows the tool's own words. */
+  observe?: (result: { code: number; stdout: string; stderr: string }) => void
 }
 
 function redactor(spec: CliAdapterSpec, source: NodeJS.ProcessEnv): (text: string) => string {
@@ -467,6 +469,7 @@ export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunIn
   })
 
   if (input.signal?.aborted) throw input.signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
+  options.observe?.({ code: result.code, stdout: redact(result.stdout), stderr: redact(result.stderr) })
   if (result.spawnFailed || (result.code === -1 && !result.timedOut && !result.stderr.trim() && !result.stdout.trim())) {
     throw new CliAdapterError('the ' + label + ' command could not be started: install it (' + spec.packageNote + ')', 'CLI_NOT_FOUND', 'install: ' + spec.packageNote)
   }

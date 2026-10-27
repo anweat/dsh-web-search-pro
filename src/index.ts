@@ -36,6 +36,7 @@ import { buildPromptText } from './prompt.ts'
 import { registerSkillWhenAvailable } from './skill.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
 import { automationModeOf, resolveWebCall, webPolicyDecision } from './actions/approval.ts'
+import { registerRpc } from './rpc.ts'
 
 export const name = 'web-search-pro'
 // `browser` (dsh-browser) is deliberately NOT injected: Cordis 4.0.4 treats every
@@ -85,6 +86,9 @@ export function apply(ctx: Context, config: Config): void {
   const router = new SearchRouter(ctx, resolved, store, dynamic, getBrowser)
   ctx.effect(() => () => router.dispose())
   const fetchSvc = new FetchService(store, dynamic, getBrowser, () => router.deepseekAccess())
+
+  //    The settings card's private RPC channel (live readiness, "Try it" of a custom CLI); only where the Host has the transport.
+  registerRpc(ctx, { router, dynamic })
 
   // 5. Tools: `web_index` + `web_call` (or one tool per action with toolSurface=flat). The bundled
   //    `dsh-web-search-pro` skill is registered only when the Host has a skill registry. It must not be

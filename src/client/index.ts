@@ -11,6 +11,7 @@ import {
 import { SettingsCard } from './SettingsCard.tsx'
 import { en, zh } from './locales.ts'
 import { ensureStyles } from './styles.ts'
+import type { TrialRequest } from '../rpc-types.ts'
 
 export const name = 'web-search-pro-client'
 export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'configForms']
@@ -28,6 +29,9 @@ export type SettingsCardProps = PropsLocale<typeof NS> & {
   save: () => void
   discard: () => void
   refreshCredentials: () => void
+  refreshStatus: () => void
+  runTrial: (request: TrialRequest) => void
+  clearTrial: () => void
 }
 export function apply(ctx: Context): void {
   ensureStyles()

@@ -8,6 +8,7 @@ import {
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
+import { RPC_CHANNEL, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts'
 import { cliIssues, evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
@@ -51,6 +52,17 @@ export interface RubricCardState {
   problems: string[]
 }
 
+/** What the card knows from the running plugin over its private RPC channel (rpc-types.ts); empty where the Host has no transport. */
+export interface ServerState {
+  /** The Host has the transport: live readiness and "Try it" are possible. */
+  available: boolean
+  loading: boolean
+  failed: boolean
+  status?: StatusView
+  /** The trial run of a custom CLI draft: idle, running, or the last outcome. */
+  trial: { state: 'idle' | 'running' | 'done' | 'failed'; id?: string; result?: TrialResult; error?: string }
+}
+
 export interface WebSearchCardState {
   available: boolean
   writable: boolean
@@ -67,6 +79,7 @@ export interface WebSearchCardState {
   rubrics: RubricCardState[]
   /** Overrides in settings that name no built-in rubric. */
   unknownRubrics: string[]
+  server: ServerState
 }
 
 interface Draft { text: string; clear: boolean }
@@ -154,6 +167,8 @@ export class WebSearchSettingsController {
   private credentialGeneration = 0
   private credentialRefSignature = ''
   private credentialStates = emptyCredentials()
+  private server: ServerState = { available: false, loading: false, failed: false, trial: { state: 'idle' } }
+  private trialGeneration = 0
 
   constructor(
     private readonly scope: ConfigForm<Record<string, unknown>>,
@@ -166,6 +181,58 @@ export class WebSearchSettingsController {
       if (signature !== this.credentialRefSignature) void this.refreshCredentials()
     })
     void this.refreshCredentials()
+    void this.refreshStatus()
+  }
+
+  /** The Host's RPC client, read when it is used (the service may arrive after the card was registered); undefined where there is none. */
+  private rpc(): { call(channel: string, endpoint: string, payload: unknown): Promise<{ ok: true; value: unknown } | { ok: false; error: { message: string } }> } | undefined {
+    try {
+      const root = this.ctx as unknown as { get?: (name: string) => unknown; connection?: unknown }
+      const connection = (root.get?.('connection') ?? root.connection) as { rpc?: { call?: unknown } } | undefined
+      return typeof connection?.rpc?.call === 'function' ? connection.rpc as never : undefined
+    } catch { return undefined }
+  }
+
+  /** Ask the plugin what is ready now (the same local probes as `sources.status`). Silent when the Host has no transport. */
+  async refreshStatus(): Promise<void> {
+    const rpc = this.rpc()
+    if (!rpc) { this.server = { ...this.server, available: false, loading: false }; this.publish(); return }
+    this.server = { ...this.server, available: true, loading: true }
+    this.publish()
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'status', {})
+      if (!result.ok) throw new Error(result.error.message)
+      this.server = { ...this.server, available: true, loading: false, failed: false, status: result.value as StatusView }
+    } catch {
+      // An older plugin build without the channel answers nothing useful: the card falls back to what it can tell by itself.
+      this.server = { ...this.server, loading: false, failed: true }
+    }
+    this.publish()
+  }
+
+  /** Run one search of a custom CLI draft (rpc-types.ts `trial`). The outcome lands in `server.trial`. */
+  async runTrial(request: TrialRequest): Promise<void> {
+    const rpc = this.rpc()
+    const generation = ++this.trialGeneration
+    if (!rpc) { this.server = { ...this.server, trial: { state: 'failed', id: request.id, error: 'unavailable' } }; this.publish(); return }
+    this.server = { ...this.server, trial: { state: 'running', id: request.id } }
+    this.publish()
+    let trial: ServerState['trial']
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'trial', request)
+      trial = result.ok ? { state: 'done', id: request.id, result: result.value as TrialResult } : { state: 'failed', id: request.id, error: result.error.message }
+    } catch (error) {
+      trial = { state: 'failed', id: request.id, error: error instanceof Error ? error.message : String(error) }
+    }
+    if (generation !== this.trialGeneration) return
+    this.server = { ...this.server, trial }
+    this.publish()
+  }
+
+  clearTrial(): void {
+    this.trialGeneration += 1
+    this.server = { ...this.server, trial: { state: 'idle' } }
+    this.publish()
   }
 
   inject() {
@@ -180,6 +247,9 @@ export class WebSearchSettingsController {
       save: () => { void this.save() },
       discard: () => { this.discard() },
       refreshCredentials: () => { void this.refreshCredentials() },
+      refreshStatus: () => { void this.refreshStatus() },
+      runTrial: (request: TrialRequest) => { void this.runTrial(request) },
+      clearTrial: () => { this.clearTrial() },
     }
   }
 
@@ -307,6 +377,8 @@ export class WebSearchSettingsController {
     this.saving = false
     this.failed = !landed
     this.publish()
+    // What is ready may have changed with the settings just saved (a custom CLI, a key, a chain).
+    if (landed) void this.refreshStatus()
   }
 
   async refreshCredentials(): Promise<void> {
@@ -359,6 +431,7 @@ export class WebSearchSettingsController {
       providerChoices: providerChoices(getAt(analysis.evidence, ['judge', 'providers'])),
       rubrics: this.projectRubrics(fields, analysis),
       unknownRubrics: unknownRubricIds(analysis.evidence.rubrics),
+      server: this.server,
     }
   }
 
