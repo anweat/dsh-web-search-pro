@@ -1,0 +1,79 @@
+{
+  "_constructed": "Built from twitter-cli 0.8.5 source (serialization.py tweet_to_dict, output.py success_payload) and the shape reported in dsh-web-search-pro issue #38. NOT captured by this plugin: the texts, ids and handles are invented. The real tool prints no such key.",
+  "ok": true,
+  "schema_version": "1",
+  "data": [
+    {
+      "id": "1900000000000000001",
+      "text": "Shipping v2 today.\nChangelog and migration notes: https://t.co/AbCdEfGhIj",
+      "author": {
+        "id": "1001",
+        "name": "Alice Dev",
+        "screenName": "alice",
+        "profileImageUrl": "https://pbs.twimg.com/profile_images/1900000000000000999/abcdEFGH_normal.jpg",
+        "verified": true
+      },
+      "metrics": { "likes": 1234, "retweets": 56, "replies": 7, "quotes": 3, "views": 98765, "bookmarks": 12 },
+      "createdAt": "Wed Oct 07 18:05:04 +0000 2026",
+      "createdAtLocal": "2026-10-08 02:05",
+      "createdAtISO": "2026-10-07T18:05:04+00:00",
+      "media": [
+        { "type": "video", "url": "https://video.twimg.com/amplify_video/1900000000000000555/vid/avc1/1920x1080/clip.mp4?tag=29", "width": 1920, "height": 1080 }
+      ],
+      "urls": ["https://example.com/changelog"],
+      "isRetweet": false,
+      "retweetedBy": null,
+      "lang": "en",
+      "score": null
+    },
+    {
+      "id": "1900000000000000002",
+      "text": "",
+      "author": {
+        "id": "1002",
+        "name": "Bob 中文",
+        "screenName": "bob_cn",
+        "profileImageUrl": "https://pbs.twimg.com/profile_images/1900000000000000998/zyxWVU_normal.jpg",
+        "verified": false
+      },
+      "metrics": { "likes": 0, "retweets": 0, "replies": 0, "quotes": 0, "views": 0, "bookmarks": 0 },
+      "createdAt": "Tue Oct 06 09:00:00 +0000 2026",
+      "createdAtLocal": "2026-10-06 17:00",
+      "createdAtISO": "2026-10-06T09:00:00+00:00",
+      "media": [
+        { "type": "photo", "url": "https://pbs.twimg.com/media/Gabcdefg.jpg", "width": 1200, "height": 800 }
+      ],
+      "urls": [],
+      "isRetweet": false,
+      "retweetedBy": null,
+      "lang": "zh",
+      "score": null
+    },
+    {
+      "id": "1900000000000000003",
+      "text": "RT @carol: Thread on caching strategies for LLM agents (1/5)",
+      "author": {
+        "id": "1003",
+        "name": "Dave",
+        "screenName": "dave",
+        "profileImageUrl": "https://pbs.twimg.com/profile_images/1900000000000000997/qwerty_normal.jpg",
+        "verified": false
+      },
+      "metrics": { "likes": 3, "retweets": 1, "replies": 0, "quotes": 0, "views": 410, "bookmarks": 0 },
+      "createdAt": "Mon Oct 05 12:30:00 +0000 2026",
+      "createdAtLocal": "2026-10-05 20:30",
+      "createdAtISO": "2026-10-05T12:30:00+00:00",
+      "media": [],
+      "urls": [],
+      "isRetweet": true,
+      "retweetedBy": "dave",
+      "lang": "en",
+      "score": null,
+      "quotedTweet": {
+        "id": "1900000000000000100",
+        "text": "Original thread start",
+        "author": { "screenName": "carol", "name": "Carol" }
+      }
+    }
+  ]
+}

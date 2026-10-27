@@ -10,7 +10,7 @@ import { resolveSources, type SourcesInput } from '../pipeline/sources-spec.ts'
 import { CALIBRATED_THRESHOLDS, thresholdKey, thresholdsProblems } from '../pipeline/coverage.ts'
 import { DEFAULT_PROVIDER_ID, PRESETS, resolveProviders, unusableReason, type JudgeSettings } from '../pipeline/judges/providers-spec.ts'
 import { BUILTIN_RUBRIC_IDS, builtinDef, overrideProblems } from '../pipeline/rubrics-spec.ts'
-import { platformBackendIssues } from '../cli/chains-spec.ts'
+import { customCliPlatformIssues, platformBackendIssues } from '../cli/chains-spec.ts'
 import { resolveCliAdapters } from '../cli/spec.ts'
 import { getAt, isRecord, rubricField, type Json, type SettingField } from './form-specs.ts'
 
@@ -167,6 +167,8 @@ export function sourcesIssues(sources: Json): Issue[] {
   const issues: Issue[] = []
   for (const message of resolveSources(sources as SourcesInput).diagnostics) {
     if (message.includes('both prioritised and disabled')) { for (const field of ['sources.priority', 'sources.disabled'] as const) issues.push({ field, message, level: 'warning', related: ['sources.priority', 'sources.disabled'] }); continue }
+    const confidence = /^sources\.confidence\.(\S+) ignored/.exec(message)
+    if (confidence) { issues.push({ field: `sources.confidence.${confidence[1]!}`, message, level: 'error' }); continue }
     const budget = /^sources\.budget\.([^.\s]+)\.(total|daily)\b/.exec(message)
     const field: SettingField = budget ? `sources.budget.${budget[1]!}.${budget[2] as 'total' | 'daily'}` : message.includes('sources.disabled') ? 'sources.disabled' : 'sources.priority'
     issues.push({ field, message, level: 'error' })
@@ -187,6 +189,7 @@ export function unknownRubricIds(rubrics: unknown): string[] {
 export function cliIssues(platformBackends: unknown, cliAdapters: unknown): Issue[] {
   const issues: Issue[] = []
   for (const message of resolveCliAdapters(cliAdapters).diagnostics) issues.push({ field: 'cliAdapters', message, level: 'error' })
+  for (const message of customCliPlatformIssues(cliAdapters)) issues.push({ field: 'cliAdapters', message, level: 'error' })
   for (const message of platformBackendIssues(platformBackends, cliAdapters)) issues.push({ field: 'platformBackends', message, level: 'error', related: ['cliAdapters'] })
   return issues
 }

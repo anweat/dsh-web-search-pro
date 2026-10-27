@@ -1,0 +1,21 @@
+{
+  "_comment": "LIVE capture, 2026-10-26, POST https://api.deepseek.com/v1/tools/search with a real API key (the key is never part of a response). Trimmed: the first 1 results only, summaries cut at 1,400 characters; every other field is as returned. Request: {\"query\":\"DatabaseSync busy timeout site:nodejs.org\",\"count\":5,\"need_content\":false} The API returned a single result for this site: query.",
+  "live": true,
+  "status": 200,
+  "body": {
+    "results": [
+      {
+        "title": "Database | Node.js 26.11.1 Documentation",
+        "site_name": "nodejs.org",
+        "site_icon": "https://cdn.deepseek.com/site-icons/nodejs.org",
+        "authority": 3,
+        "rerank_score": 1.320075511932373,
+        "date": null,
+        "url": "https://beta.docs.nodejs.org/sqlite/Database",
+        "summary": "Default:\n...\n});\n...\n'main'.\n...\ncreate\n...\nv23.3.0, v22.12.0\n\nv23.3.0, v22.12.\n...\n## database.applyChangeset\n...\npatch\n...\n:\n...\ntable\n...\nthe\n...\nas the\n...\nWhether\n...\napplied successfully\n...\naborted.\n\nAn exception is thrown\n...\nnot open. This method is a wrapper aroundsqlite3changeset_apply().",
+        "snippet": "const database = new Database(':memory:', { allowExtension: true }) ... DATABASE Default: 'main'. ... database.createSession ... v23.3.0 ... Creates and attaches a session to the database. This method is a wrapper aroundsqlite3session_create() ... database.applyChangeset ... A binary changeset or patchset. ... An exception is thrown if the database is not open. This method is a wrapper aroundsqlite3changeset_apply(). ... const sourceDb = new Database(' ... // Now that the changeset has been applied, targetDb contains the same data as sourceDb.const",
+        "content": ""
+      }
+    ]
+  }
+}

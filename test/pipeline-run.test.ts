@@ -306,3 +306,48 @@ test('pipeline: a budget and per-URL limit from the task reach selection', async
   assert.ok(small.pack.stats.excerptChars <= 500)
   assert.equal(new Set(small.pack.evidence.map(e => e.url)).size, small.pack.evidence.length)
 })
+
+test('pipeline: a whole-output custom CLI result (cli:// stand-in link) is a source of the pack but is never fetched', async () => {
+  const wholeUrl = 'cli://echo?q=node%3Asqlite%20busy%20timeout'
+  const h = harness({
+    search: call => call.id === 'bing'
+      ? { state: 'ok', sources: [{ url: wholeUrl, title: 'echo: node:sqlite busy timeout', snippet: 'node:sqlite busy timeout WAL mode: set PRAGMA busy_timeout' }] }
+      : okSources('https://docs.test/busy', 'https://docs.test/wal'),
+  })
+  const { pack } = await runPipeline(TASK, h.deps)
+  assert.ok(!h.fetched.some(url => url.startsWith('cli://')), 'no page fetch for the stand-in link: ' + h.fetched.join(', '))
+  assert.ok(pack.sources.some(source => source.url === wholeUrl), 'it is listed as a source')
+  assert.ok(!pack.notes.some(note => /could not be read/.test(note)), 'and it is not reported as a page that failed to load')
+  assert.ok(pack.evidence.every(item => item.url.startsWith('https://')), 'evidence comes from real pages only')
+  assert.deepEqual(pack.coveredNeeds, ['n1', 'n2'])
+})
+
+test('pipeline: results of a custom CLI carry via, confidence and the honest label into the pack sources and the excerpts; a doubted source keeps a place among the pages that are read', async () => {
+  const TAG = 'user-defined, not verified by the plugin (用户自定义，未经插件验证)'
+  const h = harness({
+    pages: { ...PAGES, 'https://mine.test/busy': BUSY },
+    search: call => call.id === 'bing'
+      ? { state: 'ok', sources: [{ url: 'https://mine.test/busy', title: 'Mine', snippet: 'node:sqlite busy timeout WAL mode guide', via: 'custom-cli:mine', tag: TAG, confidence: 0.5 }] }
+      : okSources('https://docs.test/busy', 'https://docs.test/wal', 'https://other.test/bread', 'https://blog.test/mix', 'https://docs.test/extra'),
+  })
+  const { pack } = await runPipeline(TASK, { ...h.deps, configuredEngines: ['ddg', 'bing'] }, { engines: ['ddg', 'bing'], fetchTopK: 3, perProviderCount: 10 })
+  const mine = pack.sources.find(source => source.url === 'https://mine.test/busy')!
+  assert.deepEqual([mine.via, mine.confidence, mine.tag], ['custom-cli:mine', 0.5, TAG])
+  assert.ok(h.fetched.includes('https://mine.test/busy'), 'rank 1 of a doubted source sank below the full-confidence results, but its page is still read: ' + h.fetched.join(', '))
+  const docs = pack.sources.find(source => source.url === 'https://docs.test/busy')!
+  assert.deepEqual(Object.keys(docs).filter(key => ['via', 'confidence', 'tag'].includes(key)), [], 'a built-in source adds nothing')
+  const excerpt = pack.evidence.find(item => item.url === 'https://mine.test/busy')
+  if (excerpt) assert.deepEqual([excerpt.via, excerpt.confidence, excerpt.tag], ['custom-cli:mine', 0.5, TAG])
+})
+
+test('rendering: a source line and an excerpt name the custom CLI, the confidence and the label; a plain source stays as it was', async () => {
+  const { qualityTag, renderEvidencePack } = await import('../src/pipeline/render.ts')
+  assert.equal(qualityTag({ rerankScore: 2.3, authority: 4 }), '[rerank 2.3/3, authority 4/4]')
+  assert.equal(qualityTag({}), '')
+  assert.equal(qualityTag({ via: 'custom-cli:echo', confidence: 0.5, tag: 'T' }), '[via custom-cli:echo, confidence 0.5, T]')
+  const pack = { resultId: 'r_1', profile: 'general' as const, needs: [{ id: 'n1', text: 'x', critical: true }], evidence: [{ evidenceId: 'e_1', blockId: 'b', url: 'https://m.test/', excerpt: 'text', needIds: ['n1'], grade: 3, source: 'custom-cli:m', confidence: 0.5, tag: 'T' }], coveredNeeds: ['n1'], gaps: [], partial: false, notes: [], verification: { native: [], local: [] } }
+  const text = renderEvidencePack(pack, [{ url: 'https://o.test/', title: 'O', via: 'custom-cli:m', confidence: 0.5, tag: 'T' }, { url: 'https://p.test/', title: 'P' }], 'Engine: x')
+  assert.match(text, /grade 3 · via custom-cli:m · confidence 0\.5 · T/)
+  assert.match(text, /- \[O\]\(https:\/\/o\.test\/\) \[via custom-cli:m, confidence 0\.5, T\]/)
+  assert.match(text, /- \[P\]\(https:\/\/p\.test\/\)\n?/)
+})

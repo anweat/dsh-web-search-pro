@@ -1,0 +1,211 @@
+{
+ "query": "rust async runtime comparison",
+ "ts": "2026-10-26T16:16:47.964445Z",
+ "results": [
+  {
+   "source": "github",
+   "adapter": "gh",
+   "title": "Feature request: make the WebSearch / WebFetch backend configurable (bring your own key, default unchanged)",
+   "url": "https://github.com/KonghaYao/peri/issues/171",
+   "content": "Hi @KonghaYao,\n\nI've been running peri as my daily driver for the last few weeks — the ~50MB footprint is what got me to try it, and the free `peri-*` tiers in the setup wizard meant I was productive before I configured anything. `WebSearch` is the tool I lean on most, because half of what I ask mid-task (\"what changed in this crate\", \"which flag does this CLI take now\") is not in my context.\n\n**The thing that keeps biting me**\n\nBoth web tools are wired to a single hardcoded gateway:\n\n```rust\n//",
+   "author": "gefsikatsinelou",
+   "ts": "2026-09-27T02:22:52Z",
+   "score": 0.0,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.9400000000000001
+  },
+  {
+   "source": "hackernews",
+   "adapter": "builtin",
+   "title": "Show HN: Banish: A declarative framework for rule-based state machines in Rust",
+   "url": "https://github.com/LoganFlaherty/banish/releases/tag/v1.3.0",
+   "content": "",
+   "author": "LoganFlaherty",
+   "ts": "2026-03-22T05:37:30+00:00",
+   "score": 0.002,
+   "engagement": {
+    "likes": 1,
+    "comments": 0,
+    "shares": null,
+    "views": null,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.8562716281149159
+  },
+  {
+   "source": "hackernews",
+   "adapter": "builtin",
+   "title": "Show HN: I'm building a pure-Rust reimplementation of rsync (Protocol 32)",
+   "url": "https://github.com/oferchen/rsync",
+   "content": "",
+   "author": "oferchen",
+   "ts": "2026-02-22T22:51:36+00:00",
+   "score": 0.006,
+   "engagement": {
+    "likes": 3,
+    "comments": 2,
+    "shares": null,
+    "views": null,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.8485104654679554
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "深入解析 Rust Tokio:Runtime、Task 与 async fn 底层原理",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031405&ver=7050&signature=REDACTED&new=1",
+   "content": "async Rust,那你可能已经敲过几十次 #[tokio::main] 了.你盯着它... runtime 是如何构建的,当你 await 某个东西时发生了什么,...",
+   "author": "绣化之道",
+   "ts": "2026-03-06T02:21:51Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.6716812875892351
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "Towards Scaling Laws for Coding Agents",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031405&ver=7050&signature=REDACTED&new=1",
+   "content": "improving the runtime performance of the compiler. In hours 100 to ... //github.com/vizopsai/async_compiler_factory 获取.Comparison ...",
+   "author": "系统范畴论",
+   "ts": "2026-03-03T02:15:54Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.6708266704988128
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "async-openai OpenAI API接口Rust实现 | 疯狂的Rust库",
+   "url": "https://www.bilibili.com/video/BV1R8eXzGENK",
+   "content": "https://crates.io/crates/async-openai",
+   "author": "沙漠在逃",
+   "ts": "2025-08-28T05:19:20Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 16,
+    "comments": 7,
+    "shares": null,
+    "views": 702,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.6176650470756857
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "【Luoxz游戏开发】 UE4/UE5 Runtime Editor：打包后的游戏也能像编辑器一样工作！",
+   "url": "https://www.bilibili.com/video/BV1GsotYSECc",
+   "content": "1. UE4 编辑器核心模块移植\n\t迁移并优化编辑器核心，确保功能完整性与可扩展性。\n2. UE4 高级 Gizmo 交互系统（精简版）\n\t轻量级多维度变换系统，支持自定义操控与精确交互。\n3. 程序化道路系统（含交叉口与匝道口）\n\t基于专业道路设计曲线（直线、圆曲线、缓和曲线）构建道路几何，支持符合工程标准的道路生成与编辑。\n\t兼容外部道路曲线数据采样与导入，实现高精度曲线拟合与动态拓扑适配。\n4. 房屋建筑系统（含门窗与墙体交互）\n\t参数化建模框架，实现建筑结构与门窗的智能交互。\n5. 地形系统（雕刻",
+   "author": "NB-666",
+   "ts": "2025-03-25T11:42:59Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 6,
+    "comments": 4,
+    "shares": null,
+    "views": 483,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.5733618745134259
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "Think Twice Before Using Async Rust | Prime Reacts",
+   "url": "https://www.youtube.com/watch?v=TZxxWXVnb1E",
+   "content": "",
+   "author": "The PrimeTime",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 94852,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "🦀Master Rust Programming #15 | Async Programming: Futures, Streams & TRPL | Async/Await Rust vs JS 🚀",
+   "url": "https://www.youtube.com/watch?v=fR4A5IbZnWs",
+   "content": "",
+   "author": "BlockDev",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 349,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "Async Rust Is A Bad Language | Prime Reacts",
+   "url": "https://www.youtube.com/watch?v=ANu2TDkKotw",
+   "content": "",
+   "author": "The PrimeTime",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 154387,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "【疯狂的Rust库】async-std 实现了很多标准库的异步函数",
+   "url": "https://www.bilibili.com/video/BV15LYTeQEUm",
+   "content": "库地址：https://crates.io/crates/async-std",
+   "author": "沙漠在逃",
+   "ts": "2024-08-06T09:47:51Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 14,
+    "comments": 3,
+    "shares": null,
+    "views": 1004,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.507624123528696
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "006. DatenLord CTO 施继成的 Rust 修炼之道",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031405&ver=7050&signature=REDACTED&new=1",
+   "content": "runtime 讨论• Async crate comparison - Rust Community Wiki[8]• Abstraction layer for async runtimes : rust[9]• Is async-std a ...",
+   "author": "RustTalk",
+   "ts": "2022-11-21T00:39:50Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.33
+  }
+ ],
+ "errors": []
+}

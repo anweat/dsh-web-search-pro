@@ -1,10 +1,22 @@
 /** Text helpers shared by the action renderers. @module web-search-pro/actions/format */
 
-function sourceLine(s: { url: string; title?: string; snippet?: string; publishedAt?: string }): string {
+import { WHOLE_OUTPUT_SCHEME } from '../cli/spec.ts'
+import { qualityTag } from '../pipeline/render.ts'
+
+type FormatSource = { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; via?: string; confidence?: number; tag?: string }
+
+function sourceLine(s: FormatSource): string {
   const label = s.title && s.title.length ? s.title : safeHost(s.url)
+  // The whole output of a custom CLI is a block of text, not a one-line snippet: it goes below the heading, indented.
+  if (s.url.startsWith(WHOLE_OUTPUT_SCHEME)) {
+    const quality = qualityTag(s)
+    return '- ' + label + ' (' + s.url + ')' + (quality ? ' ' + quality : '') + (s.snippet ? '\n' + s.snippet.split('\n').map(line => '    ' + line).join('\n') : '')
+  }
   const meta: string[] = []
   if (s.snippet) meta.push(s.snippet)
   if (s.publishedAt) meta.push('(' + s.publishedAt + ')')
+  const quality = qualityTag(s)
+  if (quality) meta.push(quality)
   const suffix = meta.length ? ' — ' + meta.join(' ') : ''
   return '- [' + label + '](' + s.url + ')' + suffix
 }
@@ -13,7 +25,7 @@ function safeHost(url: string): string {
   try { return new URL(url).hostname } catch { return url }
 }
 
-export function formatSources(sources: { url: string; title?: string; snippet?: string; publishedAt?: string }[]): string {
+export function formatSources(sources: FormatSource[]): string {
   if (!sources.length) return 'No results found.'
   return sources.map(sourceLine).join('\n')
 }

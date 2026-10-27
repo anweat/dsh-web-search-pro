@@ -5,8 +5,10 @@ import { configuredDecider } from '../src/pipeline/judge-status.ts'
 import { BUILTIN_RUBRIC_IDS } from '../src/pipeline/rubrics-spec.ts'
 import { resolveAllRubrics } from '../src/pipeline/rubrics.ts'
 import { resolveProviders } from '../src/pipeline/judges/providers.ts'
-import { BUDGET_SPECS, BUDGETED_SOURCES, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
-import { BASE, harness } from './settings-harness.ts'
+import { BUDGET_SPECS, BUDGETED_SOURCES, confidenceSpec, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
+import { isPathSpec } from '../src/client/form-specs.ts'
+import { ALL_SPECS } from '../src/client/form.ts'
+import { BASE, harness, isVolatilePath, type SchemaNode as VolatileNode } from './settings-harness.ts'
 
 // ── the form covers the whole schema ────────────────────────────────────────
 
@@ -33,6 +35,12 @@ test('every leaf of the Config schema is a control, a derived control, or a secr
       continue
     }
     if (leaf === 'evidence.rubrics') continue
+    if (leaf === 'sources.confidence') { // a dict of numbers: one dynamic field per source id, sources.confidence.<id>
+      assert.equal(node.inner!.meta?.volatile ?? node.meta?.volatile, true)
+      assert.deepEqual([confidenceSpec('ddg').field, confidenceSpec('custom-cli:echo').parse('0.4')], ['sources.confidence.ddg', { kind: 'set', value: 0.4 }])
+      assert.equal(confidenceSpec('ddg').parse('1.2'), undefined)
+      continue
+    }
     if (leaf === 'sources.budget') {
       assert.deepEqual(Object.keys(node.inner!.dict!), ['total', 'daily'])
       assert.deepEqual(BUDGET_SPECS.map(spec => spec.field), BUDGETED_SOURCES.flatMap(id => [`sources.budget.${id}.total`, `sources.budget.${id}.daily`]))
@@ -43,7 +51,7 @@ test('every leaf of the Config schema is a control, a derived control, or a secr
   assert.deepEqual(missing, [])
   // dict-valued controls that are not a single field: one pair per keyed source, one JSON entry per built-in rubric.
   assert.deepEqual(KEYED_SPECS.map(spec => spec.field), KEYED_SOURCES.flatMap(({ id }) => [`keyedSources.${id}.apiKeyEnv`, `keyedSources.${id}.baseUrl`]))
-  assert.equal(KEYED_SOURCES.length, 7)
+  assert.equal(KEYED_SOURCES.length, 8)
   const h = harness()
   for (const id of BUILTIN_RUBRIC_IDS) assert.ok(rubricField(id) in h.controller.snapshot().fields)
   h.controller.dispose()
@@ -64,6 +72,8 @@ test('the defaults the card shows are the defaults of the schema', () => {
   assert.equal(resolved.bochaApiKeyEnv, DEFAULTS.bochaApiKeyEnv)
   assert.equal(resolved.bochaBaseUrl, DEFAULTS.bochaBaseUrl)
   assert.equal(resolved.bochaSummary, DEFAULTS.bochaSummary)
+  assert.equal(resolved.twitterAuthTokenEnv, DEFAULTS.twitterAuthTokenEnv)
+  assert.equal(resolved.twitterCt0Env, DEFAULTS.twitterCt0Env)
 })
 
 // ── round trips: load -> edit -> save -> the payload is what the schema and the server read ──────────────────────
@@ -96,6 +106,8 @@ const CASES: Case[] = [
   { field: 'toolSurface', before: 'indexed', text: 'flat', payload: 'flat' },
   { field: 'bochaApiKeyEnv', before: '', text: 'MY_BOCHA', payload: 'MY_BOCHA' },
   { field: 'bochaBaseUrl', before: '', text: 'https://api.bocha.cn', payload: 'https://api.bocha.cn' },
+  { field: 'twitterAuthTokenEnv', before: '', text: 'MY_TW_AUTH', payload: 'MY_TW_AUTH' },
+  { field: 'twitterCt0Env', before: '', text: 'MY_TW_CT0', payload: 'MY_TW_CT0' },
   { field: 'bochaSummary', before: 'true', text: 'false', payload: false },
   { field: 'searxngUrl', before: '', text: 'http://127.0.0.1:8080', payload: 'http://127.0.0.1:8080' },
   { field: 'openalexMailto', before: '', text: 'me@example.com', payload: 'me@example.com' },
@@ -115,7 +127,7 @@ for (const item of CASES) {
     assert.equal(controller.snapshot().dirty, false)
 
     const key = item.root ?? item.field
-    assert.deepEqual(scope.writes, [`set:${key}`])
+    assert.deepEqual(scope.writes, [`set:${item.field}`], 'one op, at the path of the field: never a whole container')
     assert.deepEqual(scope.user[key], item.payload)
     // The payload is something the schema takes, and the server reads back exactly what was meant.
     const parsed = (Config as unknown as (value: unknown) => unknown)({ [key]: item.payload })
@@ -181,7 +193,7 @@ test('judge mode keeps the legacy scorer / jevMode pair in step, and either read
 
   controller.resetField('evidence.judge.mode')
   await controller.save()
-  assert.equal(Object.hasOwn(scope.user, 'evidence'), false, 'resetting the mode removes all three keys and the emptied evidence object')
+  assert.deepEqual(scope.user.evidence, { judge: {} }, 'resetting the mode removes all three keys; the Host leaves the emptied container behind')
   controller.dispose()
 })
 
@@ -198,7 +210,7 @@ test('a legacy-only settings file shows its mode, and editing it leaves no stale
 
 // ── roots keep what the card does not edit ──────────────────────────────────
 
-test('saving one option writes its root once and carries the siblings the card does not know', async () => {
+test('saving one option writes only its own path, so the siblings the card does not know stay as they are', async () => {
   const user = {
     evidence: { maxRounds: 3, somethingNew: { keep: true } },
     keyedSources: { tavily: { apiKey: 'literal-from-yaml', apiKeyEnv: 'T1' }, brave: { baseUrl: 'https://brave.example.com' } },
@@ -207,7 +219,7 @@ test('saving one option writes its root once and carries the siblings the card d
   controller.edit('evidence.maxQueries', '5')
   controller.edit('keyedSources.tavily.baseUrl', 'https://tavily.example.com')
   await controller.save()
-  assert.deepEqual(scope.writes.sort(), ['set:evidence', 'set:keyedSources'])
+  assert.deepEqual(scope.writes.sort(), ['set:evidence.maxQueries', 'set:keyedSources.tavily.baseUrl'])
   assert.deepEqual(scope.user.evidence, { maxRounds: 3, somethingNew: { keep: true }, maxQueries: 5 })
   assert.deepEqual(scope.user.keyedSources, {
     tavily: { apiKey: 'literal-from-yaml', apiKeyEnv: 'T1', baseUrl: 'https://tavily.example.com' },
@@ -218,18 +230,19 @@ test('saving one option writes its root once and carries the siblings the card d
   controller.dispose()
 })
 
-test('resetting removes the option, prunes what it leaves empty, and unsets an emptied root', async () => {
+test('resetting unsets the option at its own path; what it leaves empty stays (the Host does not prune)', async () => {
   const { scope, controller } = harness(BASE, { evidence: { coverage: { mode: 'shadow', provider: 'bocha-jev' } }, provider: { deadlineMs: 4000 } })
   controller.resetField('evidence.coverage.mode')
   controller.resetField('provider.deadlineMs')
   await controller.save()
   assert.deepEqual(scope.user.evidence, { coverage: { provider: 'bocha-jev' } })
-  assert.equal(Object.hasOwn(scope.user, 'provider'), false)
-  assert.deepEqual(scope.writes.sort(), ['set:evidence', 'unset:provider'])
+  assert.deepEqual(scope.user.provider, {})
+  assert.deepEqual(scope.writes.sort(), ['unset:evidence.coverage.mode', 'unset:provider.deadlineMs'])
 
   controller.resetField('evidence.coverage.provider')
   await controller.save()
-  assert.equal(Object.hasOwn(scope.user, 'evidence'), false)
+  assert.deepEqual(scope.user.evidence, { coverage: {} })
+  assert.equal(controller.snapshot().dirty, false)
   controller.dispose()
 })
 
@@ -239,7 +252,7 @@ test('an unchanged draft is not a change, and a failed Host write keeps the path
   controller.edit('evidence.maxRounds', '2')
   assert.equal(controller.snapshot().dirty, false)
 
-  scope.set = async () => { throw new Error('host write rejected') }
+  scope.mutate = async () => { throw new Error('host write rejected') }
   controller.edit('evidence.maxRounds', '3')
   await controller.save()
   assert.equal(controller.snapshot().failed, true)
@@ -253,7 +266,7 @@ test('values outside what a control accepts block the save', async () => {
   for (const [field, text] of [
     ['evidence.maxRounds', '0'], ['evidence.maxRounds', '1.5'], ['provider.evidence', 'maybe'], ['provider.deadlineMs', '50'],
     ['toolSurface', 'wide'], ['bochaBaseUrl', 'not a url'], ['bochaBaseUrl', 'https://user:pw@api.example.com'],
-    ['bochaApiKeyEnv', 'has space'], ['keyedSources.tavily.apiKeyEnv', 'tvly sk 123'], ['openalexMailto', 'nobody'],
+    ['bochaApiKeyEnv', 'has space'], ['twitterCt0Env', 'has space'], ['keyedSources.tavily.apiKeyEnv', 'tvly sk 123'], ['openalexMailto', 'nobody'],
     ['evidence.judge.mode', 'always'], ['evidence.coverage.mode', 'hybrid'], ['evidence.budget.perSearchInputTokens', '-1'],
   ] as [SettingField, string][]) {
     controller.edit(field, text)
@@ -284,5 +297,101 @@ test('Bocha and keyed sources get write-only credentials that follow their saved
   assert.equal(controller.snapshot().credentials['keyed:brave'].configured, true)
   assert.equal(controller.snapshot().credentials['keyed:brave'].text, '')
   assert.equal(JSON.stringify(scope.user).includes('secret-for-test'), false, 'no key value reaches the settings')
+  controller.dispose()
+})
+
+test('the twitter-cli tokens are write-only credentials that follow their saved references, and never reach the settings', async () => {
+  const { scope, credentialValues, described, controller } = harness(BASE)
+  const refs = new Set(described.flat())
+  for (const ref of ['TWITTER_AUTH_TOKEN', 'TWITTER_CT0']) assert.ok(refs.has(ref), ref)
+  controller.edit('twitterAuthTokenEnv', 'MY_TW_AUTH')
+  controller.editCredential('twitter-auth-token', 'twitter-auth-secret-for-test')
+  controller.editCredential('twitter-ct0', 'twitter-ct0-secret-for-test')
+  await controller.save()
+  assert.equal(credentialValues.get('MY_TW_AUTH'), 'twitter-auth-secret-for-test')
+  assert.equal(credentialValues.get('TWITTER_CT0'), 'twitter-ct0-secret-for-test')
+  assert.equal(controller.snapshot().credentials['twitter-ct0'].configured, true)
+  assert.equal(controller.snapshot().credentials['twitter-ct0'].text, '')
+  assert.equal(JSON.stringify(scope.user).includes('secret-for-test'), false, 'no token value reaches the settings')
+  controller.dispose()
+})
+
+// ── the Host only takes edits beneath a volatile field ──────────────────────
+
+test('every field the card writes lies beneath a volatile node of the Config schema, so the Host accepts it (a whole container is never written)', () => {
+  const schema = Config as unknown as VolatileNode
+  const refused: string[] = []
+  for (const spec of ALL_SPECS) {
+    const path = isPathSpec(spec) ? [spec.root, ...spec.path] : spec.field === 'playwright' ? ['playwright', 'enabled'] : [spec.field]
+    if (!isVolatilePath(schema, path)) refused.push(spec.field + ' -> ' + path.join('.'))
+  }
+  // `playwright` is written key by key: both of its keys are live.
+  assert.ok(isVolatilePath(schema, ['playwright', 'snapshotDir']))
+  assert.deepEqual(refused, [])
+  // Whole containers are not volatile themselves: exactly what the Host refused when the card wrote `evidence` as one value.
+  for (const container of ['evidence', 'sources', 'provider', 'playwright']) assert.equal(isVolatilePath(schema, [container]), false, container)
+})
+
+test('a save sends one atomic mutation of leaf ops: sources, budget and flags together; nothing is refused', async () => {
+  const { scope, controller } = harness()
+  controller.edit('sources.disabled', 'bing')
+  controller.edit('sources.budget.deepseek.daily', '50')
+  controller.edit('deepseekFetch', 'true')
+  controller.edit('evidence.coverage.thresholds.weak', '0.1')
+  controller.edit('evidence.coverage.thresholds.covered', '0.4')
+  await controller.save()
+  assert.equal(scope.mutations.length, 1, 'one mutation')
+  assert.deepEqual(scope.refused, [])
+  assert.deepEqual(scope.writes.sort(), ['set:deepseekFetch', 'set:evidence.coverage.thresholds.covered', 'set:evidence.coverage.thresholds.weak', 'set:sources.budget.deepseek.daily', 'set:sources.disabled'])
+  assert.deepEqual(scope.user.sources, { disabled: ['bing'], budget: { deepseek: { daily: 50 } } })
+  assert.equal(controller.snapshot().failed, false)
+  controller.dispose()
+})
+
+test('playwright is written key by key (the Host refuses the whole object), and removed keys are unset', async () => {
+  const { scope, controller } = harness()
+  controller.edit('playwright', '{"enabled":false,"snapshotDir":"/tmp/shots"}')
+  await controller.save()
+  assert.deepEqual(scope.refused, [])
+  assert.deepEqual(scope.writes, ['set:playwright.enabled', 'set:playwright.snapshotDir'])
+  assert.deepEqual(scope.user.playwright, { enabled: false, snapshotDir: '/tmp/shots' })
+  scope.writes.length = 0
+  controller.edit('playwright', '{"enabled":true}')
+  await controller.save()
+  assert.deepEqual(scope.writes, ['set:playwright.enabled', 'unset:playwright.snapshotDir'])
+  assert.deepEqual(scope.user.playwright, { enabled: true })
+  scope.writes.length = 0
+  controller.resetField('playwright')
+  await controller.save()
+  assert.deepEqual(scope.writes, ['unset:playwright.enabled'])
+  assert.equal(controller.snapshot().failed, false)
+  controller.dispose()
+})
+
+test('a refused mutation keeps the whole draft and the credentials unwritten; accepted ones clear both', async () => {
+  const { scope, credentialValues, controller } = harness()
+  controller.edit('searchMaxResults', '12')
+  controller.editCredential('exa', 'secret-for-test')
+  const real = scope.mutate.bind(scope)
+  scope.mutate = async () => false
+  await controller.save()
+  assert.equal(controller.snapshot().failed, true)
+  assert.equal(controller.snapshot().changes, 2)
+  assert.equal(credentialValues.size, 0, 'no key is written after a refused settings write')
+  scope.mutate = real
+  await controller.save()
+  assert.equal(controller.snapshot().failed, false)
+  assert.equal(controller.snapshot().changes, 0)
+  assert.equal(scope.user.searchMaxResults, 12)
+  assert.equal(credentialValues.get('EXA_API_KEY'), 'secret-for-test')
+  controller.dispose()
+})
+
+test('the empty containers the Host parser fills into the section are not read as given values', () => {
+  const { controller } = harness({ ...BASE, evidence: { coverage: { mode: 'off', thresholds: {} }, judge: { providers: {} }, rubrics: {} } })
+  const fields = controller.snapshot().fields
+  assert.equal(fields['evidence.coverage.thresholds.weak'].message, undefined)
+  assert.equal(fields['evidence.coverage.thresholds.covered'].message, undefined)
+  assert.deepEqual(Object.values(fields).filter(field => field.message || field.warning), [])
   controller.dispose()
 })

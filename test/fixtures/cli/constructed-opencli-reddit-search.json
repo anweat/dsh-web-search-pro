@@ -1,0 +1,32 @@
+[
+  {
+    "id": "abc123",
+    "title": "Example post: an agent harness comparison",
+    "subreddit": "r/examples",
+    "author": "example_user",
+    "score": "245",
+    "comments": "37",
+    "url": "https://www.reddit.com/r/examples/comments/abc123/example_post_an_agent_harness_comparison/",
+    "created_utc": "1792000000.0",
+    "selftext": "Body text of the example post.",
+    "post_hint": "",
+    "url_overridden_by_dest": "",
+    "preview_image_url": "",
+    "gallery_urls": []
+  },
+  {
+    "id": "def456",
+    "title": "Another example post",
+    "subreddit": "r/samples",
+    "author": "sample_user",
+    "score": "3",
+    "comments": "0",
+    "url": "https://www.reddit.com/r/samples/comments/def456/another_example_post/",
+    "created_utc": "1791900000.0",
+    "selftext": "",
+    "post_hint": "link",
+    "url_overridden_by_dest": "https://example.com/",
+    "preview_image_url": "",
+    "gallery_urls": []
+  }
+]

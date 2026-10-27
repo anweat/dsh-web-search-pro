@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  buildArgv, buildCliEnv, CliAdapterError, loginHint, missingEnv, parseCliOutput, resolveField, runCliSearch, savedLoginPresent,
+  buildArgv, buildCliEnv, CliAdapterError, loginHint, missingEnv, normalizeNoProxy, parseCliOutput, resolveField, runCliSearch, savedLoginPresent, splitTerms,
 } from '../src/cli/runner.ts'
 import { baseSpec, posix, withCommands } from './cli-helpers.ts'
 
@@ -20,6 +20,37 @@ test('argv: placeholders are filled per token, never joined into a shell string;
   // A query that would read as a flag is neutralised unless a `--` precedes it.
   assert.equal(buildArgv(s, { query: '-rf', count: 1 })[1], ' -rf')
   assert.equal(buildArgv({ argv: ['search', '--', '{query}'] }, { query: '-rf', count: 1 })[2], '-rf')
+})
+
+test('argv overfetch: the tool is asked for more than the count, the mapper still returns at most the count', async () => {
+  assert.equal(buildArgv({ argv: ['s', '{query}', '-n', '{count}'], maxCount: 10, overfetch: 3 }, { query: 'q', count: 4 })[3], '7')
+  assert.equal(buildArgv({ argv: ['s', '{query}', '-n', '{count}'], maxCount: 10, overfetch: 3 }, { query: 'q', count: 99 })[3], '13')
+  assert.equal(buildArgv({ argv: ['s', '{query}', '-n', '{count}'], maxCount: 10 }, { query: 'q', count: 4 })[3], '4')
+  const out = JSON.stringify({ data: [{ url: 'https://e.test/1', title: 'a' }, { title: 'no link' }, { url: 'https://e.test/2', title: 'b' }, { url: 'https://e.test/3', title: 'c' }] })
+  if (posix) await withCommands({ 'demo-cli': emit(out) }, async () => {
+    const r = await runCliSearch(baseSpec({ search: { ...baseSpec().search, overfetch: 2, maxCount: 5 } }), { query: 'q', count: 2 })
+    assert.deepEqual(r.map(s => s.url), ['https://e.test/1', 'https://e.test/2'], 'two results although an entry without a link came between them')
+  })
+})
+
+test('argv {terms}: the query becomes one token per word (quotes keep a phrase), so a tool that joins its words itself sees real words', () => {
+  const gh = { argv: ['search', 'issues', '--limit', '{count}', '--', '{terms}'], maxCount: 15 }
+  assert.deepEqual(buildArgv(gh, { query: 'DeepSeek 搜索  插件\t问题', count: 3 }), ['search', 'issues', '--limit', '3', '--', 'DeepSeek', '搜索', '插件', '问题'])
+  assert.deepEqual(buildArgv(gh, { query: 'repo:o/r "exact phrase" -label:bug', count: 3 }).slice(5), ['repo:o/r', 'exact phrase', '-label:bug'], 'qualifiers stay whole, a quoted phrase is one word, a dash after -- is data')
+  assert.deepEqual(splitTerms('  a   "b  c"  ""  d"e f"g '), ['a', 'b  c', 'de fg'])
+  assert.deepEqual(splitTerms(Array.from({ length: 20 }, (_, i) => 'w' + i).join(' ')).length, 16, 'at most 16 words; the rest is folded into the last')
+  assert.equal(splitTerms(Array.from({ length: 20 }, (_, i) => 'w' + i).join(' ')).at(-1), 'w15 w16 w17 w18 w19')
+  // Without a `--` a word that reads as a flag is neutralised, as for {query}; a query with no word at all stays one token.
+  assert.deepEqual(buildArgv({ argv: ['s', '{terms}'] }, { query: '-x y', count: 1 }), ['s', ' -x', 'y'])
+  assert.deepEqual(buildArgv({ argv: ['s', '{terms}'] }, { query: '   ', count: 1 }), ['s', '   '])
+})
+
+test('NO_PROXY reaches the child without bracketed IPv6 entries (httpx fails the whole search on "[::1]")', () => {
+  assert.equal(normalizeNoProxy('localhost, 127.0.0.1,[::1],[fe80::1]:8080,::1,.local,'), 'localhost,127.0.0.1,::1,fe80::1,::1,.local')
+  assert.equal(normalizeNoProxy('*'), '*')
+  const env = buildCliEnv(baseSpec(), { PATH: '/bin', NO_PROXY: 'localhost,[::1]', no_proxy: '[::1]', HTTPS_PROXY: 'http://[::1]:7890' })
+  assert.deepEqual([env.NO_PROXY, env.no_proxy], ['localhost,::1', '::1'])
+  assert.equal(env.HTTPS_PROXY, 'http://[::1]:7890', 'proxy URLs keep their brackets')
 })
 
 test('the child gets a minimal environment: the spec\'s own names, UTF-8 for Python, nothing else of the process', () => {

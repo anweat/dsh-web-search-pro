@@ -6,14 +6,20 @@
  */
 
 import { BUILTIN_CLI_SPECS } from './builtin-specs.ts'
+import { OPENCLI_SITE_OF } from './opencli-sites.ts'
 import { platformBackendProblems, resolveCliAdapters } from './spec.ts'
 
-/** The default chain of each platform: first usable backend answers, empty or failing ones fall through in order. */
+/**
+ * The default chain of each platform: first usable backend answers, empty or failing ones fall through in order. The platforms
+ * that need a login (xiaohongshu, reddit, twitter, zhihu) try the standalone OpenCLI first: it reads the login of the user's
+ * own day-to-day Chrome through the OpenCLI Browser Bridge, so nothing is logged in by the plugin. The standalone CLIs
+ * (xhs, rdt, twitter, zhihu) stay as the optional fallback for users who logged them in themselves.
+ */
 export const DEFAULT_CHAINS: Readonly<Record<string, readonly string[]>> = {
   xiaohongshu: ['opencli', 'xhs', 'browser-opencli'],
-  reddit: ['rdt', 'opencli', 'browser-opencli'],
-  twitter: ['twitter', 'opencli', 'browser-opencli'],
-  zhihu: ['zhihu', 'browser-search'],
+  reddit: ['opencli', 'rdt', 'browser-opencli'],
+  twitter: ['opencli', 'twitter', 'browser-opencli'],
+  zhihu: ['opencli', 'zhihu', 'browser-search'],
   bilibili: ['bili'],
   youtube: ['yt-dlp'],
   github: ['rest', 'gh'],
@@ -34,11 +40,7 @@ export const DEFAULT_CHAINS: Readonly<Record<string, readonly string[]>> = {
 /** Platforms whose provider is a chain (everything in the default table). */
 export const CHAIN_PLATFORMS: readonly string[] = Object.keys(DEFAULT_CHAINS)
 
-/** Platform -> site of the standalone OpenCLI (`opencli <site> search`). */
-export const OPENCLI_SITE_OF: Readonly<Record<string, string>> = {
-  xiaohongshu: 'xiaohongshu', twitter: 'twitter', reddit: 'reddit', instagram: 'instagram', facebook: 'facebook',
-  zhihu: 'zhihu', weibo: 'weibo', douban: 'douban', tieba: 'tieba', douyin: 'douyin', bilibili: 'bilibili', youtube: 'youtube', wechat: 'weixin',
-}
+export { OPENCLI_SITE_OF }
 
 /** Platforms the dsh-browser OpenCLI bridge has a site adapter for (pinned to engines.ts by a test). */
 export const BROWSER_OPENCLI_PLATFORMS: readonly string[] = ['xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook']
@@ -49,6 +51,11 @@ export const REST_PLATFORMS: readonly string[] = ['github', 'github-issues', 'gi
 
 /** Backend ids that are not CLI specs. */
 export const FIXED_BACKENDS = ['opencli', 'browser-opencli', 'browser-search', 'rest'] as const
+
+/** Whether `id` names a platform backend: a built-in CLI spec, a fixed backend, or a custom CLI (`custom-cli:<id>`). */
+export function isBackendId(id: string): boolean {
+  return (FIXED_BACKENDS as readonly string[]).includes(id) || BUILTIN_CLI_SPECS.some(spec => spec.id === id) || id.startsWith('custom-cli:')
+}
 
 export interface BackendServing { ok: boolean; why?: string }
 
@@ -63,7 +70,9 @@ export function backendServes(id: string, platform: string, specPlatforms: Reado
   if (id === 'rest') return REST_PLATFORMS.includes(platform) ? { ok: true } : { ok: false, why: 'does not serve platform ' + platform }
   const platforms = specPlatforms.get(id)
   if (!platforms) return { ok: false, why: 'is not a known backend (built-in ids: ' + [...specPlatforms.keys()].filter(k => !k.startsWith('custom-cli:')).join(', ') + ', ' + FIXED_BACKENDS.join(', ') + ')' }
-  if (!id.startsWith('custom-cli:') && !platforms.includes(platform)) return { ok: false, why: 'does not serve platform ' + platform + ' (it serves ' + platforms.join(', ') + ')' }
+  // A custom CLI is the platform `custom-cli:<id>` of its own and serves exactly the platforms its spec declares.
+  if (id === platform) return { ok: true }
+  if (!platforms.includes(platform)) return { ok: false, why: 'does not serve platform ' + platform + (platforms.length ? ' (it serves ' + platforms.join(', ') + ')' : ' (it declares no platform' + (id.startsWith('custom-cli:') ? ': add ' + platform + ' to its "platforms"' : '') + ')') }
   return { ok: true }
 }
 
@@ -73,6 +82,17 @@ export function specPlatformsOf(cliAdapters: unknown): { platforms: Map<string, 
   const user = resolveCliAdapters(cliAdapters)
   for (const [id, spec] of user.specs) platforms.set('custom-cli:' + id, spec.platforms)
   return { platforms, diagnostics: user.diagnostics }
+}
+
+/** The declared platforms of the user's CLI adapters that no backend chain exists for (the spec would serve nothing there). */
+export function customCliPlatformIssues(cliAdapters: unknown): string[] {
+  const { specs } = resolveCliAdapters(cliAdapters)
+  const out: string[] = []
+  for (const [id, spec] of specs) {
+    const unknown = spec.platforms.filter(platform => !CHAIN_PLATFORMS.includes(platform))
+    if (unknown.length) out.push('cliAdapters.' + id + '.platforms: no backend chain exists for ' + unknown.join(', ') + ' (platforms with a chain: ' + CHAIN_PLATFORMS.join(', ') + ')')
+  }
+  return out
 }
 
 /**

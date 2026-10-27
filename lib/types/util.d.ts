@@ -111,10 +111,20 @@ export declare function shapeSources(sources: readonly {
     snippet?: string | null;
     publishedAt?: string | null;
     lowConfidence?: boolean;
+    rerankScore?: number | null;
+    authority?: number | null;
+    via?: string | null;
+    tag?: string | null;
+    confidence?: number | null;
 }[], count: number): {
     url: string;
     title?: string;
     snippet?: string;
     publishedAt?: string;
+    rerankScore?: number;
+    authority?: number;
     lowConfidence?: true;
+    via?: string;
+    confidence?: number;
+    tag?: string;
 }[];

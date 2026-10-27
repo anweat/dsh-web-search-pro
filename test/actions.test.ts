@@ -14,13 +14,14 @@ const EXPECTED_ACTIONS = [
   'sources.status', 'sources.deps', 'sources.install',
   'rules.list', 'rules.upsert', 'rules.remove', 'rules.import', 'rules.export',
   'cache.clear', 'cache.stats',
+  'config.inspect', 'config.set_order', 'config.set_confidence', 'config.upsert_cli', 'config.remove_cli', 'config.reset', 'config.export',
 ]
 
 test('the registry holds exactly the planned actions, named group.action', () => {
   assert.deepEqual(ACTIONS.map(action => action.name), EXPECTED_ACTIONS)
   assert.equal(new Set(ACTIONS.map(action => action.name)).size, ACTIONS.length)
   for (const action of ACTIONS) {
-    assert.match(action.name, /^[a-z]+\.[a-z]+$/)
+    assert.match(action.name, /^[a-z]+\.[a-z_]+$/)
     assert.equal(action.name.split('.')[0], action.group)
     assert.ok(isActionGroup(action.group))
     assert.ok(action.summary.length > 20 && action.summary.length <= 400 && !action.summary.includes('\n'), action.name + ' summary')
@@ -97,7 +98,10 @@ test('approval classes and concurrency map the old tools\' flags per action', ()
   const approval = Object.fromEntries(ACTIONS.map(action => [action.name, action.approval]))
   for (const name of ['sources.install']) assert.equal(approval[name], 'install')
   for (const name of ['cache.clear', 'history.delete', 'rules.upsert', 'rules.remove', 'rules.import']) assert.equal(approval[name], 'local-write', name)
-  for (const action of ACTIONS) if (!['sources.install', 'cache.clear', 'history.delete', 'rules.upsert', 'rules.remove', 'rules.import'].includes(action.name)) assert.equal(action.approval, 'none', action.name)
+  // The agent overlay: changes run unasked (denied in read-only mode), a new custom CLI always asks.
+  for (const name of ['config.set_order', 'config.set_confidence', 'config.remove_cli', 'config.reset']) assert.equal(approval[name], 'config', name)
+  assert.equal(approval['config.upsert_cli'], 'run-program')
+  for (const action of ACTIONS) if (!['sources.install', 'cache.clear', 'history.delete', 'rules.upsert', 'rules.remove', 'rules.import', 'config.set_order', 'config.set_confidence', 'config.remove_cli', 'config.reset', 'config.upsert_cli'].includes(action.name)) assert.equal(action.approval, 'none', action.name)
   // Whatever changes state is approval-gated and never runs beside another call; the rest may overlap (web_rule list/export, every read-only tool were concurrency-safe).
   for (const action of ACTIONS) {
     assert.equal(action.mutating, action.approval !== 'none', action.name)

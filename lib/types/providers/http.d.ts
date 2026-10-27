@@ -27,7 +27,8 @@ export interface ProviderResponse {
     text: string;
 }
 export interface ProviderRequest {
-    deps: EngineDeps;
+    /** Only the transport settings are read (SSRF-safe HTTP path and the test seams). */
+    deps: Pick<EngineDeps, 'allowProxyFakeIp' | 'fetchImpl' | 'lookup'>;
     signal?: AbortSignal | undefined;
     headers?: Record<string, string>;
     method?: 'GET' | 'POST';

@@ -44,7 +44,8 @@ export interface ProviderCall {
 export type ProviderOutcome = {
     state: 'ok';
     sources: readonly ProviderSource[]; /** The backend of a platform chain that answered. */
-    backend?: string;
+    backend?: string; /** The engine's own remarks (a query it had to cut, results it dropped); they reach the pack notes. */
+    notes?: readonly string[];
 }
 /** `detail` carries the provider's own explanation of an empty answer (e.g. a login hint), when it gave one. */
  | {

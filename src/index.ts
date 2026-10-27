@@ -35,7 +35,10 @@ import { EvidenceService } from './pipeline/service.ts'
 import { buildPromptText } from './prompt.ts'
 import { registerSkillWhenAvailable } from './skill.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
-import { automationModeOf, resolveWebCall, webPolicyDecision } from './actions/approval.ts'
+import { automationModeOf, resolveWebCall, webCallDecision } from './actions/approval.ts'
+import { registerRpc } from './rpc.ts'
+import { OverlayStore, overlayFileFor } from './overlay.ts'
+import { pendingRestart, restartValues } from './restart.ts'
 
 export const name = 'web-search-pro'
 // `browser` (dsh-browser) is deliberately NOT injected: Cordis 4.0.4 treats every
@@ -79,12 +82,30 @@ export function apply(ctx: Context, config: Config): void {
   //    therefore reads through the SAME stable `dynamic` closure that
   //    dereferences the live config per call — hot-reloaded sections reach
   //    every consumer.
-  const dynamic = (): ResolvedConfig => resolveConfig(ctx.fiber.config as Config)
+  const baseline = (): ResolvedConfig => resolveConfig(ctx.fiber.config as Config)
+  //    The agent overlay: run-time settings an agent may change (config.* actions), merged over the profile configuration on
+  //    every read, so each consumer of `dynamic` sees them at once. It lives beside the database; whether an id is a registered
+  //    source is the router's registry (built below, so it is read through `routerRef`; until then every id passes).
+  let routerRef: SearchRouter | undefined
+  const overlay = new OverlayStore({
+    file: overlayFileFor(dbPath),
+    baseline,
+    known: id => routerRef === undefined || routerRef.registry.routeId(id) !== undefined || Object.hasOwn(baseline().customPlatforms ?? {}, id),
+    knownSignature: () => String(routerRef?.registry.revision ?? -1),
+  })
+  const dynamic = (): ResolvedConfig => overlay.effective()
+  //    Fields only read at start-up (restart.ts): what they were when the plugin mounted, to tell when the configuration moved on.
+  const mountedValues = restartValues(resolved)
+  const pending = () => { try { return pendingRestart(mountedValues, restartValues(baseline())) } catch { return [] } }
 
   // 4. Services.
   const router = new SearchRouter(ctx, resolved, store, dynamic, getBrowser)
+  routerRef = router
   ctx.effect(() => () => router.dispose())
-  const fetchSvc = new FetchService(store, dynamic, getBrowser)
+  const fetchSvc = new FetchService(store, dynamic, getBrowser, () => router.deepseekAccess())
+
+  //    The settings card's private RPC channel (live readiness, "Try it" of a custom CLI); only where the Host has the transport.
+  registerRpc(ctx, { router, dynamic, overlay, pendingRestart: pending })
 
   // 5. Tools: `web_index` + `web_call` (or one tool per action with toolSurface=flat). The bundled
   //    `dsh-web-search-pro` skill is registered only when the Host has a skill registry. It must not be
@@ -94,7 +115,7 @@ export function apply(ctx: Context, config: Config): void {
   //    One evidence service serves search.run and the ctx.web provider (it keeps no per-call state).
   const evidence = new EvidenceService({ router, fetch: fetchSvc, store, dynamic })
   const providerState = (): ProviderState => readProviderState({ web: ctx.get('web'), registered: providerRegistered, id: dynamic().providerId, evidence: dynamic().provider.evidence })
-  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser, evidence, providerState, skillAvailable: skill.isAvailable })
+  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser, evidence, providerState, skillAvailable: skill.isAvailable, overlay, pendingRestart: pending })
 
   //    Approval is decided per ACTION: web_call (and each flat tool) is resolved to its action first, so the user
   //    is asked about `cache.clear` or `sources.install bili`, not about a generic dispatcher. The old tools were
@@ -107,7 +128,7 @@ export function apply(ctx: Context, config: Config): void {
     if (call?.kind !== 'action') return downstream
     const action = findAction(call.action)
     if (!action || action.approval === 'none') return downstream
-    return webPolicyDecision(call.action, call.args, await automationModeOf(usableBrowser(getBrowser())))
+    return webCallDecision(call.action, call.args, await automationModeOf(usableBrowser(getBrowser())))
   })
 
   // 5. Optional ctx.web provider registration (opt-in: `registerProvider`). The Host picks a provider only when the `web`

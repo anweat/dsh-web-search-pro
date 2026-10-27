@@ -78,7 +78,7 @@ test('web_index group, action, and query levels', async () => {
     assert.equal(group.level, 'group')
     for (const name of ['history.list', 'history.replay', 'history.expand', 'history.export', 'history.delete']) assert.ok(group.text.includes(name + ' - '), name)
     assert.match(group.text, /history\.delete - .*\| id: string \| asks/)
-    assert.match((await index(h, { group: 'nope' })).text, /Unknown group "nope"\. Groups: search, read, history, sources, rules, cache\./)
+    assert.match((await index(h, { group: 'nope' })).text, /Unknown group "nope"\. Groups: search, read, history, sources, rules, cache, config\./)
 
     const action = await index(h, { action: 'search.run' })
     assert.equal(action.level, 'action')

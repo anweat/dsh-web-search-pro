@@ -5,9 +5,9 @@ description: "Web research with web_call search.run (an evidence pack: only the 
 
 # dsh-web-search-pro
 
-Two tools. `web_index` shows what exists; `web_call` runs one action and returns `{ok, action, result | error{code,message,hint,schema?}}` (you read the result as text). Actions are named `group.action`. Do not guess other tool names.
+Two tools. `web_index` shows what exists; `web_call` runs one action and returns `{ok, action, result | error{code,message,hint,schema?}}`. Actions are named `group.action`; do not guess other names.
 
-For web research prefer `search.run` over `web_search` + `web_fetch`: it returns filtered evidence, not whole result lists and pages. If the Host's own `web_search` already answers with an `Evidence pack ...` (it is routed through this plugin), treat it exactly like a `search.run` pack: read gaps, then `history.expand` or `read.fetch`.
+For web research prefer `search.run` over `web_search` + `web_fetch`: it returns filtered evidence, not whole result lists and pages. A Host `web_search` that answers with an `Evidence pack ...` (routed through this plugin) is a `search.run` pack: read gaps, then `history.expand` or `read.fetch`.
 
 ## 1. Search: evidence mode first
 
@@ -21,13 +21,13 @@ Pass `task` (one sentence: your goal, not the chat) or `profile` for an evidence
 {"action":"search.run","args":{"query":"量子计算 最新进展 2026","task":"了解 2026 年量子计算的最新进展","profile":"news_fact","needs":"最新的纠错进展;主要厂商的路线图","constraints":"[{\"kind\":\"time_window\",\"value\":\"2026\",\"strength\":\"soft\"}]"}}
 ```
 
-`needs` are `;`-separated sub-questions (default: the task). The query may be English while task and needs are Chinese.
+`needs` are `;`-separated sub-questions (default: the task). The query may be English with a Chinese task.
 
 ## 2. Read the pack before answering
 
 - Cite the evidence URLs. Every excerpt has an `evidenceId`.
 - **Coverage is heuristic.** A need listed in `gaps`, or an empty pack, does not mean the answer does not exist. Before saying "not found": expand or fetch, then try another source or phrasing (`gaps[].reason`: `no_candidates`, `no_page_content`, `weak_support`, `budget`).
-- `low relevance` entries only avoid an empty pack; do not lean on them.
+- `low relevance` entries only avoid an empty pack; do not rely on them.
 
 ```json call
 {"action":"history.expand","args":{"evidenceId":"e_1a2b3c"}}
@@ -53,7 +53,7 @@ A long page is capped; the reply gives `nextOffset`. Continue with `offset` (ser
 {"action":"search.recommend","args":{"task":"find the official documentation for Rust async runtimes","profile":"docs_code"}}
 ```
 
-returns at most 3 sources, ready ones first, with how to call each (`use`) and what is missing. Use one or two; add another only when the evidence is insufficient. Sources that need setup: tell the user what is missing (`references/sources.md`) instead of calling them.
+returns at most 3 sources, ready ones first, with how to call each (`use`) and what is missing. Use one or two; add another only when the evidence is insufficient. Needs setup: tell the user what is missing (`references/sources.md`), do not call it.
 
 Name sources only when you have a reason:
 
@@ -63,7 +63,7 @@ Name sources only when you have a reason:
 
 - `engines` takes ids from `search.recommend` / `sources.status` (aliases like `ddg` work; an unknown id lists the valid ones). Explicit engines are tried in order.
 - `platform` searches one site (`github`, `v2ex`, `bilibili`, `rss` with `url`, `zhihu`, `xiaohongshu`, `twitter`, ...). With `task`/`profile` it is the evidence source (gate, page reads and scoring as usual). If it is unavailable the call fails with what is missing: tell the user, or pass `allowFallback:true` to search the web engines instead. Platforms run a backend chain; logins are the user's job (`references/sources.md`).
-- **来源策略**: nothing configured = anonymous / free sources (English: Exa's keyless route, then ddg / bing; Chinese: ddg / bing). Sources the user configured a key for are promoted for their language; the user's settings `sources: {priority, disabled, budget}` are rankings and caps (a used-up source is skipped, never an error). `engines` always wins. Tiers: `references/sources.md`.
+- **来源策略**: nothing configured = anonymous / free sources (English: Exa's keyless route, then ddg / bing; Chinese: ddg / bing). Sources the user configured a key for are promoted for their language, `deepseek` (常用, billed) first; settings `sources: {priority, disabled, budget}` rank and cap them (a used-up source is skipped, never an error). `engines` always wins. Tiers: `references/sources.md`.
 
 ## 4. Constraints
 
@@ -75,14 +75,15 @@ Name sources only when you have a reason:
 
 ## 5. Budgets
 
-- `budget` (evidence mode): excerpt characters, default 6000, max 30000. Gaps caused by budget say so; raise it or expand.
-- `count`: max results (1-20). A page read is capped at 20000 characters by default; `maxChars` raises it per call.
-- Model scoring (when enabled) has a per-search and a daily token cap; `sources.status` shows usage (`references/judges.md`).
-- `cache.clear`, `history.delete`, `rules.upsert|remove|import` and `sources.install` change local state or the machine: run them only when the user asks.
+- `budget` (evidence mode): excerpt characters, default 6000, max 30000. Gaps caused by budget say so: raise it or expand.
+- `count`: max results (1-20). A page read is capped at 20000 characters; `maxChars` raises it.
+- Model scoring (when enabled) has token caps; `sources.status` shows usage (`references/judges.md`).
+- `cache.clear`, `history.delete`, `rules.upsert|remove|import`, `sources.install` and `config.*` change local state or the machine: run them only when the user asks.
+- The user asks you to reorder sources, switch one off or add a CLI as a source: `config.inspect` first, then `config.set_order` / `set_confidence` / `upsert_cli` (asks the user) with a real `reason`: `references/config.md`.
 
 ## 6. Browser hand-off
 
-For pages that need interaction, login, or a rendered DOM, use the dsh-browser plugin: see its skill `dsh-browser` or call `browser_index`. `read.snapshot` and browser-based platforms work only when it is installed and ready (`sources.status` shows `browser`).
+Pages that need interaction, login or a rendered DOM: the dsh-browser plugin (its skill `dsh-browser`, or `browser_index`). `read.snapshot` and browser platforms work only when it is installed and ready (`sources.status` shows `browser`).
 
 ## 7. When something fails
 
@@ -95,4 +96,4 @@ For pages that need interaction, login, or a rendered DOM, use the dsh-browser p
 | `DEADLINE` | retry narrower, fewer engines |
 | `ACTION_FAILED` | read the message; empty or failed engines are listed in the result (`enginesTried`, `fallbackNote`) |
 
-Quota, fake-IP errors, cooldowns: `references/troubleshooting.md`. Judge providers and rubrics (settings, not model-editable): `references/judges.md`. Keyed sources and the catalog: `references/sources.md`. Extraction rules for a badly read site: `rules.upsert`, then `read.fetch` with `fresh:true`.
+Quota, fake-IP, cooldowns: `references/troubleshooting.md`. Judge providers, rubrics (settings): `references/judges.md`. Keyed sources, catalog: `references/sources.md`. Bad extraction: `rules.upsert`, then `read.fetch` `fresh:true`.

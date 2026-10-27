@@ -1,0 +1,236 @@
+{
+  "ok": true,
+  "schema_version": "1",
+  "data": {
+    "has_more": true,
+    "items": [
+      {
+        "xsec_token": "EXAMPLE_TOKEN_00a1",
+        "id": "0000000000000000000000a1",
+        "model_type": "note",
+        "note_card": {
+          "type": "normal",
+          "display_title": "示例笔记：双人露营装备清单",
+          "user": {
+            "xsec_token": "EXAMPLE_USER_TOKEN",
+            "nick_name": "示例作者甲",
+            "avatar": "https://sns-avatar.example.com/avatar/example",
+            "user_id": "00000000000000000000user",
+            "nickname": "示例作者甲"
+          },
+          "interact_info": {
+            "liked": false,
+            "liked_count": "128",
+            "collected": false,
+            "collected_count": "3",
+            "comment_count": "1",
+            "shared_count": "0"
+          },
+          "cover": {
+            "url_default": "http://sns-webpic.example.com/example-default",
+            "url_pre": "http://sns-webpic.example.com/example-pre",
+            "height": 2304,
+            "width": 1728
+          },
+          "image_list": [
+            {
+              "info_list": [
+                {
+                  "image_scene": "WB_PRV",
+                  "url": "http://sns-webpic.example.com/example-pre"
+                },
+                {
+                  "image_scene": "WB_DFT",
+                  "url": "http://sns-webpic.example.com/example-default"
+                }
+              ],
+              "height": 2304,
+              "width": 1728
+            }
+          ],
+          "corner_tag_info": [
+            {
+              "type": "publish_time",
+              "text": "08-26"
+            }
+          ]
+        }
+      },
+      {
+        "xsec_token": "EXAMPLE_TOKEN_00a2",
+        "id": "0000000000000000000000a2",
+        "model_type": "note",
+        "note_card": {
+          "type": "normal",
+          "display_title": "示例笔记：新手露营避坑",
+          "user": {
+            "xsec_token": "EXAMPLE_USER_TOKEN",
+            "nick_name": "示例作者乙",
+            "avatar": "https://sns-avatar.example.com/avatar/example",
+            "user_id": "00000000000000000000user",
+            "nickname": "示例作者乙"
+          },
+          "interact_info": {
+            "liked": false,
+            "liked_count": "2",
+            "collected": false,
+            "collected_count": "3",
+            "comment_count": "1",
+            "shared_count": "0"
+          },
+          "cover": {
+            "url_default": "http://sns-webpic.example.com/example-default",
+            "url_pre": "http://sns-webpic.example.com/example-pre",
+            "height": 2304,
+            "width": 1728
+          },
+          "image_list": [
+            {
+              "info_list": [
+                {
+                  "image_scene": "WB_PRV",
+                  "url": "http://sns-webpic.example.com/example-pre"
+                },
+                {
+                  "image_scene": "WB_DFT",
+                  "url": "http://sns-webpic.example.com/example-default"
+                }
+              ],
+              "height": 2304,
+              "width": 1728
+            }
+          ],
+          "corner_tag_info": [
+            {
+              "type": "publish_time",
+              "text": "2025-12-01"
+            }
+          ]
+        }
+      },
+      {
+        "xsec_token": "EXAMPLE_TOKEN_HQ01",
+        "id": "0000000000000000000000b1",
+        "model_type": "hot_query",
+        "hot_query": {
+          "title": "大家都在搜",
+          "source": 1,
+          "word_request_id": "00000000-0000-0000-0000-000000000000",
+          "queries": [
+            {
+              "id": "1",
+              "name": "示例词一",
+              "search_word": "示例词一",
+              "cover": ""
+            },
+            {
+              "id": "2",
+              "name": "示例词二",
+              "search_word": "示例词二",
+              "cover": ""
+            }
+          ]
+        }
+      },
+      {
+        "xsec_token": "EXAMPLE_TOKEN_00a3",
+        "id": "0000000000000000000000a3",
+        "model_type": "note",
+        "note_card": {
+          "type": "normal",
+          "display_title": "示例笔记：只有标题的一条",
+          "user": {
+            "xsec_token": "EXAMPLE_USER_TOKEN",
+            "nick_name": "示例作者丙",
+            "avatar": "https://sns-avatar.example.com/avatar/example",
+            "user_id": "00000000000000000000user",
+            "nickname": "示例作者丙"
+          },
+          "interact_info": {
+            "liked": false,
+            "liked_count": "0",
+            "collected": false,
+            "collected_count": "3",
+            "comment_count": "1",
+            "shared_count": "0"
+          },
+          "cover": {
+            "url_default": "http://sns-webpic.example.com/example-default",
+            "url_pre": "http://sns-webpic.example.com/example-pre",
+            "height": 2304,
+            "width": 1728
+          },
+          "image_list": [
+            {
+              "info_list": [
+                {
+                  "image_scene": "WB_PRV",
+                  "url": "http://sns-webpic.example.com/example-pre"
+                },
+                {
+                  "image_scene": "WB_DFT",
+                  "url": "http://sns-webpic.example.com/example-default"
+                }
+              ],
+              "height": 2304,
+              "width": 1728
+            }
+          ],
+          "corner_tag_info": []
+        }
+      },
+      {
+        "xsec_token": "EXAMPLE_TOKEN_00a4",
+        "id": "0000000000000000000000a4",
+        "model_type": "note",
+        "note_card": {
+          "type": "normal",
+          "display_title": "示例笔记：三小时前发布",
+          "user": {
+            "xsec_token": "EXAMPLE_USER_TOKEN",
+            "nick_name": "示例作者丁",
+            "avatar": "https://sns-avatar.example.com/avatar/example",
+            "user_id": "00000000000000000000user",
+            "nickname": "示例作者丁"
+          },
+          "interact_info": {
+            "liked": false,
+            "liked_count": "15",
+            "collected": false,
+            "collected_count": "3",
+            "comment_count": "1",
+            "shared_count": "0"
+          },
+          "cover": {
+            "url_default": "http://sns-webpic.example.com/example-default",
+            "url_pre": "http://sns-webpic.example.com/example-pre",
+            "height": 2304,
+            "width": 1728
+          },
+          "image_list": [
+            {
+              "info_list": [
+                {
+                  "image_scene": "WB_PRV",
+                  "url": "http://sns-webpic.example.com/example-pre"
+                },
+                {
+                  "image_scene": "WB_DFT",
+                  "url": "http://sns-webpic.example.com/example-default"
+                }
+              ],
+              "height": 2304,
+              "width": 1728
+            }
+          ],
+          "corner_tag_info": [
+            {
+              "type": "publish_time",
+              "text": "3小时前"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

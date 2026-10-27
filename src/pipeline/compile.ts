@@ -15,6 +15,9 @@
  *  - keyed sources (dev-plan M7c): Tavily / Linkup / Baidu Qianfan / Zhipu take domain lists (`options.sites`, capped at what
  *    each documents) and a date lower bound (`options.since`); Brave / Serper (Google) take `site:` / `-site:` / `-term`
  *    operators in the query; whatever a source does not document stays for local verification;
+ *  - deepseek (DeepSeek Search API): `site:a OR site:b` / `-site:` / `-term` for HARD site / exclude_site / exclude_term and
+ *    `after:YYYY-MM-DD` for a HARD time_window whose lower bound is understood, all in the query text (the API documents them as
+ *    query operators); `originalQuestion` carries the task goal (or the first critical need) for the API's `ori_question`;
  *  - github*: the natural-language query returns nothing on repository search
  *    (E1: 0 of 20), so it is replaced by a short keyword query;
  *  - everything else: the plain query.
@@ -54,7 +57,7 @@ export interface CompiledQuery {
   /** Text to send to the provider. */
   query: string
   /** Provider-native options, shaped like `EngineSearchOptions` (Exa and Bocha have some; the anonymous APIs take `since` / `lang`). */
-  options?: { exa?: CompiledExaOptions; bocha?: CompiledBochaOptions; since?: string; lang?: 'zh' | 'en'; sites?: CompiledSites }
+  options?: { exa?: CompiledExaOptions; bocha?: CompiledBochaOptions; since?: string; lang?: 'zh' | 'en'; sites?: CompiledSites; originalQuestion?: string }
   /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
   fallbacks?: string[]
   /** Ids of constraints the provider enforces natively. */
@@ -225,6 +228,60 @@ export function compileKeyed(task: TaskLike, providerId: string, now: Date, caps
   return { ...finish(task, providerId, task.query, native), ...Object.keys(options).length ? { options } : {} }
 }
 
+// ── DeepSeek Search API ─────────────────────────────────────────────────────
+
+/** The question the caller asked, for `ori_question`: the task goal, else the first critical (then first) need, when it adds something to the query. */
+function originalQuestionOf(task: TaskLike): string | undefined {
+  const query = task.query.replace(/\s+/g, ' ').trim().toLowerCase()
+  const candidates = [task.goal, task.needs.find(n => n.critical)?.text, task.needs[0]?.text]
+  for (const c of candidates) {
+    const text = (c ?? '').replace(/\s+/g, ' ').trim()
+    if (text && text.toLowerCase() !== query) return text
+  }
+  return undefined
+}
+
+/**
+ * DeepSeek Search takes `site:` (several joined by `OR`), `-site:`, `-term`, `"phrase"`, `lang:`, `after:` and `before:` inside
+ * the query. Hard constraints become those operators (the engine keeps them whole when it has to cut a long query). An operator the
+ * query already spells is not repeated; a hard site when the query already restricts to other sites stays local (two `site:`
+ * restrictions would AND into nothing).
+ */
+export function compileDeepSeek(task: TaskLike, providerId: string, now: Date): CompiledQuery {
+  const parts: string[] = []
+  const native: string[] = []
+  const lower = task.query.toLowerCase()
+  const has = (token: string): boolean => lower.includes(token.toLowerCase())
+  const sites = hard(task, 'site').map(c => ({ c, d: domainOf(c.value) })).filter(x => x.d)
+  const fresh = [...new Set(sites.map(x => x.d).filter(d => !has('site:' + d)))]
+  if (fresh.length && /(?:^|\s)site:/i.test(task.query)) {
+    // The query restricts to other sites already: adding ours would AND them. Leave those constraints to the local check.
+    native.push(...sites.filter(x => has('site:' + x.d)).map(x => x.c.id))
+  } else {
+    native.push(...sites.map(x => x.c.id))
+    if (fresh.length) parts.push(fresh.map(d => 'site:' + d).join(' OR '))
+  }
+  for (const c of hard(task, 'exclude_site')) {
+    const d = domainOf(c.value)
+    if (!d) continue
+    native.push(c.id)
+    if (!has('-site:' + d)) parts.push('-site:' + d)
+  }
+  for (const c of hard(task, 'exclude_term')) {
+    const term = operatorTerm(c.value)
+    if (!term) continue
+    native.push(c.id)
+    if (!has('-' + term)) parts.push('-' + term)
+  }
+  const windows = hardWindows(task, now)
+  if (windows.length && !/(?:^|\s)after:/i.test(task.query)) {
+    parts.push('after:' + isoDay(windows[0]!.start)) // the strictest lower bound holds
+    native.push(...windows.map(x => x.c.id))
+  }
+  const originalQuestion = originalQuestionOf(task)
+  return { ...finish(task, providerId, [task.query, ...parts].join(' ').trim(), native), ...originalQuestion ? { options: { originalQuestion } } : {} }
+}
+
 // ── GitHub keyword queries ──────────────────────────────────────────────────
 
 /** Chinese words that carry no topical signal in a repository search. */
@@ -309,6 +366,7 @@ export function compileQuery(task: TaskLike, providerId: string, now: Date = new
   if (providerId === 'ddg' || providerId === 'bing') return compileOperators(task, providerId)
   if (providerId === 'exa') return compileExa(task, providerId, now)
   if (providerId === 'bocha') return compileBocha(task, providerId, now)
+  if (providerId === 'deepseek') return compileDeepSeek(task, providerId, now)
   if (providerId === 'github' || providerId.startsWith('github-')) return compileGithub(task, providerId)
   return finish(task, providerId, task.query, [])
 }

@@ -11,9 +11,10 @@ import { HISTORY_ACTIONS } from './history.ts'
 import { SOURCES_ACTIONS } from './sources.ts'
 import { RULES_ACTIONS } from './rules.ts'
 import { CACHE_ACTIONS } from './cache.ts'
+import { CONFIG_ACTIONS } from './config.ts'
 
 export const ACTIONS: readonly ActionDef[] = [
-  ...SEARCH_ACTIONS, ...READ_ACTIONS, ...HISTORY_ACTIONS, ...SOURCES_ACTIONS, ...RULES_ACTIONS, ...CACHE_ACTIONS,
+  ...SEARCH_ACTIONS, ...READ_ACTIONS, ...HISTORY_ACTIONS, ...SOURCES_ACTIONS, ...RULES_ACTIONS, ...CACHE_ACTIONS, ...CONFIG_ACTIONS,
 ]
 
 const BY_NAME = new Map(ACTIONS.map(action => [action.name, action]))
@@ -25,6 +26,7 @@ export const GROUP_SUMMARIES: Record<ActionGroup, string> = {
   sources: 'source and dependency status, install CLI dependencies',
   rules: 'per-site extraction rules: list, upsert, remove, import, export',
   cache: 'clear the cache, store statistics',
+  config: 'read and change the search order, confidence and custom CLIs at run time (agent overlay)',
 }
 
 export function isActionGroup(value: unknown): value is ActionGroup {

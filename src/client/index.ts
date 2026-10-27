@@ -11,6 +11,7 @@ import {
 import { SettingsCard } from './SettingsCard.tsx'
 import { en, zh } from './locales.ts'
 import { ensureStyles } from './styles.ts'
+import type { TrialRequest } from '../rpc-types.ts'
 
 export const name = 'web-search-pro-client'
 export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'configForms']
@@ -28,6 +29,13 @@ export type SettingsCardProps = PropsLocale<typeof NS> & {
   save: () => void
   discard: () => void
   refreshCredentials: () => void
+  refreshStatus: () => void
+  /** The agent overlay: read it again, drop entries (keys, or `'all'`), write one into the configuration and drop it. */
+  refreshOverlay: () => void
+  revokeOverlay: (keys: readonly string[] | 'all') => void
+  adoptOverlay: (key: string) => void
+  runTrial: (request: TrialRequest) => void
+  clearTrial: () => void
 }
 export function apply(ctx: Context): void {
   ensureStyles()

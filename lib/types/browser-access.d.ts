@@ -42,3 +42,20 @@ export declare function browserState(browser: BrowserService | undefined): {
     state: 'ready' | 'incomplete' | 'legacy' | 'missing';
     reason?: string;
 };
+/** What a launch of the browser would do on this machine, as dsh-browser reports it (0.2.2+ `status().browser`). */
+export interface BrowserLaunchReadiness {
+    ready: boolean;
+    /** Which browser a launch will use (`playwright-chromium`, `system-browser`, ...). */
+    source?: string;
+    /** Where it is. */
+    path?: string;
+    /** The one command (or step) that fixes `ready: false`, in dsh-browser's own words. */
+    advice?: string;
+}
+/**
+ * Whether the browser service can actually launch a browser. The service being present only means the plugin is loaded: a new user
+ * has no Playwright Chromium, and whether a system Chrome stands in is dsh-browser's decision. It is asked, never guessed, and
+ * only a dsh-browser that reports it (`status().browser`) is believed; any other answer (older plugin, a failing status call)
+ * is `undefined`, which callers treat as unknown and say nothing about.
+ */
+export declare function browserLaunchReadiness(browser: BrowserService | undefined): Promise<BrowserLaunchReadiness | undefined>;

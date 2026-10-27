@@ -5,10 +5,11 @@
  * @module web-search-pro/actions/errors
  */
 
-import { ActionArgError, ActionNotFoundError, type ActionErrorBody, type ErrorCode } from './types.ts'
+import { ActionArgError, ActionConflictError, ActionNotFoundError, ActionUnavailableError, type ActionErrorBody, type ErrorCode } from './types.ts'
 import { BrowserUnavailableError } from '../browser-access.ts'
 import { NoBackendError } from '../backend-registry.ts'
 import { SourceUnavailableError } from '../providers/unavailable.ts'
+import { DeepSeekFetchError } from '../providers/deepseek.ts'
 import { loadCatalog } from '../catalog/load.ts'
 
 export const DEFAULT_ERROR_HINTS: Readonly<Partial<Record<ErrorCode, string>>> = {
@@ -54,6 +55,8 @@ function setupTextFor(source: string): string | undefined {
 export function mapError(error: unknown, opts: { signal?: AbortSignal } = {}): ActionErrorBody {
   if (error instanceof ActionArgError) return { code: 'INVALID_ARGS', message: error.message, ...error.hint ? { hint: error.hint } : {} }
   if (error instanceof ActionNotFoundError) return { code: 'NOT_FOUND', message: error.message, hint: error.hint ?? hintFor('NOT_FOUND')! }
+  if (error instanceof ActionUnavailableError) return { code: 'CAPABILITY_UNAVAILABLE', message: error.message, hint: error.hint ?? hintFor('CAPABILITY_UNAVAILABLE')! }
+  if (error instanceof ActionConflictError) return { code: 'ACTION_FAILED', message: error.message, hint: error.hint ?? 'The stored state changed since you read it; read it again and decide again.' }
   const message = messageOf(error)
   const name = error instanceof Error ? error.name : ''
   const result = (code: ErrorCode, hint = hintFor(code)): ActionErrorBody => ({ code, message, ...hint ? { hint } : {} })
@@ -62,6 +65,7 @@ export function mapError(error: unknown, opts: { signal?: AbortSignal } = {}): A
     const setup = setupTextFor(error.source)
     return result('CAPABILITY_UNAVAILABLE', 'Tell the user what is missing' + (setup ? ' (setup: ' + setup + ')' : '') + '; do not read this as "no results". Pass allowFallback=true in evidence mode to search the web engines instead.')
   }
+  if (error instanceof DeepSeekFetchError) return result('ACTION_FAILED', 'DeepSeek Fetch declined or failed: that is DeepSeek\'s answer, not the page\'s own status. Try read.fetch with mode http or playwright, or another URL.')
   if (abortedByDeadline(opts.signal)) return result('DEADLINE')
   if (opts.signal?.aborted || name === 'AbortError' || /\baborted\b/i.test(message)) return result('CANCELLED')
   if (NOT_FOUND.test(message)) return result('NOT_FOUND')

@@ -1,0 +1,8 @@
+ok: false
+error:
+  code: UNKNOWN
+  message: 'SyntaxError: Unexpected token ''<'', "<body clas"... is not valid JSON'
+  exitCode: 1
+# AutoFix: re-run with --trace=retain-on-failure for trace artifact
+# opencli reddit search --trace retain-on-failure
+

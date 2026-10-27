@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web';
 import type { Store } from './store.ts';
 import type { ResolvedConfig } from './config.ts';
-import { type EngineSearchOptions } from './engines.ts';
+import { type EngineSearchOptions, type UsageRecorder } from './engines.ts';
 import type { ChainEntryReport, ChainReport } from './cli/chain.ts';
 import { type CostTier, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts';
 import { type RequestBudgetState } from './pipeline/ledger.ts';
@@ -47,14 +47,19 @@ export interface PlatformRequest {
     authProfile?: string;
     rulePack?: string;
 }
+/** A result row as the router returns it; `via`, `confidence` and `tag` appear for custom CLIs and for sources with a confidence below 1. */
+export type RouterSource = {
+    url: string;
+    title?: string;
+    snippet?: string;
+    publishedAt?: string;
+    via?: string;
+    confidence?: number;
+    tag?: string;
+};
 export interface RouterSearchResult {
     content?: string;
-    sources: {
-        url: string;
-        title?: string;
-        snippet?: string;
-        publishedAt?: string;
-    }[];
+    sources: RouterSource[];
     engine: string;
     enginesTried: string[];
     fromCache: boolean;
@@ -95,8 +100,14 @@ export interface ProviderReport {
     budget?: RequestBudgetState;
     /** Not verified against the live service (descriptor.verification). */
     unverified?: boolean;
+    /** "常用": the plugin's recommended source (descriptor.common). With a resolved key it leads the default order. */
+    common?: boolean;
+    /** Confidence (0..1) of what this source returns: 1 for a built-in source unless `sources.confidence` says otherwise; a custom CLI has its spec's. */
+    confidence: number;
     /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
-    chain?: ChainEntryReport[];
+    chain?: (ChainEntryReport & {
+        confidence: number;
+    })[];
     readiness: Readiness & {
         state?: ChainReport['state'];
         lastLocalCheck: string;
@@ -124,6 +135,8 @@ export declare class SearchRouter {
     /** User-defined CLI adapters (settings `cliAdapters`) this router registered as `custom-cli:<id>` platforms, with the diagnostics of the entries it ignored. */
     private readonly customCli;
     private cliAdapterDiagnostics;
+    /** Confidence of each registered custom CLI by route id (its spec's, default 0.5), rebuilt with the registrations. */
+    private customConfidence;
     /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
     private readonly readiness;
     /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -152,10 +165,27 @@ export declare class SearchRouter {
     private bindingsOf;
     private probeEnv;
     /**
-     * The configured `engines` list with the user's `sources.*` preferences applied: disabled sources removed, `priority` ones that are
-     * already in the list moved to the front in their listed order. An explicit `engines` of a call never goes through this.
+     * The default engine order for a search that names no `engines`: the configured `engines` list with the user's `sources.*`
+     * preferences applied, then the default rule for "常用" (common) sources.
+     *  1. an explicit `engines` of a call never comes through here;
+     *  2. `sources.disabled` ids are removed, `sources.priority` ids that are in the list move to the front in their listed order;
+     *  3. a common source (DeepSeek Search) whose key resolves leads what is left, while `engines` is still the default list (a
+     *     list the user wrote is theirs: it keeps its order, and a common source in it keeps the position given). `sources.disabled`
+     *     and `evidence.sourcePolicy: anonymous-only` switch it off.
      */
     private preferred;
+    /** Route ids of the common ("常用") sources that are ready to run now (key resolved), best `priority` first. */
+    private commonReady;
+    /**
+     * Key and endpoint of the DeepSeek Fetch API for the fetch pipeline, or undefined when no key resolves (settings literal ->
+     * DSH credentials ref -> process environment, the same order as the search side). Resolved per call; the key is never cached.
+     */
+    deepseekAccess(): Promise<{
+        apiKey: string;
+        baseUrl?: string;
+        allowProxyFakeIp: boolean;
+        usage: UsageRecorder;
+    } | undefined>;
     /** Alias / full id -> route id; ids the registry does not know are kept as written (the backend then reports them unknown). */
     private canonicalIds;
     backendDiagnostics(cliAvailability?: ReadonlyMap<string, boolean>): Promise<BackendDiagnostic[]>;
@@ -176,6 +206,13 @@ export declare class SearchRouter {
     runProvider(call: ProviderCall, opts?: {
         skipSeam?: boolean;
     }): Promise<ProviderOutcome>;
+    /**
+     * The credential variables of the CLI adapters under the names the tools read, each resolved like the plugin's other secrets:
+     * settings literal -> DSH credentials ref (`twitterAuthTokenEnv`) -> process environment. Values only ever reach a command's environment.
+     */
+    cliEnv(): Promise<Record<string, string>>;
+    /** Sync twin of {@link cliEnv} for `available()` checks: settings literal and process environment only. */
+    private cliEnvSync;
     /** Resolve a key through credentials first, then process env. */
     private resolveKey;
     private deps;
@@ -194,6 +231,16 @@ export declare class SearchRouter {
     requestBudgetOf(route: string): RequestBudgetState | undefined;
     /** Problems of the `sources.*` settings (unknown ids, bad numbers), for `sources.status`. */
     sourceDiagnostics(): string[];
+    /** The confidence of one platform backend as a leg of a chain (`xhs`, `custom-cli:echo`): its own, without the provider's. */
+    backendConfidenceOf(id: string): number;
+    /** `sources.confidence` by canonical id (a provider's route id; a platform backend id as written), valid entries only. */
+    private confidenceOverrides;
+    /**
+     * The confidence (0..1) of what `route` returned, through `backend` when it is a platform chain: `sources.confidence` of the
+     * provider times that of the backend that answered, each defaulting to the custom CLI's own (spec `confidence`, 0.5) and to 1
+     * for every built-in source, so the built-in ones are 1 unless the user set something.
+     */
+    confidenceOf(route: string, backend?: string): number;
     /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
     private usageRecorder;
     /** Whether any configured engine is currently usable. */

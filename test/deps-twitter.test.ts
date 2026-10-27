@@ -38,7 +38,7 @@ async function withCommands<T>(commands: Record<string, string>, fn: () => Promi
     fs.rmSync(dir, { recursive: true, force: true })
   }
 }
-const TWITTER_OK = 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY"; echo "  -n, --max INTEGER";; *) echo "twitter-cli";; esac'
+const TWITTER_OK = 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY"; echo "  -n, --max INTEGER"; echo "  --json   Output as JSON.";; *) echo "twitter-cli";; esac'
 
 test('twitter is its own dependency entry; agent-reach stays as an optional install helper', () => {
   assert.ok(DEP_IDS.includes('twitter'))
@@ -90,7 +90,7 @@ test('twitterGate: executable command AND settings AND credentials decide availa
     delete process.env.TWITTER_CT0
     const missing = twitterGate(on, { available: true })
     assert.equal(missing.available, false)
-    assert.match(missing.note!, /TWITTER_AUTH_TOKEN \/ TWITTER_CT0/)
+    assert.match(missing.note!, /TWITTER_CT0 is not set \(looked in/)
   } finally {
     for (const [key, value] of [['TWITTER_AUTH_TOKEN', env.a], ['TWITTER_CT0', env.b]] as const) { if (value === undefined) delete process.env[key]; else process.env[key] = value }
   }

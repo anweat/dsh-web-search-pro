@@ -127,6 +127,12 @@ export interface SourcesConfig {
   /** Source ids the automatic plan and the configured `engines` list never use (an explicit `engines` / `platform` in a call still can). */
   disabled?: string[]
   /**
+   * Confidence (0..1) per source id, including the platform backends of a chain (`xhs`, `browser-search`, `custom-cli:<id>`).
+   * Built-in sources have 1; a custom CLI has the `confidence` of its spec (default 0.5) unless it is set here. It scales the
+   * source's weight in rank fusion a little (pipeline/confidence.ts) and is printed with its results; 1 changes nothing.
+   */
+  confidence?: Record<string, number>
+  /**
    * Optional request caps per source id, counted in the usage ledger (persistent, atomic): `total` over all time, `daily` per
    * calendar day (time zone of `evidence.budget`). No source has a cap unless it is set here. An exhausted source is skipped
    * with a note and the plan falls back to other sources; it is never an error. Example for a Bocha account with 1000 requests:
@@ -136,8 +142,113 @@ export interface SourcesConfig {
 }
 
 export interface Config {
-  /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
-  dbPath?: string
+  // ── Common: what nearly everyone touches ──
+  /** Default cap on returned sources per search. */
+  searchMaxResults: number
+  /** Query all requested engines in parallel and merge. */
+  parallelEngines: boolean
+  /** Tool surface: `indexed` (default) keeps only web_index / web_call in context; `flat` registers one tool per action. Applied at startup. */
+  toolSurface?: ToolSurface
+  /** Trust Clash/TUN fake-IP DNS answers (198.18/15, fdfe:dcba:9876::/64, 2001:2::/48) while retaining all other SSRF checks. */
+  allowProxyFakeIp: boolean
+  /**
+   * Let `read.fetch` use the DeepSeek Fetch API ($0.75 per 1,000 successful requests) as a backend, after the free ones and before the
+   * browser, in `mode: auto`, and accept `mode: deepseek`. Uses the same key as DeepSeek Search (`keyedSources.deepseek`). Off by default: it spends money.
+   */
+  deepseekFetch: boolean
+  // ── Search order: engines, source rules, platform backend chains ──
+  /** Ordered engine list for search.run. */
+  engines: string[]
+  /** Source preferences and request budgets (dev-plan M11a). */
+  sources?: SourcesConfig
+  /**
+   * Ordered backend chain per platform (dev-plan M12): backend ids such as `xhs`, `opencli` (standalone OpenCLI), `browser-opencli`
+   * (dsh-browser), `browser-search`, `rest`, `gh`, `custom-cli:<id>`. A platform not listed uses its default chain.
+   */
+  platformBackends?: Record<string, string[]>
+  // ── Sources and keys: key references, endpoints, tokens ──
+  /**
+   * Keyed search sources by route id (`tavily`, `brave`, `linkup`, `serper`, `metaso`, `zhipu`, `baidu-qianfan`): the key literal,
+   * the credentials ref / environment variable name (default e.g. TAVILY_API_KEY), and an optional endpoint base override.
+   * A source without a key is `credential: missing` and not executable.
+   */
+  keyedSources?: Record<string, { apiKey?: string; apiKeyEnv?: string; baseUrl?: string }>
+  /** Exa API key (falls back to $EXA_API_KEY / credentials ref). */
+  exaApiKey?: string
+  /** Credential/env reference for the Exa key; defaults to EXA_API_KEY. */
+  exaApiKeyEnv?: string
+  /** Jina AI API key (falls back to $JINA_API_KEY / credentials ref). */
+  jinaApiKey?: string
+  /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
+  jinaApiKeyEnv?: string
+  /** Bocha web-search API key (falls back to the credentials ref / $BOCHA_SEARCH_API_KEY, then $BOCHA_JEV_API_KEY of the same account). */
+  bochaApiKey?: string
+  /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
+  bochaApiKeyEnv?: string
+  /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bocha.cn. */
+  bochaBaseUrl?: string
+  /** Ask Bocha for its longer per-page summary (default true). */
+  bochaSummary?: boolean
+  /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
+  githubToken?: string
+  /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
+  githubTokenEnv?: string
+  /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
+  searxngUrl?: string
+  /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
+  openalexMailto?: string
+  // ── Custom CLI: your own read-only command-line sources ──
+  /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
+  cliAdapters?: Record<string, Record<string, unknown>>
+  // ── Reading and evidence: page sizes, evidence pipeline, scoring model ──
+  /** Evidence pipeline (S6 scoring). */
+  evidence?: Partial<EvidenceConfig>
+  /**
+   * Default output cap (characters) of one `read.fetch` call. Longer pages are cut here and
+   * continued with `offset`; the ctx.web fetch provider (which cannot be told a size) uses twice this.
+   */
+  fetchDefaultChars: number
+  /** `read.contents`: output cap per URL (characters). */
+  exaContentsPerUrlChars: number
+  /** `read.contents`: output cap over all URLs of one call (characters); shared fairly between them. */
+  exaContentsTotalChars: number
+  // ── Platforms and runtime: CLI backends, logins, browser, ctx.web route, deadlines ──
+  /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
+  enableCliBackends: boolean
+  /** Allow opencli browser-session backends. */
+  opencliEnabled: boolean
+  /** Allow agent-reach backends. */
+  agentReachEnabled: boolean
+  /** twitter-cli `auth_token` cookie (falls back to the credentials ref / $TWITTER_AUTH_TOKEN). Handed to the twitter command only through its environment. */
+  twitterAuthToken?: string
+  /** Credential/env reference for the twitter auth token; defaults to TWITTER_AUTH_TOKEN. */
+  twitterAuthTokenEnv?: string
+  /** twitter-cli `ct0` cookie (falls back to the credentials ref / $TWITTER_CT0). */
+  twitterCt0?: string
+  /** Credential/env reference for the twitter ct0 cookie; defaults to TWITTER_CT0. */
+  twitterCt0Env?: string
+  /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
+  playwright: {
+    /** Gate the playwright fallback backend in read.fetch. */
+    enabled: boolean
+    /** Directory for read.snapshot artifacts; defaults to <dbDir>/snapshots. */
+    snapshotDir?: string
+  }
+  /** User-defined custom platform search: url template + selectors + optional cookie. */
+  customPlatforms?: Record<string, CustomPlatformSpec>
+  /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
+  platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
+  /** Per-platform binding to domain-scoped dsh-browser auth/rule profiles. */
+  browserBindings?: Record<string, BrowserBinding>
+  /** Provider id registered into ctx.web for the built-in web_search tool. */
+  providerId: string
+  /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
+  registerProvider: boolean
+  /** ctx.web provider route: evidence pack inside the built-in web_search (only when this plugin is the selected provider). */
+  provider?: Partial<ProviderSettings>
+  /** Cooperative per-call timeout budget in ms. */
+  timeoutMs: number
+  // ── Advanced and diagnostics: cache, ranking weights, storage path, logging ──
   /** Cache freshness window in seconds. */
   ttlSeconds: number
   /** In-process LRU entry cap (hot queries resolve without touching SQLite). */
@@ -159,95 +270,12 @@ export interface Config {
   authorityBoost: number
   /** Extra authority domains (beyond the built-in .edu/.gov/.org and the curated list). */
   authorityDomains: string[]
-  /** Default cap on returned sources per search. */
-  searchMaxResults: number
-  /**
-   * Default output cap (characters) of one `read.fetch` call. Longer pages are cut here and
-   * continued with `offset`; the ctx.web fetch provider (which cannot be told a size) uses twice this.
-   */
-  fetchDefaultChars: number
-  /** `read.contents`: output cap per URL (characters). */
-  exaContentsPerUrlChars: number
-  /** `read.contents`: output cap over all URLs of one call (characters); shared fairly between them. */
-  exaContentsTotalChars: number
-  /** Tool surface: `indexed` (default) keeps only web_index / web_call in context; `flat` registers one tool per action. Applied at startup. */
-  toolSurface?: ToolSurface
-  /** Cooperative per-call timeout budget in ms. */
-  timeoutMs: number
-  /** Trust Clash/TUN fake-IP DNS answers (198.18/15, fdfe:dcba:9876::/64, 2001:2::/48) while retaining all other SSRF checks. */
-  allowProxyFakeIp: boolean
-  /** Ordered engine list for search.run. */
-  engines: string[]
-  /** Query all requested engines in parallel and merge. */
-  parallelEngines: boolean
-  /** Exa API key (falls back to $EXA_API_KEY / credentials ref). */
-  exaApiKey?: string
-  /** Credential/env reference for the Exa key; defaults to EXA_API_KEY. */
-  exaApiKeyEnv?: string
-  /** Jina AI API key (falls back to $JINA_API_KEY / credentials ref). */
-  jinaApiKey?: string
-  /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
-  jinaApiKeyEnv?: string
-  /** Bocha web-search API key (falls back to the credentials ref / $BOCHA_SEARCH_API_KEY, then $BOCHA_JEV_API_KEY of the same account). */
-  bochaApiKey?: string
-  /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
-  bochaApiKeyEnv?: string
-  /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bocha.cn. */
-  bochaBaseUrl?: string
-  /** Ask Bocha for its longer per-page summary (default true). */
-  bochaSummary?: boolean
-  /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
-  searxngUrl?: string
-  /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
-  openalexMailto?: string
-  /**
-   * Keyed search sources by route id (`tavily`, `brave`, `linkup`, `serper`, `metaso`, `zhipu`, `baidu-qianfan`): the key literal,
-   * the credentials ref / environment variable name (default e.g. TAVILY_API_KEY), and an optional endpoint base override.
-   * A source without a key is `credential: missing` and not executable.
-   */
-  keyedSources?: Record<string, { apiKey?: string; apiKeyEnv?: string; baseUrl?: string }>
-  /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
-  githubToken?: string
-  /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
-  githubTokenEnv?: string
-  /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
-  enableCliBackends: boolean
-  /** Allow opencli browser-session backends. */
-  opencliEnabled: boolean
-  /** Allow agent-reach backends. */
-  agentReachEnabled: boolean
-  /** Provider id registered into ctx.web for the built-in web_search tool. */
-  providerId: string
-  /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
-  registerProvider: boolean
-  /** ctx.web provider route: evidence pack inside the built-in web_search (only when this plugin is the selected provider). */
-  provider?: Partial<ProviderSettings>
-  /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
-  platformRules?: Record<string, { item: string; title: string; link: string; text?: string }>
-  /** User-defined custom platform search: url template + selectors + optional cookie. */
-  customPlatforms?: Record<string, CustomPlatformSpec>
-  /** Per-platform binding to domain-scoped dsh-browser auth/rule profiles. */
-  browserBindings?: Record<string, BrowserBinding>
-  /**
-   * Ordered backend chain per platform (dev-plan M12): backend ids such as `xhs`, `opencli` (standalone OpenCLI), `browser-opencli`
-   * (dsh-browser), `browser-search`, `rest`, `gh`, `custom-cli:<id>`. A platform not listed uses its default chain.
-   */
-  platformBackends?: Record<string, string[]>
-  /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
-  cliAdapters?: Record<string, Record<string, unknown>>
-  /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
-  playwright: {
-    /** Gate the playwright fallback backend in read.fetch. */
-    enabled: boolean
-    /** Directory for read.snapshot artifacts; defaults to <dbDir>/snapshots. */
-    snapshotDir?: string
-  }
-  /** Source preferences and request budgets (dev-plan M11a). */
-  sources?: SourcesConfig
-  /** Evidence pipeline (S6 scoring). */
-  evidence?: Partial<EvidenceConfig>
+  /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
+  dbPath?: string
   verbose: boolean
 }
+
+export { DEFAULT_ENGINES }
 
 // The volatile() modifier changes each live field's output type to
 // Volatile<T> (a readonly array-like snapshot with get()), which is not
@@ -257,25 +285,30 @@ export interface Config {
 // The cosmokit import below exists solely so the emitted .d.ts can name the
 // inferred Volatile types without a non-portable pnpm path reference.
 import type { Volatile } from '@deepseek-ai/cosmokit'
+import { DEFAULT_ENGINES } from './default-chain.ts'
 void ({} as Volatile<unknown>)
 export const Config = z.object({
-  dbPath: z.string().volatile(),
-  toolSurface: z.string().default('indexed').volatile(),
-  ttlSeconds: z.number().default(3600).volatile(),
-  memoryCacheEntries: z.number().default(128).volatile(),
-  rrfConstant: z.number().default(60).volatile(),
-  freshnessBoost: z.number().default(0.2).volatile(),
-  freshnessDays: z.number().default(30).volatile(),
-  authorityBoost: z.number().default(0.25).volatile(),
-  authorityDomains: z.array(z.string()).default([]).volatile(),
+  // ── Common: what nearly everyone touches ──
   searchMaxResults: z.number().default(8).volatile(),
-  fetchDefaultChars: z.number().default(20_000).volatile(),
-  exaContentsPerUrlChars: z.number().default(8_000).volatile(),
-  exaContentsTotalChars: z.number().default(30_000).volatile(),
-  timeoutMs: z.number().default(30_000).volatile(),
-  allowProxyFakeIp: z.boolean().default(false).volatile(),
-  engines: z.array(z.string()).default(['ddg', 'bing', 'exa', 'seam', 'jina']).volatile(),
   parallelEngines: z.boolean().default(false).volatile(),
+  toolSurface: z.string().default('indexed').volatile(),
+  allowProxyFakeIp: z.boolean().default(false).volatile(),
+  deepseekFetch: z.boolean().default(false).volatile(),
+  // ── Search order: engines, source rules, platform backend chains ──
+  engines: z.array(z.string()).default([...DEFAULT_ENGINES]).volatile(),
+  sources: z.object({
+    priority: z.array(z.string()).volatile(),
+    disabled: z.array(z.string()).volatile(),
+    confidence: z.dict(z.number()).volatile(),
+    budget: z.dict(z.object({ total: z.number(), daily: z.number() })).volatile(),
+  }),
+  platformBackends: z.dict(z.array(z.string())).volatile(),
+  // ── Sources and keys: key references, endpoints, tokens ──
+  keyedSources: z.dict(z.object({
+    apiKey: z.string().role('secret'),
+    apiKeyEnv: z.string(),
+    baseUrl: z.string(),
+  })).volatile(),
   exaApiKey: z.string().role('secret').volatile(),
   exaApiKeyEnv: z.string().default('EXA_API_KEY').volatile(),
   jinaApiKey: z.string().role('secret').volatile(),
@@ -284,54 +317,13 @@ export const Config = z.object({
   bochaApiKeyEnv: z.string().default('BOCHA_SEARCH_API_KEY').volatile(),
   bochaBaseUrl: z.string().default('https://api.bocha.cn').volatile(),
   bochaSummary: z.boolean().default(true).volatile(),
-  searxngUrl: z.string().volatile(),
-  openalexMailto: z.string().volatile(),
-  keyedSources: z.dict(z.object({
-    apiKey: z.string().role('secret'),
-    apiKeyEnv: z.string(),
-    baseUrl: z.string(),
-  })).volatile(),
   githubToken: z.string().role('secret').volatile(),
   githubTokenEnv: z.string().default('GITHUB_TOKEN').volatile(),
-  enableCliBackends: z.boolean().default(true).volatile(),
-  opencliEnabled: z.boolean().default(true).volatile(),
-  agentReachEnabled: z.boolean().default(true).volatile(),
-  providerId: z.string().default('web-search-pro').volatile(),
-  registerProvider: z.boolean().default(false).volatile(),
-  provider: z.object({
-    evidence: z.string().default('auto').volatile(),
-    deadlineMs: z.number().default(25_000).volatile(),
-  }),
-  platformRules: z.dict(z.object({
-    item: z.string(),
-    title: z.string(),
-    link: z.string(),
-    text: z.string(),
-  })).volatile(),
-  customPlatforms: z.dict(z.object({
-    name: z.string(),
-    url: z.string(),
-    item: z.string(),
-    title: z.string(),
-    link: z.string(),
-    text: z.string(),
-    cookie: z.string().role('secret'),
-  })).volatile(),
-  browserBindings: z.dict(z.object({
-    authProfile: z.string(),
-    rulePack: z.string(),
-  })).volatile(),
-  platformBackends: z.dict(z.array(z.string())).volatile(),
+  searxngUrl: z.string().volatile(),
+  openalexMailto: z.string().volatile(),
+  // ── Custom CLI: your own read-only command-line sources ──
   cliAdapters: z.dict(z.dict(z.any())).volatile(),
-  playwright: z.object({
-    enabled: z.boolean().default(true).volatile(),
-    snapshotDir: z.string(),
-  }),
-  sources: z.object({
-    priority: z.array(z.string()).volatile(),
-    disabled: z.array(z.string()).volatile(),
-    budget: z.dict(z.object({ total: z.number(), daily: z.number() })).volatile(),
-  }),
+  // ── Reading and evidence: page sizes, evidence pipeline, scoring model ──
   evidence: z.object({
     scorer: z.union(['rule', 'jev']).default('rule').volatile(),
     jevMode: z.union(['off', 'shadow', 'control', 'hybrid']).default('off').volatile(),
@@ -379,6 +371,56 @@ export const Config = z.object({
       providers: z.dict(z.object({ perSearchInputTokens: z.number(), dailyInputTokens: z.number() })),
     }).volatile(),
   }),
+  fetchDefaultChars: z.number().default(20_000).volatile(),
+  exaContentsPerUrlChars: z.number().default(8_000).volatile(),
+  exaContentsTotalChars: z.number().default(30_000).volatile(),
+  // ── Platforms and runtime: CLI backends, logins, browser, ctx.web route, deadlines ──
+  enableCliBackends: z.boolean().default(true).volatile(),
+  opencliEnabled: z.boolean().default(true).volatile(),
+  agentReachEnabled: z.boolean().default(true).volatile(),
+  twitterAuthToken: z.string().role('secret').volatile(),
+  twitterAuthTokenEnv: z.string().default('TWITTER_AUTH_TOKEN').volatile(),
+  twitterCt0: z.string().role('secret').volatile(),
+  twitterCt0Env: z.string().default('TWITTER_CT0').volatile(),
+  playwright: z.object({
+    enabled: z.boolean().default(true).volatile(),
+    snapshotDir: z.string().volatile(),
+  }),
+  customPlatforms: z.dict(z.object({
+    name: z.string(),
+    url: z.string(),
+    item: z.string(),
+    title: z.string(),
+    link: z.string(),
+    text: z.string(),
+    cookie: z.string().role('secret'),
+  })).volatile(),
+  platformRules: z.dict(z.object({
+    item: z.string(),
+    title: z.string(),
+    link: z.string(),
+    text: z.string(),
+  })).volatile(),
+  browserBindings: z.dict(z.object({
+    authProfile: z.string(),
+    rulePack: z.string(),
+  })).volatile(),
+  providerId: z.string().default('web-search-pro').volatile(),
+  registerProvider: z.boolean().default(false).volatile(),
+  provider: z.object({
+    evidence: z.string().default('auto').volatile(),
+    deadlineMs: z.number().default(25_000).volatile(),
+  }),
+  timeoutMs: z.number().default(30_000).volatile(),
+  // ── Advanced and diagnostics: cache, ranking weights, storage path, logging ──
+  ttlSeconds: z.number().default(3600).volatile(),
+  memoryCacheEntries: z.number().default(128).volatile(),
+  rrfConstant: z.number().default(60).volatile(),
+  freshnessBoost: z.number().default(0.2).volatile(),
+  freshnessDays: z.number().default(30).volatile(),
+  authorityBoost: z.number().default(0.25).volatile(),
+  authorityDomains: z.array(z.string()).default([]).volatile(),
+  dbPath: z.string().volatile(),
   verbose: z.boolean().default(false).volatile(),
 })
 
@@ -390,10 +432,15 @@ export interface ResolvedConfig extends Config {
   jinaApiKey?: string
   jinaApiKeyEnv: string
   githubTokenEnv: string
+  twitterAuthToken?: string
+  twitterAuthTokenEnv: string
+  twitterCt0?: string
+  twitterCt0Env: string
   bochaApiKey?: string
   bochaApiKeyEnv: string
   bochaBaseUrl: string
   bochaSummary: boolean
+  deepseekFetch: boolean
   searxngUrl?: string
   openalexMailto?: string
   keyedSources?: Config['keyedSources']
@@ -421,50 +468,8 @@ export function defaultDbPath(): string {
   return path.join(home, 'data', 'web-search-pro', 'store.db')
 }
 
-/**
- * The Host parses the plugin config with the schema above, and schemastery fills every optional nested container it was not
- * given with an empty one (`calibration: { points: [] }`, `price: {}`, `limits: {}`, `criteria: []`, `thresholds: {}`).
- * The validators of the judge settings (providers, rubric overrides, coverage thresholds) read "present" as "given", so
- * those fillers would reject every custom provider / rubric override and report empty thresholds as invalid. They are
- * removed here, on exactly the keys the schema fills, and nowhere inside user data (`extraBody` is passed through as is).
- */
-const isPlain = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-const isEmptyContainer = (value: unknown): boolean => Array.isArray(value) ? value.length === 0 : isPlain(value) && Object.keys(value).length === 0
-
-function withoutFillers<T>(value: T, keys: readonly string[]): T {
-  if (!isPlain(value)) return value
-  const out: Record<string, unknown> = { ...value }
-  for (const key of keys) if (key in out && isEmptyContainer(out[key])) delete out[key]
-  return out as T
-}
-
-export function normalizeJudge<T>(judge: T): T {
-  const base = withoutFillers(judge, ['providers']) as unknown
-  if (!isPlain(base) || !isPlain(base.providers)) return base as T
-  const providers: Record<string, unknown> = {}
-  for (const [id, entry] of Object.entries(base.providers)) {
-    let next = withoutFillers(entry, ['limits', 'extraBody', 'price', 'calibration'])
-    // `calibration: { points: [] }` is the schema's filler; a calibration the user wrote has at least a version or points.
-    if (isPlain(next) && isPlain(next.calibration)) {
-      const calibration = withoutFillers(next.calibration, ['points'])
-      const rest = { ...next }
-      if (Object.keys(calibration).length > 0) rest.calibration = calibration
-      else delete rest.calibration
-      next = rest
-    }
-    providers[id] = next
-  }
-  return { ...base, providers } as T
-}
-
-export function normalizeRubrics<T>(rubrics: T): T {
-  if (!isPlain(rubrics)) return rubrics
-  return Object.fromEntries(Object.entries(rubrics).map(([id, entry]) => [id, withoutFillers(entry, ['criteria'])])) as T
-}
-
-export function normalizeCoverage<T>(coverage: T): T {
-  return withoutFillers(coverage, ['thresholds'])
-}
+export { normalizeJudge, normalizeRubrics, normalizeCoverage } from './config-fillers.ts'
+import { normalizeJudge, normalizeRubrics, normalizeCoverage } from './config-fillers.ts'
 
 /** Resolve a fully-defaulted config from user input. Unwraps volatile fields (schemastery `Volatile<T>`) into plain values so consumers never see the wrapper. */
 export function resolveConfig(config: Config): ResolvedConfig {
@@ -491,7 +496,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     exaContentsTotalChars: vOr(config.exaContentsTotalChars, 30_000) as number,
     timeoutMs: vOr(config.timeoutMs, 30_000) as number,
     allowProxyFakeIp: vOr(config.allowProxyFakeIp, false) as boolean,
-    engines: vOr(config.engines, ['ddg', 'bing', 'exa', 'seam', 'jina']) as string[],
+    engines: vOr(config.engines, [...DEFAULT_ENGINES]) as string[],
     parallelEngines: vOr(config.parallelEngines, false) as boolean,
     exaApiKey: config.exaApiKey !== undefined ? v(config.exaApiKey) : undefined,
     exaApiKeyEnv: vOr(config.exaApiKeyEnv, 'EXA_API_KEY') as string,
@@ -501,11 +506,16 @@ export function resolveConfig(config: Config): ResolvedConfig {
     bochaApiKeyEnv: vOr(config.bochaApiKeyEnv, 'BOCHA_SEARCH_API_KEY') as string,
     bochaBaseUrl: vOr(config.bochaBaseUrl, 'https://api.bocha.cn') as string,
     bochaSummary: vOr(config.bochaSummary, true) as boolean,
+    deepseekFetch: vOr(config.deepseekFetch, false) as boolean,
     searxngUrl: config.searxngUrl !== undefined ? v(config.searxngUrl) : undefined,
     openalexMailto: config.openalexMailto !== undefined ? v(config.openalexMailto) : undefined,
     keyedSources: config.keyedSources !== undefined ? v(config.keyedSources) : undefined,
     githubToken: config.githubToken !== undefined ? v(config.githubToken) : undefined,
     githubTokenEnv: vOr(config.githubTokenEnv, 'GITHUB_TOKEN') as string,
+    twitterAuthToken: config.twitterAuthToken !== undefined ? v(config.twitterAuthToken) : undefined,
+    twitterAuthTokenEnv: vOr(config.twitterAuthTokenEnv, 'TWITTER_AUTH_TOKEN') as string,
+    twitterCt0: config.twitterCt0 !== undefined ? v(config.twitterCt0) : undefined,
+    twitterCt0Env: vOr(config.twitterCt0Env, 'TWITTER_CT0') as string,
     enableCliBackends: vOr(config.enableCliBackends, true) as boolean,
     opencliEnabled: vOr(config.opencliEnabled, true) as boolean,
     agentReachEnabled: vOr(config.agentReachEnabled, true) as boolean,
@@ -542,6 +552,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
       priority: vOr(sv.priority, [] as string[]) as string[],
       disabled: vOr(sv.disabled, [] as string[]) as string[],
       budget: vOr(sv.budget, {} as Record<string, SourceBudgetInput>) as Record<string, SourceBudgetInput>,
+      confidence: vOr(sv.confidence, {} as Record<string, number>) as Record<string, number>,
     },
     verbose: vOr(config.verbose, false) as boolean,
   }

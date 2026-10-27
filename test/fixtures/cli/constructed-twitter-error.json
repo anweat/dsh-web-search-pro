@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "schema_version": "1",
+  "error": {
+    "code": "not_authenticated",
+    "message": "No Twitter cookies found.\n\nOption 1: Set TWITTER_AUTH_TOKEN and TWITTER_CT0 environment variables\nOption 2: Make sure you are logged into x.com in your browser (Arc/Chrome/Edge/Firefox/Brave)\n\nRun 'twitter -v <command>' for debug diagnostics."
+  }
+}

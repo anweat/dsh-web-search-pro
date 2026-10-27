@@ -17,10 +17,10 @@ import type { ResolvedConfig } from '../config.ts'
 import { BUILTIN_CLI_SPECS } from './builtin-specs.ts'
 import { backendServes, CHAIN_PLATFORMS, DEFAULT_CHAINS, OPENCLI_SITE_OF } from './chains-spec.ts'
 import { cliSpecEngine, disabledBySettings, probeError, specReadiness, type SpecReadiness } from './engine.ts'
-import { listOpencliSites, OPENCLI_PROBE, opencliSearchSpec } from './opencli.ts'
+import { listOpencliSites, OPENCLI_PROBE, opencliSiteVerification, planOpencliSearch } from './opencli.ts'
 import { cachedProbe, probeCli } from './probe.ts'
 import { CliAdapterError, runCliSearchDetailed } from './runner.ts'
-import { resolveCliAdapters, type CliAdapterSpec } from './spec.ts'
+import { resolveCliAdapters, USER_DEFINED, type CliAdapterSpec } from './spec.ts'
 
 export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'custom-cli'
 
@@ -74,9 +74,9 @@ const fromSpec = (r: SpecReadiness): LegReadiness => ({
 function specLeg(id: string, spec: CliAdapterSpec, platform: string, ctx: ChainContext): ChainLeg {
   return {
     id, kind: id.startsWith('custom-cli:') ? 'custom-cli' : 'cli', label: spec.bins[0]!,
-    engine: cliSpecEngine(spec, platform, ctx.deps, { id, label: spec.bins[0]! }),
+    engine: cliSpecEngine(spec, platform, ctx.deps, { id, label: spec.bins[0]!, ...id.startsWith('custom-cli:') ? { userDefined: true } : {} }),
     readiness: async () => fromSpec(await specReadiness(spec, ctx.deps)),
-    verification: spec.verification?.status ?? 'unverified',
+    verification: spec.verification?.status ?? (id.startsWith('custom-cli:') ? USER_DEFINED : 'unverified'),
   }
 }
 
@@ -87,23 +87,25 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
     backend: 'opencli',
     label: 'OpenCLI (standalone)',
     available: () => !disabledBySettings({ id: 'opencli' }, ctx.deps) && (cachedProbe(OPENCLI_PROBE)?.state ?? 'detected') === 'detected',
+    unavailableReason: () => {
+      const probe = cachedProbe(OPENCLI_PROBE)
+      return disabledBySettings({ id: 'opencli' }, ctx.deps) ?? (probe && probe.state !== 'detected' ? probeError(OPENCLI_PROBE, probe)?.message : undefined)
+    },
     async search(query, count, signal) {
       const off = disabledBySettings({ id: 'opencli' }, ctx.deps)
       if (off) throw new CliAdapterError(off, 'CLI_NOT_FOUND')
       const probe = await probeCli(OPENCLI_PROBE)
       const failure = probe.state === 'detected' ? undefined : probeError(OPENCLI_PROBE, probe)
       if (failure) throw failure
-      const listed = await listOpencliSites()
-      const entry = listed.sites?.get(site)
-      if (!entry) throw new CliAdapterError(listed.problem ?? 'opencli has no read `search` command for the site ' + site + ' (opencli list)', 'CLI_CONTRACT_MISMATCH', 'run `opencli list` to see the sites your version supports')
-      const spec = opencliSearchSpec(platform, entry)
-      if (!spec) throw new CliAdapterError('opencli site ' + site + ' cannot be used by this adapter', 'CLI_CONTRACT_MISMATCH')
+      const plan = await planOpencliSearch(platform, site)
+      if (!plan.spec) throw new CliAdapterError(plan.problem ?? 'opencli site ' + site + ' cannot be used by this adapter', 'CLI_CONTRACT_MISMATCH', plan.hint)
+      const spec = plan.spec
       const { sources, skipped } = await runCliSearchDetailed(spec, { query, count, signal }, { platform, bin: probe.path ?? 'opencli' })
       return { sources, via: 'opencli', backend: 'opencli', ...skipped ? { notes: [skipped + ' result' + (skipped === 1 ? '' : 's') + ' without a link skipped'] } : {} }
     },
   }
   return {
-    id: 'opencli', kind: 'opencli', label: 'OpenCLI (standalone)', engine, verification: 'contract-only',
+    id: 'opencli', kind: 'opencli', label: 'OpenCLI (standalone)', engine, verification: opencliSiteVerification(site).status,
     async readiness() {
       const off = disabledBySettings({ id: 'opencli' }, ctx.deps)
       if (off) return { ready: false, installation: 'missing', reason: 'opencli: ' + off, code: 'disabled' }

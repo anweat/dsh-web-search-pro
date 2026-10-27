@@ -12,6 +12,7 @@ import path from 'node:path'
 import crossSpawn from 'cross-spawn'
 import { load as yamlLoad } from 'js-yaml'
 import { parse as parseHtml } from 'node-html-parser'
+import { WHOLE_OUTPUT_SCHEME } from './cli/spec.ts'
 import { assertResolvedPublicUrl, readBoundedBody, stripSensitiveHeadersForRedirect, type ResolvePublicUrlOptions } from './safe-http.ts'
 
 /** js-yaml parser (npm dep). */
@@ -298,14 +299,22 @@ export const SNIPPET_MAX_CHARS = 500
  * slice to `count`, cap snippets, drop empty optional fields.
  */
 export function shapeSources(
-  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; lowConfidence?: boolean }[],
+  sources: readonly { url: string; title?: string | null; snippet?: string | null; publishedAt?: string | null; lowConfidence?: boolean; rerankScore?: number | null; authority?: number | null; via?: string | null; tag?: string | null; confidence?: number | null }[],
   count: number,
-): { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: true }[] {
+): { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: true; via?: string; confidence?: number; tag?: string }[] {
   return sources.slice(0, count).map(s => ({
     url: s.url,
     ...s.title ? { title: s.title } : {},
-    ...s.snippet ? { snippet: capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
+    // A whole-output result (`cli://`) was already cut by the runner, with a note saying so: the generic cap would only cut it again.
+    ...s.snippet ? { snippet: s.url.startsWith(WHOLE_OUTPUT_SCHEME) ? s.snippet : capText(s.snippet, SNIPPET_MAX_CHARS) } : {},
     ...s.publishedAt ? { publishedAt: s.publishedAt } : {},
+    // The provider's own quality grade (DeepSeek Search), as source metadata.
+    ...typeof s.rerankScore === 'number' && Number.isFinite(s.rerankScore) ? { rerankScore: Math.round(s.rerankScore * 100) / 100 } : {},
+    ...typeof s.authority === 'number' && Number.isFinite(s.authority) && s.authority >= 0 ? { authority: s.authority } : {},
     ...s.lowConfidence ? { lowConfidence: true as const } : {},
+    // Which user-defined CLI returned the row, how far the source is trusted (below 1 only) and the honest label.
+    ...s.via ? { via: s.via } : {},
+    ...typeof s.confidence === 'number' && Number.isFinite(s.confidence) && s.confidence < 1 ? { confidence: Math.round(Math.max(s.confidence, 0) * 10_000) / 10_000 } : {},
+    ...s.tag ? { tag: s.tag } : {},
   }))
 }

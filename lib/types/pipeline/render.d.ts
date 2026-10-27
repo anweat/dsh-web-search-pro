@@ -10,8 +10,24 @@ export interface RenderSource {
     title?: string;
     snippet?: string;
     publishedAt?: string;
+    rerankScore?: number;
+    authority?: number;
     lowConfidence?: boolean;
+    via?: string;
+    confidence?: number;
+    tag?: string;
 }
+/**
+ * `[rerank 2.4/3, authority 3/4]`: the provider's own grades of a source (DeepSeek Search); for a custom CLI or a source the user gave a
+ * confidence below 1 also `via custom-cli:echo, confidence 0.5` and the honest label (user-defined, not verified). Empty when there is none of it.
+ */
+export declare function qualityTag(s: {
+    rerankScore?: number;
+    authority?: number;
+    via?: string;
+    confidence?: number;
+    tag?: string;
+}): string;
 /** Marker for a source / excerpt whose page only passed the S4 floor, not the relevance gate (dev-plan §3.1). */
 export declare const LOW_RELEVANCE = " (low relevance)";
 /** One line under the header (dev-plan M3b): "covered" is a lexical judgement, and a missing passage proves nothing. */

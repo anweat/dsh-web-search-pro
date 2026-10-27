@@ -17,8 +17,10 @@ import type { Store } from '../store.ts'
 import type { EvidenceService } from '../pipeline/service.ts'
 import type { BrowserGetter } from '../browser-access.ts'
 import type { ProviderState } from '../provider.ts'
+import type { OverlayStore } from '../overlay.ts'
+import type { PendingRestart } from '../restart.ts'
 
-export const ACTION_GROUPS = ['search', 'read', 'history', 'sources', 'rules', 'cache'] as const
+export const ACTION_GROUPS = ['search', 'read', 'history', 'sources', 'rules', 'cache', 'config'] as const
 export type ActionGroup = typeof ACTION_GROUPS[number]
 
 /**
@@ -58,8 +60,10 @@ export interface OutputSchema {
  * - `none`: runs directly.
  * - `install`: runs an external installer (`sources.install`).
  * - `local-write`: changes or deletes locally stored data (cache, history rows, extraction rules).
+ * - `config`: changes the agent overlay (search order, confidence, platform chains); runs without asking, denied in read-only mode.
+ * - `run-program`: lets the plugin run a local program (a custom CLI spec); always asks the user, denied in read-only mode.
  */
-export type ApprovalClass = 'none' | 'install' | 'local-write'
+export type ApprovalClass = 'none' | 'install' | 'local-write' | 'config' | 'run-program'
 
 export interface ActionExample {
   args: Record<string, unknown>
@@ -83,10 +87,16 @@ export interface ActionServices {
   providerState?: () => ProviderState
   /** Default characters one text exit may return (config `fetchDefaultChars`). */
   outputCap: () => number
+  /** The agent overlay (run-time settings an agent may change); absent where the host of the actions has none (`config.*` then reports it). */
+  overlay?: OverlayStore
+  /** Settings changed in the configuration that the running plugin only reads at start-up. */
+  pendingRestart?: () => PendingRestart[]
 }
 
 export interface ActionContext extends ActionServices {
   signal: AbortSignal
+  /** The session the call belongs to (recorded in the overlay audit trail); undefined outside a session. */
+  sessionId?: string
 }
 
 export interface ActionDef {
@@ -112,6 +122,12 @@ export interface ActionDef {
   errors?: string[]
   /** Whether the action can run right now, for the index listing only; undefined means yes. */
   unavailable?(env: { browserReady: boolean }): string | undefined
+  /**
+   * Checks beyond the parameter schema that need no state and run no side effect, one message per problem ([] when fine).
+   * Run on the schema-validated arguments by `runAction` before `execute`, and by the approval hook before the user is asked,
+   * so a call that would be refused as INVALID_ARGS never becomes an approval prompt. Keep it a pure function of `args`.
+   */
+  precheck?(args: Record<string, any>): string[]
   execute(args: Record<string, any>, ctx: ActionContext): Promise<unknown>
   /** The result as the text the model reads. */
   render(result: any, args: Record<string, any>): string
@@ -130,6 +146,22 @@ export class ActionNotFoundError extends Error {
   constructor(message: string, readonly hint?: string) {
     super(message)
     this.name = 'ActionNotFoundError'
+  }
+}
+
+/** Raised when something the call needs is not set up here (a broken overlay file, say); mapped to CAPABILITY_UNAVAILABLE. */
+export class ActionUnavailableError extends Error {
+  constructor(message: string, readonly hint?: string) {
+    super(message)
+    this.name = 'ActionUnavailableError'
+  }
+}
+
+/** Raised when a write is refused because the stored state moved on since the caller read it (revision mismatch); mapped to ACTION_FAILED with the hint to read again. */
+export class ActionConflictError extends Error {
+  constructor(message: string, readonly hint?: string) {
+    super(message)
+    this.name = 'ActionConflictError'
   }
 }
 

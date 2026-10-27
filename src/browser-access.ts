@@ -79,3 +79,35 @@ export function browserState(browser: BrowserService | undefined): { available: 
   if (absent.length) return { available: true, state: 'incomplete', reason: 'dsh-browser lacks ' + absent.join(', ') + '; update @anweat/dsh-browser' }
   return { available: true, state: 'ready' }
 }
+
+/** What a launch of the browser would do on this machine, as dsh-browser reports it (0.2.2+ `status().browser`). */
+export interface BrowserLaunchReadiness {
+  ready: boolean
+  /** Which browser a launch will use (`playwright-chromium`, `system-browser`, ...). */
+  source?: string
+  /** Where it is. */
+  path?: string
+  /** The one command (or step) that fixes `ready: false`, in dsh-browser's own words. */
+  advice?: string
+}
+
+/**
+ * Whether the browser service can actually launch a browser. The service being present only means the plugin is loaded: a new user
+ * has no Playwright Chromium, and whether a system Chrome stands in is dsh-browser's decision. It is asked, never guessed, and
+ * only a dsh-browser that reports it (`status().browser`) is believed; any other answer (older plugin, a failing status call)
+ * is `undefined`, which callers treat as unknown and say nothing about.
+ */
+export async function browserLaunchReadiness(browser: BrowserService | undefined): Promise<BrowserLaunchReadiness | undefined> {
+  const status = (browser as { status?: unknown } | undefined)?.status
+  if (typeof status !== 'function') return undefined
+  try {
+    const value = (await (status as () => Promise<{ browser?: { ready?: unknown; source?: unknown; path?: unknown; installAdvice?: unknown } }>).call(browser))?.browser
+    if (value === undefined || value === null || typeof value.ready !== 'boolean') return undefined
+    return {
+      ready: value.ready,
+      ...typeof value.source === 'string' ? { source: value.source } : {},
+      ...typeof value.path === 'string' ? { path: value.path } : {},
+      ...typeof value.installAdvice === 'string' && value.installAdvice ? { advice: value.installAdvice.slice(0, 600) } : {},
+    }
+  } catch { return undefined }
+}

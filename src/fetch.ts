@@ -14,8 +14,9 @@ import { httpGet, capText } from './util.ts'
 import { LruCache } from './memory-cache.ts'
 import { assertSafePublicUrl } from './safe-http.ts'
 import { SingleFlight } from './singleflight.ts'
+import { deepseekFetchPage, type DeepSeekFetchAccess } from './providers/deepseek.ts'
 
-export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright'
+export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright' | 'deepseek'
 
 export interface FetchOptions {
   mode: FetchMode
@@ -135,7 +136,7 @@ export type PageClass = 'content' | 'shell' | 'login_wall' | 'captcha' | 'js_she
 
 /** One backend attempt of a fetch, in order (recorded in the result and in the stored fetch detail). */
 export interface FetchAttempt {
-  source: 'jina' | 'http' | 'playwright'
+  source: 'jina' | 'http' | 'playwright' | 'deepseek'
   class: PageClass
   chars?: number
   detail?: string
@@ -204,6 +205,12 @@ export function mergedRules(store: Store): ExtractRule[] {
   return [...dbRules, ...BUILTIN_RULES]
 }
 
+/**
+ * The DeepSeek Fetch API access for a call: key, endpoint, ledger. Resolved per call by the router (settings literal -> DSH credentials ->
+ * process environment); undefined = no key. Test seams (`fetchImpl`, `lookup`, `sleep`) ride along on the returned object.
+ */
+export type DeepSeekFetchAccessProvider = () => Promise<Pick<DeepSeekFetchAccess, 'apiKey' | 'baseUrl' | 'usage' | 'fetchImpl' | 'lookup' | 'sleep' | 'allowProxyFakeIp'> | undefined>
+
 export class FetchService {
   private readonly memory = new LruCache<FetchResult>(128)
   /** In-flight de-duplication of identical non-fresh fetches (C3). */
@@ -215,6 +222,7 @@ export class FetchService {
     private readonly store: Store,
     private readonly config: ResolvedConfig | (() => ResolvedConfig),
     browser?: BrowserService | BrowserGetter,
+    private readonly deepseek?: DeepSeekFetchAccessProvider,
   ) {
     this.getBrowser = toBrowserGetter(browser)
   }
@@ -288,13 +296,16 @@ export class FetchService {
         attempts.push({ source, class: cls, chars: result.text.length })
       } catch (error) {
         if (opts.mode !== 'auto' || opts.signal?.aborted) throw error
-        attempts.push({ source, class: 'error', detail: (error instanceof Error ? error.message : String(error)).slice(0, 160) })
+        attempts.push({ source, class: 'error', detail: (error instanceof Error ? error.message : String(error)).slice(0, source === 'playwright' ? 500 : 160) })
       }
     }
     const hasContent = (): boolean => tried.some(t => t.cls === 'content')
 
     if (opts.mode === 'auto' || opts.mode === 'jina') await attempt('jina', () => this.fetchJina(normalized, opts, maxChars))
     if (opts.mode === 'http' || (opts.mode === 'auto' && !hasContent())) await attempt('http', () => this.fetchHttp(normalized, opts, maxChars, rules))
+
+    // DeepSeek Fetch API (paid, off unless `deepseekFetch`): explicit `mode: deepseek`, or in auto mode when the free backends found no content.
+    if (opts.mode === 'deepseek' || (opts.mode === 'auto' && this.cfg().deepseekFetch === true && !hasContent())) await attempt('deepseek', () => this.fetchDeepSeek(normalized, opts, maxChars))
 
     // Browser render: an explicit request always; auto only when nothing usable came back (no result at all, or only
     // a shell / JS stub / login wall that a real browser may see through). It is optional and never installed here.
@@ -318,7 +329,10 @@ export class FetchService {
       }
     }
     const chosen = best()
-    if (!chosen) throw new Error('all fetch backends failed for ' + normalized + browserNote)
+    if (!chosen) {
+      const renderFailure = attempts.find(a => a.source === 'playwright' && a.class === 'error' && a.detail)
+      throw new Error('all fetch backends failed for ' + normalized + browserNote + (renderFailure ? ' (browser render failed: ' + renderFailure.detail + ')' : ''))
+    }
     const result: FetchResult = { ...chosen.result, attempts }
 
     // P1-3: flag pages that are not content (navigation/JS/form shell, login wall, captcha, error page) so the
@@ -387,6 +401,16 @@ export class FetchService {
       }
     }
     return { url: res.finalUrl, text: capText(res.text, maxChars), source: 'http', fromCache: false, statusCode: res.status }
+  }
+
+  /** One page through the DeepSeek Fetch API. 403 / 404 are DeepSeek's own verdicts (see `DeepSeekFetchError`), never the target page's status. */
+  private async fetchDeepSeek(url: string, opts: FetchOptions, maxChars: number): Promise<FetchResult> {
+    if (this.cfg().deepseekFetch !== true) throw new Error('DeepSeek Fetch is off: it is billed ($0.75 per 1,000 successful requests), so the user turns it on first (settings deepseekFetch)')
+    const access = await this.deepseek?.()
+    if (!access) throw new Error('DeepSeek Fetch has no API key: set $DEEPSEEK_API_KEY, a DSH credentials ref or the DeepSeek key in the plugin settings')
+    const page = await deepseekFetchPage(url, { ...access, allowProxyFakeIp: access.allowProxyFakeIp ?? this.cfg().allowProxyFakeIp }, opts.signal)
+    // The API reports neither the target's HTTP status nor a final URL: no statusCode is claimed.
+    return { url, ...page.title ? { title: page.title } : {}, text: capText(page.text.trim(), maxChars), source: 'deepseek', fromCache: false }
   }
 
   private async fetchPlaywright(browser: BrowserService, url: string, opts: FetchOptions, maxChars: number, rules: ExtractRule[]): Promise<FetchResult> {

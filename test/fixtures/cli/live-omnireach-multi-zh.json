@@ -1,0 +1,326 @@
+{
+ "query": "DeepSeek 联网搜索 插件",
+ "ts": "2026-10-26T16:17:15.202754Z",
+ "results": [
+  {
+   "source": "github",
+   "adapter": "gh",
+   "title": "Qhzy1411/Maibot-Deepseek-Web-Searcher",
+   "url": "https://github.com/Qhzy1411/Maibot-Deepseek-Web-Searcher",
+   "content": "Maibot Deepseek联网搜索插件",
+   "author": null,
+   "ts": "2026-10-11T17:58:31Z",
+   "score": 0.0,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.9132713141000388
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "给 DeepSeek Harness 装内容搜索插件解决搜得到标题，搜不到内容问题",
+   "url": "https://www.bilibili.com/video/BV1o2n96AEVu",
+   "content": "给 DeepSeek Harness 装内容搜索插件解决搜得到标题，搜不到内容问题\n插件地址：https://github.com/Victue/dsh-session-search\n个人博客：https://www.firstsaofan.top/\n如果基于源码本地安装遇到问题可参考本人博客",
+   "author": "桃源耕云客",
+   "ts": "2026-10-26T04:17:13Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 18,
+    "comments": 328,
+    "shares": null,
+    "views": 583,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.73
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "DeepSeek 装什么插件才实用?",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031433&ver=7050&signature=REDACTED&new=1",
+   "content": "DeepSeek Harness 装什么插件才实用? 从文件处理、联网搜索,到长期记忆、多 Agent 协作,12 个实用插件整理成一张图. 刚上手...",
+   "author": "容易学的PPT",
+   "ts": "2026-10-26T02:05:56Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.7298311236515969
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "开源2个月25万Star!DeepSeek Harness最强12款插件盘点",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031433&ver=7050&signature=REDACTED&new=1",
+   "content": "DeepSeek Harness GitHub Star直接突破25万!第三方插件生态彻... ModSearch联网插件:给模型补上网页抓取搜索能力,支持多家搜...",
+   "author": "人工智能 我在行",
+   "ts": "2026-10-23T02:25:56Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.7242998175848152
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "DeepSeek的搜索接口是啥，跟模型自带的搜索差在哪，我实测16道题",
+   "url": "https://www.bilibili.com/video/BV12dnL6kEps",
+   "content": "大模型自己就会上网搜，为什么还要单独开一个搜索接口？区别在于：模型自带的搜索，搜什么、什么时候搜、搜几条，全是模型自己定的，你插不上手，搜到的东西也接不进你自己的程序。这期讲的就是 DeepSeek 新出的这套搜索接口——查询词你自己指定，返回的是排好的结果，标题、网址、时间、相关分、权威分都在，能存下来核对、能接进自己的程序。它按次收费，一次五厘钱；我用 DeepSeek 官方 API 跑了 16 道题实测它准不准、哪里有坑，测试范围和边界也一并讲清。你平时在网页版点联网，背后就是同一套引擎。",
+   "author": "不确定体验局",
+   "ts": "2026-10-19T04:30:00Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 86,
+    "comments": 50,
+    "shares": null,
+    "views": 6204,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.7170500333432704
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "当你在关掉智能搜索功能之后，让 Deepseek 联网搜索:",
+   "url": "https://www.bilibili.com/video/BV1wBnG6tEm5",
+   "content": "-",
+   "author": "LifeErr0r",
+   "ts": "2026-10-18T09:00:22Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 23,
+    "comments": 1,
+    "shares": null,
+    "views": 1717,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.7155454752147643
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "DeepSeek支持api网页搜索(接入 Kimi Code 与 DSH 双端插件)",
+   "url": "https://www.bilibili.com/video/BV1LKJi6CEKF",
+   "content": "• 技术向：DeepSeek 原生 Search/Fetch 接入 AI Agent——Kimi Code 与 DSH 双端插件                           \n   • 痛点向：内置搜索 403？让 AI 编程助手改用 DeepSeek 原生联网                                            \n   • 教程向：从零安装 DeepSeek 原生搜索插件：Kimi Code、DeepSeek Harness 两套实录              ",
+   "author": "red润",
+   "ts": "2026-10-17T12:05:26Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 29,
+    "comments": 131,
+    "shares": null,
+    "views": 1892,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.7139311914100961
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "刚刚，DeepSeek 新增搜索与抓取 API 并按次收费。",
+   "url": "https://www.bilibili.com/video/BV1P3Jt6ME6z",
+   "content": "",
+   "author": "黑鸦Heya",
+   "ts": "2026-10-16T14:02:12Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 2332,
+    "comments": 689,
+    "shares": null,
+    "views": 105691,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.7122290498834836
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "聊天走 GLM,搜索却在扣 DeepSeek:排查到底,我给 DSH 写了个开源插件",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031433&ver=7050&signature=REDACTED&new=1",
+   "content": "还顺手写了一个开源插件,把这个问题彻底终结.这篇文章就是完... deepseek-v4-flash,每次联网搜索就是一次真实的 DeepSeek API ...",
+   "author": "肥肥的GitHub",
+   "ts": "2026-10-13T09:30:59Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.7063231371852878
+  },
+  {
+   "source": "bilibili",
+   "adapter": "bilibili-api",
+   "title": "DeepSeek Harness联网能力安装教程｜让AI实时搜索资料",
+   "url": "https://www.bilibili.com/video/BV1WrpQ61EDB",
+   "content": "DeepSeek Harness 开启联网能力教程来了！🚀\n无论是自媒体选题、短视频脚本、行业资讯整理，还是日常内容创作辅助，让 AI 工作流变得更加高效。\n本期带你体验 AI 联网能力玩法，适用于 DeepSeek Harness、Codex、WorkBuddy、Claude Code、Cursor 等 AI 编程与创作工具。\n✅ DeepSeek Harness 联网能力配置\n✅ AI 实时搜索资料演示\n✅ 热点分析与内容生成玩法\n✅ AI Agent 工作流升级技巧\n让你的 AI 助手从“回答问题”",
+   "author": "扁式丶Bb",
+   "ts": "2026-10-12T06:36:02Z",
+   "score": 0.4,
+   "engagement": {
+    "likes": 4,
+    "comments": 0,
+    "shares": null,
+    "views": 560,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.704245745852137
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "【保姆级教程】DeepSeek全网最简单的满血版联网方法+进阶玩法教程！",
+   "url": "https://www.youtube.com/watch?v=YQszP-FU7nQ",
+   "content": "",
+   "author": "来真的",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 5996,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "一招解锁Deepseek API联网功能，让R1自带搜索，任意平台可用！",
+   "url": "https://www.youtube.com/watch?v=FAbqYwjainI",
+   "content": "",
+   "author": "AI学长小林",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 12329,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "deepseek harness a股解读插件，无需联网搜索即可使用 #deepseek #plugins #opensource #stockmarket #stocks",
+   "url": "https://www.youtube.com/watch?v=LKcFv4Vt3Ok",
+   "content": "",
+   "author": "Skingway",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 32,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "Deepseek官网不能使用？手把手教你使用API+联网搜索+知识库+强制思考，我都要！获得官网相同的使用体验。",
+   "url": "https://www.youtube.com/watch?v=0O3MEKueXpM",
+   "content": "",
+   "author": "啥都玩的材料人",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 488,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "【最佳本地模型】本地部署DeepSeek-R1模型教程，支持联网搜索，支持本地RAG知识库检索 | OLLAMA + PAGE ASSIST",
+   "url": "https://www.youtube.com/watch?v=nK9LOufJazg",
+   "content": "",
+   "author": "EasyAI",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 3186,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "youtube",
+   "adapter": "yt-dlp",
+   "title": "DeepSeek Harness插件完全指南：找、装、管、造四步搞定（附十大必装插件盘点）",
+   "url": "https://www.youtube.com/watch?v=1GLZZfvPtzI",
+   "content": "",
+   "author": "嗯哌AI",
+   "ts": null,
+   "score": 0.0,
+   "engagement": {
+    "likes": null,
+    "comments": null,
+    "shares": null,
+    "views": 9603,
+    "collects": null
+   },
+   "cost": "free",
+   "raw_score": 0.56
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "DeepSeek完全指南:免费AI之王,你只用了10%的功能",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031433&ver=7050&signature=REDACTED&new=1",
+   "content": "ChatGPT在英文场景和插件生态上更强.日常用DeepSeek完全够... 联网搜索的结构化提问技巧角色设定提升输出质量R1深度思考处...",
+   "author": "智合共生",
+   "ts": "2026-03-31T13:14:15Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.3435508422967827
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "豆包、DeepSeek联网搜索增加抖音信源和官网信源,GEO优化逻辑变了!",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031433&ver=7050&signature=REDACTED&new=1",
+   "content": "DeepSeek和豆包的联网搜索信源已增加抖音及官网相关内容,具体变化如下:一、豆包的信源特征字节系生态深度绑定:豆包的问答...",
+   "author": "外贸加油站",
+   "ts": "2026-03-25T04:00:42Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.33172471697346656
+  },
+  {
+   "source": "wechat",
+   "adapter": "sogou",
+   "title": "DeepSeek自述联网搜索标准",
+   "url": "https://mp.weixin.qq.com/s?src=11&timestamp=1793031433&ver=7050&signature=REDACTED&new=1",
+   "content": "联网搜索的三个维度——权威性、相关性、时效性——是我在联网搜索模式下,从搜索引擎返回的结果中筛选信息时的主要判断依据....",
+   "author": "新一个冬天",
+   "ts": "2026-03-24T05:39:55Z",
+   "score": 0.3,
+   "engagement": null,
+   "cost": "free",
+   "raw_score": 0.33
+  }
+ ],
+ "errors": []
+}

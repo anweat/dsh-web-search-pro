@@ -105,6 +105,12 @@ export interface SourcesConfig {
     /** Source ids the automatic plan and the configured `engines` list never use (an explicit `engines` / `platform` in a call still can). */
     disabled?: string[];
     /**
+     * Confidence (0..1) per source id, including the platform backends of a chain (`xhs`, `browser-search`, `custom-cli:<id>`).
+     * Built-in sources have 1; a custom CLI has the `confidence` of its spec (default 0.5) unless it is set here. It scales the
+     * source's weight in rank fusion a little (pipeline/confidence.ts) and is printed with its results; 1 changes nothing.
+     */
+    confidence?: Record<string, number>;
+    /**
      * Optional request caps per source id, counted in the usage ledger (persistent, atomic): `total` over all time, `daily` per
      * calendar day (time zone of `evidence.budget`). No source has a cap unless it is set here. An exhausted source is skipped
      * with a note and the plan falls back to other sources; it is never an error. Example for a Bocha account with 1000 requests:
@@ -113,8 +119,115 @@ export interface SourcesConfig {
     budget?: Record<string, SourceBudgetInput>;
 }
 export interface Config {
-    /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
-    dbPath?: string;
+    /** Default cap on returned sources per search. */
+    searchMaxResults: number;
+    /** Query all requested engines in parallel and merge. */
+    parallelEngines: boolean;
+    /** Tool surface: `indexed` (default) keeps only web_index / web_call in context; `flat` registers one tool per action. Applied at startup. */
+    toolSurface?: ToolSurface;
+    /** Trust Clash/TUN fake-IP DNS answers (198.18/15, fdfe:dcba:9876::/64, 2001:2::/48) while retaining all other SSRF checks. */
+    allowProxyFakeIp: boolean;
+    /**
+     * Let `read.fetch` use the DeepSeek Fetch API ($0.75 per 1,000 successful requests) as a backend, after the free ones and before the
+     * browser, in `mode: auto`, and accept `mode: deepseek`. Uses the same key as DeepSeek Search (`keyedSources.deepseek`). Off by default: it spends money.
+     */
+    deepseekFetch: boolean;
+    /** Ordered engine list for search.run. */
+    engines: string[];
+    /** Source preferences and request budgets (dev-plan M11a). */
+    sources?: SourcesConfig;
+    /**
+     * Ordered backend chain per platform (dev-plan M12): backend ids such as `xhs`, `opencli` (standalone OpenCLI), `browser-opencli`
+     * (dsh-browser), `browser-search`, `rest`, `gh`, `custom-cli:<id>`. A platform not listed uses its default chain.
+     */
+    platformBackends?: Record<string, string[]>;
+    /**
+     * Keyed search sources by route id (`tavily`, `brave`, `linkup`, `serper`, `metaso`, `zhipu`, `baidu-qianfan`): the key literal,
+     * the credentials ref / environment variable name (default e.g. TAVILY_API_KEY), and an optional endpoint base override.
+     * A source without a key is `credential: missing` and not executable.
+     */
+    keyedSources?: Record<string, {
+        apiKey?: string;
+        apiKeyEnv?: string;
+        baseUrl?: string;
+    }>;
+    /** Exa API key (falls back to $EXA_API_KEY / credentials ref). */
+    exaApiKey?: string;
+    /** Credential/env reference for the Exa key; defaults to EXA_API_KEY. */
+    exaApiKeyEnv?: string;
+    /** Jina AI API key (falls back to $JINA_API_KEY / credentials ref). */
+    jinaApiKey?: string;
+    /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
+    jinaApiKeyEnv?: string;
+    /** Bocha web-search API key (falls back to the credentials ref / $BOCHA_SEARCH_API_KEY, then $BOCHA_JEV_API_KEY of the same account). */
+    bochaApiKey?: string;
+    /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
+    bochaApiKeyEnv?: string;
+    /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bocha.cn. */
+    bochaBaseUrl?: string;
+    /** Ask Bocha for its longer per-page summary (default true). */
+    bochaSummary?: boolean;
+    /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
+    githubToken?: string;
+    /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
+    githubTokenEnv?: string;
+    /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
+    searxngUrl?: string;
+    /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
+    openalexMailto?: string;
+    /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
+    cliAdapters?: Record<string, Record<string, unknown>>;
+    /** Evidence pipeline (S6 scoring). */
+    evidence?: Partial<EvidenceConfig>;
+    /**
+     * Default output cap (characters) of one `read.fetch` call. Longer pages are cut here and
+     * continued with `offset`; the ctx.web fetch provider (which cannot be told a size) uses twice this.
+     */
+    fetchDefaultChars: number;
+    /** `read.contents`: output cap per URL (characters). */
+    exaContentsPerUrlChars: number;
+    /** `read.contents`: output cap over all URLs of one call (characters); shared fairly between them. */
+    exaContentsTotalChars: number;
+    /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
+    enableCliBackends: boolean;
+    /** Allow opencli browser-session backends. */
+    opencliEnabled: boolean;
+    /** Allow agent-reach backends. */
+    agentReachEnabled: boolean;
+    /** twitter-cli `auth_token` cookie (falls back to the credentials ref / $TWITTER_AUTH_TOKEN). Handed to the twitter command only through its environment. */
+    twitterAuthToken?: string;
+    /** Credential/env reference for the twitter auth token; defaults to TWITTER_AUTH_TOKEN. */
+    twitterAuthTokenEnv?: string;
+    /** twitter-cli `ct0` cookie (falls back to the credentials ref / $TWITTER_CT0). */
+    twitterCt0?: string;
+    /** Credential/env reference for the twitter ct0 cookie; defaults to TWITTER_CT0. */
+    twitterCt0Env?: string;
+    /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
+    playwright: {
+        /** Gate the playwright fallback backend in read.fetch. */
+        enabled: boolean;
+        /** Directory for read.snapshot artifacts; defaults to <dbDir>/snapshots. */
+        snapshotDir?: string;
+    };
+    /** User-defined custom platform search: url template + selectors + optional cookie. */
+    customPlatforms?: Record<string, CustomPlatformSpec>;
+    /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
+    platformRules?: Record<string, {
+        item: string;
+        title: string;
+        link: string;
+        text?: string;
+    }>;
+    /** Per-platform binding to domain-scoped dsh-browser auth/rule profiles. */
+    browserBindings?: Record<string, BrowserBinding>;
+    /** Provider id registered into ctx.web for the built-in web_search tool. */
+    providerId: string;
+    /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
+    registerProvider: boolean;
+    /** ctx.web provider route: evidence pack inside the built-in web_search (only when this plugin is the selected provider). */
+    provider?: Partial<ProviderSettings>;
+    /** Cooperative per-call timeout budget in ms. */
+    timeoutMs: number;
     /** Cache freshness window in seconds. */
     ttlSeconds: number;
     /** In-process LRU entry cap (hot queries resolve without touching SQLite). */
@@ -136,132 +249,43 @@ export interface Config {
     authorityBoost: number;
     /** Extra authority domains (beyond the built-in .edu/.gov/.org and the curated list). */
     authorityDomains: string[];
-    /** Default cap on returned sources per search. */
-    searchMaxResults: number;
-    /**
-     * Default output cap (characters) of one `read.fetch` call. Longer pages are cut here and
-     * continued with `offset`; the ctx.web fetch provider (which cannot be told a size) uses twice this.
-     */
-    fetchDefaultChars: number;
-    /** `read.contents`: output cap per URL (characters). */
-    exaContentsPerUrlChars: number;
-    /** `read.contents`: output cap over all URLs of one call (characters); shared fairly between them. */
-    exaContentsTotalChars: number;
-    /** Tool surface: `indexed` (default) keeps only web_index / web_call in context; `flat` registers one tool per action. Applied at startup. */
-    toolSurface?: ToolSurface;
-    /** Cooperative per-call timeout budget in ms. */
-    timeoutMs: number;
-    /** Trust Clash/TUN fake-IP DNS answers (198.18/15, fdfe:dcba:9876::/64, 2001:2::/48) while retaining all other SSRF checks. */
-    allowProxyFakeIp: boolean;
-    /** Ordered engine list for search.run. */
-    engines: string[];
-    /** Query all requested engines in parallel and merge. */
-    parallelEngines: boolean;
-    /** Exa API key (falls back to $EXA_API_KEY / credentials ref). */
-    exaApiKey?: string;
-    /** Credential/env reference for the Exa key; defaults to EXA_API_KEY. */
-    exaApiKeyEnv?: string;
-    /** Jina AI API key (falls back to $JINA_API_KEY / credentials ref). */
-    jinaApiKey?: string;
-    /** Credential/env reference for the Jina key; defaults to JINA_API_KEY. */
-    jinaApiKeyEnv?: string;
-    /** Bocha web-search API key (falls back to the credentials ref / $BOCHA_SEARCH_API_KEY, then $BOCHA_JEV_API_KEY of the same account). */
-    bochaApiKey?: string;
-    /** Credential/env reference for the Bocha search key; defaults to BOCHA_SEARCH_API_KEY. */
-    bochaApiKeyEnv?: string;
-    /** Bocha endpoint base (`/v1/web-search` is appended); defaults to https://api.bocha.cn. */
-    bochaBaseUrl?: string;
-    /** Ask Bocha for its longer per-page summary (default true). */
-    bochaSummary?: boolean;
-    /** Self-hosted SearXNG instance URL (JSON format enabled); the `searxng` engine is available only when set. No public instance is built in. */
-    searxngUrl?: string;
-    /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
-    openalexMailto?: string;
-    /**
-     * Keyed search sources by route id (`tavily`, `brave`, `linkup`, `serper`, `metaso`, `zhipu`, `baidu-qianfan`): the key literal,
-     * the credentials ref / environment variable name (default e.g. TAVILY_API_KEY), and an optional endpoint base override.
-     * A source without a key is `credential: missing` and not executable.
-     */
-    keyedSources?: Record<string, {
-        apiKey?: string;
-        apiKeyEnv?: string;
-        baseUrl?: string;
-    }>;
-    /** GitHub API token for the REST search engines (falls back to $GITHUB_TOKEN / $GH_TOKEN / credentials ref). */
-    githubToken?: string;
-    /** Credential/env reference for the GitHub token; defaults to GITHUB_TOKEN. */
-    githubTokenEnv?: string;
-    /** Allow CLI backends (bili / yt-dlp / opencli / agent-reach). */
-    enableCliBackends: boolean;
-    /** Allow opencli browser-session backends. */
-    opencliEnabled: boolean;
-    /** Allow agent-reach backends. */
-    agentReachEnabled: boolean;
-    /** Provider id registered into ctx.web for the built-in web_search tool. */
-    providerId: string;
-    /** Register the ctx.web provider (set DSH_WEB_SEARCH_PROVIDER to use it). */
-    registerProvider: boolean;
-    /** ctx.web provider route: evidence pack inside the built-in web_search (only when this plugin is the selected provider). */
-    provider?: Partial<ProviderSettings>;
-    /** Per-platform search-page selector overrides (item/title/link/text). Overrides built-in specs. */
-    platformRules?: Record<string, {
-        item: string;
-        title: string;
-        link: string;
-        text?: string;
-    }>;
-    /** User-defined custom platform search: url template + selectors + optional cookie. */
-    customPlatforms?: Record<string, CustomPlatformSpec>;
-    /** Per-platform binding to domain-scoped dsh-browser auth/rule profiles. */
-    browserBindings?: Record<string, BrowserBinding>;
-    /**
-     * Ordered backend chain per platform (dev-plan M12): backend ids such as `xhs`, `opencli` (standalone OpenCLI), `browser-opencli`
-     * (dsh-browser), `browser-search`, `rest`, `gh`, `custom-cli:<id>`. A platform not listed uses its default chain.
-     */
-    platformBackends?: Record<string, string[]>;
-    /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
-    cliAdapters?: Record<string, Record<string, unknown>>;
-    /** Snapshot options. The browser runtime itself (channel/headless/storageStatePath) is provided by the dsh-browser plugin via the `browser` service. */
-    playwright: {
-        /** Gate the playwright fallback backend in read.fetch. */
-        enabled: boolean;
-        /** Directory for read.snapshot artifacts; defaults to <dbDir>/snapshots. */
-        snapshotDir?: string;
-    };
-    /** Source preferences and request budgets (dev-plan M11a). */
-    sources?: SourcesConfig;
-    /** Evidence pipeline (S6 scoring). */
-    evidence?: Partial<EvidenceConfig>;
+    /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
+    dbPath?: string;
     verbose: boolean;
 }
+export { DEFAULT_ENGINES };
+import { DEFAULT_ENGINES } from './default-chain.ts';
 export declare const Config: z<Schemastery.ObjectS<NoInfer<{
-    dbPath: z<string, string, "volatile">;
-    toolSurface: z<string, string, "volatile-defined">;
-    ttlSeconds: z<number, number, "volatile-defined">;
-    memoryCacheEntries: z<number, number, "volatile-defined">;
-    rrfConstant: z<number, number, "volatile-defined">;
-    freshnessBoost: z<number, number, "volatile-defined">;
-    freshnessDays: z<number, number, "volatile-defined">;
-    authorityBoost: z<number, number, "volatile-defined">;
-    authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     searchMaxResults: z<number, number, "volatile-defined">;
-    fetchDefaultChars: z<number, number, "volatile-defined">;
-    exaContentsPerUrlChars: z<number, number, "volatile-defined">;
-    exaContentsTotalChars: z<number, number, "volatile-defined">;
-    timeoutMs: z<number, number, "volatile-defined">;
-    allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
-    engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     parallelEngines: z<boolean, boolean, "volatile-defined">;
-    exaApiKey: z<string, string, "volatile">;
-    exaApiKeyEnv: z<string, string, "volatile-defined">;
-    jinaApiKey: z<string, string, "volatile">;
-    jinaApiKeyEnv: z<string, string, "volatile-defined">;
-    bochaApiKey: z<string, string, "volatile">;
-    bochaApiKeyEnv: z<string, string, "volatile-defined">;
-    bochaBaseUrl: z<string, string, "volatile-defined">;
-    bochaSummary: z<boolean, boolean, "volatile-defined">;
-    searxngUrl: z<string, string, "volatile">;
-    openalexMailto: z<string, string, "volatile">;
+    toolSurface: z<string, string, "volatile-defined">;
+    allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
+    deepseekFetch: z<boolean, boolean, "volatile-defined">;
+    engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    sources: z<Schemastery.ObjectS<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, "plain">;
+    platformBackends: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
     keyedSources: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
         apiKey?: string | null | undefined;
         apiKeyEnv?: string | null | undefined;
@@ -271,85 +295,19 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         apiKeyEnv: z<string, string, "plain">;
         baseUrl: z<string, string, "plain">;
     }>>, string>>, "volatile">;
+    exaApiKey: z<string, string, "volatile">;
+    exaApiKeyEnv: z<string, string, "volatile-defined">;
+    jinaApiKey: z<string, string, "volatile">;
+    jinaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaApiKey: z<string, string, "volatile">;
+    bochaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaBaseUrl: z<string, string, "volatile-defined">;
+    bochaSummary: z<boolean, boolean, "volatile-defined">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
-    enableCliBackends: z<boolean, boolean, "volatile-defined">;
-    opencliEnabled: z<boolean, boolean, "volatile-defined">;
-    agentReachEnabled: z<boolean, boolean, "volatile-defined">;
-    providerId: z<string, string, "volatile-defined">;
-    registerProvider: z<boolean, boolean, "volatile-defined">;
-    provider: z<Schemastery.ObjectS<NoInfer<{
-        evidence: z<string, string, "volatile-defined">;
-        deadlineMs: z<number, number, "volatile-defined">;
-    }>>, Schemastery.ObjectT<NoInfer<{
-        evidence: z<string, string, "volatile-defined">;
-        deadlineMs: z<number, number, "volatile-defined">;
-    }>>, "plain">;
-    platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-        item?: string | null | undefined;
-        title?: string | null | undefined;
-        link?: string | null | undefined;
-        text?: string | null | undefined;
-    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-        item: z<string, string, "plain">;
-        title: z<string, string, "plain">;
-        link: z<string, string, "plain">;
-        text: z<string, string, "plain">;
-    }>>, string>>, "volatile">;
-    customPlatforms: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-        name?: string | null | undefined;
-        url?: string | null | undefined;
-        item?: string | null | undefined;
-        title?: string | null | undefined;
-        link?: string | null | undefined;
-        text?: string | null | undefined;
-        cookie?: string | null | undefined;
-    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-        name: z<string, string, "plain">;
-        url: z<string, string, "plain">;
-        item: z<string, string, "plain">;
-        title: z<string, string, "plain">;
-        link: z<string, string, "plain">;
-        text: z<string, string, "plain">;
-        cookie: z<string, string, "plain">;
-    }>>, string>>, "volatile">;
-    browserBindings: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-        authProfile?: string | null | undefined;
-        rulePack?: string | null | undefined;
-    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-        authProfile: z<string, string, "plain">;
-        rulePack: z<string, string, "plain">;
-    }>>, string>>, "volatile">;
-    platformBackends: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+    searxngUrl: z<string, string, "volatile">;
+    openalexMailto: z<string, string, "volatile">;
     cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
-    playwright: z<Schemastery.ObjectS<NoInfer<{
-        enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
-    }>>, Schemastery.ObjectT<NoInfer<{
-        enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
-    }>>, "plain">;
-    sources: z<Schemastery.ObjectS<NoInfer<{
-        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            total?: number | null | undefined;
-            daily?: number | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            total: z<number, number, "plain">;
-            daily: z<number, number, "plain">;
-        }>>, string>>, "volatile">;
-    }>>, Schemastery.ObjectT<NoInfer<{
-        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            total?: number | null | undefined;
-            daily?: number | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            total: z<number, number, "plain">;
-            daily: z<number, number, "plain">;
-        }>>, string>>, "volatile">;
-    }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
@@ -693,35 +651,108 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             }>>, string>, "plain">;
         }>>>, "volatile">;
     }>>, "plain">;
+    fetchDefaultChars: z<number, number, "volatile-defined">;
+    exaContentsPerUrlChars: z<number, number, "volatile-defined">;
+    exaContentsTotalChars: z<number, number, "volatile-defined">;
+    enableCliBackends: z<boolean, boolean, "volatile-defined">;
+    opencliEnabled: z<boolean, boolean, "volatile-defined">;
+    agentReachEnabled: z<boolean, boolean, "volatile-defined">;
+    twitterAuthToken: z<string, string, "volatile">;
+    twitterAuthTokenEnv: z<string, string, "volatile-defined">;
+    twitterCt0: z<string, string, "volatile">;
+    twitterCt0Env: z<string, string, "volatile-defined">;
+    playwright: z<Schemastery.ObjectS<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "volatile">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "volatile">;
+    }>>, "plain">;
+    customPlatforms: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        name?: string | null | undefined;
+        url?: string | null | undefined;
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+        cookie?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        name: z<string, string, "plain">;
+        url: z<string, string, "plain">;
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+        cookie: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    browserBindings: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        authProfile?: string | null | undefined;
+        rulePack?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        authProfile: z<string, string, "plain">;
+        rulePack: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    providerId: z<string, string, "volatile-defined">;
+    registerProvider: z<boolean, boolean, "volatile-defined">;
+    provider: z<Schemastery.ObjectS<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, "plain">;
+    timeoutMs: z<number, number, "volatile-defined">;
+    ttlSeconds: z<number, number, "volatile-defined">;
+    memoryCacheEntries: z<number, number, "volatile-defined">;
+    rrfConstant: z<number, number, "volatile-defined">;
+    freshnessBoost: z<number, number, "volatile-defined">;
+    freshnessDays: z<number, number, "volatile-defined">;
+    authorityBoost: z<number, number, "volatile-defined">;
+    authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    dbPath: z<string, string, "volatile">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
-    dbPath: z<string, string, "volatile">;
-    toolSurface: z<string, string, "volatile-defined">;
-    ttlSeconds: z<number, number, "volatile-defined">;
-    memoryCacheEntries: z<number, number, "volatile-defined">;
-    rrfConstant: z<number, number, "volatile-defined">;
-    freshnessBoost: z<number, number, "volatile-defined">;
-    freshnessDays: z<number, number, "volatile-defined">;
-    authorityBoost: z<number, number, "volatile-defined">;
-    authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     searchMaxResults: z<number, number, "volatile-defined">;
-    fetchDefaultChars: z<number, number, "volatile-defined">;
-    exaContentsPerUrlChars: z<number, number, "volatile-defined">;
-    exaContentsTotalChars: z<number, number, "volatile-defined">;
-    timeoutMs: z<number, number, "volatile-defined">;
-    allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
-    engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     parallelEngines: z<boolean, boolean, "volatile-defined">;
-    exaApiKey: z<string, string, "volatile">;
-    exaApiKeyEnv: z<string, string, "volatile-defined">;
-    jinaApiKey: z<string, string, "volatile">;
-    jinaApiKeyEnv: z<string, string, "volatile-defined">;
-    bochaApiKey: z<string, string, "volatile">;
-    bochaApiKeyEnv: z<string, string, "volatile-defined">;
-    bochaBaseUrl: z<string, string, "volatile-defined">;
-    bochaSummary: z<boolean, boolean, "volatile-defined">;
-    searxngUrl: z<string, string, "volatile">;
-    openalexMailto: z<string, string, "volatile">;
+    toolSurface: z<string, string, "volatile-defined">;
+    allowProxyFakeIp: z<boolean, boolean, "volatile-defined">;
+    deepseekFetch: z<boolean, boolean, "volatile-defined">;
+    engines: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    sources: z<Schemastery.ObjectS<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
+        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+            total?: number | null | undefined;
+            daily?: number | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+            total: z<number, number, "plain">;
+            daily: z<number, number, "plain">;
+        }>>, string>>, "volatile">;
+    }>>, "plain">;
+    platformBackends: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
     keyedSources: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
         apiKey?: string | null | undefined;
         apiKeyEnv?: string | null | undefined;
@@ -731,85 +762,19 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         apiKeyEnv: z<string, string, "plain">;
         baseUrl: z<string, string, "plain">;
     }>>, string>>, "volatile">;
+    exaApiKey: z<string, string, "volatile">;
+    exaApiKeyEnv: z<string, string, "volatile-defined">;
+    jinaApiKey: z<string, string, "volatile">;
+    jinaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaApiKey: z<string, string, "volatile">;
+    bochaApiKeyEnv: z<string, string, "volatile-defined">;
+    bochaBaseUrl: z<string, string, "volatile-defined">;
+    bochaSummary: z<boolean, boolean, "volatile-defined">;
     githubToken: z<string, string, "volatile">;
     githubTokenEnv: z<string, string, "volatile-defined">;
-    enableCliBackends: z<boolean, boolean, "volatile-defined">;
-    opencliEnabled: z<boolean, boolean, "volatile-defined">;
-    agentReachEnabled: z<boolean, boolean, "volatile-defined">;
-    providerId: z<string, string, "volatile-defined">;
-    registerProvider: z<boolean, boolean, "volatile-defined">;
-    provider: z<Schemastery.ObjectS<NoInfer<{
-        evidence: z<string, string, "volatile-defined">;
-        deadlineMs: z<number, number, "volatile-defined">;
-    }>>, Schemastery.ObjectT<NoInfer<{
-        evidence: z<string, string, "volatile-defined">;
-        deadlineMs: z<number, number, "volatile-defined">;
-    }>>, "plain">;
-    platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-        item?: string | null | undefined;
-        title?: string | null | undefined;
-        link?: string | null | undefined;
-        text?: string | null | undefined;
-    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-        item: z<string, string, "plain">;
-        title: z<string, string, "plain">;
-        link: z<string, string, "plain">;
-        text: z<string, string, "plain">;
-    }>>, string>>, "volatile">;
-    customPlatforms: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-        name?: string | null | undefined;
-        url?: string | null | undefined;
-        item?: string | null | undefined;
-        title?: string | null | undefined;
-        link?: string | null | undefined;
-        text?: string | null | undefined;
-        cookie?: string | null | undefined;
-    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-        name: z<string, string, "plain">;
-        url: z<string, string, "plain">;
-        item: z<string, string, "plain">;
-        title: z<string, string, "plain">;
-        link: z<string, string, "plain">;
-        text: z<string, string, "plain">;
-        cookie: z<string, string, "plain">;
-    }>>, string>>, "volatile">;
-    browserBindings: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-        authProfile?: string | null | undefined;
-        rulePack?: string | null | undefined;
-    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-        authProfile: z<string, string, "plain">;
-        rulePack: z<string, string, "plain">;
-    }>>, string>>, "volatile">;
-    platformBackends: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<string[], string>>, "volatile">;
+    searxngUrl: z<string, string, "volatile">;
+    openalexMailto: z<string, string, "volatile">;
     cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
-    playwright: z<Schemastery.ObjectS<NoInfer<{
-        enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
-    }>>, Schemastery.ObjectT<NoInfer<{
-        enabled: z<boolean, boolean, "volatile-defined">;
-        snapshotDir: z<string, string, "plain">;
-    }>>, "plain">;
-    sources: z<Schemastery.ObjectS<NoInfer<{
-        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            total?: number | null | undefined;
-            daily?: number | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            total: z<number, number, "plain">;
-            daily: z<number, number, "plain">;
-        }>>, string>>, "volatile">;
-    }>>, Schemastery.ObjectT<NoInfer<{
-        priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
-        budget: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
-            total?: number | null | undefined;
-            daily?: number | null | undefined;
-        } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
-            total: z<number, number, "plain">;
-            daily: z<number, number, "plain">;
-        }>>, string>>, "volatile">;
-    }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
         jevMode: z<"off" | "shadow" | "control" | "hybrid", "off" | "shadow" | "control" | "hybrid", "volatile-defined">;
@@ -1153,6 +1118,76 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             }>>, string>, "plain">;
         }>>>, "volatile">;
     }>>, "plain">;
+    fetchDefaultChars: z<number, number, "volatile-defined">;
+    exaContentsPerUrlChars: z<number, number, "volatile-defined">;
+    exaContentsTotalChars: z<number, number, "volatile-defined">;
+    enableCliBackends: z<boolean, boolean, "volatile-defined">;
+    opencliEnabled: z<boolean, boolean, "volatile-defined">;
+    agentReachEnabled: z<boolean, boolean, "volatile-defined">;
+    twitterAuthToken: z<string, string, "volatile">;
+    twitterAuthTokenEnv: z<string, string, "volatile-defined">;
+    twitterCt0: z<string, string, "volatile">;
+    twitterCt0Env: z<string, string, "volatile-defined">;
+    playwright: z<Schemastery.ObjectS<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "volatile">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        enabled: z<boolean, boolean, "volatile-defined">;
+        snapshotDir: z<string, string, "volatile">;
+    }>>, "plain">;
+    customPlatforms: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        name?: string | null | undefined;
+        url?: string | null | undefined;
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+        cookie?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        name: z<string, string, "plain">;
+        url: z<string, string, "plain">;
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+        cookie: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    platformRules: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        item?: string | null | undefined;
+        title?: string | null | undefined;
+        link?: string | null | undefined;
+        text?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        item: z<string, string, "plain">;
+        title: z<string, string, "plain">;
+        link: z<string, string, "plain">;
+        text: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    browserBindings: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<{
+        authProfile?: string | null | undefined;
+        rulePack?: string | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        authProfile: z<string, string, "plain">;
+        rulePack: z<string, string, "plain">;
+    }>>, string>>, "volatile">;
+    providerId: z<string, string, "volatile-defined">;
+    registerProvider: z<boolean, boolean, "volatile-defined">;
+    provider: z<Schemastery.ObjectS<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        evidence: z<string, string, "volatile-defined">;
+        deadlineMs: z<number, number, "volatile-defined">;
+    }>>, "plain">;
+    timeoutMs: z<number, number, "volatile-defined">;
+    ttlSeconds: z<number, number, "volatile-defined">;
+    memoryCacheEntries: z<number, number, "volatile-defined">;
+    rrfConstant: z<number, number, "volatile-defined">;
+    freshnessBoost: z<number, number, "volatile-defined">;
+    freshnessDays: z<number, number, "volatile-defined">;
+    authorityBoost: z<number, number, "volatile-defined">;
+    authorityDomains: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    dbPath: z<string, string, "volatile">;
     verbose: z<boolean, boolean, "volatile-defined">;
 }>>, "plain">;
 export interface ResolvedConfig extends Config {
@@ -1163,10 +1198,15 @@ export interface ResolvedConfig extends Config {
     jinaApiKey?: string;
     jinaApiKeyEnv: string;
     githubTokenEnv: string;
+    twitterAuthToken?: string;
+    twitterAuthTokenEnv: string;
+    twitterCt0?: string;
+    twitterCt0Env: string;
     bochaApiKey?: string;
     bochaApiKeyEnv: string;
     bochaBaseUrl: string;
     bochaSummary: boolean;
+    deepseekFetch: boolean;
     searxngUrl?: string;
     openalexMailto?: string;
     keyedSources?: Config['keyedSources'];
@@ -1177,8 +1217,6 @@ export interface ResolvedConfig extends Config {
 }
 /** Default database path under the harness home. */
 export declare function defaultDbPath(): string;
-export declare function normalizeJudge<T>(judge: T): T;
-export declare function normalizeRubrics<T>(rubrics: T): T;
-export declare function normalizeCoverage<T>(coverage: T): T;
+export { normalizeJudge, normalizeRubrics, normalizeCoverage } from './config-fillers.ts';
 /** Resolve a fully-defaulted config from user input. Unwraps volatile fields (schemastery `Volatile<T>`) into plain values so consumers never see the wrapper. */
 export declare function resolveConfig(config: Config): ResolvedConfig;

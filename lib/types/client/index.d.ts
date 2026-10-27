@@ -1,6 +1,7 @@
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 import type { Context } from './context-types.ts';
 import { type CredentialId, type RubricTextKey, type SettingField, type WebSearchCardState } from './form.ts';
+import type { TrialRequest } from '../rpc-types.ts';
 export declare const name = "web-search-pro-client";
 export declare const inject: string[];
 export declare const NS = "web-search-pro.card";
@@ -16,5 +17,12 @@ export type SettingsCardProps = PropsLocale<typeof NS> & {
     save: () => void;
     discard: () => void;
     refreshCredentials: () => void;
+    refreshStatus: () => void;
+    /** The agent overlay: read it again, drop entries (keys, or `'all'`), write one into the configuration and drop it. */
+    refreshOverlay: () => void;
+    revokeOverlay: (keys: readonly string[] | 'all') => void;
+    adoptOverlay: (key: string) => void;
+    runTrial: (request: TrialRequest) => void;
+    clearTrial: () => void;
 };
 export declare function apply(ctx: Context): void;

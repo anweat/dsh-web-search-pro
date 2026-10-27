@@ -1,0 +1,6 @@
+ok: false
+error:
+  code: AUTH_REQUIRED
+  message: Xiaohongshu search results are blocked behind a login wall
+  help: Please open Chrome or Chromium and log in to https://www.xiaohongshu.com
+  exitCode: 77

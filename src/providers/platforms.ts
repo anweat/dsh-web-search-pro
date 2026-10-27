@@ -29,7 +29,7 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
       const errors: unknown[] = []
       const notes: string[] = []
       for (const engine of chain) {
-        if (!engine.available()) { notes.push(engine.id + ': unavailable'); continue }
+        if (!engine.available()) { notes.push(engine.id + ': ' + (engine.unavailableReason?.() ?? 'unavailable')); continue }
         try {
           const outcome = await engine.search(query, count, signal, options)
           // The legs that were passed over are named with their reasons, so a fall-through is never silent.
@@ -41,8 +41,9 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
           notes.push(engine.id + ': ' + (error instanceof Error ? error.message : String(error)))
         }
       }
-      if (!errors.length) throw new EngineError(label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
-      if (errors.length === 1) throw errors[0]
+      if (!errors.length) throw new EngineError(label + ' unavailable' + (notes.length ? ': ' + notes.join('; ') : ''), 'ENGINE_UNAVAILABLE', false)
+      // One backend failed and nothing else ran: its own error. Backends that were passed over before or after it are named too.
+      if (errors.length === 1 && notes.length === 1) throw errors[0]
       const code = (error: unknown): unknown => (error as { code?: unknown } | null)?.code
       if (errors.every(error => code(error) === 'ENGINE_EMPTY')) throw new EngineError(notes.join('; '), 'ENGINE_EMPTY', false)
       throw new EngineError(notes.join('; '), 'ENGINE_ERROR', errors.some(error => (error as { retryable?: unknown } | null)?.retryable !== false))
@@ -133,30 +134,30 @@ export const platformAdapters: readonly ProviderAdapter[] = [
 
   cliPlatform('xiaohongshu', '小红书', {
     languages: ['zh'], regions: ['cn'], domains: ['xiaohongshu.com'], taskProfiles: ['experience'], resultKinds: ['social'],
-    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI with your own Chrome'), cliReq('xhs', 'second backend: xiaohongshu-cli (`xhs login` is yours to run)'), BROWSER_REQ],
+    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('xhs', 'optional fallback: xiaohongshu-cli (`xhs login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs your login; command contracts probed locally, no search run' },
+    verification: { live: false, note: 'log in to xiaohongshu.com in your own Chrome (OpenCLI) or log xhs in yourself; the xhs search was measured live on 2026-10-27, the OpenCLI one answered AUTH_REQUIRED without a login so its mapping is not measured; command contracts probed locally' },
   }),
 
-  // One provider, three backends in order: twitter-cli, the standalone OpenCLI, the dsh-browser OpenCLI bridge.
+  // One provider, three backends in order: the standalone OpenCLI (your Chrome's login), twitter-cli (optional fallback), the dsh-browser OpenCLI bridge.
   cliPlatform('twitter', 'Twitter / X', {
     domains: ['twitter.com', 'x.com'], taskProfiles: ['experience', 'news_fact'], resultKinds: ['social'],
     requirements: [
-      cliReq('twitter', 'first backend: twitter-cli (needs TWITTER_AUTH_TOKEN and TWITTER_CT0)'),
+      cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'),
+      cliReq('twitter', 'optional fallback: twitter-cli (needs TWITTER_AUTH_TOKEN and TWITTER_CT0)'),
       { kind: 'key', id: 'twitter-auth-token', env: ['TWITTER_AUTH_TOKEN'], optional: true, note: 'twitter-cli needs this and TWITTER_CT0' },
       { kind: 'key', id: 'twitter-ct0', env: ['TWITTER_CT0'], optional: true, note: 'twitter-cli needs this and TWITTER_AUTH_TOKEN' },
-      cliReq('opencli', 'second backend: standalone OpenCLI with your own Chrome'),
       BROWSER_REQ,
     ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs a logged-in session or twitter-cli tokens; not verified live' },
+    verification: { live: true, note: 'OpenCLI twitter search measured live on 2026-10-27 (needs an x.com login in your own Chrome); the twitter-cli fallback (tokens) is contract-only' },
   }),
 
   cliPlatform('reddit', 'Reddit', {
     languages: ['en'], domains: ['reddit.com'], taskProfiles: ['experience'], resultKinds: ['social'],
-    requirements: [cliReq('rdt', 'first backend: rdt-cli (`rdt login` is yours to run)'), cliReq('opencli', 'second backend: standalone OpenCLI with your own Chrome'), BROWSER_REQ],
+    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('rdt', 'optional fallback: rdt-cli (`rdt login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs your login; command contracts probed locally, no search run' },
+    verification: { live: false, note: 'OpenCLI reddit was not measured (Reddit answered a web page, likely an IP block on a proxied network; mapped as such); rdt is contract-only; log in in your own Chrome or log rdt in yourself' },
   }),
   opencliPlatform('instagram', 'Instagram', { domains: ['instagram.com'] }),
   opencliPlatform('facebook', 'Facebook', { domains: ['facebook.com'] }),
@@ -177,9 +178,9 @@ export const platformAdapters: readonly ProviderAdapter[] = [
 
   cliPlatform('zhihu', '知乎', {
     languages: ['zh'], regions: ['cn'], resultKinds: ['qa'], taskProfiles: ['experience', 'compare'], domains: ['zhihu.com'],
-    requirements: [cliReq('zhihu', 'first backend: zhihu-cli (`zhihu login` is yours to run)'), BROWSER_REQ],
+    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('zhihu', 'optional fallback: zhihu-cli (`zhihu login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
-    verification: { live: false, note: 'needs your login; command contract probed locally, no search run' },
+    verification: { live: true, note: 'OpenCLI zhihu search measured live on 2026-10-27 (needs a zhihu.com login in your own Chrome; no excerpt or time in its output); zhihu-cli is contract-only' },
   }),
   browserPlatform('weibo', '微博', { resultKinds: ['social'], taskProfiles: ['experience', 'news_fact'], domains: ['weibo.com', 'weibo.cn'] }),
   browserPlatform('douban', '豆瓣', { taskProfiles: ['experience', 'compare'], domains: ['douban.com'] }),
@@ -192,15 +193,15 @@ export const platformAdapters: readonly ProviderAdapter[] = [
     languages: ['zh'], regions: ['cn'], domains: ['mp.weixin.qq.com', 'weixin.qq.com'], taskProfiles: ['news_fact', 'experience'], resultKinds: ['social'],
     requirements: [cliReq('omnireach', 'first backend: OmniReach (`--on wechat`, Sogou, no key)'), cliReq('wx-search-cli', 'second backend: wx-search-cli (Sogou)')],
     costModel: { kind: 'free', note: 'Sogou WeChat search through a local CLI; no key, no login; rate limits and captchas apply' }, costTier: 'anonymous',
-    verification: { live: true, note: 'omnireach 0.19.0-alpha wechat search parsed on 2026-10-06; wx-search-cli from its docs only' },
+    verification: { live: true, note: 'omnireach 0.19.0-alpha (--on wechat) and wx-search-cli 0.1.0 searches parsed live on 2026-10-26' },
   }),
 
   // OmniReach as its own multi-source provider: addressable (`platform=omnireach`), never planned on its own.
   cliPlatform('omnireach', 'OmniReach (多源)', {
     languages: ['zh', 'en'], regions: ['global', 'cn'], taskProfiles: [], resultKinds: ['web', 'social'],
-    requirements: [cliReq('omnireach', 'OmniReach CLI (its own default sources; browser-backed ones stay opt-in there)')],
-    costModel: { kind: 'free', note: 'the CLI\'s default free sources; keys and the Chrome bridge are not passed' }, costTier: 'anonymous',
-    verification: { live: false, note: 'contract probed and the wechat source run live; the multi-source command was not run' },
+    requirements: [cliReq('omnireach', 'OmniReach CLI (explicit keyless sources: hackernews, youtube, github, wechat, bilibili; never its automatic routing, which adds Chrome-backed google / twitter)')],
+    costModel: { kind: 'free', note: 'five keyless sources named with --on; keys and the Chrome bridge are not passed' }, costTier: 'anonymous',
+    verification: { live: true, note: 'omnireach 0.19.0-alpha: the explicit-source multi-source command and the wechat source parsed live on 2026-10-26' },
   }),
 
   // Tanso (Bocha / Zhihu API CLI): documented contract only.

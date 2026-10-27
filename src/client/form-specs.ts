@@ -23,8 +23,8 @@ export type Json = Record<string, unknown>
 export type TopField =
   | 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs'
   | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars'
-  | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv'
-  | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'searxngUrl' | 'openalexMailto'
+  | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env'
+  | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'deepseekFetch' | 'searxngUrl' | 'openalexMailto'
   | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled'
   | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright'
   | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant'
@@ -47,8 +47,10 @@ export type RubricField = `evidence.rubrics.${string}`
 export type KeyedField = `keyedSources.${string}.apiKeyEnv` | `keyedSources.${string}.baseUrl`
 /** One axis of one source's request budget (`sources.budget.<id>.total|daily`). */
 export type BudgetField = `sources.budget.${string}.${'total' | 'daily'}`
+/** The confidence of one source or platform backend (`sources.confidence.<id>`): the ids are open, so these fields are made on demand. */
+export type ConfidenceField = `sources.confidence.${string}`
 
-export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField
+export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField | ConfidenceField
 
 export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources'
 
@@ -218,8 +220,11 @@ export const DEFAULTS = {
   budget: { ...DEFAULT_BUDGET },
   toolSurface: 'indexed',
   bochaApiKeyEnv: 'BOCHA_SEARCH_API_KEY',
+  twitterAuthTokenEnv: 'TWITTER_AUTH_TOKEN',
+  twitterCt0Env: 'TWITTER_CT0',
   bochaBaseUrl: 'https://api.bocha.cn',
   bochaSummary: true,
+  deepseekFetch: false,
 } as const
 
 // ── the specs ───────────────────────────────────────────────────────────────
@@ -236,9 +241,12 @@ export const FIELD_SPECS: readonly FieldSpec[] = [
   textField('exaApiKeyEnv', { required: true }),
   textField('jinaApiKeyEnv', { required: true }),
   textField('githubTokenEnv', { required: true }),
+  textField('twitterAuthTokenEnv', { pattern: KEY_REF_PATTERN }),
+  textField('twitterCt0Env', { pattern: KEY_REF_PATTERN }),
   textField('bochaApiKeyEnv', { pattern: KEY_REF_PATTERN }),
   textField('bochaBaseUrl', { url: true }),
   booleanField('bochaSummary', true),
+  booleanField('deepseekFetch'),
   textField('searxngUrl', { url: true }),
   textField('openalexMailto', { email: true }),
   booleanField('enableCliBackends'),
@@ -331,13 +339,19 @@ export const BUDGETED_SOURCES: readonly string[] = ['bocha', ...KEYED_SOURCE_IDS
 export const BUDGET_SPECS: readonly PathSpec[] = BUDGETED_SOURCES.flatMap(id => (['total', 'daily'] as const).map(axis =>
   path(numberField(`sources.budget.${id}.${axis}`, { min: 0, integer: true }), 'sources', ['budget', id, axis])))
 
+/** `sources.confidence.<id>`: a number 0..1; empty = the default (1 for a built-in source, the spec's own for a custom CLI). */
+export const confidenceSpec = (id: string): PathSpec => path(numberField(`sources.confidence.${id}`, { min: 0, max: 1 }), 'sources', ['confidence', id])
+
+export const confidenceField = (id: string): ConfidenceField => `sources.confidence.${id}`
+export const CONFIDENCE_PREFIX = 'sources.confidence.'
+
 /** The spec of a rubric override entry: the whole object as one JSON draft, which the rubric editor builds field by field. */
 export const rubricSpec = (id: string): PathSpec => path(jsonField(`evidence.rubrics.${id}`), E, ['rubrics', id])
 
 export const rubricField = (id: string): RubricField => `evidence.rubrics.${id}`
 
 /** Fields that a Host write can never take as text (credentials go through the credentials remote). */
-export const CREDENTIAL_IDS = ['exa', 'jina', 'github', 'bocha', ...KEYED_SOURCE_IDS.map(id => `keyed:${id}` as const)] as const
+export const CREDENTIAL_IDS = ['exa', 'jina', 'github', 'bocha', 'twitter-auth-token', 'twitter-ct0', ...KEYED_SOURCE_IDS.map(id => `keyed:${id}` as const)] as const
 export type CredentialId = typeof CREDENTIAL_IDS[number]
 
 /** The settings field holding the credentials ref / environment variable name of each credential, and its default name. */
@@ -347,6 +361,8 @@ export function credentialRef(id: CredentialId): { field: SettingField; default:
     case 'jina': return { field: 'jinaApiKeyEnv', default: 'JINA_API_KEY' }
     case 'github': return { field: 'githubTokenEnv', default: 'GITHUB_TOKEN' }
     case 'bocha': return { field: 'bochaApiKeyEnv', default: DEFAULTS.bochaApiKeyEnv }
+    case 'twitter-auth-token': return { field: 'twitterAuthTokenEnv', default: DEFAULTS.twitterAuthTokenEnv }
+    case 'twitter-ct0': return { field: 'twitterCt0Env', default: DEFAULTS.twitterCt0Env }
     default: {
       const source = id.slice('keyed:'.length)
       return { field: `keyedSources.${source}.apiKeyEnv`, default: KEYED_SOURCE_ENVS[source]![0]! }

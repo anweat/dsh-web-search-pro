@@ -137,7 +137,7 @@ test('local probes by dimension: browser platforms say dsh-browser is missing, a
   }
 })
 
-test('twitter probe: the chain is twitter-cli, standalone OpenCLI, dsh-browser OpenCLI; the reason names every skipped leg', { skip: process.platform === 'win32' }, async () => {
+test('twitter probe: the chain is standalone OpenCLI, twitter-cli, dsh-browser OpenCLI; the reason names every skipped leg', { skip: process.platform === 'win32' }, async () => {
   const registry = createBuiltinRegistry()
   const tokens = [process.env.TWITTER_AUTH_TOKEN, process.env.TWITTER_CT0]
   delete process.env.TWITTER_AUTH_TOKEN
@@ -147,15 +147,15 @@ test('twitter probe: the chain is twitter-cli, standalone OpenCLI, dsh-browser O
     await withCommands({}, async () => {
       const none = await registry.resolve('twitter')!.probeLocal(env()) as any
       assert.equal(none.available, false)
-      assert.match(none.reason, /^no usable backend: twitter: twitter not found on PATH.*; opencli: opencli not found on PATH.*; browser-opencli: platform twitter requires the optional dsh-browser plugin/)
+      assert.match(none.reason, /^no usable backend: opencli: opencli not found on PATH.*; twitter: twitter not found on PATH.*; browser-opencli: platform twitter requires the optional dsh-browser plugin/)
       assert.equal((await registry.resolve('twitter')!.probeLocal(env({ browser: fakeBrowser() })) as any).available, true, 'the dsh-browser OpenCLI leg alone is enough')
     })
     // twitter-cli installed but its tokens are not set: skipped with the variables named; setting them makes the first leg ready.
     clearProbeCache()
-    await withCommands({ twitter: 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY";; *) echo "twitter, version 0.8.5";; esac' }, async () => {
+    await withCommands({ twitter: 'case "$1" in search) echo "Usage: twitter search [OPTIONS] QUERY"; echo "  -n, --max INTEGER"; echo "  --json  Output as JSON.";; *) echo "twitter, version 0.8.5";; esac' }, async () => {
       const noTokens = await registry.resolve('twitter')!.probeLocal(env()) as any
       assert.equal(noTokens.available, false)
-      assert.match(noTokens.reason, /twitter: TWITTER_AUTH_TOKEN \/ TWITTER_CT0 not set \(set TWITTER_AUTH_TOKEN \/ TWITTER_CT0 in your environment/)
+      assert.match(noTokens.reason, /twitter: TWITTER_AUTH_TOKEN \/ TWITTER_CT0 not set \(set TWITTER_AUTH_TOKEN \/ TWITTER_CT0 in DSH credentials \(plugin settings twitterAuthToken \/ twitterCt0\) or in the Host process environment; a shell profile alone is not enough\)/)
       process.env.TWITTER_AUTH_TOKEN = 'a'
       process.env.TWITTER_CT0 = 'b'
       const viaCli = await registry.resolve('twitter')!.probeLocal(env()) as any

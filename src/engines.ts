@@ -13,14 +13,32 @@ import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } fro
 import type { CustomPlatformSpec } from './config.ts'
 import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
 import { EngineError } from './engine-error.ts'
-import { cliSpecEngine } from './cli/engine.ts'
+import { cliSpecEngine, specEnv } from './cli/engine.ts'
 import { builtinSpecById } from './cli/builtin-specs.ts'
-import { buildArgv, parseCliOutput } from './cli/runner.ts'
+import { buildArgv, missingEnv, parseCliOutput } from './cli/runner.ts'
+
+/**
+ * A source row as an engine returns it: the host's `WebSearchSource` plus the provider's own quality signals, when it has any
+ * (DeepSeek Search: `rerank_score` 0..3 and `authority` 0..4). They travel with the row as source metadata and are one small
+ * fusion signal (pipeline/fusion.ts); no engine is required to set them.
+ */
+export interface EngineSource extends WebSearchSource {
+  /** The provider's relevance / authority / freshness rank score, 0..3 (higher is better). */
+  readonly rerankScore?: number
+  /** The provider's source-authority grade, 0..4 (unknown = absent). */
+  readonly authority?: number
+  /** The user-defined CLI that returned the row (`custom-cli:echo`): set by the adapter, shown with the result. */
+  readonly via?: string
+  /** The honest label of a user-defined source ("user-defined, not verified by the plugin"). */
+  readonly tag?: string
+  /** The source's confidence (0..1), below 1 only: set by the router from the spec / `sources.confidence`, never by an engine. */
+  readonly confidence?: number
+}
 
 export interface SearchOutcome {
   /** Provider-generated answer/summary text, when any. */
   content?: string
-  sources: WebSearchSource[]
+  sources: EngineSource[]
   /** Id of the concrete backend that answered (a platform provider with a fallback chain names the leg that ran). */
   via?: string
   /** The backend id of the platform chain that answered (`bili`, `browser-opencli`), for display and history. */
@@ -36,6 +54,8 @@ export interface Engine {
   backend?: string
   /** Cheap local availability check; must not do network I/O. */
   available(): boolean
+  /** Why `available()` is false, when the engine knows (a platform chain quotes it in its fall-through note instead of "unavailable"). */
+  unavailableReason?(): string | undefined
   /** Browser-service method this engine depends on (dsh-browser is optional). */
   needsBrowser?: BrowserMethod
   search(query: string, count: number, signal?: AbortSignal, options?: EngineSearchOptions): Promise<SearchOutcome>
@@ -45,6 +65,8 @@ export interface EngineSearchOptions {
   exa?: Omit<ExaSearchRequest, 'query' | 'numResults'>
   /** Bocha native request fields compiled from hard constraints (pipeline/compile.ts). */
   bocha?: { freshness?: string; include?: string[]; exclude?: string[] }
+  /** The caller's original question or need (DeepSeek Search `ori_question`, cut to 128 characters by the engine); absent = none sent. */
+  originalQuestion?: string
   /** Lower bound of the publication date (ISO 8601), compiled from a hard time_window; the engine maps it to its native filter. */
   since?: string
   /** Domain lists compiled from hard site / exclude_site constraints (keyed sources that take them as request fields). */
@@ -77,6 +99,8 @@ export interface EngineDeps {
   usage?: UsageRecorder
   /** Test seam: replaces the global fetch of API clients that accept one. */
   fetchImpl?: typeof fetch
+  /** Test seam: waits between retries of the engines that retry (DeepSeek); resolves early on abort. Default: a real timer. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   /** Test seam: replaces the DNS lookup of the SSRF check. */
   lookup?: (hostname: string) => Promise<{ address: string; family?: number }[]>
   /** API keys of the keyed sources by route id (`tavily`, `brave`, ...): config literal -> credentials ref -> environment (router). */
@@ -93,6 +117,11 @@ export interface EngineDeps {
   anysearchApiKey?: string
   /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
   githubToken?: string
+  /**
+   * Credential variables of the CLI adapters by the name the tool reads (`TWITTER_AUTH_TOKEN`, `TWITTER_CT0`), resolved by the router:
+   * config literal -> credentials ref -> process environment. Handed to a command only through its environment, never in argv.
+   */
+  cliEnv?: Readonly<Record<string, string>>
   enableCli: boolean
   opencliEnabled: boolean
   agentReachEnabled: boolean
@@ -577,7 +606,7 @@ export function agentReachEngine(platform: string, deps: EngineDeps): Engine {
     return {
       id: 'agentreach-twitter',
       label: 'agent-reach twitter-cli',
-      available: () => deps.enableCli && deps.agentReachEnabled && !!process.env.TWITTER_AUTH_TOKEN && !!process.env.TWITTER_CT0,
+      available: () => deps.enableCli && deps.agentReachEnabled && missingEnv(twitterSpec, specEnv(deps)).length === 0,
       async search(query, count, signal, options) {
         try {
           return await leg.search(query, count, signal, options)

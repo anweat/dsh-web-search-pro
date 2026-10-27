@@ -19,11 +19,37 @@ export type OutputFormat = typeof OUTPUT_FORMATS[number]
 export const CLI_VERIFICATIONS = ['live', 'contract-only', 'docs-only'] as const
 export type CliVerification = typeof CLI_VERIFICATIONS[number]
 
+/**
+ * The short honest tag shown next to a backend that was not verified with a real search ("detected and configured" is not "works"),
+ * or undefined for `live` and for backends that are not CLI specs.
+ */
+export function verificationTag(status: string): string | undefined {
+  if (status === 'contract-only') return 'contract-only — output parser not verified with a real search'
+  if (status === 'docs-only') return 'docs-only — written from upstream docs, tool not run here'
+  if (status === USER_DEFINED) return USER_DEFINED_TAG
+  return undefined
+}
+
+/** The verification word of a user-defined spec: it is unverified by definition and says so in every result it returns. */
+export const USER_DEFINED = 'user-defined'
+/** The honest label a custom CLI's results and chain entries carry. */
+export const USER_DEFINED_TAG = 'user-defined, not verified by the plugin (用户自定义，未经插件验证)'
+/** Confidence of a custom CLI whose spec gives none: below the built-in sources (1), because nothing here checked its output. */
+export const DEFAULT_CUSTOM_CONFIDENCE = 0.5
+/** Default and largest size of a whole-output result's text, in characters (`output.lines.maxChars`). */
+export const WHOLE_OUTPUT_DEFAULT_CHARS = 2_000
+export const WHOLE_OUTPUT_MAX_CHARS = 8_000
+/** Scheme of the stand-in link of a whole-output result (`cli://<id>?q=<query>`): not a web page, so nothing fetches it. */
+export const WHOLE_OUTPUT_SCHEME = 'cli://'
+
 export const CLI_ERROR_CODES = ['CLI_NOT_FOUND', 'CLI_CONTRACT_MISMATCH', 'CLI_NOT_LOGGED_IN', 'ENGINE_EMPTY', 'CLI_FAILED'] as const
 export type CliErrorCode = typeof CLI_ERROR_CODES[number]
 
-/** One piece of a joined field: a path, optionally with text put before / after the value. */
-export type JoinPart = string | { path: string; prefix?: string; suffix?: string }
+/**
+ * One piece of a joined field: a path, optionally with text put before / after the value, a `{ template }` over the item (dropped
+ * when a placeholder is empty), or a `{ time }` path whose text is read as a time (see {@link FieldSource}) and dropped when it is not one.
+ */
+export type JoinPart = string | { path: string; prefix?: string; suffix?: string } | { template: string } | { time: string; prefix?: string; suffix?: string }
 
 /** `{ template }` fills `{path}` placeholders from the item and yields nothing when one is empty; `when` makes it apply to one kind of item. */
 export interface TemplateSource { template: string; when?: { path: string; equals: string | number | boolean } }
@@ -34,7 +60,11 @@ export interface TemplateSource { template: string; when?: { path: string; equal
  *  - a list of paths and templates: the first non-empty one wins;
  *  - `{ template }`: `{path}` placeholders over the item, dropped when any of them is empty;
  *  - `{ join }`: the non-empty parts joined with `sep` (default ` | `);
- *  - `{ epoch }`: a Unix timestamp (seconds) as an ISO date; `{ date }`: the date part (first 10 characters) of an ISO timestamp.
+ *  - `{ epoch }`: a Unix timestamp (seconds) as an ISO date; `{ date }`: the date part (first 10 characters) of an ISO timestamp;
+ *  - `{ time }`: a time text the tool prints (ISO, the X API's `created_at`, `2026-10-27`, `08-26`, `3小时前`, `昨天 10:20`, ...) as an
+ *    ISO date or timestamp, and nothing when the text is none of the exactly known formats (see cli/time-text.ts).
+ * A dotted path may hold a `key=value` segment that picks the first element of an array with that field value
+ * (`note_card.corner_tag_info.type=publish_time.text`).
  */
 export type FieldSource =
   | string
@@ -43,6 +73,7 @@ export type FieldSource =
   | { join: readonly JoinPart[]; sep?: string }
   | { epoch: string }
   | { date: string }
+  | { time: string }
 
 export interface CliOutputSpec {
   format: OutputFormat
@@ -52,9 +83,16 @@ export interface CliOutputSpec {
   expect?: readonly { path: string; equals: string | number | boolean }[]
   /** Paths of the tool's own error text, read when `expect` fails (first non-empty one). */
   errorPaths?: readonly string[]
-  /** text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`). */
-  lines?: { mode: 'tsv'; columns: readonly string[] } | { mode: 'url-lines' }
-  fields: { url: FieldSource; title?: FieldSource; snippet?: FieldSource; publishedAt?: FieldSource }
+  /**
+   * text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`; `whole`: the
+   * whole stdout is ONE result, for a tool that prints just a block of text: its text capped at `maxChars` (default
+   * {@link WHOLE_OUTPUT_DEFAULT_CHARS}) with a note when it was cut, the title "<id>: <query>" and the link `cli://<id>?q=<query>`).
+   */
+  lines?: { mode: 'tsv'; columns: readonly string[] } | { mode: 'url-lines' } | { mode: 'whole'; maxChars?: number }
+  /** Required (with `url`) for every mode except `whole`, which maps nothing. */
+  fields?: { url?: FieldSource; title?: FieldSource; snippet?: FieldSource; publishedAt?: FieldSource }
+  /** Items whose `path` equals the value are not results at all and are not counted as skipped (xhs: `model_type` is `hot_query` for the suggestion cards its result list also carries). */
+  skipWhen?: { path: string; equals: string | number | boolean }
   /** Strip HTML tags from title and snippet. */
   stripTags?: boolean
   /** Values read as "empty" (`None`). */
@@ -67,16 +105,55 @@ export interface CliOutputSpec {
   requireTitle?: boolean
 }
 
+/**
+ * How a tool reports a failed command in its machine-readable format (a YAML / JSON payload on stderr, else stdout), and what
+ * each of its error codes means. A listed code is mapped to a structured plugin error; a code that is not listed keeps the
+ * tool's own message (`<tool> search failed: [CODE] message`).
+ */
+export interface CliErrorCodesSpec {
+  /** Dotted path of the tool's error code in the failure payload (`error.code`). */
+  codePath: string
+  /** Dotted path of its message (`error.message`). */
+  messagePath?: string
+  /** Codes that mean "not logged in" (CLI_NOT_LOGGED_IN). */
+  notLoggedIn?: readonly string[]
+  /** Exit codes that mean "not logged in" when the output carries no readable code. */
+  notLoggedInExit?: readonly number[]
+  /** Codes that mean "no results" (ENGINE_EMPTY). */
+  empty?: readonly string[]
+  /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
+  blocked?: readonly string[]
+  /** Case-insensitive fragments of the tool's message that mean the same (a JSON parse error on an HTML page: `Unexpected token '<'`). */
+  blockedPatterns?: readonly string[]
+  /** Codes that mean the tool cannot reach its browser (CLI_FAILED, not retryable). */
+  unavailable?: readonly string[]
+  /** Codes that mean a timeout (ENGINE_TIMEOUT). */
+  timeout?: readonly string[]
+  /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
+  usage?: readonly string[]
+}
+
 export interface CliSearchSpec {
-  /** Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`). */
+  /**
+   * Arguments after the binary. `{query}` and `{count}` are the placeholders; a token may embed one (`ytsearch{count}:{query}`).
+   * A token that is exactly `{terms}` expands to the query split into one argv token per word (double quotes keep a phrase together):
+   * for tools that join their positional arguments themselves and would otherwise quote a one-token query as an exact phrase (`gh search`).
+   */
   argv: readonly string[]
   /** Largest `{count}` sent (the search call's count is clamped to 1..maxCount). */
   maxCount?: number
+  /**
+   * Extra results asked of the tool beyond the count (`{count}` becomes count + overfetch), for tools whose list can hold entries the
+   * mapper must drop (bili: courses and series without a link). The mapper still returns at most `count`.
+   */
+  overfetch?: number
   output: CliOutputSpec
   /** Case-insensitive fragments of the tool's output that mean "no results" rather than a failure. */
   emptyWhen?: readonly string[]
   /** Case-insensitive fragments of the tool's output that mean "not logged in" (maps to CLI_NOT_LOGGED_IN). */
   notLoggedInPatterns?: readonly string[]
+  /** The tool's structured error codes (checked before the fragments above). */
+  errorCodes?: CliErrorCodesSpec
 }
 
 export interface CliProbeSpec {
@@ -86,11 +163,15 @@ export interface CliProbeSpec {
   helpArgs: readonly string[]
   /** Fragments the help output must contain: the subcommands and flags that prove this is the tool the spec describes. */
   mustContain: readonly string[]
+  /** Appended to the reason when `mustContain` is not met (which version is known to have the contract, for example). */
+  contractHint?: string
 }
 
 export interface CliLoginSpec {
   /** What the user runs themselves (`xhs login`); never run by the plugin. */
-  command: string
+  command?: string
+  /** What the user does, in words, when the tool takes its login from somewhere the plugin cannot run (the login of the user's own Chrome): shown instead of a command. One of `command` / `hint` is required. */
+  hint?: string
   /** Home-relative files that exist once the user has logged in. Only their existence is checked, never their content. */
   savedCredentialPaths?: readonly string[]
   /** The tool reads the browser's cookies by itself when it has no saved login: then it is never run without one. */
@@ -103,8 +184,15 @@ export interface CliAdapterSpec {
   bins: readonly string[]
   /** What the package is called, which can differ from the command (`pip install pyzhihu-cli` runs `zhihu`). */
   packageNote: string
-  /** Platform ids the spec can serve (`search.run platform=`); a user spec's platform is `custom-cli:<id>`. */
+  /**
+   * Platform ids the spec serves: the platforms whose backend chain it may sit in (`platformBackends.<platform>`). A user spec is
+   * also a platform of its own, `custom-cli:<id>`, and may list none when it is a general `engine`.
+   */
   platforms: readonly string[]
+  /** User specs only: also a general search engine, listed in `engines` as `custom-cli:<id>` (fused and de-duplicated with the others). */
+  engine?: boolean
+  /** User specs only: 0..1, default {@link DEFAULT_CUSTOM_CONFIDENCE}. `sources.confidence.custom-cli:<id>` overrides it. */
+  confidence?: number
   probe: CliProbeSpec
   /** Every command word the argv templates use. */
   allowedSubcommands: readonly string[]
@@ -182,19 +270,20 @@ const strList = (v: unknown, maxItems: number, maxLen = 200): v is string[] => A
 const ID_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/
 const BIN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const ENV_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
-const PATH_RE = /^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$/
+const PATH_RE = /^[A-Za-z0-9_$-]+(=[A-Za-z0-9_$-]+)?(\.[A-Za-z0-9_$-]+(=[A-Za-z0-9_$-]+)?)*$/
 const VERSION_RE = /^\d+(\.\d+){0,3}$/
-const PLACEHOLDERS = new Set(['query', 'count', 'url'])
+const PLACEHOLDERS = new Set(['query', 'count', 'url', 'terms'])
 const MAX_TIMEOUT_MS = 180_000
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
-const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
-const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain'])
-const SEARCH_KEYS = new Set(['argv', 'maxCount', 'output', 'emptyWhen', 'notLoggedInPatterns'])
-const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
+const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'engine', 'confidence', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
+const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
+const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
+const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'])
+const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'skipWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
 const ENV_KEYS = new Set(['required', 'passthrough', 'set'])
-const LOGIN_KEYS = new Set(['command', 'savedCredentialPaths', 'readsBrowserCookiesWithoutLogin'])
+const LOGIN_KEYS = new Set(['command', 'hint', 'savedCredentialPaths', 'readsBrowserCookiesWithoutLogin'])
 
 function closed(obj: Record<string, unknown>, keys: Set<string>, where: string, errors: string[]): void {
   for (const key of Object.keys(obj)) if (!keys.has(key)) errors.push(where + '.' + key + ' is not a spec field')
@@ -219,9 +308,9 @@ function checkFieldSource(value: unknown, where: string, errors: string[]): void
     }
     return
   }
-  if (!isObject(value)) { errors.push(where + ' must be a path, a list, { template }, { join }, { epoch } or { date }'); return }
+  if (!isObject(value)) { errors.push(where + ' must be a path, a list, { template }, { join }, { epoch }, { date } or { time }'); return }
   const keys = Object.keys(value)
-  if (keys.length === 1 && (keys[0] === 'epoch' || keys[0] === 'date')) {
+  if (keys.length === 1 && (keys[0] === 'epoch' || keys[0] === 'date' || keys[0] === 'time')) {
     if (typeof value[keys[0]!] !== 'string' || !PATH_RE.test(value[keys[0]!] as string)) errors.push(where + '.' + keys[0] + ' must be a dotted path')
     return
   }
@@ -238,14 +327,17 @@ function checkFieldSource(value: unknown, where: string, errors: string[]): void
     if (!value.join.length || value.join.length > 8) errors.push(where + '.join needs 1..8 parts')
     for (const part of value.join) {
       if (typeof part === 'string') { if (!PATH_RE.test(part)) errors.push(where + '.join: "' + part + '" is not a dotted path') }
-      else if (isObject(part) && typeof part.path === 'string' && PATH_RE.test(part.path) && Object.keys(part).every(k => ['path', 'prefix', 'suffix'].includes(k))) {
+      else if (isObject(part) && typeof part.template === 'string' && Object.keys(part).length === 1) {
+        if (!isStr(part.template, 300)) errors.push(where + '.join: a template part must be a string')
+        else templateProblems(part.template, where + '.join.template', undefined, errors)
+      } else if (isObject(part) && (typeof part.path === 'string' ? PATH_RE.test(part.path) : typeof part.time === 'string' && PATH_RE.test(part.time)) && Object.keys(part).every(k => [typeof part.path === 'string' ? 'path' : 'time', 'prefix', 'suffix'].includes(k))) {
         for (const k of ['prefix', 'suffix']) if (part[k] !== undefined && !(typeof part[k] === 'string' && (part[k] as string).length <= 40)) errors.push(where + '.join.' + k + ' must be a short string')
-      } else errors.push(where + '.join: each part is a path or { path, prefix?, suffix? }')
+      } else errors.push(where + '.join: each part is a path, { template }, { time } or { path, prefix?, suffix? }')
     }
     if (value.sep !== undefined && !(typeof value.sep === 'string' && value.sep.length <= 16)) errors.push(where + '.sep must be a short string')
     return
   }
-  errors.push(where + ' must be a path, a list, { template }, { join }, { epoch } or { date }')
+  errors.push(where + ' must be a path, a list, { template }, { join }, { epoch }, { date } or { time }')
 }
 
 function checkOutput(value: unknown, where: string, errors: string[]): void {
@@ -260,18 +352,27 @@ function checkOutput(value: unknown, where: string, errors: string[]): void {
     }
   }
   if (value.errorPaths !== undefined && !(Array.isArray(value.errorPaths) && value.errorPaths.length <= 6 && value.errorPaths.every(p => typeof p === 'string' && PATH_RE.test(p)))) errors.push(where + '.errorPaths must be dotted paths')
+  if (value.skipWhen !== undefined) {
+    const k = value.skipWhen
+    if (!(isObject(k) && typeof k.path === 'string' && PATH_RE.test(k.path) && ['string', 'number', 'boolean'].includes(typeof k.equals) && Object.keys(k).every(key => key === 'path' || key === 'equals'))) errors.push(where + '.skipWhen must be { path, equals }')
+  }
+  const whole = isObject(value.lines) && value.lines.mode === 'whole'
   if (value.lines !== undefined) {
     const l = value.lines
     if (isObject(l) && l.mode === 'url-lines' && Object.keys(l).length === 1) { /* fine */ }
+    else if (isObject(l) && l.mode === 'whole' && Object.keys(l).every(k => k === 'mode' || k === 'maxChars')) {
+      if (l.maxChars !== undefined && !(Number.isInteger(l.maxChars) && (l.maxChars as number) >= 200 && (l.maxChars as number) <= WHOLE_OUTPUT_MAX_CHARS)) errors.push(where + '.lines.maxChars must be an integer 200..' + WHOLE_OUTPUT_MAX_CHARS)
+    }
     else if (isObject(l) && l.mode === 'tsv' && strList(l.columns, 24, 40) && l.columns.length >= 2 && l.columns.every(c => /^[A-Za-z0-9_]+$/.test(c)) && Object.keys(l).every(k => k === 'mode' || k === 'columns')) { /* fine */ }
-    else errors.push(where + '.lines must be { mode: "url-lines" } or { mode: "tsv", columns: [...] }')
+    else errors.push(where + '.lines must be { mode: "url-lines" }, { mode: "tsv", columns: [...] } or { mode: "whole" }')
   }
   if (value.format === 'text' && value.lines === undefined) errors.push(where + '.lines is required for format text')
   if (value.format !== 'text' && value.lines !== undefined) errors.push(where + '.lines is only for format text')
-  if (!isObject(value.fields)) errors.push(where + '.fields must be an object')
+  if (value.fields === undefined && whole) { /* a whole-output result maps no fields */ }
+  else if (!isObject(value.fields)) errors.push(where + '.fields must be an object')
   else {
     closed(value.fields, FIELD_KEYS, where + '.fields', errors)
-    if (value.fields.url === undefined) errors.push(where + '.fields.url is required')
+    if (value.fields.url === undefined && !whole) errors.push(where + '.fields.url is required')
     for (const key of Object.keys(value.fields)) if (FIELD_KEYS.has(key)) checkFieldSource(value.fields[key], where + '.fields.' + key, errors)
   }
   if (value.stripTags !== undefined && typeof value.stripTags !== 'boolean') errors.push(where + '.stripTags must be a boolean')
@@ -288,12 +389,24 @@ function checkSearch(value: unknown, where: string, allowed: readonly string[], 
   } else {
     const argv = value.argv as string[]
     argv.forEach(token => templateProblems(token, where + '.argv', PLACEHOLDERS, errors))
-    if (!argv.some(t => /\{(query|url)\}/.test(t))) errors.push(where + '.argv must carry a {query} (or {url}) placeholder')
+    if (!argv.some(t => /\{(query|url|terms)\}/.test(t))) errors.push(where + '.argv must carry a {query} (or {url} / {terms}) placeholder')
+    for (const token of argv) if (token.includes('{terms}') && token !== '{terms}') errors.push(where + '.argv: {terms} must be a token of its own')
     errors.push(...argvProblems(argv, allowed, where + '.argv'))
   }
   if (value.maxCount !== undefined && !(Number.isInteger(value.maxCount) && (value.maxCount as number) >= 1 && (value.maxCount as number) <= 100)) errors.push(where + '.maxCount must be an integer 1..100')
+  if (value.overfetch !== undefined && !(Number.isInteger(value.overfetch) && (value.overfetch as number) >= 0 && (value.overfetch as number) <= 10)) errors.push(where + '.overfetch must be an integer 0..10')
   checkOutput(value.output, where + '.output', errors)
   for (const key of ['emptyWhen', 'notLoggedInPatterns'] as const) if (value[key] !== undefined && !strList(value[key], 12, 120)) errors.push(where + '.' + key + ' must be a list of short strings')
+  if (value.errorCodes !== undefined) checkErrorCodes(value.errorCodes, where + '.errorCodes', errors)
+}
+
+function checkErrorCodes(value: unknown, where: string, errors: string[]): void {
+  if (!isObject(value)) { errors.push(where + ' must be an object'); return }
+  closed(value, ERROR_CODES_KEYS, where, errors)
+  if (!(typeof value.codePath === 'string' && PATH_RE.test(value.codePath))) errors.push(where + '.codePath must be a dotted path')
+  if (value.messagePath !== undefined && !(typeof value.messagePath === 'string' && PATH_RE.test(value.messagePath))) errors.push(where + '.messagePath must be a dotted path')
+  for (const key of ['notLoggedIn', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
+  if (value.notLoggedInExit !== undefined && !(Array.isArray(value.notLoggedInExit) && value.notLoggedInExit.length <= 8 && value.notLoggedInExit.every(c => Number.isInteger(c) && (c as number) > 0 && (c as number) < 256))) errors.push(where + '.notLoggedInExit must be exit codes 1..255')
 }
 
 export interface CliSpecValidation {
@@ -315,7 +428,12 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
   if (typeof raw.id !== 'string' || !ID_RE.test(raw.id)) errors.push(at + '.id must match ' + String(ID_RE))
   if (!Array.isArray(raw.bins) || !raw.bins.length || raw.bins.length > 4 || !raw.bins.every(b => typeof b === 'string' && BIN_RE.test(b))) errors.push(at + '.bins must be 1..4 command names (no paths)')
   if (!isStr(raw.packageNote, 240)) errors.push(at + '.packageNote must be a short string (what the package is called, which can differ from the command)')
-  if (!strList(raw.platforms, 8, 40) || !(raw.platforms as string[]).length) errors.push(at + '.platforms must list 1..8 platform ids')
+  // A user spec may serve no platform at all when it is a general engine; a built-in always names its platforms.
+  const noPlatforms = origin === 'user' && raw.engine === true
+  if (!strList(raw.platforms, 8, 40) || (!(raw.platforms as string[]).length && !noPlatforms)) errors.push(at + (origin === 'user' ? '.platforms must list 1..8 platform ids (or be empty with "engine": true)' : '.platforms must list 1..8 platform ids'))
+  for (const key of ['engine', 'confidence'] as const) if (raw[key] !== undefined && origin !== 'user') errors.push(at + '.' + key + ' is for user-defined specs only')
+  if (raw.engine !== undefined && typeof raw.engine !== 'boolean') errors.push(at + '.engine must be a boolean')
+  if (raw.confidence !== undefined && !(typeof raw.confidence === 'number' && Number.isFinite(raw.confidence) && raw.confidence >= 0 && raw.confidence <= 1)) errors.push(at + '.confidence must be a number 0..1')
   if (typeof raw.needsLogin !== 'boolean') errors.push(at + '.needsLogin must be a boolean')
   if (!(Number.isInteger(raw.timeoutMs) && (raw.timeoutMs as number) >= 1_000 && (raw.timeoutMs as number) <= MAX_TIMEOUT_MS)) errors.push(at + '.timeoutMs must be an integer 1000..' + MAX_TIMEOUT_MS)
   if (!(Number.isInteger(raw.maxOutputBytes) && (raw.maxOutputBytes as number) >= 1_024 && (raw.maxOutputBytes as number) <= MAX_OUTPUT_BYTES)) errors.push(at + '.maxOutputBytes must be an integer 1024..' + MAX_OUTPUT_BYTES)
@@ -335,6 +453,7 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
     if (!(Array.isArray(p.helpArgs) && p.helpArgs.length)) errors.push(at + '.probe.helpArgs must not be empty')
     if (p.minVersion !== undefined && !(typeof p.minVersion === 'string' && VERSION_RE.test(p.minVersion))) errors.push(at + '.probe.minVersion must look like 1.2.3')
     if (!strList(p.mustContain, 12, 80)) errors.push(at + '.probe.mustContain must be a list of short strings (the subcommands / flags that prove the contract)')
+    if (p.contractHint !== undefined && !isStr(p.contractHint, 200)) errors.push(at + '.probe.contractHint must be a short string')
   }
 
   const searchWhere = (key: string): string => at + '.' + key
@@ -369,7 +488,9 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
     if (!isObject(l)) errors.push(at + '.login must be an object')
     else {
       closed(l, LOGIN_KEYS, at + '.login', errors)
-      if (!isStr(l.command, 120)) errors.push(at + '.login.command must be a short string (what the user runs themselves)')
+      if (l.command === undefined && l.hint === undefined) errors.push(at + '.login needs a command (what the user runs themselves) or a hint (what the user does)')
+      if (l.command !== undefined && !isStr(l.command, 120)) errors.push(at + '.login.command must be a short string (what the user runs themselves)')
+      if (l.hint !== undefined && !isStr(l.hint, 200)) errors.push(at + '.login.hint must be a short string (what the user does)')
       if (l.savedCredentialPaths !== undefined && !(strList(l.savedCredentialPaths, 4, 160) && (l.savedCredentialPaths as string[]).every(p => /^~\/[^\0]+$/.test(p) && !p.includes('..')))) errors.push(at + '.login.savedCredentialPaths must be paths starting with ~/ (no ..)')
       if (l.readsBrowserCookiesWithoutLogin !== undefined && typeof l.readsBrowserCookiesWithoutLogin !== 'boolean') errors.push(at + '.login.readsBrowserCookiesWithoutLogin must be a boolean')
       if (l.readsBrowserCookiesWithoutLogin === true && !(Array.isArray(l.savedCredentialPaths) && l.savedCredentialPaths.length)) errors.push(at + '.login: a tool that reads browser cookies without a login needs savedCredentialPaths, so the plugin can refuse to run it without one')

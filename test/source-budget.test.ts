@@ -227,7 +227,7 @@ test('sources.status shows used and remaining requests of a capped source, the s
     const alpha = out.providers.find((p: any) => p.route === 'alpha')
     assert.deepEqual([alpha.budget.total, alpha.budget.daily, alpha.budget.exhausted], [{ limit: 3, used: 1, remaining: 2 }, { limit: 2, used: 1, remaining: 1 }, false])
     assert.equal(out.providers.find((p: any) => p.route === 'beta').budget, undefined)
-    assert.deepEqual(out.sources, { policy: 'default', priority: ['alpha'], disabled: ['beta'] })
+    assert.deepEqual({ ...out.sources, common: undefined }, { policy: 'default', priority: ['alpha'], disabled: ['beta'], common: undefined }, 'the common-source report is checked in the DeepSeek tests')
     assert.ok(out.notes.some((n: string) => /sources\.budget\.ghost ignored/.test(n)))
     const text = renderResult('sources.status', out)
     assert.match(text, /request budget alpha: total 1\/3 \(2 left\), today 1\/2 \(1 left\)\n/)

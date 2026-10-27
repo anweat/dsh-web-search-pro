@@ -1,0 +1,51 @@
+[
+  {
+    "id": "1000000000000000001",
+    "author": "example_dev",
+    "bio": "",
+    "text": "Trying the new agent harness on a sample benchmark. Same model, different harness, noticeably different results.\nThread below.",
+    "created_at": "Tue Oct 27 08:38:08 +0000 2026",
+    "likes": 308,
+    "views": "55556",
+    "url": "https://x.com/i/status/1000000000000000001",
+    "has_media": true,
+    "media_urls": [
+      "https://pbs.twimg.com/media/EXAMPLEMEDIA0001.jpg"
+    ],
+    "media_posters": [
+      "https://pbs.twimg.com/media/EXAMPLEMEDIA0001.jpg"
+    ],
+    "card": null,
+    "quoted_tweet": null
+  },
+  {
+    "id": "1000000000000000002",
+    "author": "sample_user",
+    "bio": "",
+    "text": "短评：这个 harness 的默认工具集很克制，上手只要十分钟。",
+    "created_at": "Mon Oct 26 21:05:40 +0000 2026",
+    "likes": 12,
+    "views": "2310",
+    "url": "https://x.com/i/status/1000000000000000002",
+    "has_media": false,
+    "media_urls": [],
+    "media_posters": [],
+    "card": null,
+    "quoted_tweet": null
+  },
+  {
+    "id": "1000000000000000003",
+    "author": "another_handle",
+    "bio": "",
+    "text": "Release notes are up. https://example.com/release-notes",
+    "created_at": "Sun Oct 25 02:15:00 +0000 2026",
+    "likes": 0,
+    "views": "87",
+    "url": "https://x.com/i/status/1000000000000000003",
+    "has_media": false,
+    "media_urls": [],
+    "media_posters": [],
+    "card": null,
+    "quoted_tweet": null
+  }
+]

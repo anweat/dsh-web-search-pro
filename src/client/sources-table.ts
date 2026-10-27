@@ -31,6 +31,7 @@ export const ANONYMOUS_SOURCES: readonly AnonymousSource[] = [
 
 /** Display names of the keyed sources by route id (proper names, shown the same in every language). */
 export const KEYED_NAMES: Readonly<Record<string, string>> = {
+  deepseek: 'DeepSeek Search / Fetch',
   tavily: 'Tavily',
   brave: 'Brave Search',
   linkup: 'Linkup',

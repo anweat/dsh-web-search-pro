@@ -12,7 +12,7 @@
  */
 export type Json = Record<string, unknown>;
 /** Top-level config fields (one Host write each). */
-export type TopField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'searxngUrl' | 'openalexMailto' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose';
+export type TopField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env' | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'deepseekFetch' | 'searxngUrl' | 'openalexMailto' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose';
 /** Options inside `evidence` / `provider`, addressed by their dotted config path. */
 export type PathField = 'evidence.autoProviders' | 'evidence.sourcePolicy' | 'evidence.maxRounds' | 'evidence.maxQueries' | 'evidence.judge.mode' | 'evidence.hybridBorderline' | 'evidence.judge.provider' | 'evidence.maxJevQuestions' | 'evidence.judge.allowLlm' | 'evidence.judge.providers' | 'evidence.coverage.mode' | 'evidence.coverage.provider' | 'evidence.coverage.thresholds.weak' | 'evidence.coverage.thresholds.covered' | 'evidence.budget.perSearchInputTokens' | 'evidence.budget.dailyInputTokens' | 'evidence.budget.timezone' | 'evidence.budget.providers' | 'provider.evidence' | 'provider.deadlineMs' | 'sources.priority' | 'sources.disabled';
 /** One rubric override entry (`evidence.rubrics.<id>`) and one keyed-source field. */
@@ -20,7 +20,9 @@ export type RubricField = `evidence.rubrics.${string}`;
 export type KeyedField = `keyedSources.${string}.apiKeyEnv` | `keyedSources.${string}.baseUrl`;
 /** One axis of one source's request budget (`sources.budget.<id>.total|daily`). */
 export type BudgetField = `sources.budget.${string}.${'total' | 'daily'}`;
-export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField;
+/** The confidence of one source or platform backend (`sources.confidence.<id>`): the ids are open, so these fields are made on demand. */
+export type ConfidenceField = `sources.confidence.${string}`;
+export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField | ConfidenceField;
 export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources';
 export type FieldWrite = {
     kind: 'set';
@@ -89,8 +91,11 @@ export declare const DEFAULTS: {
     };
     readonly toolSurface: "indexed";
     readonly bochaApiKeyEnv: "BOCHA_SEARCH_API_KEY";
+    readonly twitterAuthTokenEnv: "TWITTER_AUTH_TOKEN";
+    readonly twitterCt0Env: "TWITTER_CT0";
     readonly bochaBaseUrl: "https://api.bocha.cn";
     readonly bochaSummary: true;
+    readonly deepseekFetch: false;
 };
 /** Top-level fields, in display order. */
 export declare const FIELD_SPECS: readonly FieldSpec[];
@@ -105,11 +110,15 @@ export declare const KEYED_SPECS: readonly PathSpec[];
 /** The sources the card has a request budget for: Bocha and the keyed sources (any registered id works in settings.yaml). */
 export declare const BUDGETED_SOURCES: readonly string[];
 export declare const BUDGET_SPECS: readonly PathSpec[];
+/** `sources.confidence.<id>`: a number 0..1; empty = the default (1 for a built-in source, the spec's own for a custom CLI). */
+export declare const confidenceSpec: (id: string) => PathSpec;
+export declare const confidenceField: (id: string) => ConfidenceField;
+export declare const CONFIDENCE_PREFIX = "sources.confidence.";
 /** The spec of a rubric override entry: the whole object as one JSON draft, which the rubric editor builds field by field. */
 export declare const rubricSpec: (id: string) => PathSpec;
 export declare const rubricField: (id: string) => RubricField;
 /** Fields that a Host write can never take as text (credentials go through the credentials remote). */
-export declare const CREDENTIAL_IDS: readonly ["exa", "jina", "github", "bocha", ...`keyed:${string}`[]];
+export declare const CREDENTIAL_IDS: readonly ["exa", "jina", "github", "bocha", "twitter-auth-token", "twitter-ct0", ...`keyed:${string}`[]];
 export type CredentialId = typeof CREDENTIAL_IDS[number];
 /** The settings field holding the credentials ref / environment variable name of each credential, and its default name. */
 export declare function credentialRef(id: CredentialId): {

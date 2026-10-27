@@ -2,7 +2,8 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store';
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import { type RubricKind } from '../pipeline/rubrics-spec.ts';
 import type { Context } from './context-types.ts';
-import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, type CredentialId, type SettingField } from './form-specs.ts';
+import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, type CredentialId, type FieldSpec, type SettingField } from './form-specs.ts';
+import { type OverlayView, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts';
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS };
 export type { CredentialId, SettingField };
 export interface CardFieldState {
@@ -45,10 +46,42 @@ export interface RubricCardState {
     invalid: boolean;
     problems: string[];
 }
+/** What the card knows of the agent overlay (the settings an agent changed with `config.*`), read over the RPC channel. */
+export interface OverlayCardState {
+    loading: boolean;
+    /** The channel answered with an error, or there is none. */
+    failed: boolean;
+    /** An adopt or revoke is running: the buttons wait. */
+    busy: boolean;
+    /** The last adopt / revoke that did not go through, as a dictionary key with its `{why}`. */
+    error?: {
+        key: 'agentAdoptFailed' | 'agentAdoptHalf' | 'agentRevokeFailed';
+        why?: string;
+    };
+    view?: OverlayView;
+}
+/** What the card knows from the running plugin over its private RPC channel (rpc-types.ts); empty where the Host has no transport. */
+export interface ServerState {
+    /** The Host has the transport: live readiness and "Try it" are possible. */
+    available: boolean;
+    loading: boolean;
+    failed: boolean;
+    status?: StatusView;
+    /** The trial run of a custom CLI draft: idle, running, or the last outcome. */
+    trial: {
+        state: 'idle' | 'running' | 'done' | 'failed';
+        id?: string;
+        result?: TrialResult;
+        error?: string;
+    };
+    overlay: OverlayCardState;
+}
 export interface WebSearchCardState {
     available: boolean;
     writable: boolean;
     dirty: boolean;
+    /** How many staged edits a save would write: fields whose draft differs from what is stored, plus pending secrets. */
+    changes: number;
     invalid: boolean;
     saving: boolean;
     failed: boolean;
@@ -57,9 +90,16 @@ export interface WebSearchCardState {
     /** Ids the judge / coverage provider controls offer: the presets plus the valid custom entries of the draft. */
     providerChoices: string[];
     rubrics: RubricCardState[];
+    /** Settings read only when the plugin starts (restart.ts) that have an edit waiting to be saved: a save would not take effect until a restart. */
+    restartTouched: string[];
     /** Overrides in settings that name no built-in rubric. */
     unknownRubrics: string[];
+    server: ServerState;
 }
+/** Every field spec of the form model, in display order. */
+export declare const ALL_SPECS: readonly FieldSpec[];
+/** The specs of the dynamic fields among `fields` (the text view prints them next to the fixed ones). */
+export declare function dynamicSpecsOf(fields: Readonly<Record<string, unknown>>): FieldSpec[];
 export declare class WebSearchSettingsController {
     private readonly scope;
     private readonly ctx;
@@ -75,7 +115,26 @@ export declare class WebSearchSettingsController {
     private credentialGeneration;
     private credentialRefSignature;
     private credentialStates;
+    private server;
+    private trialGeneration;
     constructor(scope: ConfigForm<Record<string, unknown>>, ctx: Context);
+    /** The Host's RPC client, read when it is used (the service may arrive after the card was registered); undefined where there is none. */
+    private rpc;
+    /** Ask the plugin what is ready now (the same local probes as `sources.status`). Silent when the Host has no transport. */
+    refreshStatus(): Promise<void>;
+    private setOverlay;
+    /** Read what the agent overlay holds (once when the panel opens, and on the refresh button). Silent where the Host has no transport. */
+    refreshOverlay(): Promise<void>;
+    /** Drop overlay entries (keys, or `'all'`) as the user. The plugin audits it; the card shows the overlay as it is afterwards. */
+    revokeOverlay(keys: readonly string[] | 'all', adopted?: boolean): Promise<boolean>;
+    /**
+     * "Adopt into configuration": write the overlay item's value into the profile with the Host's atomic `mutate` (the same call the save bar
+     * makes, at the leaf the item is about), and only when that landed ask the plugin to drop the entry. A failed write leaves both as they were.
+     */
+    adoptOverlay(key: string): Promise<boolean>;
+    /** Run one search of a custom CLI draft (rpc-types.ts `trial`). The outcome lands in `server.trial`. */
+    runTrial(request: TrialRequest): Promise<void>;
+    clearTrial(): void;
     inject(): {
         hooks: {
             webSearchPro: SnapshotStore<WebSearchCardState>;
@@ -89,6 +148,12 @@ export declare class WebSearchSettingsController {
         save: () => void;
         discard: () => void;
         refreshCredentials: () => void;
+        refreshStatus: () => void;
+        refreshOverlay: () => void;
+        revokeOverlay: (keys: readonly string[] | "all") => void;
+        adoptOverlay: (key: string) => void;
+        runTrial: (request: TrialRequest) => void;
+        clearTrial: () => void;
     };
     snapshot(): WebSearchCardState;
     edit(field: SettingField, text: string): void;
@@ -107,6 +172,12 @@ export declare class WebSearchSettingsController {
     refreshCredentials(): Promise<void>;
     dispose(): void;
     private project;
+    /** The start-up-only settings (restart.ts) whose staged edit differs from what is stored. */
+    private restartTouched;
+    /** `playwright` is one JSON field; only its `snapshotDir` is a start-up setting (`enabled` is live). */
+    private snapshotDirTouched;
+    /** Staged fields that differ from what is stored (a pending reset counts only when something is stored). */
+    private changedFields;
     private decorate;
     private projectRubrics;
     /** The state of one control from the staged draft, else from the Host section. */
@@ -117,11 +188,18 @@ export declare class WebSearchSettingsController {
      * evidence settings the draft would produce are then checked with the server's own validators.
      */
     private analyze;
+    /**
+     * The Host ops of a top-level field. A container the schema does not declare volatile as a whole (`playwright`: its keys are)
+     * is written key by key; every other field is one `set` or one `unset`.
+     */
+    private topOps;
     private opsOf;
     private credentialPlan;
     private writeCredential;
     /** The credentials ref / environment variable name each key is read from, from the saved settings (else the default). */
     private credentialRefs;
+    /** The `sources.confidence.<id>` fields that hold a value now or in the draft: the card shows these ids with their values. */
+    private dynamicFields;
     private spec;
     private resolvedRoot;
     private sectionValue;

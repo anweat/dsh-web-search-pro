@@ -9,9 +9,11 @@
 
 import { runCli } from '../util.ts'
 import { buildCliEnv } from './runner.ts'
-import { findOnPath, type ProbeSubject } from './probe.ts'
-import { validateCliAdapterSpec, type CliAdapterSpec } from './spec.ts'
+import { findOnPath, probeCli, type ProbeSubject } from './probe.ts'
+import { validateCliAdapterSpec, type CliAdapterSpec, type CliErrorCodesSpec } from './spec.ts'
+import { GENERIC_OUTPUT, opencliSiteVerification, SITE_OUTPUT } from './opencli-sites.ts'
 export { OPENCLI_SITE_OF } from './chains-spec.ts'
+export { opencliSiteVerification }
 
 /** The command that proves this is the OpenCLI whose `list` output the adapter understands. Verified on 1.8.8. */
 export const OPENCLI_PROBE: ProbeSubject = {
@@ -22,6 +24,27 @@ export const OPENCLI_PROBE: ProbeSubject = {
   env: {},
 }
 
+/**
+ * The browser options every browser-backed site command of OpenCLI accepts (read from `opencli <site> search --help` and
+ * dist/src/execution.js of 1.8.8): the command runs in a background window (no focus is taken from the user's Chrome), with an
+ * ephemeral site session whose tab is released when it finishes. These are also its defaults; the plugin passes them
+ * explicitly so a changed `OPENCLI_WINDOW` / `OPENCLI_SITE_SESSION` environment cannot bring a window to the front, and only
+ * when the command itself lists the three options (a command without a browser rejects unknown options).
+ */
+export const OPENCLI_SILENT_ARGS: readonly string[] = ['--window', 'background', '--site-session', 'ephemeral', '--keep-tab', 'false']
+const SILENT_OPTIONS = ['--window', '--site-session', '--keep-tab'] as const
+
+/** The probe of one site's search command: it must list the three silent browser options (`opencli <site> search --help`). Local, cached, no browser. */
+export function opencliSiteProbe(site: string): ProbeSubject {
+  return {
+    id: 'opencli:' + site,
+    bins: ['opencli'],
+    packageNote: OPENCLI_PROBE.packageNote,
+    probe: { versionArgs: ['--version'], minVersion: '1.8.0', helpArgs: [site, 'search', '--help'], mustContain: [...SILENT_OPTIONS] },
+    env: {},
+  }
+}
+
 export interface OpencliSite {
   site: string
   /** `cookie` sites use the user's logged-in Chrome; `public` sites need no login. */
@@ -29,18 +52,17 @@ export interface OpencliSite {
   /** Whether the command drives the browser at all. */
   browser: boolean
   hasLimit: boolean
-  loginCommand?: string
+  /** The site's domain as the command table gives it (`www.zhihu.com`), for the "log in to ..." hint. */
+  domain?: string
 }
 
-interface ListEntry { site?: unknown; name?: unknown; access?: unknown; strategy?: unknown; browser?: unknown; args?: unknown }
+interface ListEntry { site?: unknown; name?: unknown; access?: unknown; strategy?: unknown; browser?: unknown; args?: unknown; domain?: unknown }
 
 /** Sites with a read `search` command taking a positional query, from the JSON of `opencli list -f json`. Pure. */
 export function parseOpencliList(json: string): Map<string, OpencliSite> {
   const rows = JSON.parse(json) as unknown
   if (!Array.isArray(rows)) throw new Error('opencli list did not return an array')
   const sites = new Map<string, OpencliSite>()
-  const logins = new Set<string>()
-  for (const row of rows as ListEntry[]) if (row && typeof row.site === 'string' && row.name === 'login') logins.add(row.site)
   for (const row of rows as ListEntry[]) {
     if (!row || typeof row.site !== 'string' || row.name !== 'search' || row.access !== 'read' || !Array.isArray(row.args)) continue
     const args = row.args as { name?: unknown; positional?: unknown }[]
@@ -50,7 +72,7 @@ export function parseOpencliList(json: string): Map<string, OpencliSite> {
       strategy: typeof row.strategy === 'string' ? row.strategy : 'cookie',
       browser: row.browser === true,
       hasLimit: args.some(a => a.name === 'limit'),
-      ...logins.has(row.site) ? { loginCommand: 'opencli ' + row.site + ' login' } : {},
+      ...typeof row.domain === 'string' && row.domain ? { domain: row.domain } : {},
     })
   }
   return sites
@@ -79,18 +101,34 @@ export async function listOpencliSites(options: { run?: typeof runCli; ttlMs?: n
   }
 }
 
-/** Generic field mapping over the columns OpenCLI commands emit (rank, title, url, summary, ...). */
-const FIELDS = {
-  url: ['url', 'link', 'href', 'projectUrl', 'item_url'],
-  title: ['title', 'name', 'text', 'desc', 'label'],
-  snippet: ['summary', 'snippet', 'description', 'desc', 'content', 'selftext', 'abstract', 'author', 'user'],
-  publishedAt: ['published_at', 'publish_time', 'created_at', 'date', 'time', 'published', 'postTime'],
-} as const
+/**
+ * The failure format of OpenCLI 1.8.8 (dist/src/errors.js `toEnvelope`, printed as YAML on stderr whatever `-f` says):
+ * `ok: false` / `error: { code, message, help?, exitCode }`. Codes, from that file and the site adapters:
+ *  - AUTH_REQUIRED (exit 77): the Chrome has no login for the site -> not logged in (measured on xiaohongshu);
+ *  - LOGIN_WALL (77), SECURITY_BLOCK, RATE_LIMITED, FORBIDDEN: an HTML page where JSON was expected, a risk-control block -> blocked;
+ *    UNKNOWN with a JSON parse error on an HTML body (`Unexpected token '<'`) is the same thing from an adapter that does not
+ *    check (measured on reddit through a proxy);
+ *  - EMPTY_RESULT (66), NO_DATA, EMPTY_RESPONSE: nothing found; BROWSER_CONNECT (69): no Chrome / bridge; TIMEOUT (75);
+ *  - ARGUMENT, INVALID_ARGUMENT, ...: the arguments of this adapter are not accepted by that version.
+ * Anything else (COMMAND_EXEC, FETCH_ERROR, HTTP_ERROR, ...) keeps OpenCLI's own message.
+ */
+export const OPENCLI_ERROR_CODES: CliErrorCodesSpec = {
+  codePath: 'error.code',
+  messagePath: 'error.message',
+  notLoggedIn: ['AUTH_REQUIRED'],
+  notLoggedInExit: [77],
+  blocked: ['LOGIN_WALL', 'SECURITY_BLOCK', 'RATE_LIMITED', 'FORBIDDEN'],
+  blockedPatterns: ["unexpected token '<'", 'is not valid json', '<!doctype', '<html', '<body'],
+  empty: ['EMPTY_RESULT', 'NO_DATA', 'EMPTY_RESPONSE'],
+  unavailable: ['BROWSER_CONNECT'],
+  timeout: ['TIMEOUT'],
+  usage: ['ARGUMENT', 'INVALID_ARGUMENT', 'INVALID_ARG', 'INVALID_ARGS', 'INVALID_INPUT'],
+}
 
 const NOT_LOGGED_IN = ['not logged in', 'login required', 'please log in', 'please login', 'sign in', 'auth_required', 'requires login', '未登录', '请先登录']
 
 /** The spec that runs `opencli <site> search` for one platform, or undefined when the generated spec is invalid (a site named like a write command). */
-export function opencliSearchSpec(platform: string, entry: OpencliSite): CliAdapterSpec | undefined {
+export function opencliSearchSpec(platform: string, entry: OpencliSite, options: { silent?: boolean } = {}): CliAdapterSpec | undefined {
   const spec: CliAdapterSpec = {
     id: 'opencli',
     bins: ['opencli'],
@@ -99,17 +137,34 @@ export function opencliSearchSpec(platform: string, entry: OpencliSite): CliAdap
     probe: OPENCLI_PROBE.probe,
     allowedSubcommands: ['list', entry.site, 'search'],
     search: {
-      argv: [entry.site, 'search', '{query}', ...entry.hasLimit ? ['--limit', '{count}'] : [], '-f', 'json'],
+      argv: [entry.site, 'search', '{query}', ...entry.hasLimit ? ['--limit', '{count}'] : [], '-f', 'json', ...entry.browser && options.silent ? OPENCLI_SILENT_ARGS : []],
       maxCount: 20,
-      output: { format: 'json', stripTags: true, fields: { url: [...FIELDS.url], title: [...FIELDS.title], snippet: [...FIELDS.snippet], publishedAt: [...FIELDS.publishedAt] } },
+      output: SITE_OUTPUT[entry.site] ?? GENERIC_OUTPUT,
       notLoggedInPatterns: NOT_LOGGED_IN,
+      errorCodes: OPENCLI_ERROR_CODES,
     },
     env: {},
     needsLogin: entry.strategy !== 'public',
-    ...entry.strategy !== 'public' ? { login: { command: entry.loginCommand ?? 'opencli doctor' } } : {},
+    // The login is the one of the user's own Chrome; the plugin never suggests a login command for it.
+    ...entry.strategy !== 'public' ? { login: { hint: '在你的 Chrome 里登录 ' + (entry.domain ?? entry.site) + ' 后重试（opencli 使用 Chrome 的登录态）' } } : {},
     timeoutMs: 60_000,
     maxOutputBytes: 8 * 1024 * 1024,
-    verification: { status: 'contract-only', version: '1.8.8', date: '2026-10-06', note: 'command table from `opencli list -f json`; -f json is the documented output option; no site search was run (they use your Chrome sessions)' },
+    verification: opencliSiteVerification(entry.site),
   }
   return validateCliAdapterSpec(spec, 'builtin').ok ? spec : undefined
+}
+
+export interface OpencliSearchPlan { spec?: CliAdapterSpec; entry?: OpencliSite; problem?: string; hint?: string; silent: boolean }
+
+/**
+ * Everything a search of one platform through the standalone OpenCLI needs, checked locally (the command table and the site's
+ * `--help`, never a search): the site's entry, whether its command takes the silent browser options, and the generated spec.
+ */
+export async function planOpencliSearch(platform: string, site: string): Promise<OpencliSearchPlan> {
+  const listed = await listOpencliSites()
+  const entry = listed.sites?.get(site)
+  if (!entry) return { silent: false, problem: listed.problem ?? 'opencli has no read `search` command for the site ' + site + ' (opencli list)', hint: 'run `opencli list` to see the sites your version supports' }
+  const silent = entry.browser && (await probeCli(opencliSiteProbe(site))).state === 'detected'
+  const spec = opencliSearchSpec(platform, entry, { silent })
+  return spec ? { spec, entry, silent } : { entry, silent, problem: 'opencli site ' + site + ' cannot be used by this adapter' }
 }

@@ -220,7 +220,7 @@ test('recommend: platform hint narrows to that source; login-based and browser-b
   assert.equal(withBrowser.status, 'limited', 'runnable, but the login cannot be checked')
   assert.equal(withBrowser.executable, true)
   const tw = recommendSources({ platform: 'twitter' }, ctx({ cli: new Map([['twitter', true]]), hasEnv: n => n === 'TWITTER_AUTH_TOKEN', providers: providersOf({ twitter: { state: 'unavailable', reason: 'TWITTER_CT0 is not set' } }) })).picks[0]!
-  assert.deepEqual(tw.missing, ['credentials: set TWITTER_CT0'])
+  assert.deepEqual(tw.missing, ['cli: opencli (not scanned)'], 'the first backend of the chain is OpenCLI (the twitter-cli tokens are only its optional fallback)')
   const unknown = recommendSources({ ...EN, platform: 'nonesuch' }, ctx())
   assert.ok(unknown.picks.length > 0)
   assert.match(unknown.notes.join(' '), /no catalog entry for "nonesuch"/)

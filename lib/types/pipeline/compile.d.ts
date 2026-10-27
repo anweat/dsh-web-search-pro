@@ -15,6 +15,9 @@
  *  - keyed sources (dev-plan M7c): Tavily / Linkup / Baidu Qianfan / Zhipu take domain lists (`options.sites`, capped at what
  *    each documents) and a date lower bound (`options.since`); Brave / Serper (Google) take `site:` / `-site:` / `-term`
  *    operators in the query; whatever a source does not document stays for local verification;
+ *  - deepseek (DeepSeek Search API): `site:a OR site:b` / `-site:` / `-term` for HARD site / exclude_site / exclude_term and
+ *    `after:YYYY-MM-DD` for a HARD time_window whose lower bound is understood, all in the query text (the API documents them as
+ *    query operators); `originalQuestion` carries the task goal (or the first critical need) for the API's `ori_question`;
  *  - github*: the natural-language query returns nothing on repository search
  *    (E1: 0 of 20), so it is replaced by a short keyword query;
  *  - everything else: the plain query.
@@ -52,6 +55,7 @@ export interface CompiledQuery {
         since?: string;
         lang?: 'zh' | 'en';
         sites?: CompiledSites;
+        originalQuestion?: string;
     };
     /** Broader variants to try, in order, when the provider answers ENGINE_EMPTY for `query` (GitHub: fewer keywords). */
     fallbacks?: string[];
@@ -103,6 +107,13 @@ export declare function hardWindows(task: TaskLike, now: Date): {
  * sources get `site:` / `-site:` / `-term` in the query. Soft constraints are never pushed down.
  */
 export declare function compileKeyed(task: TaskLike, providerId: string, now: Date, caps: KeyedCaps): CompiledQuery;
+/**
+ * DeepSeek Search takes `site:` (several joined by `OR`), `-site:`, `-term`, `"phrase"`, `lang:`, `after:` and `before:` inside
+ * the query. Hard constraints become those operators (the engine keeps them whole when it has to cut a long query). An operator the
+ * query already spells is not repeated; a hard site when the query already restricts to other sites stays local (two `site:`
+ * restrictions would AND into nothing).
+ */
+export declare function compileDeepSeek(task: TaskLike, providerId: string, now: Date): CompiledQuery;
 export declare const GITHUB_MAX_TERMS = 5;
 /**
  * Short keyword query for repository search: entities, then must_terms, then a

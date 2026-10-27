@@ -7,7 +7,21 @@
 
 import type { EvidencePack } from './types.ts'
 
-export interface RenderSource { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: boolean }
+export interface RenderSource { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean; via?: string; confidence?: number; tag?: string }
+
+/**
+ * `[rerank 2.4/3, authority 3/4]`: the provider's own grades of a source (DeepSeek Search); for a custom CLI or a source the user gave a
+ * confidence below 1 also `via custom-cli:echo, confidence 0.5` and the honest label (user-defined, not verified). Empty when there is none of it.
+ */
+export function qualityTag(s: { rerankScore?: number; authority?: number; via?: string; confidence?: number; tag?: string }): string {
+  const bits: string[] = []
+  if (typeof s.rerankScore === 'number') bits.push('rerank ' + s.rerankScore + '/3')
+  if (typeof s.authority === 'number') bits.push('authority ' + s.authority + '/4')
+  if (s.via) bits.push('via ' + s.via)
+  if (typeof s.confidence === 'number') bits.push('confidence ' + s.confidence)
+  if (s.tag) bits.push(s.tag)
+  return bits.length ? '[' + bits.join(', ') + ']' : ''
+}
 
 /** Marker for a source / excerpt whose page only passed the S4 floor, not the relevance gate (dev-plan §3.1). */
 export const LOW_RELEVANCE = ' (low relevance)'
@@ -27,7 +41,7 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
       const lines = ['[' + (i + 1) + '] ' + e.evidenceId + ' — ' + (e.title ? e.title + ' — ' : '') + e.url + (e.publishedAt ? ' (' + e.publishedAt + ')' : '') + (e.lowConfidence ? LOW_RELEVANCE : '')]
       if (e.heading) lines.push('    § ' + e.heading)
       lines.push('    ' + e.excerpt.replace(/\n+/g, '\n    '))
-      lines.push('    needs ' + e.needIds.join(',') + ' · grade ' + e.grade + (e.source ? ' · via ' + e.source : ''))
+      lines.push('    needs ' + e.needIds.join(',') + ' · grade ' + e.grade + (e.source ? ' · via ' + e.source : '') + (e.confidence !== undefined ? ' · confidence ' + e.confidence : '') + (e.tag ? ' · ' + e.tag : ''))
       return lines.join('\n')
     }).join('\n\n'))
   } else {
@@ -40,7 +54,7 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
   }
   const shown = new Set(pack.evidence.map(e => e.url))
   const others = sources.filter(s => !shown.has(s.url))
-  if (others.length) parts.push('Other sources:\n' + others.map(s => '- [' + (s.title || hostOf(s.url)) + '](' + s.url + ')' + (s.publishedAt ? ' (' + s.publishedAt + ')' : '') + (s.lowConfidence ? LOW_RELEVANCE : '')).join('\n'))
+  if (others.length) parts.push('Other sources:\n' + others.map(s => '- [' + (s.title || hostOf(s.url)) + '](' + s.url + ')' + (s.publishedAt ? ' (' + s.publishedAt + ')' : '') + (qualityTag(s) ? ' ' + qualityTag(s) : '') + (s.lowConfidence ? LOW_RELEVANCE : '')).join('\n'))
   const v = pack.verification
   if (v.native.length || v.local.length) parts.push('Constraints — enforced by the search provider: ' + (v.native.join(', ') || 'none') + '; checked locally only: ' + (v.local.join(', ') || 'none') + '.')
   parts.push(engineLine + (pack.notes.length ? '\nNotes: ' + pack.notes.join(' | ') : ''))

@@ -4,14 +4,18 @@
  * @module web-search-pro/actions/sources
  */
 
-import { browserState } from '../browser-access.ts'
+import { browserLaunchReadiness, browserState } from '../browser-access.ts'
 import { defaultInstaller, detectDeps, installDep } from '../deps.ts'
+import { verificationTag } from '../cli/spec.ts'
 import { judgeStatus, type JudgeStatus } from '../pipeline/judge-status.ts'
 import { resolveAllRubrics } from '../pipeline/rubrics.ts'
 import type { ProviderReport } from '../router.ts'
 import { renderProviderState, type ProviderState } from '../provider.ts'
 import type { ResolvedConfig } from '../config.ts'
 import { ActionArgError, type ActionDef, type OutputNode } from './types.ts'
+import type { OverlayStore } from '../overlay.ts'
+import { overlayKeys } from '../overlay-types.ts'
+import { pendingRestartLine, type PendingRestart } from '../restart.ts'
 
 /** One registry provider in `sources.status` (all fields beyond id / label / readiness.available are optional extensions). */
 const PROVIDER_REPORT_SCHEMA: OutputNode = {
@@ -29,9 +33,11 @@ const PROVIDER_REPORT_SCHEMA: OutputNode = {
       daily: { type: 'object', additionalProperties: false, properties: { limit: { type: 'number', required: true }, used: { type: 'number', required: true }, remaining: { type: 'number', required: true } } },
     } },
     unverified: { type: 'boolean' },
+    common: { type: 'boolean' },
+    confidence: { type: 'number' },
     chain: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
       id: { type: 'string', required: true }, kind: { type: 'string', required: true }, label: { type: 'string', required: true }, order: { type: 'number', required: true }, state: { type: 'string', required: true },
-      installation: { type: 'string' }, version: { type: 'string' }, credential: { type: 'string' }, reason: { type: 'string' }, verification: { type: 'string', required: true },
+      installation: { type: 'string' }, version: { type: 'string' }, credential: { type: 'string' }, reason: { type: 'string' }, verification: { type: 'string', required: true }, confidence: { type: 'number' },
     } } },
     readiness: { type: 'object', additionalProperties: false, properties: {
       available: { type: 'boolean', required: true }, state: { type: 'string' }, installation: { type: 'string' }, credential: { type: 'string' }, health: { type: 'string' }, reason: { type: 'string' }, diagnosticCode: { type: 'string' },
@@ -62,6 +68,17 @@ const EVIDENCE_STATUS_SCHEMA: OutputNode = {
   },
 }
 
+/** Settings changed in the configuration that the running plugin only reads at start-up (restart.ts). */
+export const PENDING_RESTART_SCHEMA: OutputNode = {
+  type: 'array', items: { type: 'object', additionalProperties: false, properties: { field: { type: 'string', required: true }, running: { type: 'string', required: true }, configured: { type: 'string', required: true } } },
+}
+
+/** The state of the agent overlay in one line of data: revision, the overridden keys, and why it is ignored when it is. */
+export const OVERLAY_STATE_SCHEMA: OutputNode = {
+  type: 'object', additionalProperties: false,
+  properties: { revision: { type: 'number', required: true }, keys: { type: 'array', required: true, items: { type: 'string' } }, valid: { type: 'boolean', required: true }, problem: { type: 'string' } },
+}
+
 const SELECTION_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, properties: { pinned: { type: 'string' }, via: { type: 'string', required: true }, state: { type: 'string', required: true } } }
 
 /** The ctx.web provider route: registered by this plugin, and whether the Host is pinned to it (M8c). */
@@ -74,14 +91,41 @@ const DEP_SCHEMA: OutputNode = { type: 'object', additionalProperties: false, pr
 
 /**
  * Whether the twitter platform backend can really run: the `twitter` command works (probed by detectDeps)
- * AND the backend is enabled in settings AND its credentials are in the environment (same gates as the engine).
+ * AND the backend is enabled in settings AND its credentials are available (same gates as the engine). `env` holds the values
+ * the router resolved (settings literal -> DSH credentials -> process environment); without it only the process environment is read.
  */
-export function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: { available: boolean; diagnostic?: string }): { available: boolean; note?: string } {
+export function twitterGate(cfg: Pick<ResolvedConfig, 'enableCliBackends' | 'agentReachEnabled'>, dep: { available: boolean; diagnostic?: string }, env: Readonly<Record<string, string | undefined>> = process.env): { available: boolean; note?: string } {
   if (!dep.available) return { available: false, note: dep.diagnostic ?? 'twitter command not found (install twitter-cli; Agent-Reach alone does not provide it)' }
   if (!cfg.enableCliBackends) return { available: false, note: 'CLI backends are disabled in settings (enableCliBackends)' }
   if (!cfg.agentReachEnabled) return { available: false, note: 'disabled in settings (agentReachEnabled)' }
-  if (!process.env.TWITTER_AUTH_TOKEN || !process.env.TWITTER_CT0) return { available: false, note: 'twitter command found, but TWITTER_AUTH_TOKEN / TWITTER_CT0 are not set' }
+  if (!env.TWITTER_AUTH_TOKEN || !env.TWITTER_CT0) {
+    const missing = ['TWITTER_AUTH_TOKEN', 'TWITTER_CT0'].filter(name => !env[name])
+    return { available: false, note: 'twitter command found, but ' + missing.join(' / ') + ' ' + (missing.length > 1 ? 'are' : 'is') + ' not set (looked in the plugin settings twitterAuthToken / twitterCt0, the DSH credentials refs twitterAuthTokenEnv / twitterCt0Env and the process environment): set them in DSH credentials or in the Host process environment; a shell profile alone is not enough' }
+  }
   return { available: true }
+}
+
+/**
+ * The "常用" (common) sources and whether each can run now. Without a key it is not in the default chain; the line says how to configure it.
+ * `providers` is the registry report; a stub router without one reports none.
+ */
+export function commonSources(providers: ProviderReport[] | undefined): { common?: { id: string; label: string; ready: boolean; setup?: string }[] } {
+  const common = (providers ?? []).filter(p => p.common)
+  if (!common.length) return {}
+  return {
+    common: common.map(p => {
+      const ready = p.readiness.available && p.readiness.credential === 'configured'
+      const env = p.requirements.find(r => r.kind === 'key')?.env ?? []
+      return { id: p.route, label: p.label, ready, ...ready ? {} : { setup: 'set ' + (env.length ? '$' + env.join(' or $') + ' (or a DSH credentials ref / the settings key field)' : 'its key') } }
+    }),
+  }
+}
+
+/** Revision, overridden keys and validity of the agent overlay, for `sources.status`. */
+export function overlayState(overlay: OverlayStore): { revision: number; keys: string[]; valid: boolean; problem?: string } {
+  const problem = overlay.problem
+  const current = overlay.current()
+  return { revision: current.revision, keys: overlayKeys(current.values), valid: problem === undefined, ...problem ? { problem } : {} }
 }
 
 function defaultInstallerFor(backend: string): string {
@@ -103,10 +147,12 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
         providers: { type: 'array', items: PROVIDER_REPORT_SCHEMA },
         cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' }, installation: { type: 'string' }, version: { type: 'string' }, verification: { type: 'string' } } } },
-        browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
+        browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, launch: { type: 'object', additionalProperties: false, properties: { ready: { type: 'boolean', required: true }, source: { type: 'string' }, path: { type: 'string' }, advice: { type: 'string' } } } } },
         webRoute: WEB_ROUTE_SCHEMA,
         notes: { type: 'array', items: { type: 'string' } },
-        sources: { type: 'object', additionalProperties: false, properties: { policy: { type: 'string', required: true }, priority: { type: 'array', required: true, items: { type: 'string' } }, disabled: { type: 'array', required: true, items: { type: 'string' } } } },
+        pendingRestart: PENDING_RESTART_SCHEMA,
+        overlay: OVERLAY_STATE_SCHEMA,
+        sources: { type: 'object', additionalProperties: false, properties: { policy: { type: 'string', required: true }, priority: { type: 'array', required: true, items: { type: 'string' } }, disabled: { type: 'array', required: true, items: { type: 'string' } }, confidence: { type: 'object', additionalProperties: true }, common: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, label: { type: 'string', required: true }, ready: { type: 'boolean', required: true }, setup: { type: 'string' } } } } } },
         evidence: EVIDENCE_STATUS_SCHEMA,
       },
     },
@@ -117,6 +163,8 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       const { router, store } = ctx
       const cfg = ctx.dynamic()
       const cli = await detectDeps({ config: cfg })
+      // Tokens as the search resolves them (settings literal -> DSH credentials -> process environment); a stub router has none: the process environment.
+      const cliEnv = typeof (router as { cliEnv?: unknown }).cliEnv === 'function' ? { ...process.env, ...await router.cliEnv() } : process.env
       const availability = new Map(cli.map(value => [value.id, value.available]))
       const ev = cfg.evidence
       const { rubrics, diagnostics } = resolveAllRubrics(ev.rubrics)
@@ -127,6 +175,8 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         ...typeof (router as { sourceDiagnostics?: unknown }).sourceDiagnostics === 'function' ? router.sourceDiagnostics() : [],
         ...typeof (router as { cliAdapterProblems?: unknown }).cliAdapterProblems === 'function' ? router.cliAdapterProblems() : [],
       ]
+      const restart = ctx.pendingRestart?.() ?? []
+      const launch = browserState(ctx.browser()).state === 'ready' ? await browserLaunchReadiness(ctx.browser()) : undefined
       const providers = typeof (router as { providerReport?: unknown }).providerReport === 'function' ? await router.providerReport(availability) : undefined
       // A platform chain is only `ready` when a backend can run with its login satisfied (or not needed); otherwise the line says
       // what it really is (`login_unverified`, `needs_login`, `unavailable`) and what to do next, the same word as the provider report.
@@ -140,32 +190,44 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         engines,
         ...providers ? { providers } : {},
         cli: cli.map(v => {
-          const gate = v.id === 'twitter' ? twitterGate(cfg, v) : undefined
+          const gate = v.id === 'twitter' ? twitterGate(cfg, v, cliEnv) : undefined
           return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...v.installation ? { installation: v.installation } : {}, ...v.version ? { version: v.version } : {}, ...v.verification ? { verification: v.verification } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
         }),
-        browser: browserState(ctx.browser()),
+        browser: { ...browserState(ctx.browser()), ...launch ? { launch } : {} },
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
         ...problems.length ? { notes: problems } : {},
-        sources: { policy: ev.sourcePolicy ?? 'default', priority: cfg.sources?.priority ?? [], disabled: cfg.sources?.disabled ?? [] },
+        ...restart.length ? { pendingRestart: restart } : {},
+        ...ctx.overlay ? { overlay: overlayState(ctx.overlay) } : {},
+        sources: { policy: ev.sourcePolicy ?? 'default', priority: cfg.sources?.priority ?? [], disabled: cfg.sources?.disabled ?? [], ...Object.keys(cfg.sources?.confidence ?? {}).length ? { confidence: cfg.sources.confidence } : {}, ...commonSources(providers) },
         evidence: { scorer: ev.scorer, jevMode: ev.jevMode, mode: judge.mode, decides: judge.decides, ...judge.modeNote ? { modeNote: judge.modeNote } : {}, rubrics: rubrics.map(r => ({ id: r.id, version: r.version, overridden: r.overridden, hash: r.hash })), ...diagnostics.length || judge.diagnostics.length ? { diagnostics: [...diagnostics, ...judge.diagnostics] } : {}, provider: judge.provider, providers: judge.providers, ...judge.coverage ? { coverage: judge.coverage } : {}, ...judge.usage ? { usage: judge.usage } : {} },
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; sources?: { policy: string; priority: string[]; disabled: string[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; pendingRestart?: PendingRestart[]; overlay?: { revision: number; keys: string[]; valid: boolean; problem?: string }; sources?: { policy: string; priority: string[]; disabled: string[]; confidence?: Record<string, number>; common?: { id: string; label: string; ready: boolean; setup?: string }[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string; launch?: { ready: boolean; source?: string; path?: string; advice?: string } }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
       const mark = (e: { available: boolean; state: string }): string => (e.state === 'login_unverified' || e.state === 'needs_login' ? '⚠ ' : e.available ? '✅ ' : '❌ ')
       const lines = v.engines.map(e => mark(e) + e.id + ' [' + e.state.replace('_', ' ') + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health, r.state && 'state=' + r.state].filter(Boolean).join(' ')
-        lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
-        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + leg.verification + (leg.reason ? ' — ' + leg.reason : ''))
+        lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.common ? ' · 常用 (common)' : '') + (p.confidence !== undefined && p.confidence < 1 ? ' · confidence ' + p.confidence : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
+        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + (verificationTag(leg.verification) ?? leg.verification) + (leg.confidence !== undefined && leg.confidence < 1 ? ' · confidence ' + leg.confidence : '') + (leg.reason ? ' — ' + leg.reason : ''))
         const b = p.budget
         if (b) lines.push('    request budget ' + p.route + ': ' + [b.total && 'total ' + b.total.used + '/' + b.total.limit + ' (' + b.total.remaining + ' left)', b.daily && 'today ' + b.daily.used + '/' + b.daily.limit + ' (' + b.daily.remaining + ' left)'].filter(Boolean).join(', ') + (b.exhausted ? ' — used up: skipped, the plan falls back to other sources' : ''))
       }
-      if (v.sources) lines.push('source strategy: policy=' + v.sources.policy + (v.sources.priority.length ? ', priority: ' + v.sources.priority.join(' > ') : '') + (v.sources.disabled.length ? ', disabled: ' + v.sources.disabled.join(', ') : ''))
+      for (const c of v.sources?.common ?? []) lines.push('常用 (common) source ' + c.id + ' (' + c.label + '): ' + (c.ready ? 'key found, leads the default order unless you set sources.priority / disabled or pass engines' : 'no key, not in the default chain' + (c.setup ? ' — ' + c.setup : '')))
+      if (v.sources) lines.push('source strategy: policy=' + v.sources.policy + (v.sources.priority.length ? ', priority: ' + v.sources.priority.join(' > ') : '') + (v.sources.disabled.length ? ', disabled: ' + v.sources.disabled.join(', ') : '') + (v.sources.confidence ? ', confidence: ' + Object.entries(v.sources.confidence).map(([id, c]) => id + '=' + c).join(', ') : ''))
       lines.push(...(v.notes ?? []).map(n => '  ⚠ ' + n))
+      lines.push(...(v.pendingRestart ?? []).map(entry => '  ⚠ ' + pendingRestartLine(entry) + '；重启插件后生效'))
+      if (v.overlay) lines.push('agent overlay: revision ' + v.overlay.revision + (v.overlay.keys.length ? ', ' + v.overlay.keys.length + ' key(s): ' + v.overlay.keys.join(', ') : ', empty') + (v.overlay.valid ? '' : ' — IGNORED: ' + (v.overlay.problem ?? 'invalid') + ' (the configuration applies as written)'))
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.installation && e.installation !== 'detected' ? ' [' + e.installation + ']' : '') + (e.version ? ' ' + e.version : '') + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
-      if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + (v.browser.state === 'legacy' ? 'legacy (unsupported)' : v.browser.state) + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
+      if (v.browser) {
+        const launch = v.browser.launch
+        // The plugin being loaded is not the same as a browser being launchable: a new user has no Playwright Chromium. Said once, with dsh-browser's own advice.
+        const stuck = launch !== undefined && !launch.ready
+        lines.push((v.browser.state === 'ready' && !stuck ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + (v.browser.state === 'legacy' ? 'legacy (unsupported)' : stuck ? 'loaded, no browser to launch' : v.browser.state) + ']'
+          + (v.browser.reason ? ' — ' + v.browser.reason : '')
+          + (stuck ? ' — ' + (launch.advice ?? 'no Chromium or system Chrome could be found; see the dsh-browser runtime.status action') : launch?.source === 'system-browser' ? ' — uses the system browser' + (launch.path ? ' ' + launch.path : '') + ' (no Playwright Chromium needed)' : ''))
+      }
       if (v.webRoute) lines.push(...renderProviderState(v.webRoute))
       if (v.evidence) {
         // The effective judge mode, not the legacy `scorer` flag (which reads "rule" even while hybrid mode is on).
@@ -179,7 +241,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         if (c) lines.push('  coverage judge: mode=' + c.mode + ' (' + c.provider + ', ' + c.rubric + ')' + (c.usable ? '' : ' [not used: ' + c.reason + ']') + (c.thresholds ? ' thresholds weak<' + c.thresholds.weak + ' covered>=' + c.thresholds.covered + ' (' + c.thresholdSource + ')' : ''))
         const u = v.evidence.usage
         if (u) lines.push('  model usage ' + u.day + (u.timezone ? ' ' + u.timezone : '') + ': ' + u.requests + ' request(s), ' + u.inputTokens + ' input / ' + u.outputTokens + ' output tokens' + (u.estimated ? ' (partly estimated)' : '') + (u.amount !== undefined ? ', ' + u.amount.toFixed(4) + ' ' + (u.currency ?? '') : u.requests ? ', cost unknown' : '') + '; caps: ' + u.caps.perSearchInputTokens + '/search, ' + u.caps.dailyInputTokens + '/day input tokens')
-        for (const b of u?.byProvider ?? []) if (b.protocol === 'search') lines.push('  search usage ' + b.provider + ': ' + b.requests + ' request(s) today (tokens n/a, price unknown)')
+        for (const b of u?.byProvider ?? []) if (b.protocol === 'search' || b.protocol === 'fetch') lines.push('  ' + b.protocol + ' usage ' + b.provider + ': ' + b.requests + ' request(s) today (tokens n/a, price unknown)')
         lines.push(...(v.evidence.diagnostics ?? []).map(d => '  ⚠ ' + d))
       }
       return lines.join('\n')

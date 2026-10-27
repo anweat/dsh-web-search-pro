@@ -59,9 +59,9 @@ test('chain resolution: default orders, a configured order replaces them, and un
   try {
     const ids = (platform: string, config = h.config): string[] => resolveChain(platform, { deps: h.deps(), config }).legs.map(l => l.id)
     assert.deepEqual(ids('xiaohongshu'), ['opencli', 'xhs', 'browser-opencli'])
-    assert.deepEqual(ids('reddit'), ['rdt', 'opencli', 'browser-opencli'])
-    assert.deepEqual(ids('twitter'), ['twitter', 'opencli', 'browser-opencli'])
-    assert.deepEqual(ids('zhihu'), ['zhihu', 'browser-search'])
+    assert.deepEqual(ids('reddit'), ['opencli', 'rdt', 'browser-opencli'])
+    assert.deepEqual(ids('twitter'), ['opencli', 'twitter', 'browser-opencli'])
+    assert.deepEqual(ids('zhihu'), ['opencli', 'zhihu', 'browser-search'])
     assert.deepEqual(ids('bilibili'), ['bili'])
     assert.deepEqual(ids('youtube'), ['yt-dlp'])
     assert.deepEqual(ids('github'), ['rest', 'gh'])
@@ -70,7 +70,7 @@ test('chain resolution: default orders, a configured order replaces them, and un
     assert.deepEqual(ids('omnireach'), ['omnireach'])
     const reordered = resolveConfig({ platformBackends: { xiaohongshu: ['xhs', 'browser-opencli'] } } as never)
     assert.deepEqual(ids('xiaohongshu', reordered), ['xhs', 'browser-opencli'])
-    assert.deepEqual(ids('reddit', reordered), ['rdt', 'opencli', 'browser-opencli'], 'platforms not listed keep their default')
+    assert.deepEqual(ids('reddit', reordered), ['opencli', 'rdt', 'browser-opencli'], 'platforms not listed keep their default')
     const bad = resolveConfig({ platformBackends: { xiaohongshu: ['nope', 'rdt', 'browser-search', 'xhs'] } } as never)
     const resolved = resolveChain('xiaohongshu', { deps: h.deps(), config: bad })
     assert.deepEqual(resolved.legs.map(l => l.id), ['xhs'])
@@ -95,8 +95,12 @@ test('a backend that is missing is skipped with the reason and the next one answ
       assert.equal(out.engine, 'wechat')
       assert.equal(out.sources[0]!.url, 'https://mp.weixin.qq.com/s?a=1')
       assert.equal(h.store.listQueries({ kind: 'platform' })[0]!.engine, 'wx-search-cli', 'history names the leg')
+      // The fall-through note says why the first backend was passed over (once a probe has seen it missing), not just "unavailable".
+      await chainReport('wechat', { deps: h.deps(), config: h.config })
+      await h.search('人工智能 周报', 'wechat')
+      assert.match(JSON.stringify(h.store.listQueries({ kind: 'platform' })[0]!.detail), /skipped backends: omnireach: the omnireach command is not installed: install it/)
       const report = await chainReport('wechat', { deps: h.deps(), config: h.config })
-      assert.deepEqual(report.entries.map(e => [e.id, e.state, e.installation, e.verification]), [['omnireach', 'skipped', 'missing', 'live'], ['wx-search-cli', 'ready', 'detected', 'contract-only']])
+      assert.deepEqual(report.entries.map(e => [e.id, e.state, e.installation, e.verification]), [['omnireach', 'skipped', 'missing', 'live'], ['wx-search-cli', 'ready', 'detected', 'live']])
       assert.match(report.entries[0]!.reason!, /omnireach: omnireach not found on PATH.*omnireach/)
       assert.equal(report.available, true)
       assert.equal(report.installation, 'detected')
@@ -187,7 +191,7 @@ test('detectDeps reports every adapter CLI: missing, detected with its version, 
     assert.deepEqual([byId.get('gh')!.installation, byId.get('gh')!.version, byId.get('gh')!.available, byId.get('gh')!.verification], ['detected', '2.101.0', true, 'live'])
     assert.deepEqual([byId.get('rdt')!.installation, byId.get('rdt')!.available], ['incompatible', false])
     assert.deepEqual([byId.get('xhs')!.installation, byId.get('xhs')!.available], ['missing', false])
-    assert.deepEqual([byId.get('tanso')!.verification, byId.get('wx-search-cli')!.verification, byId.get('xhs')!.verification], ['docs-only', 'contract-only', 'contract-only'])
+    assert.deepEqual([byId.get('tanso')!.verification, byId.get('wx-search-cli')!.verification, byId.get('xhs')!.verification, byId.get('zhihu')!.verification], ['docs-only', 'live', 'live', 'contract-only'])
     assert.equal(byId.get('custom-cli:demo')!.available, true)
     assert.equal(byId.get('custom-cli:demo')!.verification, undefined, 'user adapters carry no verification')
     assert.ok(byId.get('xhs')!.installs.some(i => i.command === 'uv tool install xiaohongshu-cli'))
@@ -200,7 +204,7 @@ test('user-defined adapters: valid ones become custom-cli:<id> platforms and bac
   await withCommands({ 'demo-cli': 'case "$1" in --version) echo "demo-cli 1.0";; search) if [ "$2" = "--help" ]; then echo "--json"; else printf \'%s\' \'' + out + '\'; fi;; esac' }, async () => {
     const h = harness({
       cliAdapters: {
-        demo: { ...baseSpec(), id: 'demo' },
+        demo: { ...baseSpec(), id: 'demo', platforms: ['twitter'] },
         evil: { ...baseSpec(), id: 'evil', allowedSubcommands: ['search', 'login'], search: { ...baseSpec().search, argv: ['login', '{query}'] } },
         cookies: { ...baseSpec(), id: 'cookies', search: { ...baseSpec().search, argv: ['search', '{query}', '--cookie-source', 'chrome'] } },
         secret: { ...baseSpec(), id: 'secret', env: { set: { API_TOKEN: 'abc' } } },
@@ -272,4 +276,34 @@ test('sources.deps / sources.status / search.recommend agree with the chains: in
       } finally { h.cleanup() }
     })
   }
+})
+
+test('sources.status and search.recommend tag a backend whose adapter was never verified with a real search; live ones carry no tag', { skip: !posix }, async () => {
+  await withCommands({ 'wx-search-cli': WX_HELP }, async () => {
+    const h = harness({}, { browser: false })
+    try {
+      const defs = new Map<string, any>()
+      registerTools({ ctx: { tools: { register: (d: any) => defs.set(d.name, d) } } as any, config: h.config, dynamic: () => h.config, store: h.store, router: h.router as any, fetch: {} as any })
+      const status = await callAction(defs, 'sources.status')
+      const text = renderResult('sources.status', status)
+      assert.match(text, /2\. wx-search-cli \[ready 0\.1\.0\] live\n/)
+      assert.doesNotMatch(text, /wx-search-cli[^\n]*output parser not verified/)
+      assert.match(text, /1\. omnireach \[skipped\] live — /, 'a live adapter keeps the plain word')
+      assert.equal(status.providers.find((p: any) => p.route === 'wechat').chain[1].verification, 'live', 'the structured field stays the status word')
+      const twitterChain = status.providers.find((p: any) => p.route === 'twitter').chain
+      assert.deepEqual(twitterChain.map((e: any) => [e.id, e.verification]), [['opencli', 'live'], ['twitter', 'contract-only'], ['browser-opencli', 'unverified']], 'OpenCLI\'s twitter search was run for real; the twitter-cli fallback was not')
+      assert.deepEqual(status.providers.find((p: any) => p.route === 'zhihu').chain.map((e: any) => [e.id, e.verification]), [['opencli', 'live'], ['zhihu', 'contract-only'], ['browser-search', 'unverified']])
+      assert.equal(status.providers.find((p: any) => p.route === 'xiaohongshu').chain[1].verification, 'live', 'xhs was run with a saved login')
+      assert.deepEqual(['xiaohongshu', 'reddit'].map(r => status.providers.find((p: any) => p.route === r).chain[0].verification), ['contract-only', 'contract-only'], 'OpenCLI\'s xiaohongshu and reddit searches did not succeed yet')
+      const tw = await callAction(defs, 'search.recommend', { task: 'what do people say on twitter about deepseek', platform: 'twitter' })
+      assert.deepEqual(checkOutput(findAction('search.recommend')!.output, tw), [])
+      assert.equal(tw.picks.find((p: any) => p.id === 'twitter').backend, undefined, 'the recommended first backend (OpenCLI twitter) is live')
+      const reddit = await callAction(defs, 'search.recommend', { task: 'what do people say on reddit about deepseek', platform: 'tanso' })
+      assert.deepEqual(checkOutput(findAction('search.recommend')!.output, reddit), [])
+      assert.equal(reddit.picks.find((p: any) => p.id === 'tanso').backend, 'tanso: docs-only — written from upstream docs, tool not run here')
+      assert.match(renderResult('search.recommend', reddit), / \| backend tanso: docs-only — written from upstream docs, tool not run here/)
+      const wechat = await callAction(defs, 'search.recommend', { task: '公众号 文章', platform: 'wechat' })
+      assert.equal(wechat.picks.find((p: any) => p.id === 'wechat').backend, undefined, 'omnireach and wx-search-cli are live')
+    } finally { h.cleanup() }
+  })
 })

@@ -1,5 +1,5 @@
 /**
- * Validation of the user's source preferences (`sources.priority`, `sources.disabled`, `sources.budget`), with no Node
+ * Validation of the user's source preferences (`sources.priority`, `sources.disabled`, `sources.budget`, `sources.confidence`), with no Node
  * imports so the settings panel validates them with the code the server uses; the request counters live in ./ledger.ts.
  * @module web-search-pro/pipeline/sources-spec
  */
@@ -13,11 +13,14 @@ export interface SourcesInput {
     priority?: readonly string[];
     disabled?: readonly string[];
     budget?: Record<string, SourceBudgetInput>;
+    /** Confidence (0..1) per source or platform-backend id; absent = 1 for a built-in source, the spec's own for a custom CLI. */
+    confidence?: Record<string, number>;
 }
 export interface SourcesResolved {
     priority: string[];
     disabled: string[];
     budget: Record<string, SourceBudgetInput>;
+    confidence: Record<string, number>;
     /** Entries ignored, each saying why (surfaced by `sources.status` and the settings card). */
     diagnostics: string[];
 }
@@ -25,4 +28,4 @@ export interface SourcesResolved {
  * Validate the preferences; invalid entries are dropped and reported, never thrown. `known` (optional) tells whether an
  * id is a registered provider: unknown ids are reported and dropped, so a typo cannot silently disable nothing.
  */
-export declare function resolveSources(input: SourcesInput | undefined, known?: (id: string) => boolean): SourcesResolved;
+export declare function resolveSources(input: SourcesInput | undefined, known?: (id: string) => boolean, knownBackend?: (id: string) => boolean): SourcesResolved;

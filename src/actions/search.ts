@@ -19,6 +19,7 @@ const EVIDENCE_ITEM_SCHEMA: OutputNode = {
   properties: {
     evidenceId: { type: 'string', required: true }, blockId: { type: 'string' }, url: { type: 'string', required: true }, title: { type: 'string' },
     excerpt: { type: 'string', required: true }, heading: { type: 'string' }, publishedAt: { type: 'string' }, lowConfidence: { type: 'boolean' },
+    via: { type: 'string' }, confidence: { type: 'number' }, tag: { type: 'string' },
     needIds: { type: 'array', required: true, items: { type: 'string' } }, grade: { type: 'number', required: true }, source: { type: 'string', required: true },
   },
 }
@@ -55,7 +56,7 @@ const RECOMMEND_PROPERTIES: Record<string, OutputNode> = {
   profile: { type: 'string', required: true }, profileInferred: { type: 'boolean' }, language: { type: 'string' },
   picks: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
     id: { type: 'string', required: true }, label: { type: 'string', required: true }, kind: { type: 'string' }, costTier: { type: 'string' }, status: { type: 'string', required: true }, executable: { type: 'boolean', required: true },
-    use: { type: 'string', required: true }, why: { type: 'string' }, missing: { type: 'array', items: { type: 'string' } }, setup: { type: 'string' }, notFor: { type: 'string' }, verified: { type: 'boolean' }, sourceFamily: { type: 'string' },
+    use: { type: 'string', required: true }, why: { type: 'string' }, missing: { type: 'array', items: { type: 'string' } }, setup: { type: 'string' }, notFor: { type: 'string' }, verified: { type: 'boolean' }, common: { type: 'boolean' }, backend: { type: 'string' }, sourceFamily: { type: 'string' },
   } } },
   instruction: { type: 'string', required: true },
   notes: { type: 'array', items: { type: 'string' } },
@@ -64,7 +65,7 @@ const RECOMMEND_PROPERTIES: Record<string, OutputNode> = {
 const EXA_FIELDS = ['exaType', 'includeDomains', 'excludeDomains', 'startPublishedDate', 'endPublishedDate', 'category'] as const
 const EVIDENCE_FIELDS = ['task', 'profile', 'needs', 'constraints', 'budget'] as const
 
-type SourceRow = { url: string; title?: string; snippet?: string; publishedAt?: string; lowConfidence?: boolean }
+type SourceRow = { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean; via?: string; confidence?: number; tag?: string }
 
 export const SEARCH_ACTIONS: ActionDef[] = [
   {
@@ -101,7 +102,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
         ...EVIDENCE_OUTPUT_PROPERTIES,
         content: { type: 'string' },
         platform: { type: 'string' },
-        sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, lowConfidence: { type: 'boolean' } } } },
+        sources: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { url: { type: 'string', required: true }, title: { type: 'string' }, snippet: { type: 'string' }, publishedAt: { type: 'string' }, rerankScore: { type: 'number' }, authority: { type: 'number' }, lowConfidence: { type: 'boolean' }, via: { type: 'string' }, confidence: { type: 'number' }, tag: { type: 'string' } } } },
         engine: { type: 'string', required: true },
         backend: { type: 'string' },
         enginesTried: { type: 'array', items: { type: 'string' } },
@@ -239,6 +240,8 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       const present = new Set<string>()
       if (typeof (router as { resolveSecret?: unknown }).resolveSecret === 'function') await Promise.all(envNames.map(async n => { if (await router.resolveSecret(n)) present.add(n) }))
       else for (const n of envNames) if (process.env[n]) present.add(n)
+      // The CLI credentials as the search resolves them (settings literal / custom ref / DSH credentials), under the names the tools read.
+      if (typeof (router as { cliEnv?: unknown }).cliEnv === 'function') for (const n of Object.keys(await router.cliEnv())) present.add(n)
       const routeOf = (id: string): string => (router as { registry?: { routeId(id: string): string | undefined } }).registry?.routeId(id) ?? id
       return recommendSources({
         ...args.task?.trim() ? { task: args.task.trim() } : {}, ...args.query?.trim() ? { query: args.query.trim() } : {},

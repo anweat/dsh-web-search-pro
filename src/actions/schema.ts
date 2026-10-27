@@ -4,7 +4,7 @@
  * @module web-search-pro/actions/schema
  */
 
-import type { OutputNode, OutputSchema, ParamNode, ParamSchema } from './types.ts'
+import type { ActionDef, OutputNode, OutputSchema, ParamNode, ParamSchema } from './types.ts'
 
 // --- validation -----------------------------------------------------------
 
@@ -88,6 +88,19 @@ export function validateArgs(params: ParamSchema, args: unknown): ValidationResu
   const input = args === undefined || args === null ? {} : args
   const value = validateObject(params, false, input, '', errors) ?? {}
   return { ok: errors.length === 0, value, errors }
+}
+
+/**
+ * The argument check `runAction` applies before `execute`: the parameter schema, then the action's own `precheck`. The approval
+ * hook asks the same function, so what it lets through unasked is exactly what `runAction` refuses before running anything.
+ * Never throws: a crashing `precheck` counts as passed, because `execute` validates for itself and nothing here may block a call.
+ */
+export function preflightArgs(action: Pick<ActionDef, 'params' | 'precheck'>, args: unknown): ValidationResult {
+  const validation = validateArgs(action.params, args)
+  if (!validation.ok || !action.precheck) return validation
+  let problems: string[]
+  try { problems = action.precheck(validation.value) } catch { return validation }
+  return problems.length ? { ok: false, value: validation.value, errors: problems } : validation
 }
 
 // --- rendering ------------------------------------------------------------

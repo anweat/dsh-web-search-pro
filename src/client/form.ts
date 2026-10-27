@@ -1,12 +1,16 @@
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { normalizeCoverage, normalizeJudge, normalizeRubrics } from '../config-fillers.ts'
 import { BUILTIN_RUBRIC_IDS, builtinDef, type RubricKind } from '../pipeline/rubrics-spec.ts'
 import type { Context } from './context-types.ts'
 import {
-  BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, applyOps, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
+  BUDGET_SPECS, CREDENTIAL_IDS, CONFIDENCE_PREFIX, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, applyOps, confidenceSpec, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
+import { RPC_CHANNEL, type OverlayView, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts'
+import { adoptionOf } from './overlay-ops.ts'
+import { RESTART_FIELD_LIST } from '../restart.ts'
 import { cliIssues, evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
@@ -50,10 +54,36 @@ export interface RubricCardState {
   problems: string[]
 }
 
+/** What the card knows of the agent overlay (the settings an agent changed with `config.*`), read over the RPC channel. */
+export interface OverlayCardState {
+  loading: boolean
+  /** The channel answered with an error, or there is none. */
+  failed: boolean
+  /** An adopt or revoke is running: the buttons wait. */
+  busy: boolean
+  /** The last adopt / revoke that did not go through, as a dictionary key with its `{why}`. */
+  error?: { key: 'agentAdoptFailed' | 'agentAdoptHalf' | 'agentRevokeFailed'; why?: string }
+  view?: OverlayView
+}
+
+/** What the card knows from the running plugin over its private RPC channel (rpc-types.ts); empty where the Host has no transport. */
+export interface ServerState {
+  /** The Host has the transport: live readiness and "Try it" are possible. */
+  available: boolean
+  loading: boolean
+  failed: boolean
+  status?: StatusView
+  /** The trial run of a custom CLI draft: idle, running, or the last outcome. */
+  trial: { state: 'idle' | 'running' | 'done' | 'failed'; id?: string; result?: TrialResult; error?: string }
+  overlay: OverlayCardState
+}
+
 export interface WebSearchCardState {
   available: boolean
   writable: boolean
   dirty: boolean
+  /** How many staged edits a save would write: fields whose draft differs from what is stored, plus pending secrets. */
+  changes: number
   invalid: boolean
   saving: boolean
   failed: boolean
@@ -62,16 +92,23 @@ export interface WebSearchCardState {
   /** Ids the judge / coverage provider controls offer: the presets plus the valid custom entries of the draft. */
   providerChoices: string[]
   rubrics: RubricCardState[]
+  /** Settings read only when the plugin starts (restart.ts) that have an edit waiting to be saved: a save would not take effect until a restart. */
+  restartTouched: string[]
   /** Overrides in settings that name no built-in rubric. */
   unknownRubrics: string[]
+  server: ServerState
 }
 
 interface Draft { text: string; clear: boolean }
 /** One Host write: a whole top-level config field. */
 interface PlanItem { target: string; write: FieldWrite | undefined }
-interface Analysis { settings: PlanItem[]; issues: Issue[]; blocked: Set<SettingField>; evidence: Json }
+/** One edit as the Host's `mutate` takes it: a value set, or a field put back to what it inherits, at a path from the section root. */
+type SectionOp = { op: 'set'; path: string[]; value: unknown } | { op: 'unset'; path: string[] }
+interface Analysis { settings: PlanItem[]; ops: SectionOp[]; issues: Issue[]; blocked: Set<SettingField>; evidence: Json }
 
 const ROOTS: readonly RootKey[] = ['evidence', 'provider', 'keyedSources', 'sources']
+/** Top-level fields that are objects whose keys, not the object, are the live (volatile) settings of the plugin schema. */
+const CONTAINER_FIELDS: readonly string[] = ['playwright']
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
@@ -88,7 +125,26 @@ function same(left: unknown, right: unknown): boolean {
 }
 
 const SPECS: readonly FieldSpec[] = [...FIELD_SPECS, ...PATH_SPECS, ...KEYED_SPECS, ...BUDGET_SPECS, ...BUILTIN_RUBRIC_IDS.map(rubricSpec)]
+/** Every field spec of the form model, in display order. */
+export const ALL_SPECS: readonly FieldSpec[] = SPECS
 const SPEC_BY_FIELD = new Map<SettingField, FieldSpec>(SPECS.map(spec => [spec.field, spec]))
+/** The dynamic fields (one `sources.confidence.<id>` per source id) made so far: a field is the same object every time it is asked for. */
+const DYNAMIC_SPECS = new Map<string, FieldSpec>()
+
+/** The spec of a field that is not in the fixed list: `sources.confidence.<id>`; undefined for any other name. */
+function dynamicSpec(field: string): FieldSpec | undefined {
+  if (!field.startsWith(CONFIDENCE_PREFIX) || field.length === CONFIDENCE_PREFIX.length) return undefined
+  const known = DYNAMIC_SPECS.get(field)
+  if (known) return known
+  const spec = confidenceSpec(field.slice(CONFIDENCE_PREFIX.length))
+  DYNAMIC_SPECS.set(field, spec)
+  return spec
+}
+
+/** The specs of the dynamic fields among `fields` (the text view prints them next to the fixed ones). */
+export function dynamicSpecsOf(fields: Readonly<Record<string, unknown>>): FieldSpec[] {
+  return Object.keys(fields).filter(field => !SPEC_BY_FIELD.has(field as SettingField)).flatMap(field => dynamicSpec(field) ?? [])
+}
 
 function createLocalStore<T>(initial: T): SnapshotStore<T> {
   let snapshot = initial
@@ -128,6 +184,8 @@ export class WebSearchSettingsController {
   private credentialGeneration = 0
   private credentialRefSignature = ''
   private credentialStates = emptyCredentials()
+  private server: ServerState = { available: false, loading: false, failed: false, trial: { state: 'idle' }, overlay: { loading: false, failed: false, busy: false } }
+  private trialGeneration = 0
 
   constructor(
     private readonly scope: ConfigForm<Record<string, unknown>>,
@@ -140,6 +198,115 @@ export class WebSearchSettingsController {
       if (signature !== this.credentialRefSignature) void this.refreshCredentials()
     })
     void this.refreshCredentials()
+    void this.refreshStatus()
+    void this.refreshOverlay()
+  }
+
+  /** The Host's RPC client, read when it is used (the service may arrive after the card was registered); undefined where there is none. */
+  private rpc(): { call(channel: string, endpoint: string, payload: unknown): Promise<{ ok: true; value: unknown } | { ok: false; error: { message: string } }> } | undefined {
+    try {
+      const root = this.ctx as unknown as { get?: (name: string) => unknown; connection?: unknown }
+      const connection = (root.get?.('connection') ?? root.connection) as { rpc?: { call?: unknown } } | undefined
+      return typeof connection?.rpc?.call === 'function' ? connection.rpc as never : undefined
+    } catch { return undefined }
+  }
+
+  /** Ask the plugin what is ready now (the same local probes as `sources.status`). Silent when the Host has no transport. */
+  async refreshStatus(): Promise<void> {
+    const rpc = this.rpc()
+    if (!rpc) { this.server = { ...this.server, available: false, loading: false }; this.publish(); return }
+    this.server = { ...this.server, available: true, loading: true }
+    this.publish()
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'status', {})
+      if (!result.ok) throw new Error(result.error.message)
+      this.server = { ...this.server, available: true, loading: false, failed: false, status: result.value as StatusView }
+    } catch {
+      // An older plugin build without the channel answers nothing useful: the card falls back to what it can tell by itself.
+      this.server = { ...this.server, loading: false, failed: true }
+    }
+    this.publish()
+  }
+
+  private setOverlay(patch: Partial<OverlayCardState>): void {
+    this.server = { ...this.server, overlay: { ...this.server.overlay, ...patch } }
+    this.publish()
+  }
+
+  /** Read what the agent overlay holds (once when the panel opens, and on the refresh button). Silent where the Host has no transport. */
+  async refreshOverlay(): Promise<void> {
+    const rpc = this.rpc()
+    if (!rpc) { this.setOverlay({ loading: false, failed: true }); return }
+    this.setOverlay({ loading: true })
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'overlay', { limit: 20 })
+      if (!result.ok) throw new Error(result.error.message)
+      this.setOverlay({ loading: false, failed: false, view: result.value as OverlayView })
+    } catch {
+      // A plugin build without the endpoint answers nothing useful: the card shows no agent changes and says it could not read them.
+      this.setOverlay({ loading: false, failed: true })
+    }
+  }
+
+  /** Drop overlay entries (keys, or `'all'`) as the user. The plugin audits it; the card shows the overlay as it is afterwards. */
+  async revokeOverlay(keys: readonly string[] | 'all', adopted = false): Promise<boolean> {
+    const rpc = this.rpc()
+    if (!rpc) { this.setOverlay({ error: { key: 'agentRevokeFailed', why: 'unavailable' } }); return false }
+    this.setOverlay({ busy: true, error: undefined })
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'overlay.revoke', { keys: keys === 'all' ? 'all' : [...keys], ...adopted ? { adopted: true } : {} })
+      if (!result.ok) throw new Error(result.error.message)
+      this.setOverlay({ busy: false, failed: false, view: result.value as OverlayView })
+      void this.refreshStatus()
+      return true
+    } catch (error) {
+      this.setOverlay({ busy: false, error: { key: 'agentRevokeFailed', why: error instanceof Error ? error.message : String(error) } })
+      return false
+    }
+  }
+
+  /**
+   * "Adopt into configuration": write the overlay item's value into the profile with the Host's atomic `mutate` (the same call the save bar
+   * makes, at the leaf the item is about), and only when that landed ask the plugin to drop the entry. A failed write leaves both as they were.
+   */
+  async adoptOverlay(key: string): Promise<boolean> {
+    const item = this.server.overlay.view?.items.find(entry => entry.key === key)
+    const adoption = item ? adoptionOf(item) : undefined
+    if (!item || !adoption || this.saving || !this.scope.getSnapshot().writable) return false
+    this.setOverlay({ busy: true, error: undefined })
+    let landed = false
+    try { landed = await this.scope.mutate(adoption.ops as Parameters<ConfigForm<Record<string, unknown>>['mutate']>[0]) } catch { landed = false }
+    if (!landed) { this.setOverlay({ busy: false, error: { key: 'agentAdoptFailed' } }); return false }
+    for (const field of adoption.drop) this.staged.delete(field as SettingField)
+    this.publish()
+    const dropped = await this.revokeOverlay([key], true)
+    if (!dropped) this.setOverlay({ error: { key: 'agentAdoptHalf', why: this.server.overlay.error?.why } })
+    return dropped
+  }
+
+  /** Run one search of a custom CLI draft (rpc-types.ts `trial`). The outcome lands in `server.trial`. */
+  async runTrial(request: TrialRequest): Promise<void> {
+    const rpc = this.rpc()
+    const generation = ++this.trialGeneration
+    if (!rpc) { this.server = { ...this.server, trial: { state: 'failed', id: request.id, error: 'unavailable' } }; this.publish(); return }
+    this.server = { ...this.server, trial: { state: 'running', id: request.id } }
+    this.publish()
+    let trial: ServerState['trial']
+    try {
+      const result = await rpc.call(RPC_CHANNEL, 'trial', request)
+      trial = result.ok ? { state: 'done', id: request.id, result: result.value as TrialResult } : { state: 'failed', id: request.id, error: result.error.message }
+    } catch (error) {
+      trial = { state: 'failed', id: request.id, error: error instanceof Error ? error.message : String(error) }
+    }
+    if (generation !== this.trialGeneration) return
+    this.server = { ...this.server, trial }
+    this.publish()
+  }
+
+  clearTrial(): void {
+    this.trialGeneration += 1
+    this.server = { ...this.server, trial: { state: 'idle' } }
+    this.publish()
   }
 
   inject() {
@@ -154,6 +321,12 @@ export class WebSearchSettingsController {
       save: () => { void this.save() },
       discard: () => { this.discard() },
       refreshCredentials: () => { void this.refreshCredentials() },
+      refreshStatus: () => { void this.refreshStatus() },
+      refreshOverlay: () => { void this.refreshOverlay() },
+      revokeOverlay: (keys: readonly string[] | 'all') => { void this.revokeOverlay(keys) },
+      adoptOverlay: (key: string) => { void this.adoptOverlay(key) },
+      runTrial: (request: TrialRequest) => { void this.runTrial(request) },
+      clearTrial: () => { this.clearTrial() },
     }
   }
 
@@ -257,16 +430,9 @@ export class WebSearchSettingsController {
 
     let landed = true
     try {
-      for (const item of plan) {
-        if (item.write === undefined) { landed = false; break }
-        if (item.write.kind === 'clear') {
-          await this.scope.unset(item.target)
-          landed = !this.storedTop(item.target) && landed
-        } else {
-          await this.scope.set(item.target, item.write.value)
-          landed = same(this.userLayer()?.[item.target], item.write.value) && landed
-        }
-      }
+      // One atomic mutation, at the paths of the fields that changed: the Host accepts an edit only beneath a field the plugin
+      // declared volatile, so a whole container (`evidence`, `sources`, `playwright`) is never written as one value.
+      if (analysis.ops.length > 0) landed = await this.scope.mutate(analysis.ops as Parameters<ConfigForm<Record<string, unknown>>['mutate']>[0])
 
       if (landed) {
         for (const id of credentials) {
@@ -288,6 +454,8 @@ export class WebSearchSettingsController {
     this.saving = false
     this.failed = !landed
     this.publish()
+    // What is ready may have changed with the settings just saved (a custom CLI, a key, a chain).
+    if (landed) void this.refreshStatus()
   }
 
   async refreshCredentials(): Promise<void> {
@@ -325,11 +493,13 @@ export class WebSearchSettingsController {
     const analysis = this.analyze()
     const fields = {} as Record<SettingField, CardFieldState>
     for (const spec of SPECS) fields[spec.field] = this.decorate(spec.field, this.fieldState(spec.field), analysis)
+    for (const field of this.dynamicFields()) fields[field] = this.decorate(field, this.fieldState(field), analysis)
     const credentialsDirty = this.credentialPlan().length > 0
     return {
       available: this.scope.getSnapshot().status === 'ready',
       writable: this.scope.getSnapshot().writable,
       dirty: analysis.settings.length > 0 || credentialsDirty,
+      changes: this.changedFields() + this.credentialPlan().length,
       invalid: analysis.settings.some(item => item.write === undefined) || analysis.blocked.size > 0,
       saving: this.saving,
       failed: this.failed,
@@ -337,8 +507,46 @@ export class WebSearchSettingsController {
       credentials: Object.fromEntries(CREDENTIAL_IDS.map(id => [id, { text: this.secretDrafts.get(id) ?? '', ...this.credentialStates[id] }])) as Record<CredentialId, CredentialState>,
       providerChoices: providerChoices(getAt(analysis.evidence, ['judge', 'providers'])),
       rubrics: this.projectRubrics(fields, analysis),
+      restartTouched: this.restartTouched(),
       unknownRubrics: unknownRubricIds(analysis.evidence.rubrics),
+      server: this.server,
     }
+  }
+
+  /** The start-up-only settings (restart.ts) whose staged edit differs from what is stored. */
+  private restartTouched(): string[] {
+    const touched: string[] = []
+    for (const field of RESTART_FIELD_LIST) {
+      if (field === 'playwright.snapshotDir') { if (this.snapshotDirTouched()) touched.push(field); continue }
+      const draft = this.staged.get(field)
+      if (!draft) continue
+      if (draft.clear ? this.stored(field) : draft.text !== this.spec(field).format(this.sectionValue(field))) touched.push(field)
+    }
+    return touched
+  }
+
+  /** `playwright` is one JSON field; only its `snapshotDir` is a start-up setting (`enabled` is live). */
+  private snapshotDirTouched(): boolean {
+    const draft = this.staged.get('playwright')
+    if (!draft) return false
+    const stored = this.sectionValue('playwright')
+    const before = isRecord(stored) ? stored.snapshotDir : undefined
+    if (draft.clear) return before !== undefined
+    try {
+      const value = JSON.parse(draft.text) as unknown
+      return (isRecord(value) ? value.snapshotDir : undefined) !== before
+    } catch { return false }
+  }
+
+  /** Staged fields that differ from what is stored (a pending reset counts only when something is stored). */
+  private changedFields(): number {
+    let count = 0
+    for (const [field, draft] of this.staged) {
+      const spec = this.spec(field)
+      if (draft.clear) { if (this.stored(field)) count++; continue }
+      if (draft.text !== spec.format(this.sectionValue(field))) count++
+    }
+    return count
   }
 
   private decorate(field: SettingField, state: CardFieldState, analysis: Analysis): CardFieldState {
@@ -400,17 +608,20 @@ export class WebSearchSettingsController {
    */
   private analyze(): Analysis {
     const settings: PlanItem[] = []
+    const sectionOps: SectionOp[] = []
     const ops = new Map<RootKey, { ops: PathOp[]; invalid: boolean }>()
     const staged = new Set<SettingField>()
     for (const [field, draft] of this.staged) {
       const spec = this.spec(field)
       if (!isPathSpec(spec)) {
         if (draft.clear) {
-          if (this.stored(field)) settings.push({ target: field, write: { kind: 'clear' } })
+          if (this.stored(field)) { settings.push({ target: field, write: { kind: 'clear' } }); sectionOps.push(...this.topOps(field, { kind: 'clear' })) }
           continue
         }
         if (draft.text === spec.format(this.sectionValue(field))) continue
-        settings.push({ target: field, write: spec.parse(draft.text) })
+        const write = spec.parse(draft.text)
+        settings.push({ target: field, write })
+        if (write) sectionOps.push(...this.topOps(field, write))
         continue
       }
       const entry = ops.get(spec.root) ?? { ops: [], invalid: false }
@@ -436,13 +647,25 @@ export class WebSearchSettingsController {
       candidates.set(root, next)
       if (entry === undefined || (!entry.invalid && same(next, stored ?? {}))) continue
       if (entry.invalid) settings.push({ target: root, write: undefined })
-      else if (Object.keys(next).length > 0) settings.push({ target: root, write: { kind: 'set', value: next } })
-      else if (this.storedTop(root)) settings.push({ target: root, write: { kind: 'clear' } })
+      else {
+        if (Object.keys(next).length > 0) settings.push({ target: root, write: { kind: 'set', value: next } })
+        else if (this.storedTop(root)) settings.push({ target: root, write: { kind: 'clear' } })
+        // Leaf edits at their own paths; an unset of a leaf the user layer does not hold would only create empty parents.
+        for (const op of entry.ops) if (op.op === 'set' || hasAt(stored ?? {}, op.path)) sectionOps.push({ ...op, path: [root, ...op.path] })
+      }
     }
 
     // Effective evidence settings of the draft: the composition layer under the user layer as it would be written.
     const base = (this.scope.getSnapshot().base as Record<string, unknown> | undefined)?.evidence
-    const evidence = deepMerge(isRecord(base) ? base : {}, candidates.get('evidence')) as Json
+    const merged = deepMerge(isRecord(base) ? base : {}, candidates.get('evidence')) as Json
+    // The Host's schema parser fills empty containers (`thresholds: {}`, `providers`' `limits`, ...) into the base; the server drops
+    // them before it validates, so the card does too: "present" must mean "given".
+    const evidence: Json = {
+      ...merged,
+      ...isRecord(merged.judge) ? { judge: normalizeJudge(merged.judge) } : {},
+      ...isRecord(merged.coverage) ? { coverage: normalizeCoverage(merged.coverage) } : {},
+      ...isRecord(merged.rubrics) ? { rubrics: normalizeRubrics(merged.rubrics) } : {},
+    }
     const baseSources = (this.scope.getSnapshot().base as Record<string, unknown> | undefined)?.sources
     // The CLI adapter settings are top-level fields: the draft value when staged, else what the Host section holds.
     const topValue = (field: 'platformBackends' | 'cliAdapters'): unknown => {
@@ -459,7 +682,22 @@ export class WebSearchSettingsController {
     for (const issue of issues) {
       if (issue.level === 'error' && (touched(issue.field) || (issue.related ?? []).some(related => touched(related)))) blocked.add(issue.field)
     }
-    return { settings, issues, blocked, evidence }
+    return { settings, ops: sectionOps, issues, blocked, evidence }
+  }
+
+  /**
+   * The Host ops of a top-level field. A container the schema does not declare volatile as a whole (`playwright`: its keys are)
+   * is written key by key; every other field is one `set` or one `unset`.
+   */
+  private topOps(field: SettingField, write: FieldWrite): SectionOp[] {
+    if (!CONTAINER_FIELDS.includes(field)) return write.kind === 'clear' ? [{ op: 'unset', path: [field] }] : [{ op: 'set', path: [field], value: write.value }]
+    const stored = this.userLayer()?.[field]
+    const keys = isRecord(stored) ? Object.keys(stored) : []
+    const value = write.kind === 'set' && isRecord(write.value) ? write.value : {}
+    return [
+      ...Object.entries(value).map(([key, entry]): SectionOp => ({ op: 'set', path: [field, key], value: entry })),
+      ...keys.filter(key => !Object.hasOwn(value, key)).map((key): SectionOp => ({ op: 'unset', path: [field, key] })),
+    ]
   }
 
   private opsOf(spec: PathSpec, write: FieldWrite, resolved: Json): PathOp[] {
@@ -490,8 +728,15 @@ export class WebSearchSettingsController {
     })) as Record<CredentialId, string>
   }
 
+  /** The `sources.confidence.<id>` fields that hold a value now or in the draft: the card shows these ids with their values. */
+  private dynamicFields(): SettingField[] {
+    const stored = this.scope.getSnapshot().value?.sources
+    const ids = isRecord(stored) && isRecord(stored.confidence) ? Object.keys(stored.confidence) : []
+    return [...new Set([...ids.map(id => CONFIDENCE_PREFIX + id), ...[...this.staged.keys()].filter(field => field.startsWith(CONFIDENCE_PREFIX))])] as SettingField[]
+  }
+
   private spec(field: SettingField): FieldSpec {
-    const spec = SPEC_BY_FIELD.get(field)
+    const spec = SPEC_BY_FIELD.get(field) ?? dynamicSpec(field)
     if (!spec) throw new Error(`unknown web-search-pro settings field: ${field}`)
     return spec
   }

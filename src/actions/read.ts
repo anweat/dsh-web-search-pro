@@ -26,7 +26,7 @@ export const READ_ACTIONS: ActionDef[] = [
     notes: 'Read on with offset (served from the stored snapshot). A shell/login-wall reply lists links worth fetching instead.',
     params: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to fetch.' },
-      mode: { type: 'string', enum: ['auto', 'jina', 'http', 'playwright'], description: 'auto (default), jina, http or playwright (needs dsh-browser; auto skips it when absent).' },
+      mode: { type: 'string', enum: ['auto', 'jina', 'http', 'playwright', 'deepseek'], description: 'auto (default), jina, http, playwright (needs dsh-browser; auto skips it when absent) or deepseek (DeepSeek Fetch API; billed, needs the deepseekFetch setting; auto uses it only when that setting is on).' },
       maxChars: { type: 'number', description: 'Output cap in chars (1000-500000); default from settings (20000).' },
       offset: { type: 'number', description: 'Continue from this character offset (a truncated result gives nextOffset).' },
       fresh: { type: 'boolean', description: 'Bypass the cached snapshot.' },
@@ -57,8 +57,8 @@ export const READ_ACTIONS: ActionDef[] = [
       { args: { url: 'https://nodejs.org/api/sqlite.html', offset: 20000 }, note: 'continue a truncated page' },
     ],
     async execute(args, ctx) {
-      const mode = (args.mode ?? 'auto') as 'auto' | 'jina' | 'http' | 'playwright'
-      if (!['auto', 'jina', 'http', 'playwright'].includes(mode)) throw new ActionArgError('mode must be auto, jina, http, or playwright')
+      const mode = (args.mode ?? 'auto') as 'auto' | 'jina' | 'http' | 'playwright' | 'deepseek'
+      if (!['auto', 'jina', 'http', 'playwright', 'deepseek'].includes(mode)) throw new ActionArgError('mode must be auto, jina, http, playwright, or deepseek')
       if (args.offset !== undefined && (!Number.isFinite(args.offset) || args.offset < 0)) throw new ActionArgError('offset must be a non-negative number of characters')
       const page = await ctx.fetch.fetchPage(args.url, {
         mode,
@@ -85,7 +85,7 @@ export const READ_ACTIONS: ActionDef[] = [
       }
     },
     render(value) {
-      const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; pageClass?: string; attempts?: { source: string; class: string }[]; truncated?: boolean; nextOffset?: number; totalChars?: number }
+      const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; pageClass?: string; attempts?: { source: string; class: string; detail?: string }[]; truncated?: boolean; nextOffset?: number; totalChars?: number }
       const parts: string[] = []
       if (v.title) parts.push('Title: ' + v.title)
       // A navigation/JS/form shell has no data: say so and point the model at the links it contains instead of re-fetching the same page.
@@ -96,6 +96,9 @@ export const READ_ACTIONS: ActionDef[] = [
       }
       parts.push(v.text)
       parts.push('— Source: ' + v.source + (v.fromCache ? ' (cached snapshot)' : '') + ' · ' + v.url + (v.attempts && v.attempts.length > 1 ? ' · tried ' + v.attempts.map(a => a.source + ':' + a.class).join(' → ') : ''))
+      // A browser that could not render (no Chromium or Chrome, a missing runtime) is the one failure the model cannot work around and the user can fix: say what dsh-browser said.
+      const browserFailure = v.attempts?.find(a => a.source === 'playwright' && a.class === 'error' && a.detail)
+      if (browserFailure) parts.push('Browser render did not run: ' + browserFailure.detail)
       if (v.nextOffset !== undefined) parts.push('more: call read.fetch with offset=' + v.nextOffset + (v.totalChars !== undefined ? ' (page has ' + v.totalChars + ' chars)' : ''))
       return parts.join('\n\n')
     },

@@ -1,0 +1,54 @@
+{
+  "ok": true,
+  "schema_version": "1",
+  "data": [
+    {
+      "id": "BV1PiNaeTEjn",
+      "bvid": "BV1PiNaeTEjn",
+      "title": "全网最简单的Deepseek本地部署方法，谁都可以照抄！",
+      "author": "我是阿众",
+      "play": 1502547,
+      "duration": "3:47"
+    },
+    {
+      "id": "BV1becFeCEmU",
+      "bvid": "BV1becFeCEmU",
+      "title": "DeepSeek R1本地免费部署教程-适用于iPhone、iPad、安卓、Windows、Mac",
+      "author": "LittleUgly",
+      "play": 60268,
+      "duration": "10:27"
+    },
+    {
+      "id": "",
+      "bvid": "",
+      "title": "DeepSeekHarness企业落地实战",
+      "author": "老崔说AI",
+      "play": 3102,
+      "duration": ""
+    },
+    {
+      "id": "BV1vZH36UEti",
+      "bvid": "BV1vZH36UEti",
+      "title": "什么？本地部署deepseek v4.1？你怕不是在用api+DSH就当是本地部署了吧？",
+      "author": "梅加雨",
+      "play": 8604,
+      "duration": "4:4"
+    },
+    {
+      "id": "BV1ytPYeqE9e",
+      "bvid": "BV1ytPYeqE9e",
+      "title": "linux部署deepseek部署教程，操作简单！支持 deepseek r1 671b 模型，支持手机电脑远程使用，linux服务器部署方法",
+      "author": "科技发现",
+      "play": 26058,
+      "duration": "16:22"
+    },
+    {
+      "id": "BV1qmnd6gEo6",
+      "bvid": "BV1qmnd6gEo6",
+      "title": "拆解DGXSpark本地部署DeepSeekV4.1-Flash",
+      "author": "不归牛顿管的熊猫",
+      "play": 312,
+      "duration": "10:52"
+    }
+  ]
+}

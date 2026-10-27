@@ -1,0 +1,57 @@
+{
+  "_comment": "LIVE capture, 2026-10-26, POST https://api.deepseek.com/v1/tools/search with a real API key (the key is never part of a response). Trimmed: the first 4 results only, summaries cut at 1,400 characters; every other field is as returned. Request: {\"query\":\"PostgreSQL logical replication slot lag\",\"count\":10,\"need_content\":false,\"ori_question\":\"How do I monitor and reduce logical replication slot lag in PostgreSQL?\"}",
+  "live": true,
+  "status": 200,
+  "body": {
+    "results": [
+      {
+        "title": "Re: Regarding huge logical slot lag between source and target",
+        "site_name": "PostgreSQL",
+        "site_icon": "https://cdn.deepseek.com/site-icons/postgresql.org",
+        "authority": 4,
+        "rerank_score": 2.257854461669922,
+        "date": "2026-10-18T16:00:00+00:00",
+        "url": "https://www.postgresql.org/message-id/CAJCZko%2BHqX7hwixYDAUBL8xf-x_zd8WYguodTRyo0mGy_vCbRQ%40mail.gmail.com",
+        "summary": "# Re: Regarding huge logical slot lag between source and target\n...\n> > How to fix this permanently.\n>\n> Your output rules out a pinned transaction: the idle-in-transaction\n> sessions\n> have xid_age 9-22 (tiny), and restart_lsn is tracking confirmed_flush, so\n> nothing is stuck -- replication is simply behind by 60 GB. That is the good\n> news: there is no hidden holder to hunt. It is a throughput deficit, and\n> the\n> fix depends on *where* the deficit is.\n>\n> I reproduced your signature on 16.15 (hot-row counter, many small\n> transactions, walsender in catchup, sent ~= confirmed, spill/stream 0).\n> This\n> workload can be limited in two different places, and your snapshot cannot\n> tell which one is yours:\n>\n> 1. The subscriber's apply worker. A single apply worker applies these small\n> transactions serially; when the publisher has spare CPU, that one worker\n> is the ceiling.\n> 2. The publisher's walsender. On a CPU-saturated publisher the walsender\n> competes with your backends for CPU and cannot decode fast enough; the\n> backlog then does not drain while the load runs, and clears in seconds\n> once it stops.\n>\n> Tell them apart with top: the walsender pid on the source, and the\n> \"logical replication apply worker\" on the target. Whichever sits near 100%\n> of a core is the limit; one well below 100% while the host is busy is the\n> one\n> starved for CPU. Your sent_not_confirmed wa",
+        "snippet": "Regarding huge logical slot lag between source and target ... > Your output rules out a pinned transaction ... > nothing is stuck -- replication is simply behind by 60 GB. ... > \"logical replication apply worker\" on the target. Whichever sits near 100% ... Now slog lag is very minimal.",
+        "content": ""
+      },
+      {
+        "title": "If command output is displayed, there is an inactive logical replication slot in the instance",
+        "site_name": null,
+        "site_icon": "https://cdn.deepseek.com/site-icons/huaweicloud.com",
+        "authority": 3,
+        "rerank_score": 2.101604461669922,
+        "date": null,
+        "url": "https://support.huaweicloud.com/intl/en-us/usermanual-rds-pg/rds-pg-usermanual.pdf#35#45#35",
+        "summary": "RDS for PostgreSQL\n...\n14 Problem Diagnosis and SQL Analysis\n...\nTroubleshooting and Solution\n\n1. Heavy workload on the primary instance\n\nCheck whether there are many data writes or updates in the primary instance. On the Cloud Eye console, view the Transaction Logs Generation metric of the primary instance. Check whether the metric exceeds 40 MB/s in a given period. (Generally, WAL logs are replayed at a speed of 40 MB/s on read replicas.)\n\n- If the metric exceeds this threshold for a long period of time, there is a heavy workload on the primary instance. In this case, optimize the workload.\n\nIf the workload on the primary instance is heavy, the value of sent_lsn in the pg_stat_replication view is greatly different from the query result of select pg_current_wal_lsn(); executed on the primary instance. You can run the following SQL statements to check the difference:\n\ni. Confirm the read replica node information. Run the following SQL statement on the primary instance and record the value in the sent_lsn column as lsn1.\n\nIssue 01 (2025-04-10) Copyright © Huawei Cloud Computing Technologies Co., Ltd.\n...\nselect * from pg_stat_replication;\n\nii. Query the current WAL write location on the primary instance and record it as Isn2.\n    select pg_current_wal_Isn();\n\niii. Calculate the distance between the WAL write location and the sent WAL location.\n    select pg_size_pretty(pg_wal_Is",
+        "snippet": "If the workload on the primary instance is heavy, the value of sent_lsn in the pg_stat_replication view is greatly ... 2. High playback delay for read replicas If the read replica has long-running transactions or is heavily loaded, the query on the read replica conflicts with the log replay. ... 3. Network delay between the primary instance and read replicas If the value of sent_Isn queried on the primary instance is greatly different from that of pg_last_wal_receive_Isn queried on the read replica, there is a long network delay",
+        "content": ""
+      },
+      {
+        "title": "Troubleshoot Aurora PostgreSQL logical replication issues",
+        "site_name": "AWS re:Post",
+        "site_icon": "https://cdn.deepseek.com/site-icons/repost.aws",
+        "authority": 3,
+        "rerank_score": 2.0172407627105713,
+        "date": "2025-12-26T16:00:00+00:00",
+        "url": "https://repost.aws/knowledge-center/aurora-postgresql-logical-replication-issues?sc_ichannel=ha&sc_ilang=es&sc_isite=repost&sc_iplace=hp&sc_icontent=AAxX_yxNOKT_mOUG3Pa1hj5A&sc_ipos=4",
+        "summary": "## Resolution\n\n### Configure replication parameters\n\nBefore you troubleshoot logical replication issues, configure the following parameters for your DB cluster parameter group:\n\n- Set the rds.logical_replication value to 1 to activate logical replication on your DB cluster.\n- Set a value for max_replication_slots that includes enough slots for your expected subscription count and additional table synchronization processes.\n- Set max_wal_senders to a value that supports your max_replication_slots quota and your current physical replicas.\n- Set max_logical_replication_workers to a value that supports your subscription count and the number of additional workers that the replication system requires for table synchronization.\n- Set max_worker_processes to a value that's at least one more than the max_logical_replication_workers value. For example, if max_logical_replication_workers is 25, then set max_worker_processes to 26.\n- If data copy is slow, then increase the max_sync_workers_per_subscription value. This value controls the number of synchronization workers that process the subscription setup and new table additions.\n\nImportant: To apply the preceding changes, you must reboot your Aurora PostgreSQL-Compatible DB cluster.\n\n### Check publication and subscription configuration\n\nVerify that you correctly configured the publications and subscriptions. Make sure that the publication",
+        "snippet": "If slots are inactive or show excessive lag, then proceed to the next section to review the replication workers. ... Monitor replication progress and lag Your replication might experience lag because of high transaction volume and large transactions on the publication. Or, there might be constraints on the publication or subscription. ... To minimize the replication lag, monitor the write-through cache.",
+        "content": ""
+      },
+      {
+        "title": "Re: Unexpected data when subscribing to logical replication slot",
+        "site_name": "PostgreSQL",
+        "site_icon": "https://cdn.deepseek.com/site-icons/postgresql.org",
+        "authority": 4,
+        "rerank_score": 2.0096490383148193,
+        "date": "2024-05-07T16:00:00+00:00",
+        "url": "https://www.postgresql.org/message-id/10bcc03d-fa3e-40b6-bdd2-cac0acd046f4%40aklaver.com",
+        "summary": "# Re: Unexpected data when subscribing to logical replication slot\n...\nDate: | 2024-05-08 16:28:01\n...\n> It's running both (in docker containers) and also quite a few more\n> docker containers running various .NET applications.\n\nI think what you found is that the r7a.medium instance is not capable\nenough to do all that it is asked without introducing lag under load.\nAnswering the questions posed by Tomas Vondra would help get to the\nactual cause of the lag.\n\nIn meantime my suspicion is this part:\n\n\"For example, when I use a psql terminal to update a user's last name\nfrom \"Jones\" to \"Smith\" then I would expect the enrichment query to find\n\"Smith\" but it will sometimes still find \"Jones\". It finds the old data\nperhaps 1 in 50 times.\"\n\nIf this is being run against the Postgres server my guess is that\nsynchronous_commit=on is causing the commit on the server to wait for\nthe WAL records to be flushed to disk and this is not happening in a\ntimely manner in the '... 1 in 50 times' you mention. In that case you\nsee the old values not the new committed values. This seems to be\nconfirmed when you set synchronous_commit=off and don't see old values.\nFor completeness per:\n\n\"However, for short transactions this delay is a major component of the\ntotal transaction time. Selecting asynchronous commit mode means that\nthe server returns success as soon as the transaction is logically\ncompleted, b",
+        "snippet": "I think what you found is that the r7a.medium instance is not capable enough to do all that it is asked without introducing lag under load. ... If this is being run against the Postgres server my guess is that synchronous_commit=on is causing ... the WAL records to be flushed",
+        "content": ""
+      }
+    ]
+  }
+}

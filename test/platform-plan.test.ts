@@ -15,7 +15,7 @@ const descriptors = registry.list({ operation: 'search' }).map(a => a.descriptor
 const PLATFORMS = descriptors.filter(d => d.kind === 'platform').map(routeIdOf)
 const CONFIGURED = ['ddg', 'bing', 'exa', 'seam', 'jina']
 // Everything is ready except the keyed web sources (no key in these plan tests), so the free engines make the plan.
-const KEYED = ['exa', 'bocha', 'jina', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan']
+const KEYED = ['deepseek', 'exa', 'bocha', 'jina', 'tavily', 'brave', 'linkup', 'serper', 'metaso', 'zhipu', 'baidu-qianfan']
 const ready = (id?: string): ProviderStatus => (id !== undefined && KEYED.includes(id) ? { state: 'unavailable', credential: 'missing', reason: 'no key' } : { state: 'ready', credential: 'configured' })
 const ids = (plan: ReturnType<typeof planSources>): string[] => plan.providers.map(p => p.id)
 const base = { configured: CONFIGURED, descriptors, status: ready }
