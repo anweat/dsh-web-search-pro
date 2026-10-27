@@ -70,7 +70,7 @@ test('the skill body points models at search.run over web_search + web_fetch and
 
 test('every reference file is linked from SKILL.md', () => {
   const body = read('SKILL.md')
-  assert.deepEqual(SKILL_FILES.filter(file => file !== 'SKILL.md').sort(), ['references/judges.md', 'references/sources.md', 'references/troubleshooting.md'])
+  assert.deepEqual(SKILL_FILES.filter(file => file !== 'SKILL.md').sort(), ['references/config.md', 'references/judges.md', 'references/sources.md', 'references/troubleshooting.md'])
   for (const file of SKILL_FILES.filter(file => file !== 'SKILL.md')) assert.ok(body.includes(file), `${file} is not referenced`)
   for (const [, link] of body.matchAll(/`(references\/[\w.-]+)`/g)) assert.ok(SKILL_FILES.includes(link!), `dangling reference ${link}`)
 })

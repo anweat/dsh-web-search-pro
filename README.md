@@ -259,6 +259,7 @@ evidence:
 | | `deps` / `install` | 检测 / 安装搜索后端的外部依赖（bili/yt-dlp/twitter/agent-reach/mcporter；每项探测的是后端真正执行的命令）；浏览器依赖由 dsh-browser 管理 |
 | `rules` | `list` / `upsert` / `remove` / `import` / `export` | 持久化按站提取规则（脚本猫式）；export 会写出可再导入的版本化 JSON rule pack |
 | `cache` | `clear` / `stats` | 按时间/引擎清缓存 / 存储统计 |
+| `config` | `inspect` / `set_order` / `set_confidence` / `upsert_cli` / `remove_cli` / `reset` / `export` | agent 覆盖层：读取生效值与来源，运行时改搜索顺序、来源优先 / 停用、置信度、平台后端顺序、自定义 CLI；改动即时生效，用户可在设置面板采纳或撤销（见“agent 覆盖层与 `config.*`”） |
 
 每个动作的参数与输出 schema 是封闭的（未声明字段不会出现，除必需字段外都是可选字段）。
 
@@ -295,7 +296,7 @@ evidence:
 
 ### 审批、并发与超时（按动作）
 
-- **审批**：`sources.install`（安装外部命令）、`cache.clear`、`history.delete`、`rules.upsert` / `rules.remove` / `rules.import`（改本地存储）会请用户确认；其余动作直通。原先这些规则按工具名写在 dsh-browser 的 `tools/pre-execute` 钩子里，而 `web_call` 对它是不透明的，所以规则现在由本插件解析 `web_call` 的动作后施加，并在 dsh-browser 存在时读取它的 `automationMode`：`read-only` 拒绝；安装在 `unrestricted` 直通；本地写入在 `standard` 询问、`autonomous` / `unrestricted` 直通。**没有 dsh-browser 时模式未知，按 `standard` 处理（询问）**——这比旧行为（无 dsh-browser 时完全不审批）更严格。
+- **审批**：`sources.install`（安装外部命令）、`cache.clear`、`history.delete`、`rules.upsert` / `rules.remove` / `rules.import`（改本地存储）会请用户确认；`config.upsert_cli`（让插件能运行一个本地程序）**一律先问用户**，提示里写明命令、搜索与探测的参数模板和读取的环境变量名；其余 `config.*` 写入不询问（`dsh-browser.automationMode=read-only` 时全部拒绝）；其余动作直通。原先这些规则按工具名写在 dsh-browser 的 `tools/pre-execute` 钩子里，而 `web_call` 对它是不透明的，所以规则现在由本插件解析 `web_call` 的动作后施加，并在 dsh-browser 存在时读取它的 `automationMode`：`read-only` 拒绝；安装在 `unrestricted` 直通；本地写入在 `standard` 询问、`autonomous` / `unrestricted` 直通；`config.upsert_cli` 除 `read-only`（拒绝）外**任何模式都询问**。**headless 没有人可问时，宿主对“询问”一律拒绝**（`dsh-tools` 的 `serviceAsk`：没有 `approval` 服务时按插件给的理由拒绝，有服务但没有应答者时返回 `unavailable` 同样拒绝，会话策略为 `never` 时直接拒绝），所以 headless 的 agent 加不了 CLI，只能改顺序、置信度等不询问的项。**没有 dsh-browser 时模式未知，按 `standard` 处理（询问）**——这比旧行为（无 dsh-browser 时完全不审批）更严格。
 - **并发**：`web_call` 的并发安全性由参数里的动作决定：只读动作可并行，修改状态的动作独占（`sources.install` 现在也独占，旧的 `web_deps` 因为一个标志同时覆盖 check 与 install 而全部可并行）。
 - **超时**：每个动作保持旧工具的上限（搜索与快照 `timeoutMs` + 60 秒，读取与 Exa 正文 + 30 秒，依赖检测/安装 + 180 秒，历史与状态等 10–20 秒）；`web_call` 的宿主上限取其中最长者，各动作自己的截止时间到期后返回 `DEADLINE`（修改状态的动作会说明结果未知）。调用方的取消信号会传给执行器。
 
@@ -386,12 +387,41 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
          rulePack: zhihu-enhanced
    ```
 
+   **字段顺序**：配置 schema、宿主的通用配置视图、`--dump-config` 和设置面板的文本视图按同一份分组排列（`src/config-groups.ts`，字段名、默认值和语义不变）：常用 → 搜索顺序（`engines`、`sources`、`platformBackends`）→ 来源与密钥 → 自定义 CLI（`cliAdapters`）→ 读取与证据（`evidence` 等）→ 平台与运行时 → 高级与诊断（缓存、排序加权、`dbPath`、`verbose`）。文本视图的每一段有中文 / 英文分节标题注释，需要重启的键在注释里写明。
+
 3. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
 4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。这些引用名与密钥都可以在面板“来源”分组里设置。
 
+### 需要重启插件的设置
+
+几乎所有设置都是热更新：宿主改 profile 配置时就地更新条目的配置，每次调用经 `dynamic()` 读最新值。只有下面这些在**插件启动时读一次**，改了要重启插件（`RESTART_FIELDS`，`src/restart.ts`）：
+
+| 设置 | 为什么 |
+|---|---|
+| `toolSurface` | 工具（`web_index` + `web_call`，或每个动作一个）在启动时注册 |
+| `playwright.snapshotDir`（`playwright.enabled` 是热的） | `read.snapshot` 的快照目录在启动时确定 |
+| `providerId` / `registerProvider` | ctx.web provider 的注册与 id 在启动时给宿主 |
+| `timeoutMs` | 每个动作的截止时间与宿主工具上限在启动时定下（搜索内部的协作超时预算是热的） |
+| `memoryCacheEntries` | 进程内缓存按此容量在启动时创建 |
+| `dbPath` | SQLite 和 agent 覆盖文件在启动时打开；旧路径里的数据不会自动搬走 |
+| `verbose` | 加载标记在启动时写入 |
+
+设置面板里这些行带“重启插件后生效”标记（`?` 里写原因）；保存时若改到了它们，保存条加一句提示；状态摘要显示“待重启 N 项”。运行时检测：插件记下启动时的值，`sources.status` 和 `config.inspect` 在配置里的值与之不同时写出“待重启：<字段>（当前生效 X，配置为 Y）”。源码里有一个测试扫描对启动时配置副本的读取，新增这类读取而没登记到 `RESTART_FIELDS` 会失败。
+
+### agent 覆盖层与 `config.*`
+
+profile 配置是用户的基线，**agent 不直接改它**。agent 要调整来源顺序或加一个 CLI 时用 `config` 组的动作，它们写一个单独的**覆盖层**，叠在基线上、立即生效，设置面板里能看到并一键采纳或撤销。设计说明见 [docs/overlay-design.md](docs/overlay-design.md)。
+
+- **文件**：`$DSH_HOME/data/web-search-pro/overlay.json`，和 `dbPath` 同一个目录（改了 `dbPath` 就跟着走）。内容：`version`、`revision`（乐观锁）、`checksum`（sha256）、`values`、最近 50 条审计记录；先写临时文件再改名，权限 0600。按 mtime 和大小缓存，变了才重新读取并校验，不用 fs.watch。
+- **能覆盖的只有这些**：`engines`（整列表）、`sources.priority` / `sources.disabled`（整列表）、`sources.confidence.<id>`（单项）、`platformBackends.<平台>`（单个平台的整条链）、`cliAdapters.<id>`（整份规格）。Key、路径、预算、开关、证据与评分设置都碰不到；覆盖层只能新增或替换，不能删除基线条目（停用基线里的 CLI 用 `sources.disabled`；`config.remove_cli` 只删覆盖层自己加的）。
+- **合并**：`dynamic()` 返回“基线 + 覆盖层”，所有消费者下一次调用就看到。校验与设置面板、`sources.status` 用同一批函数（`cliIssues`、`sourcesIssues`、CLI 规格校验、来源 id 规则）；只有覆盖层**新增**的问题才算数。整个文件解析失败、校验和不符、值被校验拒绝或与基线不再一致（链里引用了用户删掉的 CLI）时，**整体忽略、按基线运行**，在 `sources.status` / `config.inspect` 报告原因，绝不只应用一半；坏文件挡住写入，直到 `config.reset {scope:"all"}`（或面板的“全部撤销”）把它挪开。
+- **动作**：`config.inspect`（每个键的生效值与来源、`revision`、最近审计、覆盖层是否有效、待重启项）、`config.set_order {engines?, priority?, disabled?, platform?, backends?}`、`config.set_confidence {id, value}`（省略 `value` 删除覆盖项）、`config.upsert_cli {id, spec}`、`config.remove_cli {id}`、`config.reset {scope: all|order|confidence|cli|platform, id?}`、`config.export`（导出生效的可覆盖设置为 YAML，可贴进 profile）。每次写入必须有 3–300 字符的 `reason`，可带 `expectedRevision`（不匹配就拒绝）；成功后 `revision + 1` 并写一条审计（时间、动作、键、前后值摘要、reason、sessionId、actor）。没有变化的写入不落盘、不增加 revision。
+- **审批**：见上面“审批、并发与超时”。`config.upsert_cli` 一律询问，其余不询问；headless 下 `upsert_cli` 被拒。
+- **设置面板**：被覆盖的行带“agent 修改”标记（悬停看值、reason、时间）；新分组“agent 修改”列出全部覆盖项和最近的审计，每项“采纳到配置”（用与保存条相同的原子 `mutate` 写进 profile，成功后才让插件删掉这一项覆盖）和“撤销”，另有“全部撤销”和“刷新”（面板打开时读取一次）。
+
 ## 设置面板
 
-0.2.3 起设置面板按“状态摘要 + 手风琴分组 + 列表与弹窗 + 固定保存条”重做（风格与 `@anweat/dsh-browser` 0.2.2 的设置页一致）；保存结构、Config schema 与运行时行为不变。顶部是**状态摘要**：实际尝试顺序的默认引擎链、已配置 Key 的来源数、“常用”的 DeepSeek 是否就绪、内置 web 工具是否经本插件、评分模型、工具面，以及校验提示的数量（点开看详情）。下面是十一个分组（常用 · 搜索顺序 · 来源 · 自定义 CLI · 读取与证据 · 评分模型 · 内置 web 工具路由 · 运行时与后端 · 网络与缓存 · 排序加权 · 高级），**默认只展开“常用”**；每个字段是“标签 + 一行说明”，长说明放在 `?` 气泡里，被覆盖的字段带“已覆盖”徽标和就地“恢复默认”，未覆盖的显示当前值（灰色）。底部的保存条一直可见，显示“N 项未保存的修改”，有“放弃修改”和“保存”。
+0.2.3 起设置面板按“状态摘要 + 手风琴分组 + 列表与弹窗 + 固定保存条”重做（风格与 `@anweat/dsh-browser` 0.2.2 的设置页一致）；保存结构、Config schema 与运行时行为不变。顶部是**状态摘要**：实际尝试顺序的默认引擎链、已配置 Key 的来源数、“常用”的 DeepSeek 是否就绪、内置 web 工具是否经本插件、评分模型、工具面，以及校验提示的数量（点开看详情）；agent 改过设置时多一个“agent 修改 N 项”入口，插件有设置要重启才生效时多一个“待重启 N 项”徽标。下面是十二个分组（常用 · 搜索顺序 · 来源 · 自定义 CLI · 读取与证据 · 评分模型 · 内置 web 工具路由 · 运行时与后端 · 网络与缓存 · 排序加权 · agent 修改 · 高级），**默认只展开“常用”**；每个字段是“标签 + 一行说明”，长说明放在 `?` 气泡里，被覆盖的字段带“已覆盖”徽标和就地“恢复默认”，未覆盖的显示当前值（灰色）。底部的保存条一直可见，显示“N 项未保存的修改”，有“放弃修改”和“保存”。
 
 | 分组 | 内容 |
 |---|---|
@@ -405,6 +435,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | 运行时与后端 | CLI / OpenCLI / Agent Reach 开关；Twitter / X 登录值（弹窗：两个引用名与两个写入式密钥）；JSON 对象列表：Playwright、自定义平台、平台选择器覆盖、浏览器绑定（每项一个弹窗） |
 | 网络与缓存 | `timeoutMs`、`ttlSeconds`、`memoryCacheEntries`、`dbPath`、`verbose` |
 | 排序加权（高级） | `rrfConstant`、`freshnessBoost` / `freshnessDays`、`authorityBoost` / `authorityDomains` |
+| agent 修改 | agent 经 `config.*` 做的修改：每项显示类型、生效值与你配置里的值、reason、时间、sessionId，带“采纳到配置”和“撤销”；“全部撤销”（也用来修复被忽略的坏文件）、“刷新”、覆盖文件路径与版本、最近的审计记录（折叠） |
 | 高级：文本模式与原始 JSON | 折叠区“原始 JSON”：`platformBackends` 与 `cliAdapters` 的整段 JSON（不再是主要入口）；当前草稿的设置（不含密钥）打印成**每个键前都带注释**的 YAML：用途、取值或范围、默认值、风险，中英文随界面语言；只读视图，可复制；去掉 `#` 行后剩下的恰好是你覆盖的键 |
 
 - **弹窗里的改动**先留在草稿里，点底部“保存”才写入；“放弃修改”丢掉全部草稿。
