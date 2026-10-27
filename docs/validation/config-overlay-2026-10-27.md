@@ -40,3 +40,20 @@
 ## 没有做的
 
 - 没有跑真实模型会话（由主会话另外跑）；headless 下“询问被拒”靠固定宿主源码里的 `serviceAsk` 字符串验证，没有在 headless 宿主里实际触发一次 `config.upsert_cli`。
+
+## 真实模型会话（主会话补跑，2026-10-27 23:10）
+
+宿主 DSH 0.2.1-rc.3 CLI，隔离 home `environments/websearch-ui-2026-10-26/home`，profile `headless`，模型 command-code `deepseek/deepseek-v4-flash`。key 只经环境变量传入，证据目录里搜不到 key 原文。证据取 `--json` 的原始 tool_result，在 `environments/websearch-ui-2026-10-26/evidence/model-runs/s4-config`、`s5-after-overlay`。
+
+- **s4**：`config.inspect` → `config.set_order` → `config.upsert_cli` → `config.inspect`。
+  - `config.inspect`：revision 0，各项都标 `[configuration]`。
+  - `config.set_order`：模型第一次传了不存在的参数 `order`，得到 `INVALID_ARGS`，附 schema。改传 `engines` 后得到 `applied, overlay revision 1`，并显示前后顺序。
+  - `config.upsert_cli`：两次调用都被宿主拦下，原话 `tool "web_call" requires approval, but no approval channel is available`。headless 没有审批渠道，所以拒绝，没有写入。
+  - 第二次 `config.inspect`：`engines [overlay]: bing > ddg > …`，并有一条审计 `#1 … agent session-… config.set_order: "用户希望中文查询先用 bing"`。
+  - 覆盖层文件：0600，`revision 1`，`values` 里只有 `engines`。
+- **s5**（新会话，不传 engines）：`search.run` 的结果以 `Engine: bing` 结尾，说明覆盖层的顺序在下一个会话里生效了。
+- **发现的问题**：
+  - 审批在参数校验之前进行。第一次 `upsert_cli` 连 `id` 和 `spec` 都没给，也直接进入审批。在有审批界面的会话里，用户会被要求批准一个本来就会失败的请求，模型也拿不到 schema。
+  - 与本次改动无关：bing 对 “tokio runtime” 返回了贴吧之类无关的中文结果，此前也见过返回 Google 翻译首页。
+- **花费**：两个会话 command-code `monthlyCredits` 共约 0.008。
+- **清理**：验证后已删除隔离 home 里的 `overlay.json`。
