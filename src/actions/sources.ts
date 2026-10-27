@@ -4,7 +4,7 @@
  * @module web-search-pro/actions/sources
  */
 
-import { browserState } from '../browser-access.ts'
+import { browserLaunchReadiness, browserState } from '../browser-access.ts'
 import { defaultInstaller, detectDeps, installDep } from '../deps.ts'
 import { verificationTag } from '../cli/spec.ts'
 import { judgeStatus, type JudgeStatus } from '../pipeline/judge-status.ts'
@@ -147,7 +147,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         engines: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, lastError: { type: 'string' }, cooldownUntil: { type: 'string' } } } },
         providers: { type: 'array', items: PROVIDER_REPORT_SCHEMA },
         cli: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, available: { type: 'boolean', required: true }, path: { type: 'string' }, note: { type: 'string' }, installation: { type: 'string' }, version: { type: 'string' }, verification: { type: 'string' } } } },
-        browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' } } },
+        browser: { type: 'object', additionalProperties: false, properties: { available: { type: 'boolean', required: true }, state: { type: 'string', required: true }, reason: { type: 'string' }, launch: { type: 'object', additionalProperties: false, properties: { ready: { type: 'boolean', required: true }, source: { type: 'string' }, path: { type: 'string' }, advice: { type: 'string' } } } } },
         webRoute: WEB_ROUTE_SCHEMA,
         notes: { type: 'array', items: { type: 'string' } },
         pendingRestart: PENDING_RESTART_SCHEMA,
@@ -176,6 +176,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         ...typeof (router as { cliAdapterProblems?: unknown }).cliAdapterProblems === 'function' ? router.cliAdapterProblems() : [],
       ]
       const restart = ctx.pendingRestart?.() ?? []
+      const launch = browserState(ctx.browser()).state === 'ready' ? await browserLaunchReadiness(ctx.browser()) : undefined
       const providers = typeof (router as { providerReport?: unknown }).providerReport === 'function' ? await router.providerReport(availability) : undefined
       // A platform chain is only `ready` when a backend can run with its login satisfied (or not needed); otherwise the line says
       // what it really is (`login_unverified`, `needs_login`, `unavailable`) and what to do next, the same word as the provider report.
@@ -192,7 +193,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
           const gate = v.id === 'twitter' ? twitterGate(cfg, v, cliEnv) : undefined
           return { id: v.id, available: gate ? gate.available : v.available, ...v.path ? { path: v.path } : {}, ...v.installation ? { installation: v.installation } : {}, ...v.version ? { version: v.version } : {}, ...v.verification ? { verification: v.verification } : {}, ...gate?.note ? { note: gate.note } : v.optional ? { note: 'optional helper, not executed by this plugin' } : v.diagnostic ? { note: v.diagnostic } : {} }
         }),
-        browser: browserState(ctx.browser()),
+        browser: { ...browserState(ctx.browser()), ...launch ? { launch } : {} },
         ...ctx.providerState ? { webRoute: ctx.providerState() } : {},
         ...problems.length ? { notes: problems } : {},
         ...restart.length ? { pendingRestart: restart } : {},
@@ -202,7 +203,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       }
     },
     render(value) {
-      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; pendingRestart?: PendingRestart[]; overlay?: { revision: number; keys: string[]; valid: boolean; problem?: string }; sources?: { policy: string; priority: string[]; disabled: string[]; confidence?: Record<string, number>; common?: { id: string; label: string; ready: boolean; setup?: string }[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
+      const v = value as { engines: { id: string; available: boolean; state: string; reason?: string; lastError?: string }[]; providers?: ProviderReport[]; notes?: string[]; pendingRestart?: PendingRestart[]; overlay?: { revision: number; keys: string[]; valid: boolean; problem?: string }; sources?: { policy: string; priority: string[]; disabled: string[]; confidence?: Record<string, number>; common?: { id: string; label: string; ready: boolean; setup?: string }[] }; cli: { id: string; available: boolean; path?: string; note?: string; installation?: string; version?: string; verification?: string }[]; browser?: { available: boolean; state: string; reason?: string; launch?: { ready: boolean; source?: string; path?: string; advice?: string } }; webRoute?: ProviderState; evidence?: { scorer: string; jevMode: string; mode?: string; decides?: string; modeNote?: string; rubrics: { id: string; version: string; overridden: boolean; hash: string }[]; diagnostics?: string[]; provider?: JudgeStatus['provider']; providers?: string[]; coverage?: JudgeStatus['coverage']; usage?: JudgeStatus['usage'] } }
       const mark = (e: { available: boolean; state: string }): string => (e.state === 'login_unverified' || e.state === 'needs_login' ? '⚠ ' : e.available ? '✅ ' : '❌ ')
       const lines = v.engines.map(e => mark(e) + e.id + ' [' + e.state.replace('_', ' ') + ']' + (e.lastError || e.reason ? ' — ' + (e.lastError ?? e.reason) : ''))
       for (const p of v.providers ?? []) {
@@ -219,7 +220,14 @@ export const SOURCES_ACTIONS: ActionDef[] = [
       lines.push(...(v.pendingRestart ?? []).map(entry => '  ⚠ ' + pendingRestartLine(entry) + '；重启插件后生效'))
       if (v.overlay) lines.push('agent overlay: revision ' + v.overlay.revision + (v.overlay.keys.length ? ', ' + v.overlay.keys.length + ' key(s): ' + v.overlay.keys.join(', ') : ', empty') + (v.overlay.valid ? '' : ' — IGNORED: ' + (v.overlay.problem ?? 'invalid') + ' (the configuration applies as written)'))
       lines.push(...v.cli.map(e => (e.available ? '✅ ' : '❌ ') + 'cli:' + e.id + (e.installation && e.installation !== 'detected' ? ' [' + e.installation + ']' : '') + (e.version ? ' ' + e.version : '') + (e.path ? ' — ' + e.path : '') + (e.note ? ' — ' + e.note : '')))
-      if (v.browser) lines.push((v.browser.state === 'ready' ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + (v.browser.state === 'legacy' ? 'legacy (unsupported)' : v.browser.state) + ']' + (v.browser.reason ? ' — ' + v.browser.reason : ''))
+      if (v.browser) {
+        const launch = v.browser.launch
+        // The plugin being loaded is not the same as a browser being launchable: a new user has no Playwright Chromium. Said once, with dsh-browser's own advice.
+        const stuck = launch !== undefined && !launch.ready
+        lines.push((v.browser.state === 'ready' && !stuck ? '✅ ' : '❌ ') + 'browser:dsh-browser [' + (v.browser.state === 'legacy' ? 'legacy (unsupported)' : stuck ? 'loaded, no browser to launch' : v.browser.state) + ']'
+          + (v.browser.reason ? ' — ' + v.browser.reason : '')
+          + (stuck ? ' — ' + (launch.advice ?? 'no Chromium or system Chrome could be found; see the dsh-browser runtime.status action') : launch?.source === 'system-browser' ? ' — uses the system browser' + (launch.path ? ' ' + launch.path : '') + ' (no Playwright Chromium needed)' : ''))
+      }
       if (v.webRoute) lines.push(...renderProviderState(v.webRoute))
       if (v.evidence) {
         // The effective judge mode, not the legacy `scorer` flag (which reads "rule" even while hybrid mode is on).

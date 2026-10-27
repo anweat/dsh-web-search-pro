@@ -193,6 +193,67 @@ test('(b2) a 0.2 browser missing a method reports which method and asks for an u
   }
 })
 
+test('(b3) sources.status says when the browser plugin is loaded but has no browser to launch, and what dsh-browser says to do', async () => {
+  const h = boot()
+  const browser = fakeBrowser() as any
+  h.holder.browser = browser
+  try {
+    // An older dsh-browser reports no launch readiness at all: nothing is said, the line is as before.
+    browser.status = async () => ({ automationMode: 'standard', chromiumInstalled: false })
+    let status = await h.run('sources.status', {})
+    assert.deepEqual(status.browser, { available: true, state: 'ready' })
+    assert.match(renderResult('sources.status', status), /✅ browser:dsh-browser \[ready\]$/m)
+
+    // A new user: no Playwright Chromium and no system Chrome. The advice is dsh-browser's own words, passed on.
+    browser.status = async () => ({ automationMode: 'standard', browser: { ready: false, source: 'none', installAdvice: 'No Chromium and no Chrome or Edge found. Install Chrome, or run: npx playwright install chromium' } })
+    status = await h.run('sources.status', {})
+    assert.deepEqual(status.browser.launch, { ready: false, source: 'none', advice: 'No Chromium and no Chrome or Edge found. Install Chrome, or run: npx playwright install chromium' })
+    const text = renderResult('sources.status', status)
+    assert.match(text, /❌ browser:dsh-browser \[loaded, no browser to launch\] — No Chromium and no Chrome or Edge found\. Install Chrome, or run: npx playwright install chromium/)
+
+    // The system Chrome stands in for the missing Chromium: ready, and it says which one is used.
+    browser.status = async () => ({ automationMode: 'standard', browser: { ready: true, source: 'system-browser', path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' } })
+    status = await h.run('sources.status', {})
+    assert.equal(status.browser.launch.ready, true)
+    assert.match(renderResult('sources.status', status), /✅ browser:dsh-browser \[ready\] — uses the system browser \/Applications\/Google Chrome\.app\/Contents\/MacOS\/Google Chrome \(no Playwright Chromium needed\)/)
+
+    // A failing or odd status call is unknown, never a verdict.
+    browser.status = async () => { throw new Error('boom') }
+    assert.deepEqual((await h.run('sources.status', {})).browser, { available: true, state: 'ready' })
+    browser.status = async () => ({ browser: { ready: 'yes' } })
+    assert.deepEqual((await h.run('sources.status', {})).browser, { available: true, state: 'ready' })
+  } finally {
+    h.cleanup()
+  }
+})
+
+test('(b4) read.fetch in auto mode tells the user why the browser did not render, in the text the model reads', async () => {
+  const h = boot()
+  const browser = fakeBrowser() as any
+  browser.render = async () => { throw new Error('dsh-browser: no browser to launch. Install Google Chrome, or run: npx playwright install chromium') }
+  h.holder.browser = browser
+  // Jina answers a link-list shell, so the page escalates to the browser, which cannot start.
+  const restoreFetch = globalThis.fetch
+  const restoreLookup = dns.lookup
+  dns.lookup = (async () => [{ address: '93.184.216.34', family: 4 }]) as typeof dns.lookup
+  globalThis.fetch = (async (input: any) => {
+    const url = String(input?.url ?? input)
+    if (url.startsWith('https://r.jina.ai/')) return new Response('# App\n\n[a](https://app.test/a)\n[b](https://app.test/b)\n[c](https://app.test/c)', { status: 200 })
+    throw new TypeError('fetch failed')
+  }) as typeof fetch
+  try {
+    const fetched = await h.run('read.fetch', { url: 'https://app.test/', mode: 'auto', fresh: true })
+    assert.equal(fetched.attempts.at(-1).source, 'playwright')
+    const text = renderResult('read.fetch', fetched)
+    assert.match(text, /tried jina:shell → .*playwright:error/)
+    assert.match(text, /Browser render did not run: dsh-browser: no browser to launch\. Install Google Chrome, or run: npx playwright install chromium/)
+  } finally {
+    globalThis.fetch = restoreFetch
+    dns.lookup = restoreLookup
+    h.cleanup()
+  }
+})
+
 test('(c) a browser that appears after apply is picked up on the next call', async () => {
   const h = boot()
   const restore = stubNetwork()

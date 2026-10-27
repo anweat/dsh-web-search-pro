@@ -119,6 +119,31 @@ test('auto: without a browser the best non-content attempt is returned flagged, 
   } finally { restore(); h.cleanup() }
 })
 
+test('auto: a browser that cannot render (no Chromium, no Chrome) is reported with its own words, in the attempt, the page text and the final error', async () => {
+  const advice = 'dsh-browser: no browser to launch. Install Google Chrome, or run: npx playwright install chromium'
+  const h = harness(PROSE)
+  const failing = { ...BROWSER_020, render: async () => { throw new Error(advice) } }
+  const svc = new FetchService(h.store, resolveConfig({ dbPath: path.join(h.dir, 'store2.db'), ttlSeconds: 60, playwright: { enabled: true, snapshotDir: path.join(h.dir, 's') } } as never) as never, (() => failing) as never)
+  const restore = stubNetwork(h.net)
+  try {
+    h.net.jina = { body: '# Docs\n\n' + NAV }
+    h.net.http = { body: SPA }
+    const out = await svc.fetchPage('https://spa.test/docs', auto())
+    assert.equal(out.shellPage, true)
+    assert.deepEqual(out.attempts?.map(a => a.source + ':' + a.class), ['jina:shell', 'http:js_shell', 'playwright:error'])
+    assert.equal(out.attempts!.at(-1)!.detail, advice, 'the whole advice, not cut at 160 characters like the other backends')
+    const longAdvice = 'x'.repeat(300) + ' run: npx playwright install chromium'
+    const failingLong = { ...BROWSER_020, render: async () => { throw new Error(longAdvice) } }
+    const svcLong = new FetchService(h.store, resolveConfig({ dbPath: path.join(h.dir, 'store3.db'), ttlSeconds: 60, playwright: { enabled: true, snapshotDir: path.join(h.dir, 's') } } as never) as never, (() => failingLong) as never)
+    const long = await svcLong.fetchPage('https://spa2.test/docs', auto())
+    assert.match(long.attempts!.at(-1)!.detail!, /npx playwright install chromium$/, 'a 300-character prefix does not push the command out')
+    // Nothing else produced a page: the error carries the render failure too.
+    h.net.jina = { body: '', status: 500 }
+    h.net.http = undefined
+    await assert.rejects(svc.fetchPage('https://none.test/x', auto()), /all fetch backends failed for https:\/\/none\.test\/x.*\(browser render failed: dsh-browser: no browser to launch\. Install Google Chrome, or run: npx playwright install chromium\)/)
+  } finally { restore(); h.cleanup() }
+})
+
 test('auto: content from Jina stops at once; short factual pages are never escalated', async () => {
   const h = harness(PROSE)
   h.net.jina = { body: '# Eiffel\n\nThe Eiffel Tower is 330 metres tall and was completed in 1889.' }

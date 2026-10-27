@@ -85,7 +85,7 @@ export const READ_ACTIONS: ActionDef[] = [
       }
     },
     render(value) {
-      const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; pageClass?: string; attempts?: { source: string; class: string }[]; truncated?: boolean; nextOffset?: number; totalChars?: number }
+      const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; pageClass?: string; attempts?: { source: string; class: string; detail?: string }[]; truncated?: boolean; nextOffset?: number; totalChars?: number }
       const parts: string[] = []
       if (v.title) parts.push('Title: ' + v.title)
       // A navigation/JS/form shell has no data: say so and point the model at the links it contains instead of re-fetching the same page.
@@ -96,6 +96,9 @@ export const READ_ACTIONS: ActionDef[] = [
       }
       parts.push(v.text)
       parts.push('— Source: ' + v.source + (v.fromCache ? ' (cached snapshot)' : '') + ' · ' + v.url + (v.attempts && v.attempts.length > 1 ? ' · tried ' + v.attempts.map(a => a.source + ':' + a.class).join(' → ') : ''))
+      // A browser that could not render (no Chromium or Chrome, a missing runtime) is the one failure the model cannot work around and the user can fix: say what dsh-browser said.
+      const browserFailure = v.attempts?.find(a => a.source === 'playwright' && a.class === 'error' && a.detail)
+      if (browserFailure) parts.push('Browser render did not run: ' + browserFailure.detail)
       if (v.nextOffset !== undefined) parts.push('more: call read.fetch with offset=' + v.nextOffset + (v.totalChars !== undefined ? ' (page has ' + v.totalChars + ' chars)' : ''))
       return parts.join('\n\n')
     },

@@ -296,7 +296,7 @@ export class FetchService {
         attempts.push({ source, class: cls, chars: result.text.length })
       } catch (error) {
         if (opts.mode !== 'auto' || opts.signal?.aborted) throw error
-        attempts.push({ source, class: 'error', detail: (error instanceof Error ? error.message : String(error)).slice(0, 160) })
+        attempts.push({ source, class: 'error', detail: (error instanceof Error ? error.message : String(error)).slice(0, source === 'playwright' ? 500 : 160) })
       }
     }
     const hasContent = (): boolean => tried.some(t => t.cls === 'content')
@@ -329,7 +329,10 @@ export class FetchService {
       }
     }
     const chosen = best()
-    if (!chosen) throw new Error('all fetch backends failed for ' + normalized + browserNote)
+    if (!chosen) {
+      const renderFailure = attempts.find(a => a.source === 'playwright' && a.class === 'error' && a.detail)
+      throw new Error('all fetch backends failed for ' + normalized + browserNote + (renderFailure ? ' (browser render failed: ' + renderFailure.detail + ')' : ''))
+    }
     const result: FetchResult = { ...chosen.result, attempts }
 
     // P1-3: flag pages that are not content (navigation/JS/form shell, login wall, captcha, error page) so the
