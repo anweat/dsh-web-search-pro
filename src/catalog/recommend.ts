@@ -168,7 +168,7 @@ function score(e: CatalogEntry, profile: Profile, language: 'zh' | 'en' | undefi
 function toSuggestion(a: Assessed): Suggestion {
   const e = a.entry
   const executable = a.status === 'ready' || a.status === 'limited'
-  const tag = e.requires?.cli ? verificationTag(cliVerificationOf(e.requires.cli) ?? '') : undefined
+  const tag = e.requires?.cli ? verificationTag(cliVerificationOf(e.requires.cli, e.platform) ?? '') : undefined
   return {
     id: e.id, label: e.label, kind: e.kind, costTier: a.costTier, status: a.status, executable, use: a.use,
     why: e.recommendedFor[0] ?? e.label,

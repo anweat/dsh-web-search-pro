@@ -12,6 +12,7 @@
  * @module web-search-pro/cli/builtin-specs
  */
 
+import { OPENCLI_SITE_OF, opencliSiteVerification } from './opencli-sites.ts'
 import { validateCliAdapterSpec, type CliAdapterSpec, type CliSearchSpec } from './spec.ts'
 
 export const BILI_CLI_VERSION = '0.6.2'
@@ -344,9 +345,13 @@ for (const spec of BUILTIN_CLI_SPECS) {
   if (!result.ok) throw new Error('built-in CLI spec ' + spec.id + ' is invalid: ' + result.errors.join('; '))
 }
 
-/** How far the adapter of a command (by its first bin name) was verified: a built-in spec's own record, `contract-only` for the standalone OpenCLI. */
-export function cliVerificationOf(bin: string): string | undefined {
-  return BUILTIN_CLI_SPECS.find(spec => spec.bins[0] === bin)?.verification?.status ?? (bin === 'opencli' ? 'contract-only' : undefined)
+/**
+ * How far the adapter of a command (by its first bin name) was verified: a built-in spec's own record, and for the standalone
+ * OpenCLI that of the site of `platform` (`live` for twitter and zhihu), else `contract-only`.
+ */
+export function cliVerificationOf(bin: string, platform?: string): string | undefined {
+  if (bin === 'opencli') return (platform && OPENCLI_SITE_OF[platform] ? opencliSiteVerification(OPENCLI_SITE_OF[platform]).status : undefined) ?? 'contract-only'
+  return BUILTIN_CLI_SPECS.find(spec => spec.bins[0] === bin)?.verification?.status
 }
 
 export const builtinSpecById = (id: string): CliAdapterSpec | undefined => BUILTIN_CLI_SPECS.find(spec => spec.id === id)

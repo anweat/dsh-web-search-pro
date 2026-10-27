@@ -11,7 +11,9 @@ import { runCli } from '../util.ts'
 import { buildCliEnv } from './runner.ts'
 import { findOnPath, probeCli, type ProbeSubject } from './probe.ts'
 import { validateCliAdapterSpec, type CliAdapterSpec } from './spec.ts'
+import { GENERIC_OUTPUT, opencliSiteVerification, SITE_OUTPUT } from './opencli-sites.ts'
 export { OPENCLI_SITE_OF } from './chains-spec.ts'
+export { opencliSiteVerification }
 
 /** The command that proves this is the OpenCLI whose `list` output the adapter understands. Verified on 1.8.8. */
 export const OPENCLI_PROBE: ProbeSubject = {
@@ -99,14 +101,6 @@ export async function listOpencliSites(options: { run?: typeof runCli; ttlMs?: n
   }
 }
 
-/** Generic field mapping over the columns OpenCLI commands emit (rank, title, url, summary, ...). */
-const FIELDS = {
-  url: ['url', 'link', 'href', 'projectUrl', 'item_url'],
-  title: ['title', 'name', 'text', 'desc', 'label'],
-  snippet: ['summary', 'snippet', 'description', 'desc', 'content', 'selftext', 'abstract', 'author', 'user'],
-  publishedAt: ['published_at', 'publish_time', 'created_at', 'date', 'time', 'published', 'postTime'],
-} as const
-
 const NOT_LOGGED_IN = ['not logged in', 'login required', 'please log in', 'please login', 'sign in', 'auth_required', 'requires login', '未登录', '请先登录']
 
 /** The spec that runs `opencli <site> search` for one platform, or undefined when the generated spec is invalid (a site named like a write command). */
@@ -121,7 +115,7 @@ export function opencliSearchSpec(platform: string, entry: OpencliSite, options:
     search: {
       argv: [entry.site, 'search', '{query}', ...entry.hasLimit ? ['--limit', '{count}'] : [], '-f', 'json', ...entry.browser && options.silent ? OPENCLI_SILENT_ARGS : []],
       maxCount: 20,
-      output: { format: 'json', stripTags: true, fields: { url: [...FIELDS.url], title: [...FIELDS.title], snippet: [...FIELDS.snippet], publishedAt: [...FIELDS.publishedAt] } },
+      output: SITE_OUTPUT[entry.site] ?? GENERIC_OUTPUT,
       notLoggedInPatterns: NOT_LOGGED_IN,
     },
     env: {},
@@ -129,7 +123,7 @@ export function opencliSearchSpec(platform: string, entry: OpencliSite, options:
     ...entry.strategy !== 'public' ? { login: { command: 'opencli doctor' } } : {},
     timeoutMs: 60_000,
     maxOutputBytes: 8 * 1024 * 1024,
-    verification: { status: 'contract-only', version: '1.8.8', date: '2026-10-06', note: 'command table from `opencli list -f json`; -f json is the documented output option; no site search was run (they use your Chrome sessions)' },
+    verification: opencliSiteVerification(entry.site),
   }
   return validateCliAdapterSpec(spec, 'builtin').ok ? spec : undefined
 }

@@ -6,6 +6,7 @@
  */
 
 import { BUILTIN_CLI_SPECS } from './builtin-specs.ts'
+import { OPENCLI_SITE_OF } from './opencli-sites.ts'
 import { platformBackendProblems, resolveCliAdapters } from './spec.ts'
 
 /**
@@ -39,11 +40,7 @@ export const DEFAULT_CHAINS: Readonly<Record<string, readonly string[]>> = {
 /** Platforms whose provider is a chain (everything in the default table). */
 export const CHAIN_PLATFORMS: readonly string[] = Object.keys(DEFAULT_CHAINS)
 
-/** Platform -> site of the standalone OpenCLI (`opencli <site> search`). */
-export const OPENCLI_SITE_OF: Readonly<Record<string, string>> = {
-  xiaohongshu: 'xiaohongshu', twitter: 'twitter', reddit: 'reddit', instagram: 'instagram', facebook: 'facebook',
-  zhihu: 'zhihu', weibo: 'weibo', douban: 'douban', tieba: 'tieba', douyin: 'douyin', bilibili: 'bilibili', youtube: 'youtube', wechat: 'weixin',
-}
+export { OPENCLI_SITE_OF }
 
 /** Platforms the dsh-browser OpenCLI bridge has a site adapter for (pinned to engines.ts by a test). */
 export const BROWSER_OPENCLI_PLATFORMS: readonly string[] = ['xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook']

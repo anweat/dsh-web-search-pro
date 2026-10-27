@@ -1,0 +1,26 @@
+[
+  {
+    "rank": 1,
+    "title": "示例文章标题：用 Rust 写一个异步运行时",
+    "type": "article",
+    "author": "示例作者甲",
+    "votes": 12,
+    "url": "https://zhuanlan.zhihu.com/p/100000001"
+  },
+  {
+    "rank": 2,
+    "title": "示例问题：如何评价这个 Agent 框架？",
+    "type": "question",
+    "author": "",
+    "votes": 0,
+    "url": "https://www.zhihu.com/question/200000002"
+  },
+  {
+    "rank": 3,
+    "title": "示例回答标题",
+    "type": "answer",
+    "author": "示例作者乙",
+    "votes": 1,
+    "url": "https://www.zhihu.com/question/200000003/answer/300000003"
+  }
+]

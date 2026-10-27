@@ -255,7 +255,7 @@ test('standalone opencli: only sites whose own list shows a read search command;
   assert.equal(validateCliAdapterSpec(silent, 'builtin').ok, true)
   assert.deepEqual(opencliSearchSpec('hackernews', sites.get('hackernews')!, { silent: true })!.search.argv, ['hackernews', 'search', '{query}', '--limit', '{count}', '-f', 'json'])
   const out = parseCliOutput(xhs, xhs.search, read('constructed-opencli-xiaohongshu-search.json'))
-  assert.deepEqual(out, [{ url: 'https://www.xiaohongshu.com/search_result/66f0aa0000000000', title: '露营装备测评', snippet: '小王', publishedAt: '2026-09-20' }])
+  assert.deepEqual(out, [{ url: 'https://www.xiaohongshu.com/search_result/66f0aa0000000000', title: '露营装备测评', snippet: '作者: 小王 | 赞: 999', publishedAt: '2026-09-20' }])
   const wx = opencliSearchSpec('wechat', sites.get('weixin')!)!
   assert.deepEqual(wx.search.argv.slice(0, 3), ['weixin', 'search', '{query}'])
   assert.equal(parseCliOutput(wx, wx.search, read('constructed-opencli-weixin-search.json'))[0]!.snippet, '摘要文字')

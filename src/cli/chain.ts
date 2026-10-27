@@ -17,7 +17,7 @@ import type { ResolvedConfig } from '../config.ts'
 import { BUILTIN_CLI_SPECS } from './builtin-specs.ts'
 import { backendServes, CHAIN_PLATFORMS, DEFAULT_CHAINS, OPENCLI_SITE_OF } from './chains-spec.ts'
 import { cliSpecEngine, disabledBySettings, probeError, specReadiness, type SpecReadiness } from './engine.ts'
-import { listOpencliSites, OPENCLI_PROBE, planOpencliSearch } from './opencli.ts'
+import { listOpencliSites, OPENCLI_PROBE, opencliSiteVerification, planOpencliSearch } from './opencli.ts'
 import { cachedProbe, probeCli } from './probe.ts'
 import { CliAdapterError, runCliSearchDetailed } from './runner.ts'
 import { resolveCliAdapters, type CliAdapterSpec } from './spec.ts'
@@ -105,7 +105,7 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
     },
   }
   return {
-    id: 'opencli', kind: 'opencli', label: 'OpenCLI (standalone)', engine, verification: 'contract-only',
+    id: 'opencli', kind: 'opencli', label: 'OpenCLI (standalone)', engine, verification: opencliSiteVerification(site).status,
     async readiness() {
       const off = disabledBySettings({ id: 'opencli' }, ctx.deps)
       if (off) return { ready: false, installation: 'missing', reason: 'opencli: ' + off, code: 'disabled' }

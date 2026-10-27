@@ -113,7 +113,7 @@ test('an unavailable platform is a structured error with what is missing and the
     assert.equal(env.ok, false)
     assert.equal(env.error.code, 'CAPABILITY_UNAVAILABLE')
     assert.match(env.error.message, /platform zhihu unavailable: unavailable: no usable backend: opencli: opencli not found on PATH.*; zhihu: zhihu not found on PATH.*; browser-search: platform zhihu requires the optional dsh-browser plugin/)
-    assert.match(env.error.hint, /Default chain: zhihu-cli .*browserBindings/, 'the catalog install text of the zhihu entry')
+    assert.match(env.error.hint, /Chain: standalone OpenCLI .*zhihu-cli .*browserBindings/, 'the catalog install text of the zhihu entry')
     assert.match(env.error.hint, /allowFallback=true/)
     // Plain platform mode reports it the same way.
     const plain = await callEnvelope(h.definitions, 'search.run', { platform: 'zhihu', query: 'x' })
