@@ -19,7 +19,9 @@
  * 本脚本自带最小 semver 实现（插件仓库没有 semver 依赖，也不该为了这个检查新增依赖）：
  * 只支持本仓库 peer 范围实际用到的写法（^ / ~ / >= / > / <= / < / =、`||` 分组、空格并列），
  * 以及 semver 的预发布优先级与上面那条“同号预发布”规则。
- * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：只有 0.2.1 这一条线（rc.2 与 rc.3 两个预发布基线）。
+ * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：两段范围——0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.4），
+ * 各自带 `-0` 上界；两条线之间（0.2.1-alpha.x / 0.2.1-rc.1）不放行，因为没有在它们上面验证过。
+ * 另外校验 cordis peer 同时容纳两条线自带的 4.0.4 / 4.0.5，并挡住 4.1.0。
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -155,16 +157,16 @@ function satisfies(version, range, options = {}) {
 }
 
 // ── 策略与检查 ────────────────────────────────────────────────────────────────
-/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：只有这一条线。 */
-const SUPPORTED_BASELINES = ['0.2.1-rc.2', '0.2.1-rc.3']
+/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.4）两段。 */
+const SUPPORTED_BASELINES = ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4']
 /**
  * 必须被拒绝的宿主版本（runtime 与 install 两种模式都不能满足）：
  * 已放弃的旧线、上一条基线（含它的预发布）、以及不放行的下一个次版本的预发布。
  */
-const REJECTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.2-alpha.1']
+const REJECTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.1-alpha.5', '0.2.1-rc.1', '0.2.2-alpha.1']
 /** 用于说明范围宽窄的代表性版本（只做展示，不影响退出码）。 */
 const MATRIX_VERSIONS = [
-  '0.1.7-rc.2', '0.2.0-rc.2', '0.2.0', '0.2.1-alpha.1', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3',
+  '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-alpha.1', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4',
   '0.2.1', '0.2.2-alpha.1', '0.2.2', '0.3.0-rc.1',
 ]
 
@@ -189,6 +191,7 @@ function selftest() {
   const looseCaret = '^0.2.1-rc.2'
   const wide = '>=0.2.1-rc.2 <0.3.0'
   const foreignLower = '>=0.2.0-rc.2 <0.2.2-0'
+  const dual = '>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0'
   const cases = [
     // range, version, runtime, install —— 期望值与真实 semver 7（npm/pnpm 默认解析、includePrerelease 解析）实测一致
     [pinned, '0.1.7-rc.2', false, false],     // 已放弃的旧线
@@ -207,6 +210,15 @@ function selftest() {
     [wide, '0.2.2-alpha.1', true, false],     // 手写 <0.3.0 放行 0.2.2 预发布，但 npm 默认解析拒绝（install 毒药）
     [wide, '0.3.0-rc.1', true, false],        // 手写 <0.3.0 挡不住 0.3.0-rc.1（宿主放行）
     [foreignLower, '0.2.1-rc.2', true, false], // 下界写成别条线的预发布：宿主校验放行、npm 拒绝（install 毒药）
+    [dual, '0.2.0-rc.1', false, false],        // 两段范围：0.2.0 线的下界是 rc.2
+    [dual, '0.2.0-rc.2', true, true],          // 第一段的比较符自带 0.2.0 的预发布，是承重的
+    [dual, '0.2.0', true, true],
+    [dual, '0.2.1-alpha.1', false, false],     // 两段之间的缝：没有验证过，两种模式都拒绝
+    [dual, '0.2.1-rc.1', false, false],
+    [dual, '0.2.1-rc.2', true, true],
+    [dual, '0.2.1-rc.4', true, true],
+    [dual, '0.2.2-alpha.1', false, false],     // 上界仍是 <0.2.2-0
+    [dual, '0.3.0-rc.1', false, false],
   ]
   let failed = 0
   for (const [range, version, runtime, install] of cases) {
@@ -283,7 +295,7 @@ if (!json && targets.includes('0.2.1-rc.3')) {
   const ranges = [...new Set(gated.map(([, range]) => range))]
   const capped = ranges.every((range) => /<0\.2\.2-0/.test(range))
   console.log('\n  代表性宿主版本（runtime / install）：')
-  const header = '    ' + 'range'.padEnd(44) + MATRIX_VERSIONS.map((v) => v.padEnd(14)).join('')
+  const header = '    ' + 'range'.padEnd(74) + MATRIX_VERSIONS.map((v) => v.padEnd(14)).join('')
   console.log(header)
   for (const range of ranges) {
     const cells = MATRIX_VERSIONS.map((version) => {
@@ -291,12 +303,26 @@ if (!json && targets.includes('0.2.1-rc.3')) {
       const install = satisfies(version, range)
       return `${runtime ? 'rt+' : 'rt-'}/${install ? 'npm+' : 'npm-'}`.padEnd(14)
     })
-    console.log('    ' + range.padEnd(44) + cells.join(''))
+    console.log('    ' + range.padEnd(74) + cells.join(''))
   }
   if (!capped) {
     console.log('\n  提示：上界未收口（缺少 <0.2.2-0）。0.2.x 后续版本一旦破坏，会在用户机器上表现为')
     console.log('        组装日志正常、`dsh plugin add` ERESOLVE —— 加 cap 可让问题在组装期点名报错。')
   }
+}
+
+// cordis：0.2.0-rc.2 宿主依赖 ~4.0.4，0.2.1-rc.x 依赖 ~4.0.5（干净安装两者都解析到 4.0.5；有锁文件时 rc.2 宿主可能是 4.0.4）。
+// 插件的 cordis peer 必须容纳两者，并挡住 4.1.0（未验证的下一个次版本）。
+const cordisRange = manifest.peerDependencies?.['@deepseek-ai/cordis']
+if (cordisRange !== undefined && versions.length === 0) {
+  for (const [version, expected] of [['4.0.4', true], ['4.0.5', true], ['4.1.0', false]]) {
+    const got = satisfies(version, cordisRange)
+    if (got !== expected) {
+      console.error(`  FAIL(cordis) ${version}  peer "${cordisRange}" ${expected ? '应当放行' : '不应放行'}`)
+      bad += 1
+    }
+  }
+  if (!json) console.log(`  cordis peer "${cordisRange}"：4.0.4 / 4.0.5 放行，4.1.0 拒绝`)
 }
 
 if (json) console.log(JSON.stringify(report, null, 2))
