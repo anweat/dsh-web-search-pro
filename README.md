@@ -413,7 +413,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 ## CLI 适配 / CLI adapters
 
-**中文**　平台不再几乎只靠 dsh-browser 内置的 OpenCLI：本插件有一层声明式的 CLI 适配（`src/cli/`）。一个适配规格 `CliAdapterSpec` 写明：命令名（`bins`，包名可与命令名不同，记在 `packageNote`）、探测契约（`probe`：`--version`、最低版本、`--help` 里必须出现的子命令 / 参数）、搜索命令（`search.argv` 是**数组**，只有 `{query}`、`{count}` 两个占位符，永不经过 shell）、输出格式（`json` / `ndjson` / `yaml` / `text`）与字段映射、`emptyWhen` / `notLoggedInPatterns`、环境变量白名单（`env.required` / `passthrough`，只写名字）、超时与输出上限。执行器按 UTF-8 解码，超时 / 取消 / 输出超限都有结构化错误：`CLI_NOT_FOUND`、`CLI_CONTRACT_MISMATCH`、`CLI_NOT_LOGGED_IN`（提示“请自行运行 `<cli> login`”）、`ENGINE_EMPTY`、`CLI_FAILED`；错误文字里不会出现环境变量的值。
+**中文**　平台不再几乎只靠 dsh-browser 内置的 OpenCLI：本插件有一层声明式的 CLI 适配（`src/cli/`）。一个适配规格 `CliAdapterSpec` 写明：命令名（`bins`，包名可与命令名不同，记在 `packageNote`）、探测契约（`probe`：`--version`、最低版本、`--help` 里必须出现的子命令 / 参数）、搜索命令（`search.argv` 是**数组**，只有 `{query}`、`{count}` 两个占位符，永不经过 shell）、输出格式（`json` / `ndjson` / `yaml` / `text`）与字段映射、`emptyWhen` / `notLoggedInPatterns`、环境变量白名单（`env.required` / `passthrough`，只写名字）、超时与输出上限。执行器按 UTF-8 解码，超时 / 取消 / 输出超限都有结构化错误：`CLI_NOT_FOUND`、`CLI_CONTRACT_MISMATCH`、`CLI_NOT_LOGGED_IN`（独立 CLI 提示“请自行运行 `<cli> login`”；`opencli` 提示“在你的 Chrome 里登录 <站点> 后重试（opencli 使用 Chrome 的登录态）”）、`ENGINE_EMPTY`、`CLI_FAILED`；错误文字里不会出现环境变量的值。规格可以带 `errorCodes`，说明工具自己的失败格式：`opencli` 把失败以 YAML（`ok: false` / `error: {code, message}`）写在 stderr，`AUTH_REQUIRED`（退出码 77）映射为未登录；`LOGIN_WALL`、`SECURITY_BLOCK`、`RATE_LIMITED`，以及 Reddit 实测遇到的 `UNKNOWN: Unexpected token '<' … is not valid JSON`（站点回了网页而不是 JSON）映射为 `CLI_FAILED`，消息明确写“站点返回了网页而不是数据，可能是风控、IP 被拦或需要登录”；`EMPTY_RESULT` → 无结果，`BROWSER_CONNECT` → 连不上浏览器扩展，`TIMEOUT` → 超时，其余错误码保留工具自己的原话。任何命令输出若是 HTML 文档（而不是 JSON / YAML），同样按“站点返回了网页”报告。
 
 **只读保证**（内置和用户自定义规格同样适用）：规格必须声明 `allowedSubcommands`，argv 里用到的子命令都得在其中，且不得命中全局拒绝表（`login`、`logout`、`post`、`comment`、`delete*`、`like`、`follow`、`favorite`、`upvote`、`save`、`subscribe`、`publish`、`ask`、`article`、`pin`、`setup`、`init`、`install`、`update` 等）；会读取浏览器 Cookie 或把凭据放进参数的 flag（`--cookie-source`、`--cookies-from-browser`、`--token`、`--password`……）一律拒绝。插件**永不运行任何登录命令**，也不代用户登录：需要登录的 CLI 由你自己运行它的 `login`；没有已保存登录的 xhs / rdt / zhihu 不会被运行（它们在没有登录时会自己去读浏览器 Cookie）。子进程只拿到最小环境（PATH、HOME、代理、证书，加规格点名的变量），不继承你整个环境。
 
@@ -425,37 +425,41 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | `gh`（github / github-issues / github-code 的回退） | `gh` | 2.101.0 | **live**（2026-10-26：仓库、issues、code 搜索均实测；查询按词拆成多个参数，因为 gh 会把单个参数当精确短语） |
 | `omnireach`（`wechat` 与多源 `omnireach`） | `omnireach` | 0.19.0-alpha | **live**（`--on wechat`；多源命令 2026-10-26 实测，显式 `--on hackernews,youtube,github,wechat,bilibili`——工具自带的自动路由在 PATH 上有 `opencli` 时会加入走你 Chrome 的 google / twitter 源，所以从不使用） |
 | `yt-dlp`（youtube） | `yt-dlp` | 2026.08.19 | **live**：真实运行 `ytsearch2:` 搜索并解析（2026-10-11） |
-| `twitter` | `twitter` | 0.8.5 | contract-only：`--json` 信封与字段来自已装 0.8.5 的源码和 issue #38 里的真实输出；需要你的 Token，我们没运行过搜索 |
-| `xhs`（xiaohongshu） | `xhs` | 0.6.4 | contract-only：帮助 + 已装包源码里的输出形状；搜索需要你的登录 |
-| `zhihu` | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
-| `rdt`（reddit） | `rdt` | 0.4.2 | contract-only（同上） |
-| 独立 `opencli`（按站点） | `opencli` | 1.8.8 | contract-only：只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json` |
+| `twitter`（可选后备） | `twitter` | 0.8.5 | contract-only：`--json` 信封与字段来自已装 0.8.5 的源码和 issue #38 里的真实输出；需要你的 Token，我们没运行过搜索 |
+| `xhs`（xiaohongshu，可选后备） | `xhs` | 0.6.4 | **live**（2026-10-27：用你自己保存的登录实测；一次返回 22 项，其中 `hot_query` 建议卡片被跳过，发布时间取 `note_card.corner_tag_info` 里的 `publish_time`，`MM-DD` / `YYYY-MM-DD` / `N小时前` 等保守解析，认不出的不填） |
+| `zhihu`（可选后备） | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
+| `rdt`（reddit，可选后备） | `rdt` | 0.4.2 | contract-only（同上） |
+| 独立 `opencli`（按站点，登录类平台的**首选**后端） | `opencli` | 1.8.8 | 只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json`。**twitter、zhihu：live**（2026-10-27 用你日常 Chrome 实测；twitter 的 `created_at` 转成 ISO，标题 / 摘要照 twitter 后端：作者 · likes · views · 时间；zhihu 只有标题 / 类型 / 作者 / 赞同数 / 链接，没有摘要和时间）。**xiaohongshu、reddit：contract-only（未实测）**——那次 Chrome 里没有小红书登录（`AUTH_REQUIRED`），Reddit 在代理出口下回了网页（见下）；字段取自 opencli 1.8.8 适配器源码里的输出列。其余站点：contract-only |
 | `wx-search-cli`（wechat 第二后端） | `wx-search-cli` | 0.1.0 | **live**（2026-10-26：中英文与无结果查询实测；一页固定 10 条，适配层按 count 截取；搜狗反爬时它输出 `[]` 且退出码 0，与“无结果”无法区分） |
 | `tanso` | `tanso` | 2.0.2 | docs-only：按上游 README，未安装；只选 `bocha_web` 与 `zhihu_search` |
 
-目录里另有只列条目、没有适配的 `douyin-cli`（它的 README 没写搜索记录的字段）。contract-only 的字段映射来自工具自己的帮助 / 源码，并有标成 “constructed” 的夹具测试；它们在真实登录后的输出上还没被确认。
+目录里另有只列条目、没有适配的 `douyin-cli`（它的 README 没写搜索记录的字段）。contract-only 的字段映射来自工具自己的帮助 / 源码，并有标成 “constructed” 的夹具测试；它们在真实登录后的输出上还没被确认。live 的夹具（`test/fixtures/cli/live-*`）保持真实输出的**形状**，内容一律是合成的占位值（仓库公开，不放真实作者、正文、id 或 token）。
 
 **默认后端链**（`platformBackends` 可改，未列出的平台用默认顺序）：
 
 | 平台 | 默认链 |
 |---|---|
 | xiaohongshu | `opencli`（独立）→ `xhs` → `browser-opencli`（dsh-browser） |
-| reddit | `rdt` → `opencli` → `browser-opencli` |
-| zhihu | `zhihu` → `browser-search`（dsh-browser 搜索页） |
-| twitter | `twitter` → `opencli` → `browser-opencli` |
+| reddit | `opencli` → `rdt` → `browser-opencli` |
+| zhihu | `opencli` → `zhihu` → `browser-search`（dsh-browser 搜索页） |
+| twitter | `opencli` → `twitter` → `browser-opencli` |
 | bilibili / youtube | `bili` / `yt-dlp` |
 | github、github-issues、github-code | `rest`（现有 REST）→ `gh` |
 | wechat（公众号，新） | `omnireach` → `wx-search-cli` |
 | omnireach（多源，不自动选入；只用五个免 Key 源） | `omnireach` |
 | instagram / facebook | `browser-opencli`；weibo、douban、tieba、douyin、kuaishou：`browser-search` |
 
-链上缺失、不兼容或未登录的后端被跳过并记下原因；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
+链上缺失、不兼容、未登录、被风控或出错的后端被跳过并记下原因（结果的 `notes` 里写 `skipped backends: opencli: …`，历史里记下最终回答的后端）；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。你显式配置的 `platformBackends` 原样优先，不会被新的默认顺序改写。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
 
-**启用一个 CLI**：按 `sources.deps` 给出的命令安装（`sources.install` 需要你的审批），再**自己**运行它的登录命令（`xhs login`、`rdt login`、`zhihu login`、`gh auth login`；twitter 要 `TWITTER_AUTH_TOKEN` / `TWITTER_CT0`：在设置面板写入 DSH Credentials，或设在**宿主进程**的环境变量里，只写进 shell 配置文件（`~/.zshrc` 等）不够，宿主进程读不到。解析顺序同插件其他密钥：设置里的字面量 `twitterAuthToken` / `twitterCt0` → 凭据引用 `twitterAuthTokenEnv` / `twitterCt0Env` → 进程环境变量；值只通过子进程的环境变量交给 `twitter`，不进命令行、日志或错误信息，`sources.status` 缺失时会写明查过哪里）。想优先用它，就改链序：
+**登录类平台（小红书、知乎、Reddit、X）怎么用——登录完全交给你**：推荐的做法是在你**日常使用的 Chrome** 里登录这些站点，再装好 [OpenCLI](https://github.com/jackwener/opencli)（`npm i -g @jackwener/opencli`）和它的 **OpenCLI Browser Bridge** 扩展（`opencli doctor` 全 OK 即连通）。独立 `opencli` 是这四个平台的首选后端，直接使用那个 Chrome 的登录态：插件不提供任何登录流程、不运行任何登录命令、不读浏览器 Cookie，登录态过期时报“在你的 Chrome 里登录 <站点> 后重试”。调用时插件给站点命令带上 `--window background --site-session ephemeral --keep-tab false`（opencli 1.8.8 的浏览器命令都支持，也是它的默认值）：在后台窗口里跑、不抢你的焦点、用完关标签页；只对 `opencli <site> search --help` 里列出这三个参数的命令传（本地探测，不搜索），老版本或不开浏览器的命令不传。独立 CLI（`xhs`、`rdt`、`zhihu`、`twitter`）只是**可选后备**：想用就按它们自己的方式登录（下面），仍由你自己运行，插件只检查登录文件是否存在，没有就跳过。
+
+**2026-10-27 的实测结论**（opencli 1.8.8，用户在场）：`opencli twitter search` 与 `zhihu search` 成功并已适配；`opencli xiaohongshu search` 退出码 77 `AUTH_REQUIRED`（那个 Chrome 里没有小红书登录），已映射为未登录；`opencli reddit search` 退出码 1，Reddit 返回的是网页（`Unexpected token '<'`）——这台机器的网络是代理出口，Reddit 的登录页也显示“网络安全部门已屏蔽你的请求”，所以 **Reddit 在代理 IP 下会被拦**，换网络出口后才能验证它；`xhs search` 用用户保存的登录成功。
+
+**启用一个独立 CLI（可选后备）**：按 `sources.deps` 给出的命令安装（`sources.install` 需要你的审批），再**自己**运行它的登录命令（`xhs login`、`rdt login`、`zhihu login`、`gh auth login`；twitter 要 `TWITTER_AUTH_TOKEN` / `TWITTER_CT0`：在设置面板写入 DSH Credentials，或设在**宿主进程**的环境变量里，只写进 shell 配置文件（`~/.zshrc` 等）不够，宿主进程读不到。解析顺序同插件其他密钥：设置里的字面量 `twitterAuthToken` / `twitterCt0` → 凭据引用 `twitterAuthTokenEnv` / `twitterCt0Env` → 进程环境变量；值只通过子进程的环境变量交给 `twitter`，不进命令行、日志或错误信息，`sources.status` 缺失时会写明查过哪里）。想优先用它，就改链序：
 
     web-search-pro:
       platformBackends:
-        xiaohongshu: [xhs, opencli, browser-opencli]
+        xiaohongshu: [xhs, opencli, browser-opencli]   # 例：想让 xhs 排在 opencli 前面
       cliAdapters:                     # 自定义只读适配（同样的校验），注册为平台 custom-cli:mytool
         mytool:
           bins: [mytool]
@@ -474,7 +478,7 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 
 无效的 `cliAdapters` 条目被忽略，原因出现在 `sources.status` 的 `notes`；设置面板里两项都有 JSON 编辑器，校验与服务端是同一批函数。
 
-**English**　Platforms no longer depend almost entirely on dsh-browser's bundled OpenCLI. A declarative adapter layer (`src/cli/`) describes each standalone CLI: `bins` (the package name may differ from the command, see `packageNote`), a contract `probe` (version floor, subcommands / flags that must appear in `--help`), a `search.argv` ARRAY with `{query}` / `{count}` placeholders (never a shell string), the output format and field mapping, `env.required` / `passthrough` NAMES only, timeout and output cap. The runner decodes UTF-8 and maps failures to `CLI_NOT_FOUND`, `CLI_CONTRACT_MISMATCH`, `CLI_NOT_LOGGED_IN` (hint: run `<cli> login` yourself), `ENGINE_EMPTY`, `CLI_FAILED`; environment values never appear in errors. **Read-only guarantee** for built-in and user specs alike: every command word must be in the spec's `allowedSubcommands` and none may match the global deny-list (login, logout, post, comment, delete*, like, follow, favorite, upvote, save, subscribe, publish, ask, article, pin, setup, init, ...); flags that read browser cookies or carry credentials are rejected. The plugin never runs a login and never logs in for you; xhs / rdt / zhihu are not run without a saved login (without one they read your browser cookies themselves). Children get a minimal environment. Probes are local (version + help, cached 60 s), never search or log in; a same-named program with another contract is `incompatible`. The table above lists each built-in spec with the verified version and how far it was checked (live / contract-only / docs-only). Each platform has an ordered backend chain (table above, configurable with `platformBackends`); skipped backends show their reason in `sources.status` (`providers[].chain`) and in the error when the whole chain is down. Your own adapters go in `cliAdapters` (validated by the same rules; registered as `custom-cli:<id>`).
+**English**　Platforms no longer depend almost entirely on dsh-browser's bundled OpenCLI. A declarative adapter layer (`src/cli/`) describes each standalone CLI: `bins` (the package name may differ from the command, see `packageNote`), a contract `probe` (version floor, subcommands / flags that must appear in `--help`), a `search.argv` ARRAY with `{query}` / `{count}` placeholders (never a shell string), the output format and field mapping, `env.required` / `passthrough` NAMES only, timeout and output cap. The runner decodes UTF-8 and maps failures to `CLI_NOT_FOUND`, `CLI_CONTRACT_MISMATCH`, `CLI_NOT_LOGGED_IN` (hint: run `<cli> login` yourself; for `opencli`: log in to the site in your own Chrome and retry, since opencli uses Chrome's login), `ENGINE_EMPTY`, `CLI_FAILED`; environment values never appear in errors. A spec may carry `errorCodes` describing the tool's failure format: opencli prints `ok: false / error: {code, message}` as YAML on stderr; `AUTH_REQUIRED` (exit 77) is not-logged-in, `LOGIN_WALL` / `SECURITY_BLOCK` / `RATE_LIMITED` and the `Unexpected token '<'` JSON error (the site answered a web page, measured on Reddit) are `CLI_FAILED` saying the site returned a web page instead of data or blocked the request (risk control, IP block, login wall), `EMPTY_RESULT` is empty, `BROWSER_CONNECT` / `TIMEOUT` have their own messages; an HTML document printed by any command is reported the same way. **Read-only guarantee** for built-in and user specs alike: every command word must be in the spec's `allowedSubcommands` and none may match the global deny-list (login, logout, post, comment, delete*, like, follow, favorite, upvote, save, subscribe, publish, ask, article, pin, setup, init, ...); flags that read browser cookies or carry credentials are rejected. The plugin never runs a login and never logs in for you; xhs / rdt / zhihu are not run without a saved login (without one they read your browser cookies themselves). Children get a minimal environment. Probes are local (version + help, cached 60 s), never search or log in; a same-named program with another contract is `incompatible`. The table above lists each built-in spec with the verified version and how far it was checked (live / contract-only / docs-only). **Login platforms (Xiaohongshu, Zhihu, Reddit, X): logging in is entirely yours.** Log in to the sites in your day-to-day Chrome and install OpenCLI (`npm i -g @jackwener/opencli`) with its OpenCLI Browser Bridge extension (`opencli doctor` all OK); the standalone `opencli` is the first backend of these four chains and uses that Chrome's login. The plugin has no login flow, runs no login command and reads no browser cookies; an expired login is reported as "log in to <site> in your own Chrome and retry". It passes `--window background --site-session ephemeral --keep-tab false` (supported by the 1.8.8 browser commands, and their defaults) so your Chrome keeps its focus and the tab is closed, only when `opencli <site> search --help` lists those options. The standalone CLIs (`xhs`, `rdt`, `zhihu`, `twitter`) are optional fallbacks that you log in yourself with the tool's own command; without a saved login they are skipped. Measured 2026-10-27 (opencli 1.8.8): twitter and zhihu searches work and are mapped (live); xiaohongshu answered `AUTH_REQUIRED` (no login in that Chrome); Reddit answered a web page behind a proxied IP (Reddit blocks proxied addresses), so those two mappings are contract-only; `xhs search` with a saved login works (live; `hot_query` cards skipped, publish time parsed conservatively). Each platform has an ordered backend chain (table above, configurable with `platformBackends`; an explicit setting always wins); skipped backends show their reason in `sources.status` (`providers[].chain`) and in the error when the whole chain is down. Your own adapters go in `cliAdapters` (validated by the same rules; registered as `custom-cli:<id>`).
 
 ## 外部依赖（按需）
 
@@ -485,8 +489,9 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序�
 | bili-cli `0.6.2` | B站后端 | `uv tool install --force git+https://github.com/public-clis/bilibili-cli@489607468f967e0e11f3cdff6efc022d011e982a` |
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
 | opencli（dsh-browser 内置） | 小红书/Twitter/Reddit/IG/FB 的 `browser-opencli` 后端 | 由 dsh-browser 内置；扩展未连接时用 `opencli doctor` 诊断 |
-| 其余适配 CLI（独立 `opencli`、`xhs`、`zhihu`、`rdt`、`omnireach`、`gh`、`wx-search-cli`、`tanso`） | 见上面的 [CLI 适配](#cli-适配--cli-adapters) | `sources.deps` 列出安装命令；登录由你自己完成 |
-| twitter-cli（命令 `twitter`） | Twitter 平台的首选后端（执行 `twitter search … --json`，需要 0.8.5 或更新；另需 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`，见上） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
+| 独立 `opencli` | 小红书 / 知乎 / Reddit / Twitter 的首选后端，用你日常 Chrome 的登录态（需 OpenCLI Browser Bridge 扩展） | `npm i -g @jackwener/opencli`；站点登录由你在 Chrome 里完成 |
+| 其余适配 CLI（`xhs`、`zhihu`、`rdt`、`omnireach`、`gh`、`wx-search-cli`、`tanso`） | 见上面的 [CLI 适配](#cli-适配--cli-adapters) | `sources.deps` 列出安装命令；登录由你自己完成 |
+| twitter-cli（命令 `twitter`） | Twitter 平台的可选后备（排在独立 OpenCLI 之后；执行 `twitter search … --json`，需要 0.8.5 或更新；另需 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`，见上） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
 | agent-reach（可选） | 仅作安装助手，本插件不直接执行它；装了它**不代表** Twitter 搜索可用 | `uv tool install agent-reach` / `pip install agent-reach` |
 | mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |
 | playwright / patchright | 渲染/截图后端 | 由 dsh-browser 内置；默认 Playwright，兼容场景可显式切 Patchright；缺 Chromium 时调用 `runtime.install`（`browser_call`） |

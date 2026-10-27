@@ -8,6 +8,7 @@
 
 - **已经有 `DEEPSEEK_API_KEY`（环境变量、DSH 凭据或设置里的密钥字段）的用户，升级后默认的 `search.run` 和证据模式自动规划会先用 DeepSeek 搜索，而它按请求计费**：Search 与 Fetch 各为每 1000 次成功请求 $0.75（空结果、失败、超时不计费，`count` 不影响价格）。文档写明经 DeepSeek Harness / Claude Code / Codex 的服务端工具调用在 2026-11-01 00:00（北京时间）前免费，但没写插件直接调用算不算，**所以本插件按会计费处理**。
 - 不想用：在 `sources.disabled` 里加 `deepseek`；只想在需要时用：自己写一份 `engines`（自定义过的 `engines` 列表保持你写的顺序，不会被自动加入）；想限量：`sources.budget.deepseek: { total, daily }`；`evidence.sourcePolicy: anonymous-only` 也不会自动使用它。没有 Key 时行为与 0.2.2 完全一样。
+- **登录类平台的默认后端顺序变了**：小红书、知乎、Reddit、X 现在先试独立 `opencli`（用你日常 Chrome 的登录态），再试独立 CLI（`xhs`、`zhihu`、`rdt`、`twitter`），最后是 dsh-browser 的后端——知乎、Reddit、Twitter 原来是独立 CLI 在前（小红书本来就是 opencli 在前）。已经登录了独立 CLI 并想继续优先用它的，在设置 `platformBackends` 里写出顺序（显式配置原样优先，不受影响）。没装独立 opencli 的用户行为不变：它被跳过并写明原因，链继续往下走。见下文“登录类平台改走 OpenCLI”。
 
 ### DeepSeek 搜索（引擎 `deepseek`，“常用”）
 
@@ -36,6 +37,21 @@
 - 旧面板（0.2.2 与 0.2.3 开发版改版前的同一份代码）把 `evidence`、`provider`、`sources` 作为**整个容器**写回，宿主（`dsh-settings`）只接受声明了 `.volatile()` 的字段之下的编辑，整体写容器报 “Config field … is not volatile”，面板显示“Host 未接受全部修改”，同一次保存里排在后面的修改（包括密钥）也不会落盘。在 rc.3 的真实面板上复现并修复（rc.2 宿主没有测）：现在一次保存是**一个原子的 `mutate`，按字段路径逐项写**（`evidence.maxRounds`、`sources.budget.deepseek.daily`……），恢复默认 `unset` 那一项；`playwright` 逐键写（`snapshotDir` 现在声明为 volatile）。密钥只在设置写入成功之后才写。不认识的同级键原样保留；宿主不会清掉恢复默认后留下的空容器（`evidence: {}`），无害。
 - 另一个老问题：宿主的 schema 解析器会在 `evidence.coverage` 下填一个空的 `thresholds: {}`，面板把它当成“给了阈值”，默认就报 “thresholds.weak must be a number in 0..1”；现在和服务端一样先去掉这些填充物再校验。
 - 测试里的 Host 替身现在按宿主的规则拒绝不在 volatile 字段之下的路径，并有一条测试固定“卡片写的每个字段都在 volatile 节点之下”。
+
+### 登录类平台改走 OpenCLI（2026-10-27 实测，opencli 1.8.8）
+
+**原则：登录完全交给用户。** 插件不提供登录流程，不运行任何登录命令，不读浏览器 Cookie；“缺登录文件就跳过”的闸门不变。推荐在日常 Chrome 里登录小红书、知乎、Reddit、X，并装好 OpenCLI 与 OpenCLI Browser Bridge 扩展；独立 CLI 是可选后备，用工具自带的登录命令，由用户自己运行。
+
+- **默认链**：reddit `opencli → rdt → browser-opencli`，twitter `opencli → twitter → browser-opencli`，zhihu `opencli → zhihu → browser-search`（xiaohongshu 仍是 `opencli → xhs → browser-opencli`）。前一个后端失败（未登录、被风控、opencli 不可用）就落到下一个，结果的 `notes` 写 `skipped backends: <id>: <原因>`；只有一个后端出错而其他后端被跳过时，错误现在也列出被跳过的后端（原来只有那一个错误）。用户显式配置的 `platformBackends` 不变。
+- **调用参数**：opencli 的浏览器命令支持 `--window`、`--site-session`、`--keep-tab`（默认值已是后台窗口、临时会话、不保留标签页；omnireach 也显式传）。插件现在显式传 `--window background --site-session ephemeral --keep-tab false`，不抢 Chrome 焦点、用完关标签页；只对 `browser: true` 且 `opencli <site> search --help` 列出这三个参数的命令传（本地探测，不搜索），否则不传。`scripts/cli-login-check.mjs` 使用同一份计划（`planOpencliSearch`）。
+- **按站点映射**：twitter（**live**）——标题是正文，摘要 `@作者 · likes · views · 时间`（照 twitter 后端），`created_at`（`Tue Oct 27 08:38:08 +0000 2026`）转成 ISO；zhihu（**live**）——`类型 · 作者 · 赞同 N`，工具本身没有摘要和时间，不编造。xiaohongshu、reddit 这次没拿到成功输出（见下），映射取自 opencli 1.8.8 适配器源码的输出列，**未实测**，仍是 contract-only，并在规格说明、`sources.status` 和目录里写明。
+- **opencli 错误映射**（规格新字段 `errorCodes`，与其他规格字段同样校验）：`AUTH_REQUIRED` / 退出码 77 → `CLI_NOT_LOGGED_IN`，提示“在你的 Chrome 里登录 <站点> 后重试（opencli 使用 Chrome 的登录态）”，不再提示 `opencli <站点> login`（规格新字段 `login.hint`）；`LOGIN_WALL`、`SECURITY_BLOCK`、`RATE_LIMITED`、`FORBIDDEN` 以及 Reddit 实测的 `Unexpected token '<' … is not valid JSON` → `CLI_FAILED`，消息写“站点返回了网页而不是数据，可能是风控、IP 被拦或需要登录”并给出检查办法；`EMPTY_RESULT` → `ENGINE_EMPTY`，`BROWSER_CONNECT` → 连不上浏览器扩展，`TIMEOUT` → `ENGINE_TIMEOUT`，参数类错误 → `CLI_CONTRACT_MISMATCH`，其余保留 `[CODE] 原话`。任何 json / yaml 命令输出了 HTML 文档，对所有规格都按“站点返回了网页”报告（原来是笼统的 `CLI_CONTRACT_MISMATCH`）。
+- **xhs**：规格改为 **live**（用户自己的登录实测）。`corner_tag_info` 里的 `publish_time` 映射为 `publishedAt`（新字段来源 `{ time }`：`MM-DD` 取最近一个不晚于今天的日期、`YYYY-MM-DD`、`N分钟前` / `N小时前` / `N天前`、`昨天 HH:MM`，按中国时间；认不出的不填）；结果里的 `hot_query` 建议卡片（有 id 无 `note_card`）用新的 `output.keepWhen` 丢弃，不计入“无链接被跳过”。
+- **规格新增（有校验，不影响已有规格）**：`{ time: 路径 }` 字段与拼接项、路径里的 `key=value` 段（取数组里第一个字段等于该值的元素）、`output.keepWhen`、`search.errorCodes`、`login.hint`（与 `login.command` 二选一）。
+- **目录与说明**：`sources.status`、`search.recommend`、`catalog/sources.v1.json`（四个平台条目、`opencli` 条目的安装说明与验证记录；新增 `twitter-cli` 条目，与 `xhs` / `zhihu-cli` / `rdt` 并列）、README、skill、`docs/validation/cli-login-checklist.md` 同步。`search.recommend` 的“未验证”标注现在跟着平台的首选后端走（Twitter 经 OpenCLI 已是 live，不再被标成未验证）。
+- **夹具与测试**：`test/fixtures/cli/live-opencli-twitter-search.json`、`live-opencli-zhihu-search.json`、`live-xhs-search.json`、`live-opencli-xiaohongshu-auth-required.yaml`、`live-opencli-reddit-html-error.yaml` 按真实输出的**形状**做，内容一律是合成的占位值（仓库公开）；`constructed-opencli-reddit-search.json` 是未实测的 Reddit 形状。新增 `cli-opencli-chain`（回退顺序、被跳过的原因、调用参数）、`cli-opencli-sites`、`cli-opencli-errors`、`cli-time-text`、`cli-xhs-live` 共 20 项测试。
+
+**实测结论（2026-10-27，用户在场，opencli 1.8.8，未升级）**：`opencli twitter search` 与 `zhihu search` 成功；`opencli xiaohongshu search` 退出码 77 `AUTH_REQUIRED`（那个 Chrome 里没有小红书登录）；`opencli reddit search` 退出码 1，Reddit 返回的是网页——这台机器的网络是代理出口，Reddit 登录页也显示“网络安全部门已屏蔽你的请求”，**Reddit 在代理 IP 下会被拦**；`xhs search` 用用户保存的登录成功，一次 22 项，其中 2 项是 `hot_query` 卡片。修复后各重跑一次：xhs 3 条带发布时间，opencli twitter 3 条（带 ISO 时间），opencli zhihu 3 条，xiaohongshu / reddit 报出新的、明确的错误。没有运行 zhihu / rdt / twitter 三个独立 CLI 的搜索（没有登录文件，闸门会跳过）。
 
 ### 验证
 
