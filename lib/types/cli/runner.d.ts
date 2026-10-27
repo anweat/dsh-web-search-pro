@@ -67,6 +67,12 @@ export declare function mapCliItemsDetailed(output: CliOutputSpec, items: readon
     skipped: number;
 };
 export declare function mapCliItems(output: CliOutputSpec, items: readonly unknown[], count: number, now?: number): WebSearchSource[];
+/**
+ * The result of a `lines: { mode: 'whole' }` command: the whole stdout as ONE source. The text is cut at `maxChars` with a note that
+ * says how much was shown; the title is "<id>: <query>"; the link is the stand-in `cli://<id>?q=<query>` (it is no web page, so the
+ * evidence pipeline lists it but never fetches it). Undefined when the tool printed nothing.
+ */
+export declare function wholeOutputSource(spec: Pick<CliAdapterSpec, 'id'>, output: CliOutputSpec, query: string, stdout: string): WebSearchSource | undefined;
 /** Parse and map in one go (what the fixtures tests call). */
 export declare function parseCliOutput(spec: Pick<CliAdapterSpec, 'bins'>, search: CliSearchSpec, stdout: string, count?: number, now?: number): WebSearchSource[];
 /** Split a query into words; double quotes keep a phrase in one word (`a "b c" d` -> `a`, `b c`, `d`) and are dropped. */
@@ -100,6 +106,12 @@ export interface CliRunOptions {
     skipCredentialGate?: boolean;
     /** Test seam: the clock `{ time }` fields read relative texts (`3小时前`) against. */
     now?: number;
+    /** Sees what the command printed (secrets redacted) before it is interpreted: the settings card's trial shows the tool's own words. */
+    observe?: (result: {
+        code: number;
+        stdout: string;
+        stderr: string;
+    }) => void;
 }
 /**
  * Run one spec command for a query and return its sources. Throws {@link CliAdapterError} (CLI_NOT_FOUND,

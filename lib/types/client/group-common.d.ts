@@ -6,7 +6,7 @@
  */
 import { type Card } from './field-rows.tsx';
 /** The names of the common group's fields, in order. */
-export declare const COMMON_FIELDS: readonly ["engines", "searchMaxResults", "parallelEngines", "toolSurface", "allowProxyFakeIp", "deepseekFetch"];
+export declare const COMMON_FIELDS: readonly ["searchMaxResults", "parallelEngines", "toolSurface", "allowProxyFakeIp", "deepseekFetch"];
 export declare function CommonGroup({ card }: {
     card: Card;
 }): import("react").JSX.Element;

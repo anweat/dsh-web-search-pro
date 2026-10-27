@@ -113,6 +113,9 @@ export declare function shapeSources(sources: readonly {
     lowConfidence?: boolean;
     rerankScore?: number | null;
     authority?: number | null;
+    via?: string | null;
+    tag?: string | null;
+    confidence?: number | null;
 }[], count: number): {
     url: string;
     title?: string;
@@ -121,4 +124,7 @@ export declare function shapeSources(sources: readonly {
     rerankScore?: number;
     authority?: number;
     lowConfidence?: true;
+    via?: string;
+    confidence?: number;
+    tag?: string;
 }[];

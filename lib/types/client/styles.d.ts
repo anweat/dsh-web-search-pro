@@ -57,5 +57,11 @@ export declare const styles: {
     readonly codeBlock: "wsp-code-block";
     readonly table: "wsp-table";
     readonly chain: "wsp-chain";
+    readonly why: "wsp-why";
+    readonly orderBar: "wsp-order-bar";
+    readonly tokens: "wsp-tokens";
+    readonly tokenRow: "wsp-token-row";
+    readonly trialOut: "wsp-trial-out";
+    readonly trialBar: "wsp-trial-bar";
 };
 export declare function ensureStyles(): void;

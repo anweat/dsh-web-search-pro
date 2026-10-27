@@ -3,6 +3,7 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import { type RubricKind } from '../pipeline/rubrics-spec.ts';
 import type { Context } from './context-types.ts';
 import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, type CredentialId, type FieldSpec, type SettingField } from './form-specs.ts';
+import { type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts';
 export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS };
 export type { CredentialId, SettingField };
 export interface CardFieldState {
@@ -45,6 +46,21 @@ export interface RubricCardState {
     invalid: boolean;
     problems: string[];
 }
+/** What the card knows from the running plugin over its private RPC channel (rpc-types.ts); empty where the Host has no transport. */
+export interface ServerState {
+    /** The Host has the transport: live readiness and "Try it" are possible. */
+    available: boolean;
+    loading: boolean;
+    failed: boolean;
+    status?: StatusView;
+    /** The trial run of a custom CLI draft: idle, running, or the last outcome. */
+    trial: {
+        state: 'idle' | 'running' | 'done' | 'failed';
+        id?: string;
+        result?: TrialResult;
+        error?: string;
+    };
+}
 export interface WebSearchCardState {
     available: boolean;
     writable: boolean;
@@ -61,9 +77,12 @@ export interface WebSearchCardState {
     rubrics: RubricCardState[];
     /** Overrides in settings that name no built-in rubric. */
     unknownRubrics: string[];
+    server: ServerState;
 }
 /** Every field spec of the form model, in display order. */
 export declare const ALL_SPECS: readonly FieldSpec[];
+/** The specs of the dynamic fields among `fields` (the text view prints them next to the fixed ones). */
+export declare function dynamicSpecsOf(fields: Readonly<Record<string, unknown>>): FieldSpec[];
 export declare class WebSearchSettingsController {
     private readonly scope;
     private readonly ctx;
@@ -79,7 +98,16 @@ export declare class WebSearchSettingsController {
     private credentialGeneration;
     private credentialRefSignature;
     private credentialStates;
+    private server;
+    private trialGeneration;
     constructor(scope: ConfigForm<Record<string, unknown>>, ctx: Context);
+    /** The Host's RPC client, read when it is used (the service may arrive after the card was registered); undefined where there is none. */
+    private rpc;
+    /** Ask the plugin what is ready now (the same local probes as `sources.status`). Silent when the Host has no transport. */
+    refreshStatus(): Promise<void>;
+    /** Run one search of a custom CLI draft (rpc-types.ts `trial`). The outcome lands in `server.trial`. */
+    runTrial(request: TrialRequest): Promise<void>;
+    clearTrial(): void;
     inject(): {
         hooks: {
             webSearchPro: SnapshotStore<WebSearchCardState>;
@@ -93,6 +121,9 @@ export declare class WebSearchSettingsController {
         save: () => void;
         discard: () => void;
         refreshCredentials: () => void;
+        refreshStatus: () => void;
+        runTrial: (request: TrialRequest) => void;
+        clearTrial: () => void;
     };
     snapshot(): WebSearchCardState;
     edit(field: SettingField, text: string): void;
@@ -133,6 +164,8 @@ export declare class WebSearchSettingsController {
     private writeCredential;
     /** The credentials ref / environment variable name each key is read from, from the saved settings (else the default). */
     private credentialRefs;
+    /** The `sources.confidence.<id>` fields that hold a value now or in the draft: the card shows these ids with their values. */
+    private dynamicFields;
     private spec;
     private resolvedRoot;
     private sectionValue;

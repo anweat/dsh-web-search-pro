@@ -111,6 +111,12 @@ export interface SourcesConfig {
      * `budget: { bocha: { total: 1000, daily: 50 } }`.
      */
     budget?: Record<string, SourceBudgetInput>;
+    /**
+     * Confidence (0..1) per source id, including the platform backends of a chain (`xhs`, `browser-search`, `custom-cli:<id>`).
+     * Built-in sources have 1; a custom CLI has the `confidence` of its spec (default 0.5) unless it is set here. It scales the
+     * source's weight in rank fusion a little (pipeline/confidence.ts) and is printed with its results; 1 changes nothing.
+     */
+    confidence?: Record<string, number>;
 }
 export interface Config {
     /** SQLite database path; defaults to $DSH_HOME/data/web-search-pro/store.db */
@@ -359,6 +365,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             total: z<number, number, "plain">;
             daily: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
         disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
@@ -369,6 +376,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             total: z<number, number, "plain">;
             daily: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
@@ -824,6 +832,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             total: z<number, number, "plain">;
             daily: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
     }>>, Schemastery.ObjectT<NoInfer<{
         priority: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
         disabled: z<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
@@ -834,6 +843,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
             total: z<number, number, "plain">;
             daily: z<number, number, "plain">;
         }>>, string>>, "volatile">;
+        confidence: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
     }>>, "plain">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;

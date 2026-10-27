@@ -21,6 +21,17 @@ export type CliVerification = typeof CLI_VERIFICATIONS[number];
  * or undefined for `live` and for backends that are not CLI specs.
  */
 export declare function verificationTag(status: string): string | undefined;
+/** The verification word of a user-defined spec: it is unverified by definition and says so in every result it returns. */
+export declare const USER_DEFINED = "user-defined";
+/** The honest label a custom CLI's results and chain entries carry. */
+export declare const USER_DEFINED_TAG = "user-defined, not verified by the plugin (\u7528\u6237\u81EA\u5B9A\u4E49\uFF0C\u672A\u7ECF\u63D2\u4EF6\u9A8C\u8BC1)";
+/** Confidence of a custom CLI whose spec gives none: below the built-in sources (1), because nothing here checked its output. */
+export declare const DEFAULT_CUSTOM_CONFIDENCE = 0.5;
+/** Default and largest size of a whole-output result's text, in characters (`output.lines.maxChars`). */
+export declare const WHOLE_OUTPUT_DEFAULT_CHARS = 2000;
+export declare const WHOLE_OUTPUT_MAX_CHARS = 8000;
+/** Scheme of the stand-in link of a whole-output result (`cli://<id>?q=<query>`): not a web page, so nothing fetches it. */
+export declare const WHOLE_OUTPUT_SCHEME = "cli://";
 export declare const CLI_ERROR_CODES: readonly ["CLI_NOT_FOUND", "CLI_CONTRACT_MISMATCH", "CLI_NOT_LOGGED_IN", "ENGINE_EMPTY", "CLI_FAILED"];
 export type CliErrorCode = typeof CLI_ERROR_CODES[number];
 /**
@@ -79,15 +90,23 @@ export interface CliOutputSpec {
     }[];
     /** Paths of the tool's own error text, read when `expect` fails (first non-empty one). */
     errorPaths?: readonly string[];
-    /** text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`). */
+    /**
+     * text: how a line becomes an item (`tsv`: tab separated columns; `url-lines`: lines holding a URL, `url` + `title`; `whole`: the
+     * whole stdout is ONE result, for a tool that prints just a block of text: its text capped at `maxChars` (default
+     * {@link WHOLE_OUTPUT_DEFAULT_CHARS}) with a note when it was cut, the title "<id>: <query>" and the link `cli://<id>?q=<query>`).
+     */
     lines?: {
         mode: 'tsv';
         columns: readonly string[];
     } | {
         mode: 'url-lines';
+    } | {
+        mode: 'whole';
+        maxChars?: number;
     };
-    fields: {
-        url: FieldSource;
+    /** Required (with `url`) for every mode except `whole`, which maps nothing. */
+    fields?: {
+        url?: FieldSource;
         title?: FieldSource;
         snippet?: FieldSource;
         publishedAt?: FieldSource;
@@ -183,8 +202,15 @@ export interface CliAdapterSpec {
     bins: readonly string[];
     /** What the package is called, which can differ from the command (`pip install pyzhihu-cli` runs `zhihu`). */
     packageNote: string;
-    /** Platform ids the spec can serve (`search.run platform=`); a user spec's platform is `custom-cli:<id>`. */
+    /**
+     * Platform ids the spec serves: the platforms whose backend chain it may sit in (`platformBackends.<platform>`). A user spec is
+     * also a platform of its own, `custom-cli:<id>`, and may list none when it is a general `engine`.
+     */
     platforms: readonly string[];
+    /** User specs only: also a general search engine, listed in `engines` as `custom-cli:<id>` (fused and de-duplicated with the others). */
+    engine?: boolean;
+    /** User specs only: 0..1, default {@link DEFAULT_CUSTOM_CONFIDENCE}. `sources.confidence.custom-cli:<id>` overrides it. */
+    confidence?: number;
     probe: CliProbeSpec;
     /** Every command word the argv templates use. */
     allowedSubcommands: readonly string[];

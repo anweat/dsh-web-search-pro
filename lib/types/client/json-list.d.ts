@@ -18,4 +18,4 @@ export declare function JsonList({ card, fields }: {
     fields: readonly string[];
 }): import("react").JSX.Element;
 /** The fields of one group of JSON settings. */
-export declare const jsonFieldsOf: (group: "judge" | "runtime" | "platform") => string[];
+export declare const jsonFieldsOf: (group: "judge" | "runtime" | "platform" | "advanced") => string[];

@@ -20,7 +20,9 @@ export type RubricField = `evidence.rubrics.${string}`;
 export type KeyedField = `keyedSources.${string}.apiKeyEnv` | `keyedSources.${string}.baseUrl`;
 /** One axis of one source's request budget (`sources.budget.<id>.total|daily`). */
 export type BudgetField = `sources.budget.${string}.${'total' | 'daily'}`;
-export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField;
+/** The confidence of one source or platform backend (`sources.confidence.<id>`): the ids are open, so these fields are made on demand. */
+export type ConfidenceField = `sources.confidence.${string}`;
+export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField | ConfidenceField;
 export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources';
 export type FieldWrite = {
     kind: 'set';
@@ -108,6 +110,10 @@ export declare const KEYED_SPECS: readonly PathSpec[];
 /** The sources the card has a request budget for: Bocha and the keyed sources (any registered id works in settings.yaml). */
 export declare const BUDGETED_SOURCES: readonly string[];
 export declare const BUDGET_SPECS: readonly PathSpec[];
+/** `sources.confidence.<id>`: a number 0..1; empty = the default (1 for a built-in source, the spec's own for a custom CLI). */
+export declare const confidenceSpec: (id: string) => PathSpec;
+export declare const confidenceField: (id: string) => ConfidenceField;
+export declare const CONFIDENCE_PREFIX = "sources.confidence.";
 /** The spec of a rubric override entry: the whole object as one JSON draft, which the rubric editor builds field by field. */
 export declare const rubricSpec: (id: string) => PathSpec;
 export declare const rubricField: (id: string) => RubricField;

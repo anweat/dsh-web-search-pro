@@ -8,8 +8,11 @@
  * @module web-search-pro/client/card-frame
  */
 import { type ReactNode } from 'react';
+import { type ChainInput } from '../default-chain.ts';
 import { type Card } from './field-rows.tsx';
 import type { WebSearchCardState } from './form.ts';
+/** What the default chain rule reads from the staged settings: the list, the preferences, the ready common sources, the policy. */
+export declare function chainInputOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials'>): ChainInput;
 /** The chain a plain search would try, from the staged settings; undefined when the draft leaves nothing to try. */
 export declare function chainOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials'>): string[] | undefined;
 /** Everything the warnings badge counts: what the validation says about a field, and the rubric problems. */

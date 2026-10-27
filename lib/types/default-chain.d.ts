@@ -24,3 +24,40 @@ export interface ChainInput {
  * it gave a common source), then the rest. Throws when everything is disabled.
  */
 export declare function effectiveChain(input: ChainInput): string[];
+/** One reason the effective chain differs from the `engines` list as written. */
+export type ChainReason = 
+/** `sources.disabled` removed these from the list. */
+{
+    kind: 'disabled';
+    ids: string[];
+}
+/** `sources.priority` moved these to the front. */
+ | {
+    kind: 'priority';
+    ids: string[];
+}
+/** The default rule put these ready common ("常用") sources in front of the list. */
+ | {
+    kind: 'common';
+    ids: string[];
+}
+/** `evidence.sourcePolicy: anonymous-only` kept these ready common sources out (they need a key). */
+ | {
+    kind: 'anonymous-only';
+    ids: string[];
+}
+/** The list is the user's own, so these ready common sources are not added (they keep their place only if the list names them). */
+ | {
+    kind: 'own-list';
+    ids: string[];
+};
+export interface ChainExplanation {
+    /** What a plain search would try, in order ({@link effectiveChain}); undefined when everything is disabled. */
+    chain: string[] | undefined;
+    reasons: ChainReason[];
+}
+/**
+ * {@link effectiveChain} plus why it differs from the list: the preview of the settings card says it in one sentence per reason, so
+ * a person who sees `deepseek` first in a list that does not begin with it knows which rule did that. Same inputs, same rule.
+ */
+export declare function explainChain(input: ChainInput): ChainExplanation;

@@ -20,6 +20,10 @@
  * {@link PROVIDER_SIGNAL_BOOST}) is, like the others, a fraction of ONE top-rank step: with the default boosts the three
  * bonuses together can never reach one rank position (0.2 + 0.25 + 0.3 = 0.75). A provider that grades its own results already
  * orders them, so the signal mostly arbitrates between providers; it never lifts a rank-10 result over a rank-1 one.
+ *
+ * Source confidence (confidence.ts) scales each provider's RRF term by `factor(c)` in [0.8, 1] and the bonus of a URL by the best factor
+ * among the providers that returned it; a provider without a confidence, which is every built-in source, has factor exactly 1 and the
+ * scores are what they were without it.
  * @module web-search-pro/pipeline/fusion
  */
 import type { Candidate } from './types.ts';

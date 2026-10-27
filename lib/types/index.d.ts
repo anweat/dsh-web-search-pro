@@ -138,6 +138,7 @@ declare const _default: {
                 total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
                 daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
             }>>, string>>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
         }>>, Schemastery.ObjectT<NoInfer<{
             priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
             disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
@@ -148,6 +149,7 @@ declare const _default: {
                 total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
                 daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
             }>>, string>>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
         }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
@@ -603,6 +605,7 @@ declare const _default: {
                 total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
                 daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
             }>>, string>>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
         }>>, Schemastery.ObjectT<NoInfer<{
             priority: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
             disabled: import("@deepseek-ai/schemastery").default<NoInfer<string[]>, NoInfer<string[]>, "volatile">;
@@ -613,6 +616,7 @@ declare const _default: {
                 total: import("@deepseek-ai/schemastery").default<number, number, "plain">;
                 daily: import("@deepseek-ai/schemastery").default<number, number, "plain">;
             }>>, string>>, "volatile">;
+            confidence: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<number, string>>, "volatile">;
         }>>, "plain">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;

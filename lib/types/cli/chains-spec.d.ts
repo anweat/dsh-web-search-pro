@@ -23,6 +23,8 @@ export declare const BROWSER_SEARCH_PLATFORMS: readonly string[];
 export declare const REST_PLATFORMS: readonly string[];
 /** Backend ids that are not CLI specs. */
 export declare const FIXED_BACKENDS: readonly ["opencli", "browser-opencli", "browser-search", "rest"];
+/** Whether `id` names a platform backend: a built-in CLI spec, a fixed backend, or a custom CLI (`custom-cli:<id>`). */
+export declare function isBackendId(id: string): boolean;
 export interface BackendServing {
     ok: boolean;
     why?: string;
@@ -37,6 +39,8 @@ export declare function specPlatformsOf(cliAdapters: unknown): {
     platforms: Map<string, readonly string[]>;
     diagnostics: string[];
 };
+/** The declared platforms of the user's CLI adapters that no backend chain exists for (the spec would serve nothing there). */
+export declare function customCliPlatformIssues(cliAdapters: unknown): string[];
 /**
  * Every problem of the `platformBackends` setting (shape, unknown platform, unknown or foreign backend id) given the
  * `cliAdapters` setting. The settings card and `sources.status` both call this.

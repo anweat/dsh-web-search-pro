@@ -7,7 +7,7 @@
 import type { Engine, EngineDeps } from '../engines.ts';
 import { CliAdapterError } from './runner.ts';
 import { type CliProbeResult } from './probe.ts';
-import type { CliAdapterSpec } from './spec.ts';
+import { type CliAdapterSpec } from './spec.ts';
 import type { runCli } from '../util.ts';
 /** Why a spec is switched off by settings, or undefined when it may run. */
 export declare function disabledBySettings(spec: Pick<CliAdapterSpec, 'id'>, deps: Pick<EngineDeps, 'enableCli' | 'agentReachEnabled'>): string | undefined;
@@ -26,6 +26,8 @@ export interface CliLegOptions {
     home?: string;
     /** The credentials are checked by the caller (the legacy twitter engine). */
     skipCredentialGate?: boolean;
+    /** A user-defined spec: every row it returns says which CLI it came from and that nothing here verified it. */
+    userDefined?: boolean;
 }
 /** The probe verdict as the structured error a search would raise, or undefined when the command is usable. */
 export declare function probeError(spec: Pick<CliAdapterSpec, 'bins' | 'packageNote'>, probe: CliProbeResult): CliAdapterError | undefined;

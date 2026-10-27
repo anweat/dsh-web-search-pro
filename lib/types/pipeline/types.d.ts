@@ -55,6 +55,15 @@ export interface Contribution {
     rank: number;
     /** The exact query sent to the provider (may be a compiled variant). */
     query: string;
+    /** The source's confidence (0..1), present only when it is below 1: a custom CLI, or a source the user set `sources.confidence` for. */
+    confidence?: number;
+}
+/** Where a result of a user-defined source came from: shown with the result and never merged away. */
+export interface CandidateOrigin {
+    /** Ids of the custom CLIs that returned the URL (`custom-cli:echo`). */
+    via: string[];
+    /** The honest label of these sources: user-defined, not verified by the plugin. */
+    tag: string;
 }
 export type Satisfied = 'yes' | 'no' | 'unknown';
 export interface ConstraintCheck {
@@ -94,6 +103,8 @@ export interface Candidate {
     signals?: CandidateSignals;
     /** Every (provider, rank, query) that returned this URL. */
     contributions: Contribution[];
+    /** Set when a user-defined CLI returned the URL. */
+    origin?: CandidateOrigin;
     checks?: ConstraintCheck[];
     gate?: GateVerdict;
 }
@@ -121,6 +132,12 @@ export interface PageBlock {
     providers: string[];
     /** The candidate only passed the S4 floor, not the relevance gate. */
     lowConfidence?: true;
+    /** Custom CLI that returned the page's URL, the label it carries, and the best confidence among the sources that returned it (below 1 only). */
+    origin?: {
+        via?: string;
+        tag?: string;
+        confidence?: number;
+    };
     block: Block;
 }
 /** `grade` is 0..3 (rule: integer buckets; Jev: the level expectation). `rank` is a finer tie-breaker. */
@@ -149,6 +166,10 @@ export interface EvidenceItem {
     source: string;
     /** The page's candidate failed the relevance gate and was kept only by the floor. */
     lowConfidence?: true;
+    /** The custom CLI(s) that returned the page, the best confidence among its sources (below 1 only) and the honest label. */
+    via?: string;
+    confidence?: number;
+    tag?: string;
 }
 export type GapReason = 'no_candidates' | 'no_page_content' | 'weak_support' | 'budget';
 export interface Gap {
@@ -244,6 +265,9 @@ export interface EvidencePack {
         rerankScore?: number;
         authority?: number;
         lowConfidence?: true;
+        via?: string;
+        confidence?: number;
+        tag?: string;
     }[];
     engine: string;
     enginesTried: string[];

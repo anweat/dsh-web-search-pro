@@ -47,14 +47,19 @@ export interface PlatformRequest {
     authProfile?: string;
     rulePack?: string;
 }
+/** A result row as the router returns it; `via`, `confidence` and `tag` appear for custom CLIs and for sources with a confidence below 1. */
+export type RouterSource = {
+    url: string;
+    title?: string;
+    snippet?: string;
+    publishedAt?: string;
+    via?: string;
+    confidence?: number;
+    tag?: string;
+};
 export interface RouterSearchResult {
     content?: string;
-    sources: {
-        url: string;
-        title?: string;
-        snippet?: string;
-        publishedAt?: string;
-    }[];
+    sources: RouterSource[];
     engine: string;
     enginesTried: string[];
     fromCache: boolean;
@@ -97,8 +102,12 @@ export interface ProviderReport {
     unverified?: boolean;
     /** "常用": the plugin's recommended source (descriptor.common). With a resolved key it leads the default order. */
     common?: boolean;
+    /** Confidence (0..1) of what this source returns: 1 for a built-in source unless `sources.confidence` says otherwise; a custom CLI has its spec's. */
+    confidence: number;
     /** Platforms with an ordered backend chain: each backend, in order, with its readiness or the reason it is skipped. */
-    chain?: ChainEntryReport[];
+    chain?: (ChainEntryReport & {
+        confidence: number;
+    })[];
     readiness: Readiness & {
         state?: ChainReport['state'];
         lastLocalCheck: string;
@@ -126,6 +135,8 @@ export declare class SearchRouter {
     /** User-defined CLI adapters (settings `cliAdapters`) this router registered as `custom-cli:<id>` platforms, with the diagnostics of the entries it ignored. */
     private readonly customCli;
     private cliAdapterDiagnostics;
+    /** Confidence of each registered custom CLI by route id (its spec's, default 0.5), rebuilt with the registrations. */
+    private customConfidence;
     /** Latest local probe per route id (read by providerStatuses for the credential dimension). */
     private readonly readiness;
     /** Last real call per route id: feeds the health dimension (never inferred from a local probe). */
@@ -220,6 +231,16 @@ export declare class SearchRouter {
     requestBudgetOf(route: string): RequestBudgetState | undefined;
     /** Problems of the `sources.*` settings (unknown ids, bad numbers), for `sources.status`. */
     sourceDiagnostics(): string[];
+    /** The confidence of one platform backend as a leg of a chain (`xhs`, `custom-cli:echo`): its own, without the provider's. */
+    backendConfidenceOf(id: string): number;
+    /** `sources.confidence` by canonical id (a provider's route id; a platform backend id as written), valid entries only. */
+    private confidenceOverrides;
+    /**
+     * The confidence (0..1) of what `route` returned, through `backend` when it is a platform chain: `sources.confidence` of the
+     * provider times that of the backend that answered, each defaulting to the custom CLI's own (spec `confidence`, 0.5) and to 1
+     * for every built-in source, so the built-in ones are 1 unless the user set something.
+     */
+    confidenceOf(route: string, backend?: string): number;
     /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
     private usageRecorder;
     /** Whether any configured engine is currently usable. */

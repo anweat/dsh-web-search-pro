@@ -110,6 +110,7 @@ export declare function TextInput(props: {
     numeric?: boolean;
     ariaLabel?: string;
     code?: boolean;
+    small?: boolean;
 }): import("react").JSX.Element;
 /** A text input followed by a fixed unit. */
 export declare function UnitInput(props: {
@@ -162,6 +163,7 @@ export declare function Btn(props: {
     danger?: boolean;
     title?: string;
     data?: string;
+    ariaLabel?: string;
 }): import("react").JSX.Element;
 /** A list row: a title with badges, a meta line, and actions on the right. */
 export declare function Item(props: {

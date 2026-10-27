@@ -32,7 +32,7 @@ export declare function sourceFields(def: SourceDef): string[];
 /** Fields shown as JSON objects, each in its own dialog: the field, the group it sits in. */
 export declare const JSON_FIELDS: readonly {
     field: string;
-    group: 'judge' | 'runtime' | 'platform';
+    group: 'judge' | 'runtime' | 'platform' | 'advanced';
 }[];
 /** Group of the text view each plain field is printed under (the others are listed explicitly where they are built). */
 export declare const TEXT_GROUP: Readonly<Record<string, string>>;
