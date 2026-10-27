@@ -9,10 +9,11 @@
 import type { OverlayItem } from '../overlay-types.ts';
 import { type Card } from './field-rows.tsx';
 /** One overlay entry: what it is, the value the agent set against the one in the configuration, why and when, and the two buttons. */
-export declare function AgentItem({ card, item, busy }: {
+export declare function AgentItem({ card, item, busy, items }: {
     card: Card;
     item: OverlayItem;
     busy: boolean;
+    items: readonly OverlayItem[];
 }): import("react").JSX.Element;
 export declare function AgentGroup({ card }: {
     card: Card;

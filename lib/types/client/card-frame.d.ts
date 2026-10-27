@@ -15,6 +15,11 @@ import type { WebSearchCardState } from './form.ts';
 export declare function chainInputOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials'>): ChainInput;
 /** The chain a plain search would try, from the staged settings; undefined when the draft leaves nothing to try. */
 export declare function chainOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials'>): string[] | undefined;
+/**
+ * The chain a plain search tries once the agent's changes (engines, priority, disabled of the overlay) are on top of the staged settings,
+ * by the same rule; undefined while the agent changed none of the three, an empty list when it would leave nothing to try.
+ */
+export declare function agentChainOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials' | 'server'>): string[] | undefined;
 /** Everything the warnings badge counts: what the validation says about a field, and the rubric problems. */
 export declare function warningsOf(snapshot: WebSearchCardState, t: Card['t']): string[];
 export declare function SummaryBar({ card }: {

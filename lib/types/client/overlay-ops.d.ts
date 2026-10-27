@@ -29,3 +29,9 @@ export declare function adoptionOf(item: Pick<OverlayItem, 'kind' | 'target' | '
 export declare function overlayKeyOfField(field: string): string | undefined;
 /** `2026-10-27 22:35` in the viewer's time zone; the text itself when it is no date. */
 export declare function formatTime(iso: string): string;
+/**
+ * The custom CLIs an overlay item leans on that only the overlay holds: an engine list or a platform chain that names `custom-cli:<id>`
+ * where `cliAdapters.<id>` is itself an overlay entry. Adopting such an item alone would leave the configuration naming a CLI it does not
+ * define, so the card says to adopt the CLI too.
+ */
+export declare function overlayCliDependencies(item: Pick<OverlayItem, 'kind' | 'value'>, items: readonly Pick<OverlayItem, 'key'>[]): string[];

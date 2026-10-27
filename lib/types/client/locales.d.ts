@@ -553,6 +553,9 @@ export declare const zh: {
     readonly summaryAgentOpen: "查看";
     readonly agentCliTitle: "agent 添加的 CLI";
     readonly agentCliNote: "这些 CLI 只在覆盖文件里，不在上面的列表里。";
+    readonly orderAgentChain: "加上 agent 的修改后实际尝试顺序：";
+    readonly orderAgentChainNone: "加上 agent 的修改后没有可用的引擎（全部被停用）。";
+    readonly agentNeedsCli: "用到了只存在于覆盖层的自定义 CLI：{ids}。采纳时请连这个 CLI 一起采纳，否则你的配置会引用一个它没有定义的 CLI。";
 };
 export declare const en: {
     readonly tab: "Web Search Pro";
@@ -1103,4 +1106,7 @@ export declare const en: {
     readonly summaryAgentOpen: "view";
     readonly agentCliTitle: "CLIs added by an agent";
     readonly agentCliNote: "These CLIs live only in the overlay file, so they are not in the list above.";
+    readonly orderAgentChain: "With the agent's changes a search tries:";
+    readonly orderAgentChainNone: "With the agent's changes no engine is left (all are disabled).";
+    readonly agentNeedsCli: "Uses a custom CLI that only the overlay holds: {ids}. Adopt that CLI too, or your configuration will name a CLI it does not define.";
 };
