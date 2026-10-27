@@ -23,13 +23,20 @@ export type CliVerification = typeof CLI_VERIFICATIONS[number];
 export declare function verificationTag(status: string): string | undefined;
 export declare const CLI_ERROR_CODES: readonly ["CLI_NOT_FOUND", "CLI_CONTRACT_MISMATCH", "CLI_NOT_LOGGED_IN", "ENGINE_EMPTY", "CLI_FAILED"];
 export type CliErrorCode = typeof CLI_ERROR_CODES[number];
-/** One piece of a joined field: a path, optionally with text put before / after the value, or a `{ template }` over the item (dropped when a placeholder is empty). */
+/**
+ * One piece of a joined field: a path, optionally with text put before / after the value, a `{ template }` over the item (dropped
+ * when a placeholder is empty), or a `{ time }` path whose text is read as a time (see {@link FieldSource}) and dropped when it is not one.
+ */
 export type JoinPart = string | {
     path: string;
     prefix?: string;
     suffix?: string;
 } | {
     template: string;
+} | {
+    time: string;
+    prefix?: string;
+    suffix?: string;
 };
 /** `{ template }` fills `{path}` placeholders from the item and yields nothing when one is empty; `when` makes it apply to one kind of item. */
 export interface TemplateSource {
@@ -45,7 +52,11 @@ export interface TemplateSource {
  *  - a list of paths and templates: the first non-empty one wins;
  *  - `{ template }`: `{path}` placeholders over the item, dropped when any of them is empty;
  *  - `{ join }`: the non-empty parts joined with `sep` (default ` | `);
- *  - `{ epoch }`: a Unix timestamp (seconds) as an ISO date; `{ date }`: the date part (first 10 characters) of an ISO timestamp.
+ *  - `{ epoch }`: a Unix timestamp (seconds) as an ISO date; `{ date }`: the date part (first 10 characters) of an ISO timestamp;
+ *  - `{ time }`: a time text the tool prints (ISO, the X API's `created_at`, `2026-10-27`, `08-26`, `3小时前`, `昨天 10:20`, ...) as an
+ *    ISO date or timestamp, and nothing when the text is none of the exactly known formats (see cli/time-text.ts).
+ * A dotted path may hold a `key=value` segment that picks the first element of an array with that field value
+ * (`note_card.corner_tag_info.type=publish_time.text`).
  */
 export type FieldSource = string | readonly (string | TemplateSource)[] | TemplateSource | {
     join: readonly JoinPart[];
@@ -54,6 +65,8 @@ export type FieldSource = string | readonly (string | TemplateSource)[] | Templa
     epoch: string;
 } | {
     date: string;
+} | {
+    time: string;
 };
 export interface CliOutputSpec {
     format: OutputFormat;
@@ -79,6 +92,11 @@ export interface CliOutputSpec {
         snippet?: FieldSource;
         publishedAt?: FieldSource;
     };
+    /** Items whose `path` equals the value are not results at all and are not counted as skipped (xhs: `model_type` is `hot_query` for the suggestion cards its result list also carries). */
+    skipWhen?: {
+        path: string;
+        equals: string | number | boolean;
+    };
     /** Strip HTML tags from title and snippet. */
     stripTags?: boolean;
     /** Values read as "empty" (`None`). */
@@ -89,6 +107,33 @@ export interface CliOutputSpec {
     titleMax?: number;
     /** Drop items without a title (a line that is not a result). */
     requireTitle?: boolean;
+}
+/**
+ * How a tool reports a failed command in its machine-readable format (a YAML / JSON payload on stderr, else stdout), and what
+ * each of its error codes means. A listed code is mapped to a structured plugin error; a code that is not listed keeps the
+ * tool's own message (`<tool> search failed: [CODE] message`).
+ */
+export interface CliErrorCodesSpec {
+    /** Dotted path of the tool's error code in the failure payload (`error.code`). */
+    codePath: string;
+    /** Dotted path of its message (`error.message`). */
+    messagePath?: string;
+    /** Codes that mean "not logged in" (CLI_NOT_LOGGED_IN). */
+    notLoggedIn?: readonly string[];
+    /** Exit codes that mean "not logged in" when the output carries no readable code. */
+    notLoggedInExit?: readonly number[];
+    /** Codes that mean "no results" (ENGINE_EMPTY). */
+    empty?: readonly string[];
+    /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
+    blocked?: readonly string[];
+    /** Case-insensitive fragments of the tool's message that mean the same (a JSON parse error on an HTML page: `Unexpected token '<'`). */
+    blockedPatterns?: readonly string[];
+    /** Codes that mean the tool cannot reach its browser (CLI_FAILED, not retryable). */
+    unavailable?: readonly string[];
+    /** Codes that mean a timeout (ENGINE_TIMEOUT). */
+    timeout?: readonly string[];
+    /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
+    usage?: readonly string[];
 }
 export interface CliSearchSpec {
     /**
@@ -109,6 +154,8 @@ export interface CliSearchSpec {
     emptyWhen?: readonly string[];
     /** Case-insensitive fragments of the tool's output that mean "not logged in" (maps to CLI_NOT_LOGGED_IN). */
     notLoggedInPatterns?: readonly string[];
+    /** The tool's structured error codes (checked before the fragments above). */
+    errorCodes?: CliErrorCodesSpec;
 }
 export interface CliProbeSpec {
     versionArgs: readonly string[];
@@ -122,7 +169,9 @@ export interface CliProbeSpec {
 }
 export interface CliLoginSpec {
     /** What the user runs themselves (`xhs login`); never run by the plugin. */
-    command: string;
+    command?: string;
+    /** What the user does, in words, when the tool takes its login from somewhere the plugin cannot run (the login of the user's own Chrome): shown instead of a command. One of `command` / `hint` is required. */
+    hint?: string;
     /** Home-relative files that exist once the user has logged in. Only their existence is checked, never their content. */
     savedCredentialPaths?: readonly string[];
     /** The tool reads the browser's cookies by itself when it has no saved login: then it is never run without one. */

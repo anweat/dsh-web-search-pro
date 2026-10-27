@@ -4,12 +4,17 @@
  * ids exist and which platforms each can serve.
  * @module web-search-pro/cli/chains-spec
  */
-/** The default chain of each platform: first usable backend answers, empty or failing ones fall through in order. */
+import { OPENCLI_SITE_OF } from './opencli-sites.ts';
+/**
+ * The default chain of each platform: first usable backend answers, empty or failing ones fall through in order. The platforms
+ * that need a login (xiaohongshu, reddit, twitter, zhihu) try the standalone OpenCLI first: it reads the login of the user's
+ * own day-to-day Chrome through the OpenCLI Browser Bridge, so nothing is logged in by the plugin. The standalone CLIs
+ * (xhs, rdt, twitter, zhihu) stay as the optional fallback for users who logged them in themselves.
+ */
 export declare const DEFAULT_CHAINS: Readonly<Record<string, readonly string[]>>;
 /** Platforms whose provider is a chain (everything in the default table). */
 export declare const CHAIN_PLATFORMS: readonly string[];
-/** Platform -> site of the standalone OpenCLI (`opencli <site> search`). */
-export declare const OPENCLI_SITE_OF: Readonly<Record<string, string>>;
+export { OPENCLI_SITE_OF };
 /** Platforms the dsh-browser OpenCLI bridge has a site adapter for (pinned to engines.ts by a test). */
 export declare const BROWSER_OPENCLI_PLATFORMS: readonly string[];
 /** Platforms with a built-in rendered-search-page spec in dsh-browser's searchResults (pinned to platform-search.ts by a test). */
