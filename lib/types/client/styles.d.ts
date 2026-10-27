@@ -64,4 +64,8 @@ export declare const styles: {
     readonly trialOut: "wsp-trial-out";
     readonly trialBar: "wsp-trial-bar";
 };
+/**
+ * Inject the card's stylesheet, or refresh it in place. A Host that hot-reloads the plugin keeps the page (and the
+ * `<style>` an older version injected), so an existing element gets the current CSS instead of being kept as is.
+ */
 export declare function ensureStyles(): void;

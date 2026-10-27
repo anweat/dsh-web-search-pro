@@ -1,6 +1,6 @@
 # 更新记录
 
-## 0.2.3（开发中）
+## 0.2.3（2026-10-28）
 
 接入 **DeepSeek Search / Fetch API**（[文档](https://api-docs.deepseek.com/guides/search/)，2026-10-17 上线）并标为“**常用**”。兼容范围与 0.2.2 相同（DSH `>=0.2.1-rc.2 <0.2.2-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更，Config schema 只增不改（`deepseekFetch`、`keyedSources.deepseek`；`playwright.snapshotDir` 现在声明为 volatile，见下文面板保存的修复）。
 
@@ -36,6 +36,10 @@
 ### 审批前先校验参数（2026-10-27）
 
 要审批的动作（`config.upsert_cli`、`cache.clear`、`history.delete`、`rules.*`、`sources.install`）现在先做和 `runAction` 同一套的参数校验（参数 schema，外加动作可选的 `precheck`；`config.upsert_cli` 的 `precheck` 就是写覆盖层时用的那套完整 `id` / `spec` 校验，一条一条列出问题），不合法就不问用户：钩子直接放行，`runAction` 在 `execute` 之前返回 `INVALID_ARGS` 和 schema，不执行、不写覆盖层、不记审计。之前真实模型会话里 `config.upsert_cli` 连 `id` 和 `spec` 都没给就进了审批，headless 下被拒（“requires approval, but no approval channel is available”），模型拿不到 schema。参数合法时审批判定不变；`automationMode=read-only` 下，合法的写入照样被拒，不合法的返回 `INVALID_ARGS`（没有东西会执行，给模型 schema 比一句拒绝更有用）。校验自身出错不会卡住调用。新增 8 项测试（含 flat 工具面与无审批渠道的宿主）。
+
+### 修复：热重载后设置页样式丢失（2026-10-28）
+
+宿主热重载插件时页面不刷新，旧版本注入的 `<style id="web-search-pro-settings-styles">` 还在，而注入函数见到它就直接返回，新版本的类名没有任何规则，设置卡片只剩文字、没有框（桌面端升级后出现，完全重启桌面端后恢复）。现在已有的 `<style>` 会换成当前版本的 CSS。
 
 ### DeepSeek 搜索（引擎 `deepseek`，“常用”）
 
@@ -90,7 +94,9 @@
 - 真实调用 **8 次 Search + 4 次 Fetch**（`docs/validation/dsh-web-search-pro-0.2.3.md`）：结果结构与全部字段、`site:` / `-site:` / `after:` 运算符、128 字符上限（HTTP 400）、401 / 404 错误体、Fetch 的 Markdown 都按预期；与文档不一致的地方（`summary` / `snippet` 长度远超文档所写；乱码查询仍返回低 `rerank_score` 的结果而不是空数组）写在记录里。**没有亲眼验证**：403 的 Fetch 拒绝、402、408 / 429 / 5xx 与重试路径（只用模拟响应测试）。
 - DeepSeek 部分新增 25 项测试（见上文总数）。
 
-## 0.2.2（2026-10-26）
+## 0.2.2（未单独发布，内容并入 0.2.3）
+
+> 0.2.2 没有发布到 npm：它的设置面板在 rc.3 宿主上保存部分分组会被拒绝，修复依赖 0.2.3 的代码，所以直接发布 0.2.3。下面的内容都包含在 0.2.3 里。
 
 适配 DSH 0.2.1-rc.2 / 0.2.1-rc.3 宿主，并修复 twitter 平台源返回错误结果的问题（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)，感谢 @gogososonono 的报告与根因分析）。npm 上的 0.2.1 的 peer 是 `<0.2.1-0`，在 0.2.1-rc.x 宿主上会被安装闸门拒绝；本版是第一个能装进 0.2.1-rc.x 宿主的发布（0.2.2 / 0.2.3 曾在内部分开记录，从未发布，这里合并为 0.2.2）。除下面 #38 的修复外没有功能变更，也没有破坏性变更；0.2.1 的配置与数据照常可用。
 
