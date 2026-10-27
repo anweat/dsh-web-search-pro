@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { COMMON_SOURCE_IDS } from '../providers/keyed-meta.ts'
-import { effectiveChain } from '../default-chain.ts'
+import { effectiveChain, type ChainInput } from '../default-chain.ts'
 import { fill, parseList, type Card, type LabelKey } from './field-rows.tsx'
 import { labelKey, SOURCE_DEFS } from './field-keys.ts'
 import type { WebSearchCardState } from './form.ts'
@@ -20,13 +20,16 @@ import { Badge, Btn, Dialog, type Tone } from './ui-kit.tsx'
 /** Sources whose key is a credential the card can see (searxng and the like have none). */
 const KEYED_DEFS = SOURCE_DEFS.filter(def => def.credential)
 
-/** The chain a plain search would try, from the staged settings; undefined when the draft leaves nothing to try. */
-export function chainOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials'>): string[] | undefined {
+/** What the default chain rule reads from the staged settings: the list, the preferences, the ready common sources, the policy. */
+export function chainInputOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials'>): ChainInput {
   const text = (field: string): string => snapshot.fields[field as keyof typeof snapshot.fields]?.text ?? ''
   const commonReady = SOURCE_DEFS.filter(def => def.common && def.credential && COMMON_SOURCE_IDS.includes(def.id) && snapshot.credentials[def.credential as keyof typeof snapshot.credentials]?.configured).map(def => def.id)
-  try {
-    return effectiveChain({ engines: parseList(text('engines')), priority: parseList(text('sources.priority')), disabled: parseList(text('sources.disabled')), commonReady, anonymousOnly: text('evidence.sourcePolicy') === 'anonymous-only' })
-  } catch { return undefined }
+  return { engines: parseList(text('engines')), priority: parseList(text('sources.priority')), disabled: parseList(text('sources.disabled')), commonReady, anonymousOnly: text('evidence.sourcePolicy') === 'anonymous-only' }
+}
+
+/** The chain a plain search would try, from the staged settings; undefined when the draft leaves nothing to try. */
+export function chainOf(snapshot: Pick<WebSearchCardState, 'fields' | 'credentials'>): string[] | undefined {
+  try { return effectiveChain(chainInputOf(snapshot)) } catch { return undefined }
 }
 
 /** Everything the warnings badge counts: what the validation says about a field, and the rubric problems. */

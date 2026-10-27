@@ -1,7 +1,8 @@
 /**
  * "Runtime and backends": the CLI / OpenCLI / Agent Reach switches, the Twitter / X login values (a dialog), the JSON objects
  * that shape backends (Playwright, platform backend chains, CLI adapters) and the platform settings (custom platforms,
- * selectors, browser bindings), each as a list with its own dialog.
+ * selectors, browser bindings), each as a list with its own dialog. The backend order of the platforms and the custom CLIs have their own
+ * groups ("Search order", "Custom CLI"); their raw JSON is under "Advanced".
  * @module web-search-pro/client/group-runtime
  */
 
@@ -12,7 +13,7 @@ import { JsonList, jsonFieldsOf } from './json-list.tsx'
 import { styles as css } from './styles.ts'
 import { Badge, Btn, Dialog, Group, Item, SubHead } from './ui-kit.tsx'
 
-const RUNTIME = ['enableCliBackends', 'opencliEnabled', 'agentReachEnabled', 'twitterAuthTokenEnv', 'twitterCt0Env', 'playwright', 'platformBackends', 'cliAdapters', 'customPlatforms', 'platformRules', 'browserBindings'] as const
+const RUNTIME = ['enableCliBackends', 'opencliEnabled', 'agentReachEnabled', 'twitterAuthTokenEnv', 'twitterCt0Env', 'playwright', 'customPlatforms', 'platformRules', 'browserBindings'] as const
 
 /** The two values twitter-cli needs: the controls of the dialog. */
 export function TwitterForm({ card }: { card: Card }) {

@@ -48,7 +48,7 @@ before(async () => {
   }
 })
 
-const GROUPS = ['common', 'sources', 'reading', 'judge', 'route', 'runtime', 'network', 'ranking', 'advanced']
+const GROUPS = ['common', 'order', 'sources', 'cli', 'reading', 'judge', 'route', 'runtime', 'network', 'ranking', 'advanced']
 
 /** The card and every dialog body, parsed. `user` is the stored settings; `credentials` the refs that hold a secret. */
 function page(lang: 'zh' | 'en', user: Record<string, unknown> = {}, credentials: Record<string, string> = {}) {
@@ -64,7 +64,7 @@ function page(lang: 'zh' | 'en', user: Record<string, unknown> = {}, credentials
 
 const entriesOf = (root: ReturnType<typeof parse>, field: string) => root.querySelectorAll(`[data-wsp-field="${field}"]`).length
 
-test('the card is a status summary, nine accordion groups of which only Common is open, and a sticky save bar', async () => {
+test('the card is a status summary, eleven accordion groups of which only Common is open, and a sticky save bar', async () => {
   const { root } = await page('en')
   assert.ok(root.querySelector('[data-wsp-summary]'), 'status summary on top')
   assert.deepEqual(root.querySelectorAll('details[data-wsp-group]').map(node => node.getAttribute('data-wsp-group')), GROUPS)
@@ -105,6 +105,8 @@ test('the route fields exist only while the route is on; the dialogs hold the ke
   assert.equal(off.formsRoot.querySelectorAll('[data-form="source"]').length, SOURCE_DEFS.length)
   assert.deepEqual(off.formsRoot.querySelectorAll('[data-form="rubric"]').map(node => node.getAttribute('data-id')), [...BUILTIN_RUBRIC_IDS])
   assert.deepEqual(off.formsRoot.querySelectorAll('[data-form="json"]').map(node => node.getAttribute('data-id')), JSON_FIELDS.map(entry => entry.field))
+  assert.deepEqual(off.formsRoot.querySelectorAll('[data-form="platform"]').map(node => node.getAttribute('data-id')), ['xiaohongshu', 'weibo'])
+  assert.deepEqual(off.formsRoot.querySelectorAll('[data-form="cli"]').map(node => node.getAttribute('data-id')), ['echo'])
 })
 
 test('lists: one row per source with its tier, key state and the common mark; one per JSON object; one per rubric; dialogs stay closed until asked', async () => {
@@ -116,7 +118,9 @@ test('lists: one row per source with its tier, key state and the common mark; on
   for (const item of common) assert.match(item.text, /Common/)
   for (const item of root.querySelectorAll('[data-wsp-source-list] [data-wsp-item]').filter(node => node.getAttribute('data-wsp-item') !== 'deepseek')) assert.doesNotMatch(item.text, /Common/)
   assert.equal(root.querySelectorAll('[role=dialog]').length, 0, 'no dialog is open')
-  assert.deepEqual(root.querySelectorAll('[data-wsp-json-list] [data-wsp-item]').map(node => node.getAttribute('data-wsp-item')), JSON_FIELDS.map(entry => entry.field))
+  // The JSON lists are in the groups they belong to: scoring, runtime, platforms and, for the two that have editors of their own, "Advanced".
+  assert.deepEqual(root.querySelectorAll('[data-wsp-json-list] [data-wsp-item]').map(node => node.getAttribute('data-wsp-item')), (['judge', 'runtime', 'platform', 'advanced'] as const).flatMap(group => JSON_FIELDS.filter(entry => entry.group === group).map(entry => entry.field)))
+  assert.deepEqual(root.querySelectorAll('details[data-wsp-group="advanced"] [data-wsp-json-list] [data-wsp-item]').map(node => node.getAttribute('data-wsp-item')), ['platformBackends', 'cliAdapters'], 'the raw JSON of the order and the CLIs moved to Advanced')
   assert.deepEqual(root.querySelectorAll('[data-wsp-rubrics] [data-wsp-item]').map(node => node.getAttribute('data-wsp-item')), [...BUILTIN_RUBRIC_IDS])
   assert.equal(root.querySelectorAll('textarea').length, 1, 'the only text box on the closed page is the text view')
 })
@@ -140,7 +144,9 @@ test('the status summary shows the chain a search tries: DeepSeek leads once its
 test('the groups hold the fields the milestone names, and enum options are the schema values', async () => {
   const { root, formsRoot } = await page('en', { registerProvider: true })
   const within = (group: string, field: string) => root.querySelector(`details[data-wsp-group="${group}"] [data-wsp-field="${field}"]`)
-  for (const field of ['engines', 'searchMaxResults', 'parallelEngines', 'toolSurface', 'allowProxyFakeIp', 'deepseekFetch']) assert.ok(within('common', field), field)
+  for (const field of ['searchMaxResults', 'parallelEngines', 'toolSurface', 'allowProxyFakeIp', 'deepseekFetch']) assert.ok(within('common', field), field)
+  assert.equal(within('common', 'engines'), null, 'the engine list is edited in "Search order" now')
+  assert.ok(within('order', 'engines'), 'engines')
   for (const field of ['evidence.sourcePolicy', 'sources.priority', 'sources.disabled', 'openalexMailto']) assert.ok(within('sources', field), field)
   for (const field of ['fetchDefaultChars', 'exaContentsPerUrlChars', 'exaContentsTotalChars', 'evidence.autoProviders', 'evidence.maxRounds', 'evidence.maxQueries']) assert.ok(within('reading', field), field)
   for (const field of ['evidence.judge.mode', 'evidence.hybridBorderline', 'evidence.judge.provider', 'evidence.maxJevQuestions', 'evidence.judge.allowLlm', 'evidence.coverage.mode', 'evidence.coverage.provider', 'evidence.coverage.thresholds.weak', 'evidence.coverage.thresholds.covered', 'evidence.budget.perSearchInputTokens', 'evidence.budget.dailyInputTokens', 'evidence.budget.timezone']) assert.ok(within('judge', field), field)

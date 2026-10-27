@@ -127,8 +127,8 @@ export function Select(props: { id?: string; value: string; options: readonly Se
 }
 
 /** A single-line text input; `muted` greys the value while it is only the inherited default. */
-export function TextInput(props: { id?: string; value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean; muted?: boolean; invalid?: boolean; list?: string; numeric?: boolean; ariaLabel?: string; code?: boolean }) {
-  return <input id={props.id} type="text" className={`${css.input} ${props.muted ? css.muted : ''} ${props.invalid ? css.invalidInput : ''} ${props.code ? css.code : ''} ${props.numeric ? 'wsp-num' : ''}`}
+export function TextInput(props: { id?: string; value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean; muted?: boolean; invalid?: boolean; list?: string; numeric?: boolean; ariaLabel?: string; code?: boolean; small?: boolean }) {
+  return <input id={props.id} type="text" className={`${css.input} ${props.muted ? css.muted : ''} ${props.invalid ? css.invalidInput : ''} ${props.code ? css.code : ''} ${props.numeric ? 'wsp-num' : ''} ${props.small ? 'wsp-sm' : ''}`}
     value={props.value} placeholder={props.placeholder} disabled={props.disabled} list={props.list} inputMode={props.numeric ? 'numeric' : undefined} spellCheck={false}
     aria-label={props.ariaLabel} aria-invalid={props.invalid || undefined} onChange={event => props.onChange(event.currentTarget.value)} />
 }
@@ -188,8 +188,8 @@ export function Dialog(props: { open: boolean; title: string; closeLabel: string
 }
 
 /** Primary and secondary buttons at the card's size. */
-export function Btn(props: { children: ReactNode; onClick?: () => void; primary?: boolean; disabled?: boolean; danger?: boolean; title?: string; data?: string }) {
-  return <Button type="button" variant={props.primary ? 'primary' : 'outline'} size="sm" disabled={props.disabled} title={props.title} className={props.danger ? css.danger : undefined} onClick={props.onClick} data-wsp-action={props.data}>{props.children}</Button>
+export function Btn(props: { children: ReactNode; onClick?: () => void; primary?: boolean; disabled?: boolean; danger?: boolean; title?: string; data?: string; ariaLabel?: string }) {
+  return <Button type="button" variant={props.primary ? 'primary' : 'outline'} size="sm" disabled={props.disabled} title={props.title} aria-label={props.ariaLabel} className={props.danger ? css.danger : undefined} onClick={props.onClick} data-wsp-action={props.data}>{props.children}</Button>
 }
 
 /** A list row: a title with badges, a meta line, and actions on the right. */

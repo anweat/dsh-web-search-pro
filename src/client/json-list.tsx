@@ -64,4 +64,4 @@ export function JsonList({ card, fields }: { card: Card; fields: readonly string
 }
 
 /** The fields of one group of JSON settings. */
-export const jsonFieldsOf = (group: 'judge' | 'runtime' | 'platform'): string[] => JSON_FIELDS.filter(entry => entry.group === group).map(entry => entry.field)
+export const jsonFieldsOf = (group: 'judge' | 'runtime' | 'platform' | 'advanced'): string[] => JSON_FIELDS.filter(entry => entry.group === group).map(entry => entry.field)

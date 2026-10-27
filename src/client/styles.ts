@@ -8,6 +8,7 @@ export const styles = {
   item: 'wsp-item', itemMain: 'wsp-item-main', itemTitle: 'wsp-item-title', itemMeta: 'wsp-item-meta', itemActions: 'wsp-item-actions', empty: 'wsp-empty',
   subHead: 'wsp-sub-head', compare: 'wsp-compare', compareCol: 'wsp-compare-col', preview: 'wsp-preview', savebar: 'wsp-savebar', saveText: 'wsp-save-text',
   dialogBody: 'wsp-dialog-body', stack: 'wsp-stack', fold: 'wsp-fold', foldBody: 'wsp-fold-body', foldHint: 'wsp-fold-hint', invalidInput: 'wsp-invalid-input', secretRow: 'wsp-secret-row', codeBlock: 'wsp-code-block', table: 'wsp-table', chain: 'wsp-chain',
+  why: 'wsp-why', orderBar: 'wsp-order-bar', tokens: 'wsp-tokens', tokenRow: 'wsp-token-row', trialOut: 'wsp-trial-out', trialBar: 'wsp-trial-bar',
 } as const
 
 export function ensureStyles(): void {
@@ -52,8 +53,15 @@ div.wsp-modal{width:min(560px,100%);max-height:100%}div.wsp-modal-wide{width:min
 .wsp-secret-row{display:flex;align-items:center;gap:8px;min-width:0}.wsp-secret-row .wsp-input{flex:1}.wsp-chain{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:0;padding:8px 10px;border-radius:8px;background:var(--dsw-alias-bg-layer-1);font-size:12px;color:var(--dsw-alias-label-secondary)}.wsp-chain code{font-family:var(--ds-font-family-code);font-size:12px;color:var(--dsw-alias-label-primary)}
 .wsp-code-block{margin:6px 0;padding:9px 11px;border-radius:8px;overflow:auto;font-family:var(--ds-font-family-code);font-size:12px;line-height:1.5;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);user-select:all}
 .wsp-table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.5}.wsp-table th,.wsp-table td{padding:5px 8px;text-align:left;border-bottom:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-tertiary)}.wsp-table th{font-weight:500;color:var(--dsw-alias-label-primary)}.wsp-table td:first-child{color:var(--dsw-alias-label-primary);white-space:nowrap}
+.wsp-order-no{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;box-sizing:border-box;border-radius:10px;background:var(--dsw-alias-interactive-bg-hover);font-size:11px;font-weight:500;color:var(--dsw-alias-label-secondary)}.wsp-order-default .wsp-order-no,.wsp-order-default .wsp-item-title strong{opacity:.6}
+.wsp-input.wsp-sm{height:28px;width:68px;padding:0 8px;font-size:12px}.wsp-input.wsp-sm.wsp-num{max-width:68px}
+.wsp-order-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}.wsp-order-bar .wsp-select{width:auto;min-width:180px;max-width:100%}
+.wsp-why{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}.wsp-why strong{font-weight:500;color:var(--dsw-alias-label-secondary)}
+.wsp-tokens{display:flex;flex-direction:column;gap:6px}.wsp-token-row{display:flex;align-items:center;gap:6px;min-width:0}.wsp-token-row .wsp-input{flex:1}.wsp-token-row .wsp-token-no{flex:none;width:16px;font-size:11px;text-align:right;color:var(--dsw-alias-label-tertiary)}
+.wsp-trial-out{display:flex;flex-direction:column;gap:6px;padding:9px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);min-width:0}.wsp-trial-out ul{margin:0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary)}.wsp-trial-out li{overflow-wrap:anywhere}
+.wsp-trial-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.wsp-trial-bar .wsp-input{flex:1;min-width:160px}
 @container (max-width:560px){.wsp-row{grid-template-columns:minmax(0,1fr)}.wsp-row-control.wsp-inline{justify-content:flex-start}.wsp-compare{grid-template-columns:minmax(0,1fr)}.wsp-group-sub{white-space:normal}.wsp-item{flex-wrap:wrap}.wsp-savebar{flex-wrap:wrap}.wsp-savebar .wsp-actions{margin-left:auto}}
-@media(max-width:560px){.wsp-compare{grid-template-columns:minmax(0,1fr)}div.wsp-modal{width:100%}.wsp-row{grid-template-columns:minmax(0,1fr)}.wsp-row-control.wsp-inline{justify-content:flex-start}.wsp-secret-row{flex-wrap:wrap}.wsp-item{flex-wrap:wrap}}
+@media(max-width:560px){.wsp-order-bar .wsp-select{width:100%}.wsp-compare{grid-template-columns:minmax(0,1fr)}div.wsp-modal{width:100%}.wsp-row{grid-template-columns:minmax(0,1fr)}.wsp-row-control.wsp-inline{justify-content:flex-start}.wsp-secret-row{flex-wrap:wrap}.wsp-item{flex-wrap:wrap}}
 `
   document.head.append(style)
 }

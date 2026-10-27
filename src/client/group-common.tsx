@@ -6,13 +6,13 @@
  */
 
 import { chainOf } from './card-frame.tsx'
-import { fill, ListRow, NumberRow, SelectRow, SwitchRow, useOverriddenCount, type Card } from './field-rows.tsx'
+import { fill, NumberRow, SelectRow, SwitchRow, useOverriddenCount, type Card } from './field-rows.tsx'
 import { SourceList } from './group-sources.tsx'
 import { styles as css } from './styles.ts'
 import { Badge, Group, SubHead } from './ui-kit.tsx'
 
 /** The names of the common group's fields, in order. */
-export const COMMON_FIELDS = ['engines', 'searchMaxResults', 'parallelEngines', 'toolSurface', 'allowProxyFakeIp', 'deepseekFetch'] as const
+export const COMMON_FIELDS = ['searchMaxResults', 'parallelEngines', 'toolSurface', 'allowProxyFakeIp', 'deepseekFetch'] as const
 
 /** The chain a plain search would try, computed from the staged settings by the router's own function. */
 function ChainLine({ card }: { card: Card }) {
@@ -20,6 +20,7 @@ function ChainLine({ card }: { card: Card }) {
   const chain = card.useWebSearchPro(snapshot => chainOf(snapshot)?.join(' › ') ?? '')
   return <p className={css.chain} role="status" data-wsp-chain>
     <span>{t('chainNow')}</span>{chain ? chain.split(' › ').map((id, index) => <span key={id + index}>{index ? '› ' : ''}<code>{id}</code></span>) : <span>{t('chainEmpty')}</span>}
+    <button type="button" className={css.link} onClick={() => { const node = document.querySelector<HTMLDetailsElement>('[data-wsp-group="order"]'); if (node) { node.open = true; node.scrollIntoView?.({ block: 'start', behavior: 'smooth' }) } }} data-wsp-open-order>{t('chainEdit')}</button>
   </p>
 }
 
@@ -27,7 +28,6 @@ export function CommonGroup({ card }: { card: Card }) {
   const { t } = card
   const count = useOverriddenCount(card, COMMON_FIELDS)
   return <Group id="common" title={t('groupCommon')} summary={t('groupCommonSub')} defaultOpen badges={count ? <Badge tone="info">{fill(t('overriddenCount'), { n: count })}</Badge> : null}>
-    <ListRow card={card} field="engines" placeholder="ddg" />
     <ChainLine card={card} />
     <NumberRow card={card} field="searchMaxResults" unit="count" />
     <SwitchRow card={card} field="parallelEngines" />

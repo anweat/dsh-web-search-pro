@@ -86,9 +86,9 @@ export function sourceFields(def: SourceDef): string[] {
 }
 
 /** Fields shown as JSON objects, each in its own dialog: the field, the group it sits in. */
-export const JSON_FIELDS: readonly { field: string; group: 'judge' | 'runtime' | 'platform' }[] = [
+export const JSON_FIELDS: readonly { field: string; group: 'judge' | 'runtime' | 'platform' | 'advanced' }[] = [
   { field: 'evidence.judge.providers', group: 'judge' }, { field: 'evidence.budget.providers', group: 'judge' },
-  { field: 'playwright', group: 'runtime' }, { field: 'platformBackends', group: 'runtime' }, { field: 'cliAdapters', group: 'runtime' },
+  { field: 'playwright', group: 'runtime' }, { field: 'platformBackends', group: 'advanced' }, { field: 'cliAdapters', group: 'advanced' },
   { field: 'customPlatforms', group: 'platform' }, { field: 'platformRules', group: 'platform' }, { field: 'browserBindings', group: 'platform' },
 ]
 
