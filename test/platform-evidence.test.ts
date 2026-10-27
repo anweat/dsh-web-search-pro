@@ -112,7 +112,7 @@ test('an unavailable platform is a structured error with what is missing and the
     const env = await callEnvelope(h.definitions, 'search.run', { platform: 'zhihu', query: TASK.query, task: TASK.task, profile: 'experience' })
     assert.equal(env.ok, false)
     assert.equal(env.error.code, 'CAPABILITY_UNAVAILABLE')
-    assert.match(env.error.message, /platform zhihu unavailable: unavailable: no usable backend: zhihu: zhihu not found on PATH.*; browser-search: platform zhihu requires the optional dsh-browser plugin/)
+    assert.match(env.error.message, /platform zhihu unavailable: unavailable: no usable backend: opencli: opencli not found on PATH.*; zhihu: zhihu not found on PATH.*; browser-search: platform zhihu requires the optional dsh-browser plugin/)
     assert.match(env.error.hint, /Default chain: zhihu-cli .*browserBindings/, 'the catalog install text of the zhihu entry')
     assert.match(env.error.hint, /allowFallback=true/)
     // Plain platform mode reports it the same way.
@@ -151,7 +151,7 @@ test('a platform on cooldown is reported, not silently replaced', async () => {
   try {
     h.holder.browser.searchResults = async () => { throw new Error('browser crashed') }
     await assert.rejects(h.router.search({ query: 'x', count: 3, fresh: true, multi: false, signal: undefined, platform: { id: 'zhihu' } }), /browser crashed/)
-    await assert.rejects(h.service.search({ ...TASK, platform: { id: 'zhihu' } }), /platform zhihu unavailable: cooling down: browser crashed/)
+    await assert.rejects(h.service.search({ ...TASK, platform: { id: 'zhihu' } }), /platform zhihu unavailable: cooling down: .*playwright-zhihu: browser crashed/)
   } finally { h.cleanup() }
 })
 
@@ -181,11 +181,11 @@ test('sources.status lists platforms in the one provider list with browser and l
     assert.equal(zhihu.kind, 'platform')
     assert.deepEqual(zhihu.domains, ['zhihu.com'])
     assert.equal(zhihu.needsBrowser, undefined, 'zhihu has a CLI leg, so it does not need the browser')
-    assert.deepEqual(zhihu.chain.map((leg: any) => [leg.id, leg.state]), [['zhihu', 'skipped'], ['browser-search', 'skipped']])
+    assert.deepEqual(zhihu.chain.map((leg: any) => [leg.id, leg.state]), [['opencli', 'skipped'], ['zhihu', 'skipped'], ['browser-search', 'skipped']])
     assert.equal(zhihu.readiness.available, false)
     assert.equal(zhihu.readiness.installation, 'missing')
     assert.equal(zhihu.readiness.credential, 'configured', 'the binding counts as a configured login')
-    assert.equal(zhihu.readiness.diagnosticCode, 'cli_missing', 'the first skipped leg decides: zhihu-cli is not installed')
+    assert.equal(zhihu.readiness.diagnosticCode, 'cli_missing', 'the first skipped leg decides: opencli is not installed')
     assert.match(zhihu.readiness.reason, /dsh-browser/)
     assert.equal(byRoute.get('ddg').kind, 'web')
     assert.equal(byRoute.get('forum').kind, 'platform')

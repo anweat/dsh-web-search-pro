@@ -41,8 +41,9 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
           notes.push(engine.id + ': ' + (error instanceof Error ? error.message : String(error)))
         }
       }
-      if (!errors.length) throw new EngineError(label + ' unavailable', 'ENGINE_UNAVAILABLE', false)
-      if (errors.length === 1) throw errors[0]
+      if (!errors.length) throw new EngineError(label + ' unavailable' + (notes.length ? ': ' + notes.join('; ') : ''), 'ENGINE_UNAVAILABLE', false)
+      // One backend failed and nothing else ran: its own error. Backends that were passed over before or after it are named too.
+      if (errors.length === 1 && notes.length === 1) throw errors[0]
       const code = (error: unknown): unknown => (error as { code?: unknown } | null)?.code
       if (errors.every(error => code(error) === 'ENGINE_EMPTY')) throw new EngineError(notes.join('; '), 'ENGINE_EMPTY', false)
       throw new EngineError(notes.join('; '), 'ENGINE_ERROR', errors.some(error => (error as { retryable?: unknown } | null)?.retryable !== false))
@@ -133,19 +134,19 @@ export const platformAdapters: readonly ProviderAdapter[] = [
 
   cliPlatform('xiaohongshu', '小红书', {
     languages: ['zh'], regions: ['cn'], domains: ['xiaohongshu.com'], taskProfiles: ['experience'], resultKinds: ['social'],
-    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI with your own Chrome'), cliReq('xhs', 'second backend: xiaohongshu-cli (`xhs login` is yours to run)'), BROWSER_REQ],
+    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('xhs', 'optional fallback: xiaohongshu-cli (`xhs login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
     verification: { live: false, note: 'needs your login; command contracts probed locally, no search run' },
   }),
 
-  // One provider, three backends in order: twitter-cli, the standalone OpenCLI, the dsh-browser OpenCLI bridge.
+  // One provider, three backends in order: the standalone OpenCLI (your Chrome's login), twitter-cli (optional fallback), the dsh-browser OpenCLI bridge.
   cliPlatform('twitter', 'Twitter / X', {
     domains: ['twitter.com', 'x.com'], taskProfiles: ['experience', 'news_fact'], resultKinds: ['social'],
     requirements: [
-      cliReq('twitter', 'first backend: twitter-cli (needs TWITTER_AUTH_TOKEN and TWITTER_CT0)'),
+      cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'),
+      cliReq('twitter', 'optional fallback: twitter-cli (needs TWITTER_AUTH_TOKEN and TWITTER_CT0)'),
       { kind: 'key', id: 'twitter-auth-token', env: ['TWITTER_AUTH_TOKEN'], optional: true, note: 'twitter-cli needs this and TWITTER_CT0' },
       { kind: 'key', id: 'twitter-ct0', env: ['TWITTER_CT0'], optional: true, note: 'twitter-cli needs this and TWITTER_AUTH_TOKEN' },
-      cliReq('opencli', 'second backend: standalone OpenCLI with your own Chrome'),
       BROWSER_REQ,
     ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
@@ -154,7 +155,7 @@ export const platformAdapters: readonly ProviderAdapter[] = [
 
   cliPlatform('reddit', 'Reddit', {
     languages: ['en'], domains: ['reddit.com'], taskProfiles: ['experience'], resultKinds: ['social'],
-    requirements: [cliReq('rdt', 'first backend: rdt-cli (`rdt login` is yours to run)'), cliReq('opencli', 'second backend: standalone OpenCLI with your own Chrome'), BROWSER_REQ],
+    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('rdt', 'optional fallback: rdt-cli (`rdt login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
     verification: { live: false, note: 'needs your login; command contracts probed locally, no search run' },
   }),
@@ -177,7 +178,7 @@ export const platformAdapters: readonly ProviderAdapter[] = [
 
   cliPlatform('zhihu', '知乎', {
     languages: ['zh'], regions: ['cn'], resultKinds: ['qa'], taskProfiles: ['experience', 'compare'], domains: ['zhihu.com'],
-    requirements: [cliReq('zhihu', 'first backend: zhihu-cli (`zhihu login` is yours to run)'), BROWSER_REQ],
+    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), cliReq('zhihu', 'optional fallback: zhihu-cli (`zhihu login` is yours to run)'), BROWSER_REQ],
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
     verification: { live: false, note: 'needs your login; command contract probed locally, no search run' },
   }),

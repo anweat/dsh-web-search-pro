@@ -327,9 +327,9 @@ test('consistency: chains, catalog and registry agree', () => {
 
 test('default chains: the order the plan fixes', () => {
   assert.deepEqual(DEFAULT_CHAINS.xiaohongshu, ['opencli', 'xhs', 'browser-opencli'])
-  assert.deepEqual(DEFAULT_CHAINS.reddit, ['rdt', 'opencli', 'browser-opencli'])
-  assert.deepEqual(DEFAULT_CHAINS.zhihu, ['zhihu', 'browser-search'])
-  assert.deepEqual(DEFAULT_CHAINS.twitter, ['twitter', 'opencli', 'browser-opencli'])
+  assert.deepEqual(DEFAULT_CHAINS.reddit, ['opencli', 'rdt', 'browser-opencli'])
+  assert.deepEqual(DEFAULT_CHAINS.zhihu, ['opencli', 'zhihu', 'browser-search'])
+  assert.deepEqual(DEFAULT_CHAINS.twitter, ['opencli', 'twitter', 'browser-opencli'])
   assert.deepEqual(DEFAULT_CHAINS.bilibili, ['bili'])
   assert.deepEqual(DEFAULT_CHAINS.youtube, ['yt-dlp'])
   for (const p of ['github', 'github-issues', 'github-code']) assert.deepEqual(DEFAULT_CHAINS[p], ['rest', 'gh'])
