@@ -66,7 +66,7 @@
 
 ## 动作
 
-见 README“agent 覆盖层与 `config.*`”。设计上的几点：
+见 [配置参考](../guide/config.md#agent-覆盖层与-config)“agent 覆盖层与 `config.*`”。设计上的几点：
 
 - 写入动作的错误：参数问题是 `INVALID_ARGS`（消息写明被拒的 id 或值，什么都没写）；`expectedRevision` 不符是 `ACTION_FAILED`，提示先 `config.inspect`；文件坏了或与基线不一致是 `CAPABILITY_UNAVAILABLE`，提示 `config.reset`；找不到可删的项是 `NOT_FOUND`。
 - 无变化的写入不落盘，`changed: false`。
