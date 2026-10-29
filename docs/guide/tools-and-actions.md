@@ -15,7 +15,7 @@
 
 | 组 | 动作 | 作用 |
 |---|---|---|
-| `search` | `run` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史；传 `task` / `profile` 得证据包；传 `platform` 搜单个平台（GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手，登录态走 Playwright；RSS 用 `url` 传 feed、`query` 可选过滤；平台与网页引擎走同一条注册表执行路径，可与 `task`/`profile` 同用得到证据包，见[平台来源](./search-and-evidence.md#平台来源)） |
+| `search` | `run` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史；传 `task` / `profile` 得证据包；传 `platform` 搜单个平台（GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手；小红书/知乎/Reddit/X 走 opencli 优先的后端链，微博等搜索页平台用 AuthProfile，见[平台登录态](./platform-login.md)；RSS 用 `url` 传 feed、`query` 可选过滤；平台与网页引擎走同一条注册表执行路径，可与 `task`/`profile` 同用得到证据包，见[平台来源](./search-and-evidence.md#平台来源)） |
 | | `recommend` | 按任务推荐至多 3 个来源（已就绪优先，其余给出缺失条件），不发搜索请求 |
 | `read` | `fetch` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存与 `offset` 续读；`auto` 按质量升级：每次结果先判为 content / shell / js_shell / login_wall / captcha / error，只有 shell、js_shell、login_wall 且 dsh-browser 就绪时才升级到 Playwright（captcha 与错误页不会，短而有实质内容的事实页不算空壳），取质量最好的一次并在 `attempts` 里记录各后端结果；不会自动安装任何东西；显式 mode 不升级，只复用同后端缓存 |
 | | `contents` | 原生 Exa `/contents` 批量正文抓取（1-100 URL，需 Exa Key） |
