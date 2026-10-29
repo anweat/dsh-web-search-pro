@@ -3,7 +3,7 @@
 > 源码位置：`D:\codeproject\deepseek-harness\scratch-plugin\web-search-pro\`
 > 调研依据见 [RESEARCH.md](./RESEARCH.md)。本文件为"具体实现"记录，与源码同步演进。
 >
-> **注意（M8a）**：本文件是历史实现记录，其中的 `web_search_pro`、`web_fetch_pro` 等 11 个工具名已并入动作注册表，现在只有 `web_index` / `web_call` 两个工具；对照表见 [README](../README.md#旧工具到新动作)。
+> **注意（M8a）**：本文件是历史实现记录，其中的 `web_search_pro`、`web_fetch_pro` 等 11 个工具名已并入动作注册表，现在只有 `web_index` / `web_call` 两个工具；对照表见 [工具与动作](../guide/tools-and-actions.md#旧工具到新动作)。
 
 ---
 
@@ -193,7 +193,7 @@ web-search-pro:
   （item/title/link/text），站点改版不用改代码。
 - 提示语已补：`web_platform_search` 工具描述 + systemPrompt 段落都写明"中文社区需登录一次
   （scripts/save-login.mjs）/ 选择器可 platformRules 覆盖"；引擎空结果错误文案指向登录脚本与 platformRules。
-- LOGIN.md 教程 + README「中文社区平台登录态」小节已发布到公开仓库。
+- LOGIN.md 教程 + README「中文社区平台登录态」小节已发布到公开仓库（2026-10-29 文档整理后合并为 [平台登录态](../guide/platform-login.md)）。
 
 ### 7.3.4.2 中文社区平台搜索（MediaCrawler 补齐，第三阶段）
 

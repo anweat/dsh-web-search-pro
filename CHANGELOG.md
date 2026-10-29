@@ -1,5 +1,32 @@
 # 更新记录
 
+## 未发布
+
+- 文档整理：README 精简为中文入口并新增英文版 `README.en.md`；其余内容按主题拆到 `docs/guide/`，设计与调研记录移到 `docs/dev/`；`LOGIN.md` 并入 `docs/guide/platform-login.md` 并按当前的 opencli 优先做法改写（登录由用户自己完成，插件没有登录窗口）；README 里的兼容表与升级说明移到本文件；新增 `scripts/check-docs-links.mjs`（`pnpm run check:docs`，已并入 `verify`）检查文档链接、锚点和中英文 README 的标题数量。没有改动运行时行为。
+
+## 从旧版本升级
+
+适用于 0.2.x 各版本之间的升级（0.1.x 宿主或 dsh-browser 0.1.x 请不要升级，停留在 `dsh-web-search-pro@0.1.15`，见[兼容与发布通道（历史）](#兼容与发布通道历史)）。DSH Desktop 用户在插件页卸载后重新 Add plugin，写法见 [安装与首次使用](docs/guide/install.md#用-dsh-desktop-安装)。
+
+先确认宿主是 `dsh-v0.2.0-rc.2` 或 `dsh-v0.2.1-rc.2` ~ `rc.4`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
+
+```bash
+dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+```
+
+> **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。
+
+> **破坏性变更（工具面，0.2.0 起）**：旧的 `web_search_pro`、`web_fetch_pro` 等 11 个工具名不再注册，也没有兼容包装。旧会话里对它们的调用会失败；把调用改成对应动作即可，对照表见 [旧工具到新动作](docs/guide/tools-and-actions.md#旧工具到新动作)。模型在 `web_call` 里写旧工具名会得到新动作名和翻译后的参数，`web_index()` 根目录也列出同一张对照。已存储的数据（历史、页面、规则、证据、账本）与 `ctx.web` provider 不受影响。其他不兼容变化与新功能见下面各版本。
+
+升级完成后需要**完整停止并重新启动 Web profile**；仅刷新网页不会重新扫描插件的 `client.js`。随后依次检查：
+
+1. `browser_call({action:"runtime.status"})`：确认 OpenCLI、`playwright | patchright` 运行时、`automationMode` 与 `usagePolicy` 符合预期。
+2. `web_call({action:"sources.status"})`：确认搜索、CLI、Agent Reach 与浏览器后端是否 ready（浏览器应显示 `ready`，不是 `legacy (unsupported)`）。
+3. 打开 `插件 → 已安装` 中两个 bundle 各自的详情页，确认配置表单都已加载；浏览器表单负责自由度、运行时、OpenCLI 与调用缓冲。
+
+> `automationMode` 和防止过度调用的 `usagePolicy` 都属于 dsh-browser，升级不会自动改写现有配置。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile，并且仍受并发、突发、页数/深度和 429/503 退避保护。
+
+升级到 0.2.3 时请特别注意：已有 `DEEPSEEK_API_KEY` 的用户，默认搜索会先走按请求计费的 DeepSeek 搜索（见下面 0.2.3 的“请先看：默认行为会变”）。
 ## 0.2.3（2026-10-28）
 
 接入 **DeepSeek Search / Fetch API**（[文档](https://api-docs.deepseek.com/guides/search/)，2026-10-17 上线）并标为“**常用**”。兼容范围见下面“同时支持 DSH 0.2.0-rc.2 与 0.2.1-rc.2 ~ rc.4”（DSH `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0`，可选 `@anweat/dsh-browser ^0.2.0`），没有破坏性变更，Config schema 只增不改（`deepseekFetch`、`keyedSources.deepseek`；`playwright.snapshotDir` 现在声明为 volatile，见下文面板保存的修复）。
@@ -232,3 +259,17 @@
 - 需要登录的平台（小红书、知乎、微博、豆瓣、贴吧、抖音、快手、Twitter / X 等）需要真实登录态才能验证，尚未在真实账号下测过。
 - 设置面板在桌面端的观感（折叠、暗色主题、窄屏）与保存后的热更新只做过组件渲染与内存 scope 测试，需在真实桌面界面确认。
 - `toolSurface` 与 `registerProvider` 需重启 profile 才生效。
+
+## 兼容与发布通道（历史）
+
+各发布通道对应的宿主基线与兼容承诺。当前版本的兼容范围见 [README](./README.md#兼容性) 与 [兼容范围](docs/guide/compatibility.md)；0.2.x 各版本的详细变化见上面对应小节。
+
+| 插件发布通道 | DSH 基线 | 兼容承诺 |
+|---|---|---|
+| `0.1.11` 及更早的维护版本 | `dsh-v0.1.1-rc.2` | 旧基线；不再维护，不与新插件混装 |
+| `0.1.15` | `dsh-v0.1.7-rc.2` + Browser `0.1.15` | 精确锁定该宿主版本；**仍停留在 DSH 0.1.x 宿主或 dsh-browser 0.1.x 的用户请使用这一版**（后续不再更新） |
+| `0.1.17` | `dsh-v0.1.7-rc.2` ~ `dsh-v0.2.0-rc.2` + Browser `0.1.17` | 过渡版本，已不再演进；新功能不会回到这条线（2026-10-29 核对：npm 上 `dsh-web-search-pro` 没有发布过 0.1.17，0.1.x 线实际最后一版是 0.1.15） |
+| `0.2.0`（正式版） | **只支持 `dsh-v0.2.0-rc.2` 这一条线**（peer `>=0.2.0-rc.2 <0.2.1-0`）+ 可选 `@anweat/dsh-browser ^0.2.0` | 第一个 0.2.0 线版本，**破坏性变更**（见 [0.2.0-rc.1](#020-rc1预发布) 的“破坏性变更”）；711 项单元测试、94 项 bench 测试，`pnpm run test:peers` 两种解析模式检查，真实 Host（DSH 0.2.0-rc.2）验收 |
+| `0.2.1` | 同 `0.2.0` | 独立 CLI 适配层与平台后端链，无破坏性变更；774 项单元测试、94 项 bench 测试，真实 Host（DSH 0.2.0-rc.2）验收 |
+| `0.2.2`（未单独发布，并入 0.2.3） | **只支持 `dsh-v0.2.1-rc.2` / `dsh-v0.2.1-rc.3`（0.2.1 线）**（peer `>=0.2.1-rc.2 <0.2.2-0`）+ 可选 `@anweat/dsh-browser ^0.2.0`（配套 `0.2.2` 起，旧的 0.2.0 / 0.2.1 只适用于 0.2.0-rc.2 宿主） | 适配 DSH 0.2.1-rc.2 / rc.3 并修复 twitter 平台结果全错（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)）；无破坏性变更。npm 上的 0.2.1 在 0.2.1-rc.x 宿主上会被安装闸门拒绝。twitter 的搜索输出契约来自 twitter-cli 0.8.5 源码与 issue 里的真实输出，我们自己没有用 Token 跑过搜索。详见 [0.2.2](#022未单独发布内容并入-023) |
+| `0.2.3` | **两条宿主线同时支持**：`dsh-v0.2.0-rc.2`（0.2.0 线）与 `dsh-v0.2.1-rc.2` ~ `rc.4`（0.2.1 线）；peer `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0`，cordis `~4.0.4`；可选 `@anweat/dsh-browser ^0.2.0`（0.2.0 线配 Browser `0.2.0` / `0.2.1` / `0.2.2`，0.2.1 线配 `0.2.2` 起） | 接入 DeepSeek Search / Fetch API 并标为“常用”（按请求计费）；设置面板同步调整。无破坏性变更，但**已有 `DEEPSEEK_API_KEY` 的用户升级后默认搜索会走这个付费接口**（`sources.disabled: [deepseek]` 关闭）。宿主适配没有改任何运行时代码，验证见 `docs/validation/2026-10-28-host-lines-and-install.md`；测试数见 [0.2.3](#0232026-10-28) |
