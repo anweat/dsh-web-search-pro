@@ -1,717 +1,113 @@
 # dsh-web-search-pro
 
-增强型、可持久化的扩展网页搜索插件 for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）。
+[English](./README.en.md) | 中文
 
-一个 DSH **bundle 插件**，把多引擎网页搜索、平台搜索、持久化缓存、受控按站增强和 Playwright 渲染打包成模型可调用的能力。常驻上下文只有 `web_index` / `web_call` 两个工具（原 11 个 `web_*` 工具已并入 20 个动作，见[工具面](#工具面索引--调用)）。路由控制面借鉴 Agent-Reach 的后端探测、顺序选择和失败冷却思路，核心逻辑为本项目原生 TypeScript 实现。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的增强型网页搜索插件：多引擎搜索、平台搜索、持久化缓存和证据包，常驻上下文只有两个工具。
 
-## 兼容与发布通道
+- **证据包模式**：给 `search.run` 一句任务目标，返回的不是结果列表，而是按需求评分后的摘录和未满足的缺口，占用的上下文少得多。
+- **多引擎 + 平台来源**：ddg / bing / Exa / Jina 等网页引擎加 GitHub、B站、YouTube、小红书、知乎、Reddit、X、RSS 等平台，统一的探测、冷却、回退与历史；DeepSeek 搜索 / 抓取是“常用”来源（按请求计费）。
+- **登录由你自己完成**：需要登录的平台优先走 `opencli`（用你日常 Chrome 的登录态），插件没有登录窗口，也不读 Cookie。
+- **两个常驻工具**：`web_index`（目录）→ `web_call`（执行），27 个动作按需披露，约 800 字符常驻。
+- **持久化**：SQLite + 内存 LRU 双层缓存、查询历史、可再导入的站点提取规则。
+- **可视化设置**：一张设置卡片管理搜索顺序、Key、自定义 CLI 和评分模型，agent 的改动以覆盖层形式出现，可一键采纳或撤销。
 
-| 插件发布通道 | DSH 基线 | 兼容承诺 |
-|---|---|---|
-| `0.1.11` 及更早的维护版本 | `dsh-v0.1.1-rc.2` | 旧基线；不再维护，不与新插件混装 |
-| `0.1.15` | `dsh-v0.1.7-rc.2` + Browser `0.1.15` | 精确锁定该宿主版本；**仍停留在 DSH 0.1.x 宿主或 dsh-browser 0.1.x 的用户请使用这一版**（后续不再更新） |
-| `0.1.17` | `dsh-v0.1.7-rc.2` ~ `dsh-v0.2.0-rc.2` + Browser `0.1.17` | 过渡版本，已不再演进；新功能不会回到这条线 |
-| `0.2.0`（正式版） | **只支持 `dsh-v0.2.0-rc.2` 这一条线**（peer `>=0.2.0-rc.2 <0.2.1-0`）+ 可选 `@anweat/dsh-browser ^0.2.0` | 第一个 0.2.0 线版本，**破坏性变更**（见 [CHANGELOG.md](./CHANGELOG.md)）；711 项单元测试、94 项 bench 测试，`pnpm run test:peers` 两种解析模式检查，真实 Host（DSH 0.2.0-rc.2）验收 |
-| `0.2.1` | 同 `0.2.0`（peer `>=0.2.0-rc.2 <0.2.1-0` + 可选 `@anweat/dsh-browser ^0.2.0`） | 独立 CLI 适配层与平台后端链，无破坏性变更（见 [CHANGELOG.md](./CHANGELOG.md)）；774 项单元测试、94 项 bench 测试，真实 Host（DSH 0.2.0-rc.2）验收 |
-| `0.2.2` | **只支持 `dsh-v0.2.1-rc.2` / `dsh-v0.2.1-rc.3`（0.2.1 线）**（peer `>=0.2.1-rc.2 <0.2.2-0`）+ 可选 `@anweat/dsh-browser ^0.2.0`（配套 `0.2.2` 起，旧的 0.2.0 / 0.2.1 只适用于 0.2.0-rc.2 宿主） | 适配 DSH 0.2.1-rc.2 / rc.3 宿主（cordis 4.0.5、schemastery 3.18.5、cordis-plugin-group 1.0.5 / loader 1.0.6 / include 1.0.10、cosmokit 1.8.6），并修复 twitter 平台结果全错（[#38](https://github.com/anweat/dsh-web-search-pro/issues/38)）；无破坏性变更。npm 上的 0.2.1 在 0.2.1-rc.x 宿主上会被安装闸门拒绝，需要升级到本版。devDeps 里停更的 `dsh-invariants` 换成 `dsh-working-directory`，并显式补上 0.2.1 线改成 peer-only 的 `dsh-llm` / `dsh-session`（宿主 `autoInstallPeers: false` 不自动装 peer）；790 项单元测试、94 项 bench 测试、`pnpm run test:peers` 两种解析模式检查；真实宿主验收（rc.3）见 `docs/validation/dsh-0.2.1-rc.3.md`。twitter 的搜索输出契约来自 twitter-cli 0.8.5 源码与 issue 里的真实输出，我们自己没有用 Token 跑过搜索 |
-| `0.2.3` | **两条宿主线同时支持**：`dsh-v0.2.0-rc.2`（0.2.0 线）与 `dsh-v0.2.1-rc.2` ~ `rc.4`（0.2.1 线）；peer `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0`，cordis `~4.0.4`；可选 `@anweat/dsh-browser ^0.2.0`（0.2.0 线配 Browser `0.2.0` / `0.2.1` / `0.2.2`，0.2.1 线配 `0.2.2` 起） | 接入 **DeepSeek Search / Fetch API** 并标为“常用”（有 Key 时默认排第一；**按请求计费**，见下文“DeepSeek 搜索 / 抓取”）；设置面板同步调整。无破坏性变更，但**已有 `DEEPSEEK_API_KEY` 的用户升级后默认搜索会走这个付费接口**（`sources.disabled: [deepseek]` 关闭）。宿主适配没有改任何运行时代码：面板保存、私有 RPC、凭据、审批钩子在 0.2.0-rc.2 上与 rc.3 / rc.4 行为一致（见 `docs/validation/2026-10-28-host-lines-and-install.md`）；测试数见 [CHANGELOG.md](./CHANGELOG.md) |
+## 兼容性
 
-**支持范围**：DSH `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0`，已在真实宿主上验证 `0.2.0-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.4`（`0.2.1-rc.2` 与 rc.3 同源，由 `test:peers` 的范围检查覆盖）；`0.2.0-rc.1`、`0.2.1-alpha.x`、`0.2.1-rc.1`、`0.2.2` 及以上都被拒绝。可选配套浏览器插件 `@anweat/dsh-browser ^0.2.0`（即 0.2.x，不含 0.3）：0.2.0 线宿主上用 Browser `0.2.0` / `0.2.1` / `0.2.2`，0.2.1 线宿主上必须是 `0.2.2` 起（旧的 0.2.0 / 0.2.1 的 peer 只含 `<0.2.1-0`，会被 0.2.1 线宿主的安装闸门拒绝，并且**整次安装作废**，插件也不会装上）。
+| 项 | 范围 |
+|---|---|
+| dsh-web-search-pro | `0.2.3` |
+| DSH 宿主（peer） | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0`；实测 `0.2.0-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.4` |
+| cordis（peer） | `~4.0.4` |
+| 可选配套 `@anweat/dsh-browser` | `^0.2.0`（0.2.1 线宿主上必须是 `0.2.2` 起） |
+| DSH 0.1.x 宿主或 dsh-browser 0.1.x | 固定使用 `dsh-web-search-pro@0.1.15`，不再更新 |
 
-**不再支持 DSH 0.1.x 宿主线，也不再支持旧的 dsh-browser 0.1.x 线；仍在这两条线上的用户请停留在 dsh-web-search-pro 0.1.15。**
-
-- DSH 0.1.x 宿主：peer 范围不再包含它，`dsh plugin add` 会因 peer 不满足而拒绝，或在组装期点名报 `incompatible`。本插件已去掉为旧宿主保留的兼容分支。
-- 旧 dsh-browser 0.1.x：浏览器是可选依赖，本插件仍会**识别**它但不会驱动它。服务对象没有版本字段，所以以形状判定：不带任何 0.2 才有的方法（`observe` / `listTargets` / `sessionState`）即视为旧线。检测到旧线时：
-  - `read.snapshot`、`read.fetch mode=playwright`、浏览器平台与 OpenCLI 平台返回 `CAPABILITY_UNAVAILABLE`：`dsh-browser 0.1.x is not supported by web-search-pro 0.2+; upgrade to @anweat/dsh-browser ^0.2.0`；
-  - `read.fetch mode=auto` 不再尝试浏览器渲染，静默跳过（全部后端失败时，错误说明里会写明原因）；
-  - `sources.status` 显示 `browser: legacy (unsupported)`；系统提示不加浏览器那一行；旧服务上的 `automationMode` 不参与写操作审批（按没有 Browser 处理，`standard` 下询问）；
-  - 其他一切（网页搜索、证据管线、非浏览器平台、缓存、历史）照常工作。
-
-**peer 范围的写法**与 `@anweat/dsh-browser 0.2.x` 完全一致：每个 `@deepseek-ai/dsh-*` peer 都是两段并联的范围 `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0`，cordis 为 `~4.0.4`。
-
-- 宿主的组装期校验用的是 `semver.satisfies(host, range, { includePrerelease: true })`；真正决定装机成败的是 npm/pnpm 的**默认** semver：预发布版本只有在某个比较符自带同号（同 major.minor.patch）预发布时才被判为满足。两段各自的下界（`>=0.2.0-rc.2`、`>=0.2.1-rc.2`）自带同号预发布，是**承重**的，必须保留；写成 `>=0.2.0-rc.2 <0.2.2-0` 这类跨线的单段范围会过宿主校验、却让 `dsh plugin add` 报 ERESOLVE。与 `@anweat/dsh-browser` 必须声明同一套策略，否则两者互为 peer 时会出现 ERESOLVE。
-- 两段之间留了缝：`0.2.1-alpha.1` ~ `0.2.1-rc.1` 没有验证过，两种解析模式都拒绝。上界是 `<0.2.2-0` 而不是 `<0.2.2`：后者放行 `0.2.2-alpha.1` 这类 0.2.2 的预发布。收口后，若 0.2.2 真出现破坏，会在**组装期**直接报 `is incompatible with dsh 0.2.2` 并点名，而不是拖到用户机器上变成运行期怪错（`0.1.5 → 0.1.7` 曾一次性打断所有按 `0.1.5-alpha.1` 构建的插件）。
-- cordis：0.2.0-rc.2 宿主依赖 `~4.0.4`，0.2.1-rc.x 依赖 `~4.0.5`，干净安装时两者都解析到 4.0.5（有锁文件的 rc.2 宿主可能是 4.0.4）。peer 写 `~4.0.4`（`>=4.0.4 <4.1.0`）同时容纳两者，挡住 4.1.0。schemastery 的 peer `^3.18.5` 不变：两条线的宿主都解析到 3.18.5。
-- 范围只表示「测过哪些」，不等于承诺不破坏；真正的防线是每换一个 DSH 版本重跑一遍这套验证。`pnpm run test:peers`（已并入 `pnpm verify`）用两种解析模式逐个断言受管 peer：`0.2.0-rc.2`、`0.2.1-rc.2` ~ `rc.4` 必须通过，`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.1-alpha.5`、`0.2.1-rc.1`、`0.2.2-alpha.1` 必须被拒绝，cordis `4.0.4` / `4.0.5` 通过、`4.1.0` 拒绝；并自带 `--selftest` 已知行为自校验（含两段范围的缝）。开发依赖固定在 `0.2.1-rc.3`（单元测试跑在这一套类型上）；0.2.0-rc.2 与 rc.4 靠真实宿主验证，不靠第二套 devDependencies。
+历史版本的兼容表见 [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史)，peer 范围的写法见 [兼容范围](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md)。
 
 ## 安装
 
+**DSH CLI**（装完重启 profile）：
+
 ```bash
-# 默认安装（面向 dsh-v0.2.0-rc.2 与 dsh-v0.2.1-rc.2 ~ rc.4 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
-# 不需要浏览器能力时，只装本插件即可：
+# 只要搜索：
 dsh plugin --profile web add dsh-web-search-pro@0.2.3
-# 或本地目录 / tarball：
-dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro
-# 重启（web profile 关闭了 HMR）：
+# 还要读取渲染页 / 浏览器平台：连同可选的浏览器插件一起装（两者都必须是 profile 的直接依赖）
+dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
 dsh --profile web
 ```
 
-> 两个插件都必须是 profile 的直接依赖：DSH 只激活直接依赖的 bundle layer，且标准 profile 可能设置 `autoInstallPeers: false`。不要只安装 Web Search Pro 后依赖 peer 自动补齐。
-> **新用户第一次安装**：只装本插件时，`dsh plugin add` 在 pnpm 11 下退出码为 0、没有任何警告（本包没有安装脚本，也不依赖 OpenCLI 或 Playwright；约 20 个包、10 MB）。要一起装浏览器插件，用 `@anweat/dsh-browser` **0.2.2 起**：它不再把 `@jackwener/opencli` 作为依赖，所以不会再有 `ERR_PNPM_IGNORED_BUILDS`（`0.2.1` 及更早的 Browser 会让 pnpm 11 拦下 OpenCLI 的安装脚本，`dsh plugin add` 以失败退出，**包其实装上了、插件却没有被加入 profile 的 bundles，之后再 `add` 任何包也都会同样失败**，连带的本插件也不会被启用；用 0.2.1 线宿主的用户在这点上没有选择，只能升级到 0.2.2）。
-> **第一次使用**：① 网页搜索、证据管线、CLI 平台不需要浏览器，装完即用。② `read.snapshot`、`read.fetch mode=playwright`、搜索页类平台需要浏览器插件，且**有 Google Chrome / Microsoft Edge 就直接用**（不用下载 Playwright 的 Chromium）；都没有时 `sources.status` 的 `browser:dsh-browser` 一行会写 `loaded, no browser to launch` 和 dsh-browser 给的可照做的步骤（装 Chrome / Edge，或 `runtime.install`，或终端命令）。③ 小红书 / 知乎 / Reddit / X 要用你日常 Chrome 的登录态：`npm i -g @jackwener/opencli` 并装它的 Browser Bridge 扩展（`opencli doctor` 全 OK），本插件优先用 PATH 上的独立 `opencli`；没有它这几个平台会往后落到独立 CLI 或 dsh-browser 的后端，`sources.status` 写明原因。OpenCLI 与浏览器的装法细节见 [dsh-browser 的 README](https://github.com/anweat/dsh-browser#readme)。
-> 本版支持 `dsh-v0.2.0-rc.2` 与 `dsh-v0.2.1-rc.2` ~ `rc.4`，Browser 为 `^0.2.0`（0.2.1 线宿主上必须是 0.2.2 起的 0.2.x），宿主或浏览器插件仍在 0.1.x 线上的，请安装 `dsh-web-search-pro@0.1.15`。若你的 harness 是本地源码 checkout，版本号可能有出入——用
-> `dsh plugin --profile web add ./<path>` 并在 profile 的 `pnpm-workspace.yaml`
-> 里对齐版本后重装即可。
+**DSH Desktop**：Desktop 的 profile 由应用管理，CLI 不能操作它。打开**插件**页 → **Add plugin**，填包名（可带版本，如 `dsh-web-search-pro@0.2.3`，写法同上面 `add` 后面那段）→ Install；对话框里还能选 **Registry**。非官方插件升级 = 先卸载再重装；国内镜像（如 npmmirror）可能晚同步，装不到新版本时把 Registry 换成 `https://registry.npmjs.org`。
 
-## 从旧版本升级
+**本地目录 / tarball（开发用）**：`dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro`。
 
-先确认宿主是 `dsh-v0.2.0-rc.2` 或 `dsh-v0.2.1-rc.2` ~ `rc.4`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
+更多（新用户第一次安装的注意事项、排障）见 [安装与首次使用](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/install.md)；升级见 [CHANGELOG](./CHANGELOG.md#从旧版本升级)。
 
-```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+## 第一次使用
+
+- **设置卡片**：`设置 → 插件 → 插件配置 → Web Search Pro`。顶部的状态摘要显示实际尝试顺序的默认引擎链、已配置 Key 的来源数、DeepSeek 是否就绪、待重启项等。
+- **查看后端**：让模型调用 `web_call` 的 `sources.status`，每个来源 / 平台的就绪状态和被跳过的原因都在里面。
+- **来源与密钥**：网页搜索和证据管线装完即用（ddg / bing 免 Key）。有 `DEEPSEEK_API_KEY` 时，默认搜索会先用**按请求计费**的 DeepSeek 搜索；不想用就在 `sources.disabled` 里写 `deepseek`。Exa、Jina、博查、GitHub 等 Key 在设置卡片的“来源”分组里写入（存进 DSH Credentials，不读回明文）。
+- **开箱默认值**：默认关闭 Jev（`evidence.jevMode: off`，证据评分用本地规则，不调用任何模型，也不需要任何模型 Key）；只有配置了博查 Key 才会使用博查。
+- **可选依赖**：浏览器插件 `@anweat/dsh-browser`（`read.snapshot`、`read.fetch mode=playwright`、搜索页类平台；有 Chrome / Edge 就直接用，不用下载 Chromium）；`npm i -g @jackwener/opencli` 加它的 Browser Bridge 扩展（小红书 / 知乎 / Reddit / X，用你日常 Chrome 的登录态，见 [平台登录态](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/platform-login.md)）；bili、yt-dlp、gh 等 CLI 由 `sources.deps` 检测。
+
+## 快速示例
+
+模型通过 `web_call({action, args})` 调用。证据包（传 `task` 或 `profile`）：
+
+```json
+{"action":"search.run","args":{"query":"node:sqlite busy timeout","task":"how to set a busy timeout in node:sqlite","profile":"docs_code"}}
 ```
 
-> **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级，停留在 `dsh-web-search-pro@0.1.15`。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回上面的 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。
+搜单个平台（登录类平台走 opencli-first 的后端链）：
 
-> **破坏性变更（工具面）**：旧的 `web_search_pro`、`web_fetch_pro` 等 11 个工具名不再注册，也没有兼容包装。旧会话里对它们的调用会失败；把调用改成对应动作即可，对照表见[旧工具到新动作](#旧工具到新动作)。模型在 `web_call` 里写旧工具名会得到新动作名和翻译后的参数，`web_index()` 根目录也列出同一张对照。已存储的数据（历史、页面、规则、证据、账本）与 `ctx.web` provider 不受影响。其他不兼容变化与新功能见 [CHANGELOG.md](./CHANGELOG.md)。
-
-升级完成后需要**完整停止并重新启动 Web profile**；仅刷新网页不会重新扫描插件的 `client.js`。随后依次检查：
-
-1. `browser_call({action:"runtime.status"})`：确认 OpenCLI、`playwright | patchright` 运行时、`automationMode` 与 `usagePolicy` 符合预期。
-2. `web_call({action:"sources.status"})`：确认搜索、CLI、Agent Reach 与浏览器后端是否 ready（浏览器应显示 `ready`，不是 `legacy (unsupported)`）。
-3. 打开 `插件 → 已安装` 中两个 bundle 各自的详情页，确认配置表单都已加载；浏览器表单负责自由度、运行时、OpenCLI 与调用缓冲。
-
-> `automationMode` 和防止过度调用的 `usagePolicy` 都属于 dsh-browser，升级不会自动改写现有配置。生产 profile 建议保留 `standard`；`unrestricted` 只用于隔离的自动化测试 profile，并且仍受并发、突发、页数/深度和 429/503 退避保护。
-
-若 Clash/TUN 使用 fake-IP DNS，原生 HTTP 后端可能看到 `198.18.0.0/15`、`fdfe:dcba:9876::/64` 或 `2001:2::/48`（报错信息会直接提示 `resolved to proxy fake-IP …`）。可在可视化面板的高级设置中启用 `allowProxyFakeIp`；默认关闭。该开关只信任这些代理网段的 **DNS 解析结果**，字面 fake-IP URL、localhost 和其他私网地址仍会被 SSRF 防护拒绝。
-
-## 快速使用与适用情形
-
-安装并重启后，直接在 DSH 会话里要求模型调用工具即可：
-
-```text
-请先用 web_call 的 sources.status 检查后端，然后用 search.run 搜索
-"DeepSeek Harness community feedback"，指定 exa、fresh=true、返回 8 条来源。
+```json
+{"action":"search.run","args":{"query":"机械键盘 轴体 推荐","task":"了解知乎上对机械键盘轴体的真实经验","profile":"experience","platform":"zhihu"}}
 ```
 
-**开箱默认值（不改任何设置）**：默认关闭 Jev（`evidence.jevMode: off`，证据评分用本地规则，不调用任何模型，也不需要任何模型 Key）；只有配置了博查 Key（`bochaApiKey` / `BOCHA_SEARCH_API_KEY` 或凭据引用）才会使用博查，没配置时博查不在引擎列表里，也不会被自动规划选中。默认引擎是 `seam`、`exa`、`ddg`、`bing`、`jina`（Exa 可走无 Key 的 MCP 回退，ddg / bing 免 Key）。**例外：DeepSeek 搜索（“常用”，按请求计费）只要能解析到 DeepSeek API Key（设置里的密钥字段、DSH 凭据 `DEEPSEEK_API_KEY` 或进程环境变量），默认搜索和自动规划都把它放第一位**；不想用就在 `sources.disabled` 里写 `deepseek`，或自己写一份 `engines`（见“DeepSeek 搜索 / 抓取”）。**Defaults out of the box:** Jev is off by default (`evidence.jevMode: off`; evidence scoring uses the local rules and no model is called, no model key is needed); Bocha is used only when you configure a key (`bochaApiKey` / `BOCHA_SEARCH_API_KEY` / a credentials ref) — without one it is not in the engine list and never planned. **Exception:** DeepSeek Search (the common, 常用, source; billed per request) leads the default order in both languages as soon as a DeepSeek API key resolves (settings key field, DSH credential `DEEPSEEK_API_KEY`, or the process environment); put `deepseek` under `sources.disabled` or write your own `engines` list to opt out.
+读页用 `read.fetch`（长页传 `offset` 续读），不知道用哪个来源就问 `search.recommend`。更多用法见 [搜索用法与证据包](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/search-and-evidence.md)。
 
-模型通常不需要先翻目录：`web_index()` 根目录直接给出搜索与读取两个最常用调用，随包的 skill `dsh-web-search-pro` 带有证据模式的工作示例；没有 skill 服务时根目录附一段精简指南。
+## 工具与动作概览
 
-| 情形 | 推荐入口 | 说明 |
+常驻工具只有两个：`web_index({group?, action?, query?})` 渐进披露目录，`web_call({action, args})` 执行动作并返回统一信封。使用指引在随包的 skill `dsh-web-search-pro` 里。
+
+| 组 | 动作 | 用途 |
 |---|---|---|
-| 日常网页搜索 | `search.run` | 默认按配置顺序回退；需要强制刷新时传 `fresh=true` |
-| 语义研究、社区观点 | `search.run` + `engines=exa` | 有 API Key 时走原生 Exa API；只有 Exa MCP 连接时自动经 `mcporter` 回退 |
-| 已知 URL 的批量正文 | `read.contents` | 直接调用 Exa `/contents`，必须配置 `EXA_API_KEY` |
-| GitHub/B站/Reddit 等平台 | `search.run` + `platform=…` | Reddit 等 OpenCLI 平台需要 Chrome 扩展在线；中文受限站点使用 AuthProfile |
-| 登录后页面或私有论坛 | `browserBindings` + AuthProfile | Cookie 保存在本地 storageState，按域名授权，默认只读 |
-| 页面改版、懒加载 | `platformRules` 或 RulePack | 优先改选择器；需要等待/点击/滚动时再使用有界 RulePack |
-| 模型生成多步页面操作 | `browser_call` → `automation.run_recipe` | 只读步骤直接运行；页面交互按 dsh-browser 的 `automationMode` 决定拒绝/审批/直通 |
-| 外部模型生成油猴脚本 | `script.validate` → `script.run_userscript` | 强制 `@match`、`@grant none`、禁用 `@require`；仅 `unrestricted` 跳过审批 |
-| 有限泛爬取 | `crawl.crawl` | 匿名、默认同源；调用参数不能突破浏览器插件的页数/深度预算 |
-| OpenCLI 站点适配器或浏览器桥 | `opencli.status` → `opencli.catalog` → `opencli.run` | 先发现精确 adapter；仅 `unrestricted` 跳过通用 argv 审批 |
+| `search` | `run` `recommend` | 多引擎 / 平台搜索与证据包；按任务推荐至多 3 个来源 |
+| `read` | `fetch` `contents` `snapshot` | 可读化抓取与续读；Exa 批量正文；浏览器快照 |
+| `history` | `list` `replay` `expand` `export` `delete` | 查询历史的列出、回放、展开证据块、导出、删除 |
+| `sources` | `status` `deps` `install` | 后端探测与诊断；外部依赖检测与安装 |
+| `rules` | `list` `upsert` `remove` `import` `export` | 按站点提取规则 |
+| `cache` | `clear` `stats` | 缓存清理与统计 |
+| `config` | `inspect` `set_order` `set_confidence` `upsert_cli` `remove_cli` `reset` `export` | agent 覆盖层：运行时调整搜索顺序、置信度、自定义 CLI |
 
-### 平台来源
+完整参数、审批规则、输出预算与旧工具映射见 [工具与动作](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/tools-and-actions.md)。
 
-每个平台（GitHub、GitHub 代码 / Issues、B站、YouTube、V2EX、arXiv、PubMed、小红书、Twitter / X、Reddit、Instagram、Facebook、RSS、知乎、微博、豆瓣、贴吧、抖音、快手，以及你的 `customPlatforms`）都是来源注册表里 `kind: platform` 的 provider：有描述符（语言、任务类型、站点域名、所需浏览器能力 / 登录 / CLI / Token）和适配器，与网页引擎走同一条路径（探测、冷却、并发合并、`shapeSources`、重试说明、历史）。每个平台是**一个** provider，内部是一条有序的**后端链**（独立 CLI → 独立 OpenCLI → dsh-browser 的 OpenCLI（需要装有 OpenCLI）/ 搜索页），顺序可用 `platformBackends` 改，详见下面的 [CLI 适配](#cli-适配--cli-adapters)。`sources.status` 在同一张列表里按维度报告它们的就绪状态（浏览器安装、已绑定登录、设置开关）；目录条目用 `provider` 指向同名 id。
+## 常用配置
 
-- `search.run platform=zhihu query=…` 只搜这个平台，历史类型仍为 `platform`；`engines=zhihu` 在经典搜索里同样可用。`url`（RSS）、`authProfile`、`rulePack` 随 `platform` 传，`browserBindings` 补全后两者。
-- **证据模式**：`platform` 可与 `task` / `profile` / `needs` / `constraints` 同用——该平台成为 S1 / S2 的显式来源，之后门限、读取前几页（有 Browser 时自动升级）、评分、证据包照常。
-- **平台不可用**（缺浏览器 / 登录 / CLI / Token、被设置关闭、冷却中）时返回 `CAPABILITY_UNAVAILABLE`，写明缺什么，并附目录里的安装说明；**不会**悄悄改搜网页引擎。传 `allowFallback=true` 才改搜该 profile 的网页引擎，证据包的 `notes` 会写明。平台已运行但没有结果时返回空列表和平台自己的提示（多半是缺登录），不冷却。
-- **自动规划**：平台从不被自动选入第一轮；只有任务带硬 `site` 约束且命中某平台域名（如 `zhihu.com`）并且该平台就绪时，它才排第一，并保留一个网页引擎做回退（同一上游家族只取一个，其余留给第二轮）。平台没就绪就沿用网页计划并在 `notes` 说明。`search.recommend` 对 `experience` 类任务可以推荐已就绪的平台（仍至多 3 个）。
-- **自定义平台**随设置热更新：新增、修改、删除都会同步注册表；与已有 provider 同名的键不会覆盖内置来源，`sources.status` 的 `notes` 会列出被拒绝的键。
+写在 `$DSH_HOME/settings.yaml` 的 `web-search-pro:` 段，或用设置卡片；几乎都是热更新。
 
-先运行 `sources.status` 判断后端是否 ready（要不要用哪个来源，直接问 `search.recommend`）。指定单一引擎时失败会原样返回；不指定时才会按 `engines` 顺序自动回退。所有引擎都返回空结果或不可用（没有运行时错误）时，`search.run` 返回空结果和说明，不再报错。
-
-### 两种用法
-
-同一套证据管线有两个入口。模型是否走哪一个，取决于它看到哪些工具；第二种能在模型“顺手用内置 `web_search`”时仍然让证据管线生效。
-
-**（a）直接调用 `web_call search.run`。** 模型加载 skill `dsh-web-search-pro`（或按常驻提示）调用 `search.run`，传 `task` / `profile` 得到证据包（见下节）。常驻提示和 skill 描述都写明：做网页研究时优先用它，而不是 `web_search` + `web_fetch`，因为它只返回过滤后的证据，占用的上下文少得多；读页用 `read.fetch`（长页用 `offset` 续读）。
-
-**（b）让宿主内置的 `web_search` / `web_fetch` 经过本插件。** 宿主自带这两个工具，模型常常直接用它们（实测 DeepSeek 在自然任务里就是这样，绕过了 `web_index`）。把本插件注册并**选中**为 `ctx.web` 的 provider 后：
-
-- `web_search` 的返回内容 = 本插件的证据包（与 `search.run` 同一渲染：`resultId`、缺口 `Gaps`、“覆盖是启发式的”提示，末尾一行说明可用 `web_call history.expand` / `read.fetch` 展开），`sources` 仍是来源列表；`truncated` 只在确有来源被截掉时为真。查询即任务（`task = query`，`needs = [query]`，profile 按规则推断，推断不出为 `general`，预算为默认值）。
-- 证据运行有自己的期限（`provider.deadlineMs`，默认 25 秒；到点返回 `PARTIAL` 的已有结果）。超时、管线报错都**退回今天的普通来源列表**，不会让内置工具失败；只有调用方取消会原样抛出。为避免递归，这条路径不会再调用 `ctx.web` 引擎（`seam`）。
-- `web_fetch` 沿用同一套抓取管线，上限是 `fetchDefaultChars` 的两倍；被截断时 `truncated` 为真，并在正文末尾追加一行 `[Continue with web_call read.fetch url=… offset=N]`。
-- `provider.evidence: off` 让 `web_search` 回到只返回来源列表（与旧行为完全一致）。
-
-**怎么选中（宿主的规则，不是本插件的）。** `@deepseek-ai/dsh-web` 只在两种情况下使用某个 provider：`web` 条目里**写明了它的 id**（`searchProvider` / `fetchProvider`，环境变量 `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER` 与它们是同一个字段，不是另一条优先级链），或它是**唯一可用**的已注册 provider。没写 id 又有两个可用 provider 时，每次 `web_search` 都会以 `WEB_PROVIDER_AMBIGUOUS` 失败。所以 `registerProvider` 默认是 `false`：只注册、不选中是无害的，但默认注册会在没有写 id 的部署里让内置工具直接报错，本插件不会悄悄接管宿主默认 provider。
-
-1. `settings.yaml` 的 `web-search-pro:` 段打开注册（启动时生效，改完重启）：
-
-   ```yaml
-   web-search-pro:
-     registerProvider: true
-     providerId: web-search-pro # 默认值；与下面的 id 必须一致
-     provider:
-       evidence: auto # auto（默认）| off
-       deadlineMs: 25000
-   ```
-
-2. 在 profile 的 `cordis.patch.yml`（`$DSH_HOME/profiles/<profile>/cordis.patch.yml`）里把 `web` 条目指向它：
-
-   ```yaml
-   - id: web
-     name: '@deepseek-ai/dsh-web'
-     config:
-       searchProvider: web-search-pro
-       fetchProvider: web-search-pro # 只想换搜索、保留宿主抓取时，写宿主抓取 provider 的 id（宿主源码里内置的是 `http`，以所用宿主版本为准），不要省略
-   ```
-
-   或者只在启动环境里设 `DSH_WEB_SEARCH_PROVIDER=web-search-pro`（需要时再加 `DSH_WEB_FETCH_PROVIDER`）。配置里的值与环境变量同时存在时以配置为准。**不要只注册而不写 `fetchProvider`**：本插件会同时注册搜索与抓取两个 provider，若宿主的 `web` 条目没有固定抓取 provider，宿主自带的 `http` 与本插件的会同时可用，`web_fetch` 会报 `WEB_PROVIDER_AMBIGUOUS`。
-
-3. 重启后用 `web_call sources.status` 检查：`ctx.web route` 一行会写明是否已注册、`web_search` / `web_fetch` 当前是否选中本插件、宿主固定的是哪个 id（未选中时还给出上面的配置提示）。宿主不暴露 provider 状态查询接口，所以本插件读的是 `web` 运行时已合并好的 id（读不到时只看环境变量，并在状态行里注明）。
-
-**和其他“联网调研”skill 并存。** 用户自己安装的 skill（例如 `agent-reach`）也可能在描述里声称负责联网调研；本插件的 skill 描述只陈述自己做什么（中英文触发词：联网搜索 / 查证 / 调研 / 读取网页，web research / look up / verify / read a page），不声称对其他 skill 的优先权，也无法阻止模型选别的 skill。（b）正是为这种情形准备的：不管模型加载了哪个 skill，只要它最终调用内置 `web_search` / `web_fetch`，走的就是本插件的证据管线。
-
-### 证据包模式（`search.run` 传 `task` 或 `profile`）
-
-传 `task`（一句话目标）或 `profile`（`docs_code` / `news_fact` / `academic` / `experience` / `compare` / `general`）时，`search.run` 不返回结果列表，而是按 profile 选择来源（docs_code：ddg/bing/github；academic：arxiv/pubmed/ddg；experience：ddg/bing/v2ex；news_fact：ddg/bing；compare：ddg/bing/github；general：配置的 `engines`；显式 `engines` 优先），读取前 4 个保留候选的页面，分块并按每个需求评分，在字符预算（默认 6000，`budget` 可调）内挑出摘录，并列出未被满足的需求（`gaps`）。可选参数：`needs`（`;` 分隔或 JSON 数组）、`constraints`（JSON 数组 `{kind,value,strength}`；`strength` 缺省为 soft，`hard` 只在确定违反时才丢弃候选）。输出新增 `resultId`、`evidence`、`coveredNeeds`、`gaps`、`partial` 等可选字段，原有 `sources` 仍在；超过总时限（`timeoutMs` + 30 秒）时返回 `partial: true` 的已有结果。`history.expand` 传 `evidenceId` 可读回摘录所在块及其前后块（至多 4000 字符）。不传 `task` / `profile` 时行为和输出与以前完全相同。
-
-**相关度门（S4）**：需求与候选标题/摘要语言不同（如中文需求对英文结果）时，门限判断改用跨语言对齐（需求、query、目标与实体/必含词里的拉丁词一并参与匹配），同语言保持原有的词法规则；若门限之后保留的候选少于 3 个而更多候选存在，则按融合排序补回最靠前的、未违反硬约束的候选，标为“低相关”（`sources[].lowConfidence` / `evidence[].lowConfidence`，渲染为 `(low relevance)`，`stats.lowConfidence` 计数，并在 `notes` 说明），不会因为相关度启发式而返回空包。
-
-**有界第二轮（S8）**：第一轮之后若有关键需求（`critical`）没有被满足（`gaps` 里原因不是 `budget`），且轮数、查询数、时间都还有余量，管线最多再补搜一轮：以“需求文本 + 任务里的关键实体（entity / must_term / version 约束与 query 里的标识符）”为查询，按各 provider 编译（站点约束等照常下推），优先用第一轮没用过的 provider，其次复用已回答的；只读取新候选里最好的至多 2 页，只对缺口需求评分，再与第一轮结果合并（按 URL 去重）重新挑选。单任务查询总数（一次 provider 调用算一次，GitHub 的放宽重试合并算一次；允许第二轮时第一轮至多用 `maxQueries-1` 个 provider，留一次给第二轮，显式 `engines` 不裁剪）不超过 `evidence.maxQueries`（默认 4），轮数不超过 `evidence.maxRounds`（默认 2，设 1 即关闭）；剩余时间不足 15 秒或预算已用完时跳过并在 `notes` 说明。证据包 `stats.rounds` / `stats.queries` 给出实际轮数与查询数。
-
-块评分默认用本地词法规则。可选的博查 Jev 评分（付费，需环境变量或凭据引用 `BOCHA_JEV_API_KEY`）由 `evidence` 配置控制：`jevMode: off`（默认，不调用）、`shadow`（规则决定，Jev 评分只记录到存储 `evidence_runs.pack_json` 供对照）、`control`（且 `scorer: jev` 时由 Jev 决定；任何 Jev 失败都回退到规则并在 `notes` 里说明）、`hybrid`（规则评分全部块，Jev 只重评需求语言与块语言不一致的 (需求, 块) 对；`hybridBorderline: true` 时再加规则评分为 1 的边界对；Jev 失败保留规则评分；与 `scorer` 无关）；`maxJevQuestions`（默认 64）限制每次搜索发送的 (需求, 块) 问题数。规则评分本身对中文需求与英文块做了跨语言对齐（query / 需求 / 约束里的英文词和标识符并入匹配词），默认即生效。发给 Jev 的只有一句话目标、需求文字和页面块文本。
-
-#### Jev 提示词（rubric）：可配置、有版本 / Judge prompts: configurable and versioned
-
-**中文**　发给 Jev 的问题措辞、评分等级和长度上限是带版本的 rubric（内置 `score.support`，另有 `gate.relevance`、`gate.constraint` 备用）。默认值与离线评测（`bench/rubrics/*.v1.json`）逐字相同。要调整，在设置文件 `evidence.rubrics` 里按 rubric id 写覆盖项，无需改代码：
-
-```yaml
-evidence:
-  jevMode: hybrid
-  rubrics:
-    score.support:
-      version: v2                     # 必填；内容有改动就必须换新版本号（不能是 v1）
-      instructions: |                 # 只能用 {task} {need} {candidate}；必须含 {need} 和 {candidate}（≤2000 字符）
-        文本块本身是否直接陈述了需求所问的答案，而不只是提到该主题？
-        需求：{need}
-        文本块：{candidate}
-      criteria: [无关, 只提到主题, 部分回答, 直接回答且含证据]   # 2–10 级，从低到高；不是 4 级时分数按比例换算到 0..3
-      maxStateChars: 200              # 20–2000，任务描述上限
-      maxCandidateChars: 1200         # 100–8000，每个文本块上限
-```
-
-- **校验与回退**：含未知变量、缺必需变量、等级数不在 2–10、长度越界、未换版本等，整条覆盖被忽略，改用内置版本；原因出现在 `sources.status` 的 `evidence.diagnostics` 和证据包的 `notes`（仅启用 Jev 时）。
-- **版本规则**：改了措辞、等级或长度就换新 `version`（如 v2、v3）。每次 Jev 评分都记录 `id@version#内容哈希`：证据包 `stats.jev.rubric`、shadow 日志（`evidence_runs.pack_json` 的 `shadow.rubric`）、证据行（`evidence_blocks.rubric`）；离线评测的缓存键同样包含 id、版本和全文，所以改提示词不会复用旧分数。
-- **查看**：`sources.status` 的 `evidence.rubrics` 列出每个 rubric 当前生效的版本、是否被覆盖。
-- **恢复默认**：删除对应的 `evidence.rubrics.<id>` 条目即可（设置页暂不提供该项的编辑界面，只读设置文件）。
-- **先离线对照再上线**：`node --experimental-transform-types bench/src/eval-pack.ts --rubric-file bench/rubrics/variants/score.support.v2-example.json`，在同一份冻结数据上评估候选版本；不带 `--allow-jev N` 时不会发出任何请求（用法见 `bench/src/eval-pack.ts` 文件头注释）。
-- **不让线上模型改提示词**：rubric 只能由人通过设置文件修改；插件和任何线上模型都不会自动改写或上线新版本。
-
-**English**　The question wording, grade levels and length caps sent to Jev are versioned rubrics (built in: `score.support`, plus `gate.relevance` and `gate.constraint` for future use). Defaults are byte-identical to the offline-evaluated wording. Override one under `evidence.rubrics.<id>` in settings.yaml with its own `version`, optional `instructions` (variables `{task} {need} {candidate}` only; `{need}` and `{candidate}` required), `criteria` (2-10 levels, lowest first; other than 4 levels are rescaled to 0..3), `maxStateChars`, `maxCandidateChars`. An invalid override (unknown variable, bad level count, out-of-range length, changed content under the old version label) is ignored and the built-in is used; the reason shows in `sources.status` (`evidence.diagnostics`) and the pack `notes`. Bump `version` whenever the content changes. Every Jev result records `id@version#hash` (pack `stats.jev.rubric`, shadow log, `evidence_blocks.rubric`), and the offline judge-cache keys include id, version and full text, so a changed prompt never reuses old scores. Restore defaults by deleting the `evidence.rubrics.<id>` entry (there is no settings-page editor for it yet). Compare a candidate offline first with `bench/src/eval-pack.ts --rubric-file`. Online models must never rewrite or roll out rubrics by themselves: they change only through the settings file.
-
-#### 评分模型 provider 与用量上限 / Judge providers and usage caps
-
-**中文**　S6 的模型评分分成「协议 × provider」两层，换模型只改配置：
-
-- **协议**：`systemone`（Jev 兼容的 `POST /v1/systemone`：博查 Jev、其他 Jev 部署、本地 Laya sidecar）；`rerank`（Jina / Cohere 风格的 `{model, query, documents, top_n}` → `results[{index, relevance_score}]`，也适用于暴露同形状接口的本地 bge / Qwen reranker）；`llm`（OpenAI 兼容 chat completions，温度 0、严格 JSON 校验，仅供参考/实验，默认关闭，需 `evidence.judge.allowLlm: true`）。`systemone` 与 `llm` 用 `score.support` rubric；`rerank` 以需求文本作 query。
-- **内置 provider**：`bocha-jev`（默认；`https://jev.bocha.cn`，`bocha-jev-v1`，密钥 `BOCHA_JEV_API_KEY`，请求与旧版逐字节相同）、`typesafe-jev`（占位预设，须自行填 `baseUrl` / `model`，**未验证**）、`laya-local`（`http://127.0.0.1:8765`，无密钥；实验 r1 里在当前提示词下接近随机，用前必须自己校准）、`jina-rerank`、`cohere-rerank`（**未验证**，从未对真实服务调用过）。
-- **自定义 provider**（`jevMode` / `judge.mode` 决定怎么用；`judge.mode` 是 `jevMode` 的中性写法，两者都设时前者优先，且 `control` 不再需要 `scorer: jev`）：
-
-```yaml
-evidence:
-  judge:
-    mode: hybrid                 # off | shadow | control | hybrid
-    provider: my-reranker        # 默认 bocha-jev
-    providers:
-      my-reranker:
-        protocol: rerank
-        baseUrl: http://127.0.0.1:8080/v1   # 非本机必须 https；路径可用 path 覆盖（默认 /rerank）
-        model: bge-reranker-v2-m3
-        keyRef: MY_RERANK_KEY    # 可选：凭据引用或环境变量名，永远不写密钥本身
-        limits: { maxDocumentsPerRequest: 50, blockChars: 1000 }
-        calibration:             # rerank 必填，见下
-          version: v1
-          points: [[0.1, 0], [0.4, 1], [0.7, 2], [0.9, 3]]
-      bocha-jev:                 # 与预设同名 = 覆盖预设的个别字段
-        limits: { maxQuestionsPerRequest: 16 }
-  budget:
-    perSearchInputTokens: 60000  # 默认
-    dailyInputTokens: 1000000    # 默认
-    timezone: Asia/Shanghai      # 日界线时区，默认系统时区
-    providers: { laya-local: { dailyInputTokens: 200000 } }   # 按 provider 覆盖，取更严格者
-```
-
-- **校准是硬要求**：reranker 的相关度分数不是等级，不同模型/语言差异很大。`calibration.points` 是 `[原始分, 等级0..3]` 的单调分段线性映射（原始分严格递增、等级不降；区间外取端点），版本号和内容哈希随结果记录；没有校准的 rerank provider 不会被使用（规则评分继续，并在 `notes` 说明）。不同 provider 的分数从不混用，离线缓存也按 provider+模型分开（rerank 缓存的是原始分，换校准无需重新请求）。`systemone` 也可选填 `calibration`（Laya 建议）。先用 `shadow` 观察，再考虑 `hybrid` / `control`。
-- **用量账本与上限**：每次模型调用前按保守估算预留 token、调用后按服务返回的 `usage` 结算（服务不返回则按估算记账并标 `estimated`；价格未声明时金额为空，不是 0；`price` 可选声明）。预留是原子的（SQLite `usage_ledger` 表，跨搜索、跨进程，重启不清零，未结算的预留继续占用额度）。超过单次搜索或当日上限时跳过模型阶段、回退规则评分，`notes` 出现 “model budget exceeded”。`sources.status` 的 `evidence.provider` / `evidence.usage` 显示当前 provider 是否可用、今日用量与上限。注意默认单次上限 60000 输入 token 小于 `maxJevQuestions: 64` 全量发送的估算量，较大的 hybrid 搜索可能提前停在上限处。
-- **离线评测**：`bench/src/eval-pack.ts --provider <id> [--providers-file providers.json]`、`bench/src/run-judges.ts --provider <id>`；文件格式同 `evidence.judge.providers`。
-
-**English**　S6 model scoring is split into protocol x provider; switching models is configuration. Protocols: `systemone` (Jev-compatible API: Bocha Jev, other Jev deployments, the local Laya sidecar), `rerank` (Jina/Cohere-style query-documents API, also local bge/Qwen servers) and an opt-in `llm` (OpenAI-compatible chat, temperature 0, strict JSON; off unless `evidence.judge.allowLlm`). Presets: `bocha-jev` (default, requests byte-identical to before), `typesafe-jev` (placeholder, unverified), `laya-local` (no key; near random with the current prompts, calibrate first), `jina-rerank` / `cohere-rerank` (unverified, never called live). Add your own under `evidence.judge.providers` (same-id entries override a preset's fields); `evidence.judge.mode` is the neutral name of `jevMode`. A reranker's relevance score is not a grade: `calibration.points` (monotone piecewise-linear `[raw, grade 0..3]`) is mandatory, versioned and recorded with results; provider scores are never mixed and caches are per provider+model. Every model call is reserved before and settled after in a persisted ledger (actual tokens from the API, otherwise a flagged estimate; unknown price = null, never 0), under `evidence.budget` caps (default 60k input tokens per search, 1M per day, per-provider overrides, day boundary in `timezone`). Over a cap the model stage is skipped and rule grades are used ("model budget exceeded"). `sources.status` shows the provider and today's usage. Offline: `eval-pack.ts` / `run-judges.ts --provider <id>`.
-
-**覆盖判定（S8，可选，默认关闭）**　规则覆盖是词法判断，分辨不出“文档里没有”。`evidence.coverage: { mode: off | shadow | control, provider?, thresholds?: { weak, covered } }`：对规则声称已覆盖的每个需求，向 systemone 模型（默认 `bocha-jev`）问一道 `cover.sufficient` noul 题——“这些摘录本身是否已明确给出答案”（一次请求，经用量账本与上限）。`shadow` 只把原始概率记入 `stats.coverage`，覆盖不变；`control`：概率低于 `weak` 的需求变成缺口 `weak_support (judge)`（关键需求可触发既有的有界第二轮，不增加轮数），介于 `weak` 与 `covered` 之间的保持覆盖并标 `(judge unsure)`。只有显式设置才启用，不随 `jevMode` 自动开启；失败、超限、超时、缺 Key、缺阈值时保留规则覆盖并在 `notes` 说明。阈值只对校准过的 provider + rubric 版本有效（内置 `bocha-jev` + `cover.sufficient@v1`：weak 0.0512，covered 0.313，取自 v1 calibration 划分）；换 provider、模型或 rubric 版本须自己配 `thresholds`。离线评测见 `bench/README.md` “覆盖判定评测”，数字见开发计划 M9：增益有限，所以默认保持关闭，建议先用 `shadow` 积累数据。
-
-**English**　Optional S8 coverage judge (default off). `evidence.coverage: { mode: off | shadow | control, provider?, thresholds?: { weak, covered } }` asks a systemone model (default `bocha-jev`) one `cover.sufficient` noul question per need the rules claim covered ("do these excerpts by themselves state the answer?"), metered by the usage ledger. `shadow` records raw probabilities in `stats.coverage` and changes nothing; `control` turns probabilities below `weak` into `weak_support (judge)` gaps (a critical one may start the existing bounded second round) and marks the band up to `covered` as `(judge unsure)`. Only its own setting turns it on; any failure, cap, timeout, missing key or missing thresholds keeps the rule coverage and says so in `notes`. Thresholds are only valid for the provider + rubric version they were calibrated for (shipped: `bocha-jev` + `cover.sufficient@v1`).
-
-## 工具面（索引 → 调用）
-
-常驻上下文只有两个工具，常驻文本（系统提示 + 工具名、描述、参数）约 800 字符（原 11 个工具约 9300 字符）：
-
-| 工具 | 作用 |
-|---|---|
-| `web_index({group?, action?, query?})` | 渐进披露目录：无参数列出能力组、两个最常用调用、旧名对照；`group` 列出该组动作；`action` 给出完整参数；`query` 按关键词检索（至多 8 条） |
-| `web_call({action, args})` | 执行一个动作，返回统一信封 `{ok, action, result \| error{code,message,hint,schema?}, truncation?}`；参数校验失败（`INVALID_ARGS`）时附带该动作的精简 schema，一次即可改对；未知动作会给出相近动作名 |
-
-使用指引放在随包提供的 skill `dsh-web-search-pro`（证据模式优先、先读 `gaps` 再下结论、`search.recommend` 只用 1–2 个来源、`read.fetch` 的 `offset` 续读、约束、预算、浏览器交接；参考文件含来源与 Key 配置、评分 provider 与 rubric、排障）。skill 通过可选的 `ctx.skills` 注册，**不写入必需的 `inject`**；宿主没有 skill 服务时，`web_index()` 根目录附一段精简指南兜底。系统提示只保留一行入口（有 dsh-browser 时再加一行指向 skill `dsh-browser` / `browser_index`）。
-
-### 动作
-
-| 组 | 动作 | 作用 |
+| 键 | 默认值 | 说明 |
 |---|---|---|
-| `search` | `run` | 多引擎搜索 + RRF 融合 + 内存/SQLite 双层缓存 + 历史；传 `task` / `profile` 得证据包；传 `platform` 搜单个平台（GitHub/B站/YouTube/V2EX/小红书/Twitter/Reddit/IG/FB/RSS + 知乎/微博/豆瓣/贴吧/抖音/快手，登录态走 Playwright；RSS 用 `url` 传 feed、`query` 可选过滤；平台与网页引擎走同一条注册表执行路径，可与 `task`/`profile` 同用得到证据包，见“平台来源”） |
-| | `recommend` | 按任务推荐至多 3 个来源（已就绪优先，其余给出缺失条件），不发搜索请求 |
-| `read` | `fetch` | 可读化抓取（Jina → HTTP+规则抽取 → Playwright 兜底）+ 快照缓存与 `offset` 续读；`auto` 按质量升级：每次结果先判为 content / shell / js_shell / login_wall / captcha / error，只有 shell、js_shell、login_wall 且 dsh-browser 就绪时才升级到 Playwright（captcha 与错误页不会，短而有实质内容的事实页不算空壳），取质量最好的一次并在 `attempts` 里记录各后端结果；不会自动安装任何东西；显式 mode 不升级，只复用同后端缓存 |
-| | `contents` | 原生 Exa `/contents` 批量正文抓取（1-100 URL，需 Exa Key） |
-| | `snapshot` | Playwright HTML + 文本落盘；`screenshot=false` 时不生成 PNG（需要 dsh-browser） |
-| `history` | `list` / `replay` / `expand` / `export` / `delete` | 持久历史：过滤列出 / 按 id 回放 / 读回证据摘录及前后块 / 导出 JSON / 删除一条查询 |
-| `sources` | `status` | 无副作用后端探测、失败/冷却诊断与 CLI 状态（Twitter 项同时检查 `twitter` 命令、设置开关和凭据环境变量，`note` 说明缺什么） |
-| | `deps` / `install` | 检测 / 安装搜索后端的外部依赖（bili/yt-dlp/twitter/agent-reach/mcporter；每项探测的是后端真正执行的命令）；浏览器依赖由 dsh-browser 管理 |
-| `rules` | `list` / `upsert` / `remove` / `import` / `export` | 持久化按站提取规则（脚本猫式）；export 会写出可再导入的版本化 JSON rule pack |
-| `cache` | `clear` / `stats` | 按时间/引擎清缓存 / 存储统计 |
-| `config` | `inspect` / `set_order` / `set_confidence` / `upsert_cli` / `remove_cli` / `reset` / `export` | agent 覆盖层：读取生效值与来源，运行时改搜索顺序、来源优先 / 停用、置信度、平台后端顺序、自定义 CLI；改动即时生效，用户可在设置面板采纳或撤销（见“agent 覆盖层与 `config.*`”） |
-
-每个动作的参数与输出 schema 是封闭的（未声明字段不会出现，除必需字段外都是可选字段）。
-
-### 旧工具到新动作
-
-旧的 `web_*` 工具名**已不存在**，也没有兼容包装；模型调用旧名会得到新动作名与翻译后的参数。映射表在 `src/actions/legacy.ts`，测试逐项验证每个旧参数仍可达。
-
-| 旧工具（参数） | 新动作 |
-|---|---|
-| `web_search_pro` | `search.run`（`query`、`task`、`profile`、`needs`、`constraints`、`budget`、`engines`、`count`、`fresh`、`multi`、Exa 选项原样保留） |
-| `web_platform_search` | `search.run`，传 `platform`（另有 `url`、`authProfile`、`rulePack`；现在也支持 `fresh`） |
-| `web_fetch_pro` | `read.fetch` |
-| `web_exa_contents` | `read.contents` |
-| `web_snapshot` | `read.snapshot` |
-| `web_history`（过滤） | `history.list` |
-| `web_history replay=<id>` | `history.replay {id}` |
-| `web_history action=expand evidenceId=<id>` | `history.expand {evidenceId}` |
-| `web_history export=true` | `history.export`（同样的过滤参数） |
-| `web_cache_clear`（`olderThanDays` / `engine`） | `cache.clear` |
-| `web_cache_clear queryId=<id>` | `history.delete {id}` |
-| `web_rule action=list\|upsert\|remove\|import\|export` | `rules.list` / `rules.upsert` / `rules.remove` / `rules.import` / `rules.export` |
-| `web_search_stats` | `cache.stats` |
-| `web_backend_status`（默认） | `sources.status` |
-| `web_backend_status action=recommend` | `search.recommend` |
-| `web_deps`（默认 / `action=check`） | `sources.deps` |
-| `web_deps action=install` | `sources.install` |
-
-迁移说明：
-
-- 没有 dsh-browser 的会话里，`web_*` 旧名的调用会报“工具不存在”（宿主层错误，插件无法拦截）；新会话的模型通过系统提示、skill 或 `web_index()` 找到新名字。
-- 用户在宿主里对旧工具名设置的“总是允许”规则不再生效；`web_index` 无副作用，`web_call` 的审批由本插件按**动作**判断（见下）。
-- `web_history` 的 `replay` / `export` / `action=expand` 不再与列表过滤混在一次调用里，每个动作只做一件事。
-- 输出路径变化：`search.recommend` 直接返回推荐本身（不再包在 `recommend` 字段里）；`sources.install` 返回 `install` 结果（不再带空的 `backends`）。
-
-### 审批、并发与超时（按动作）
-
-- **审批**：`sources.install`（安装外部命令）、`cache.clear`、`history.delete`、`rules.upsert` / `rules.remove` / `rules.import`（改本地存储）会请用户确认；`config.upsert_cli`（让插件能运行一个本地程序）**一律先问用户**，提示里写明命令、搜索与探测的参数模板和读取的环境变量名；其余 `config.*` 写入不询问（`dsh-browser.automationMode=read-only` 时全部拒绝）；其余动作直通。原先这些规则按工具名写在 dsh-browser 的 `tools/pre-execute` 钩子里，而 `web_call` 对它是不透明的，所以规则现在由本插件解析 `web_call` 的动作后施加，并在 dsh-browser 存在时读取它的 `automationMode`：`read-only` 拒绝；安装在 `unrestricted` 直通；本地写入在 `standard` 询问、`autonomous` / `unrestricted` 直通；`config.upsert_cli` 除 `read-only`（拒绝）外**任何模式都询问**。**headless 没有人可问时，宿主对“询问”一律拒绝**（`dsh-tools` 的 `serviceAsk`：没有 `approval` 服务时按插件给的理由拒绝，有服务但没有应答者时返回 `unavailable` 同样拒绝，会话策略为 `never` 时直接拒绝），所以 headless 的 agent 加不了 CLI，只能改顺序、置信度等不询问的项。**没有 dsh-browser 时模式未知，按 `standard` 处理（询问）**——这比旧行为（无 dsh-browser 时完全不审批）更严格。
-- **并发**：`web_call` 的并发安全性由参数里的动作决定：只读动作可并行，修改状态的动作独占（`sources.install` 现在也独占，旧的 `web_deps` 因为一个标志同时覆盖 check 与 install 而全部可并行）。
-- **超时**：每个动作保持旧工具的上限（搜索与快照 `timeoutMs` + 60 秒，读取与 Exa 正文 + 30 秒，依赖检测/安装 + 180 秒，历史与状态等 10–20 秒）；`web_call` 的宿主上限取其中最长者，各动作自己的截止时间到期后返回 `DEADLINE`（修改状态的动作会说明结果未知）。调用方的取消信号会传给执行器。
-
-### 工具面形态
-
-`toolSurface: indexed | flat`（设置文件顶层，启动时生效，默认 `indexed`）。`flat` 把同一份动作注册表投影成每个动作一个工具，名字为 `web_<组>_<动作>`（如 `web_search_run`、`web_read_fetch`），**只用于对照与调试**，不是旧工具的兼容层，常驻体积回到全部注入的量级。两种形态共用同一个分发函数，信封、错误码与审批完全一致。
-
-### 输出预算（所有出口）
-
-每个把正文交给模型的出口都有默认上限；超出部分留在本地存储，按 ID 或偏移续读，不会因为 UI 折叠而仍把全文送进上下文。
-
-| 出口 | 默认预算 | 配置项 | 超出时 |
-|---|---|---|---|
-| `search.run`（证据包） | 摘录总计 6000 字符，每 URL 至多 2~4 块 | 参数 `budget`（至多 30000） | 溢出的需求列在 `gaps`；`history.expand` 传 `evidenceId` 读回摘录所在块及前后块 |
-| `read.fetch` | 20000 字符 | `fetchDefaultChars`（1000–500000）；参数 `maxChars` | 输出 `truncated`、`nextOffset`、`totalChars`，并提示 “more: call read.fetch with offset=N”；`offset` 从已存的页面快照续读，命中缓存时不重新抓取 |
-| `read.contents` | 每 URL 8000、全部 URL 合计 30000 字符；总量不足时较短的文本原样保留、剩余额度均分给较长的 | `exaContentsPerUrlChars`、`exaContentsTotalChars` | 每条结果带 `truncated`、`totalChars`，并给出 `read.fetch offset` 的续读提示 |
-| ctx.web 抓取 Provider（内置 `web_fetch`） | `fetchDefaultChars` 的两倍（默认 40000）；`WebFetchRequest` 没有大小参数 | `fetchDefaultChars` | `truncated` 如实反映是否被截断，正文末尾追加 `[Continue with web_call read.fetch url=… offset=N]` |
-| ctx.web 搜索 Provider（内置 `web_search`，`provider.evidence: auto`） | 证据包同上（默认摘录 6000 字符）；来源条数取宿主给的 `maxResults`（1–20） | `provider.evidence`、`provider.deadlineMs` | 期限到点返回 `PARTIAL` 的已有证据包；失败退回普通来源列表；`truncated` 仅在确有来源被截掉时为真 |
-| `read.snapshot` 文本、`history.replay` 的页面文本 | `fetchDefaultChars` | `fetchDefaultChars` | 文末带截断标记；全文仍在存储里，用 `read.fetch url=… offset=N` 读取 |
-| `search.run`（普通列表与平台搜索） | 每条摘要 500 字符，条数由 `count` 限制 | `searchMaxResults` | 摘要截断 |
-
-抓取时页面至少读取并存储 100000 字符（更大的 `offset + maxChars` 会读更多，上限 500000），所以续读来自 SQLite 快照；超过已存部分的 `offset` 会自动用更大的上限重新读取。
-
-## 浏览器脚本与自动化分层
-
-`@anweat/dsh-browser ^0.2.0` 提供三类脚本入口：
-
-1. **内置只读脚本**：`article-clean`、`links`、`jsonld`、`forms`，适合稳定抽取；先用 `script.catalog`（`browser_call`）查看。
-2. **Recipe**：最多 25 步的结构化 Playwright 操作，支持 wait/click/fill/type/press/select/check/hover/scroll/extract/assert/screenshot；交互步骤由自动化模式决定审批。
-3. **外部 UserScript**：适合外部模型生成站点专项逻辑。先 `script.validate` 查看 SHA-256、域名范围与能力提示，再 `script.run_userscript`（均经 `browser_call`）；它在页面主世界运行，并非安全沙箱。
-
-工具自由度由 dsh-browser 的 `automationMode` 控制：`read-only` 隐藏或拒绝页面及 Web Search Pro 写操作；`standard`（默认）对交互、写 Recipe、外部脚本、OpenCLI、缓存/规则变更和安装操作审批；`autonomous` 直通页面交互、写 Recipe 以及本地缓存/规则变更，但安装、外部脚本和通用 OpenCLI 仍审批；`unrestricted` 为隔离测试 profile 提供无审批运行。所有模式仍保留域名、参数、大小和步骤上限校验，并始终应用 dsh-browser 的调用缓冲、退避与爬取预算。
-
-OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话。推荐顺序是 **`opencli.catalog` 查精确 adapter → network/extract → DOM 操作**；先运行 `opencli.status`。`opencli.run` 接受 argv 数组而非 shell 字符串，可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令；仅 `unrestricted` 跳过审批。
-
-更完整的 AuthProfile、脚本元数据与 OpenCLI 示例见 [LOGIN.md](./LOGIN.md)。
-
-## 配置
-
-三层，越靠前越日常：
-
-1. **DSH 可视化面板**：打开 `设置 → 插件 → 插件配置 → Web Search Pro`（各分组见下节“设置面板”）。修改先保留为本地草稿，点击“保存”后写入 `settings.yaml` 并热更新，支持放弃修改和逐字段恢复部署值。
-
-   - Exa、Jina、GitHub、博查、DeepSeek 与各需 Key 来源的密钥通过 DSH Credentials 写入，面板只显示“已配置/未配置”，不会把明文密钥读回浏览器，也不会把密钥值写进 `settings.yaml`。
-   - `platformRules`、`customPlatforms`、`browserBindings`、Playwright、自定义评分 provider 等使用 JSON 对象编辑器；格式、数值范围或服务端校验不通过时会阻止保存，并在字段下方给出与服务端一致的错误信息。
-   - 浏览器工具的审批自由度由 `dsh-browser.automationMode` 管辖，调用缓冲由 `dsh-browser.usagePolicy` 管辖；用 `browser_call` 的 `runtime.status` 查看当前状态。Web Search Pro 面板只管理搜索插件自己的后端开关，不会绕过浏览器插件的审批或资源策略。
-   - 更新带客户端面板的插件版本后需要重启 Web profile，让 DSH 客户端模块扫描器重新装载 `client.js`。
-
-2. **`$DSH_HOME/settings.yaml` → `web-search-pro:` 段**（热重载，改完即生效）：
-
-   ```yaml
-   web-search-pro:
-     toolSurface: indexed # indexed（默认，只常驻 web_index / web_call）| flat（每个动作一个工具，仅对照与调试；启动时生效）
-     exaApiKeyEnv: EXA_API_KEY # 推荐：运行环境或凭据服务，不把密钥写入配置
-     jinaApiKeyEnv: JINA_API_KEY
-     bochaApiKeyEnv: BOCHA_SEARCH_API_KEY # 博查 Key 的凭据 / 环境变量名；缺省再试 BOCHA_JEV_API_KEY
-     # twitterAuthTokenEnv: TWITTER_AUTH_TOKEN # twitter-cli 的两个 Cookie 值：凭据 / 环境变量名（默认如左）；也可在设置面板写入 DSH Credentials
-     # twitterCt0Env: TWITTER_CT0
-     # keyedSources: # 付费来源（可选，见“付费 / 需 Key 的来源”）：tavily / brave / linkup / serper / metaso / zhipu / baidu-qianfan
-     #   tavily: { apiKeyEnv: TAVILY_API_KEY }   # 或 apiKey（字面量，不推荐）/ baseUrl；没有 Key 的来源保持不可用
-     #   deepseek: { apiKeyEnv: DEEPSEEK_API_KEY } # DeepSeek 搜索 / 抓取（常用）：默认就读 DEEPSEEK_API_KEY；baseUrl 默认 https://api.deepseek.com/v1/tools
-     # deepseekFetch: false # true = read.fetch 可用 DeepSeek Fetch API（按请求计费，默认关闭）
-     engines: [ddg, bing, exa, seam, jina]
-     parallelEngines: false
-     # registerProvider: false # true = 把本插件注册为 ctx.web provider（还需在 web 条目里选中，见“两种用法”）
-     # provider: { evidence: auto, deadlineMs: 25000 } # 内置 web_search 经本插件时是否返回证据包（auto | off）与其期限
-     evidence: # 证据包模式的块评分；默认完全不调用 Jev
-       scorer: rule # rule | jev
-       jevMode: off # off | shadow | control | hybrid
-       hybridBorderline: false # 仅 hybrid：同时重评规则边界对
-       maxJevQuestions: 64
-       maxRounds: 2 # 证据包补搜轮数上限；1 = 关闭第二轮
-       maxQueries: 4 # 单任务搜索查询总数（含第一轮；一次 provider 调用算一次）
-       autoProviders: true # 按任务语言提前就绪的来源（你配置了 Key 的来源，英文无 Key 时的 Exa）；false = 只用 profile 表
-       # sourcePolicy: default # default | anonymous-only（自动规划绝不用需要 Key / 账号 / 登录的来源，见“来源策略”）
-       # rubrics: ...   # 可选：覆盖 Jev 提示词，见下文“Jev 提示词（rubric）”
-       # judge: ...     # 可选：选择/自定义模型 provider，见下文“评分模型 provider 与用量上限”
-       # budget: ...    # 可选：模型输入 token 上限（单次搜索 / 每日），默认 60000 / 1000000
-     # sources: # 来源偏好与请求额度（全部可选，默认什么都不设）
-     #   priority: [bocha, exa] # 就绪且适合任务语言 / profile 的来源按此顺序排最前
-     #   disabled: [bing]       # 自动规划与 engines 列表都不用
-     #   budget: { bocha: { total: 1000, daily: 50 } } # 请求上限；用完被跳过并回退，不报错
-     ttlSeconds: 3600
-     searchMaxResults: 8
-     browserBindings:
-       zhihu:
-         authProfile: china-community
-         rulePack: zhihu-enhanced
-   ```
-
-   **字段顺序**：配置 schema、宿主的通用配置视图、`--dump-config` 和设置面板的文本视图按同一份分组排列（`src/config-groups.ts`，字段名、默认值和语义不变）：常用 → 搜索顺序（`engines`、`sources`、`platformBackends`）→ 来源与密钥 → 自定义 CLI（`cliAdapters`）→ 读取与证据（`evidence` 等）→ 平台与运行时 → 高级与诊断（缓存、排序加权、`dbPath`、`verbose`）。文本视图的每一段有中文 / 英文分节标题注释，需要重启的键在注释里写明。
-
-3. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
-4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。这些引用名与密钥都可以在面板“来源”分组里设置。
-
-### 需要重启插件的设置
-
-几乎所有设置都是热更新：宿主改 profile 配置时就地更新条目的配置，每次调用经 `dynamic()` 读最新值。只有下面这些在**插件启动时读一次**，改了要重启插件（`RESTART_FIELDS`，`src/restart.ts`）：
-
-| 设置 | 为什么 |
-|---|---|
-| `toolSurface` | 工具（`web_index` + `web_call`，或每个动作一个）在启动时注册 |
-| `playwright.snapshotDir`（`playwright.enabled` 是热的） | `read.snapshot` 的快照目录在启动时确定 |
-| `providerId` / `registerProvider` | ctx.web provider 的注册与 id 在启动时给宿主 |
-| `timeoutMs` | 每个动作的截止时间与宿主工具上限在启动时定下（搜索内部的协作超时预算是热的） |
-| `memoryCacheEntries` | 进程内缓存按此容量在启动时创建 |
-| `dbPath` | SQLite 和 agent 覆盖文件在启动时打开；旧路径里的数据不会自动搬走 |
-| `verbose` | 加载标记在启动时写入 |
-
-设置面板里这些行带“重启插件后生效”标记（`?` 里写原因）；保存时若改到了它们，保存条加一句提示；状态摘要显示“待重启 N 项”。运行时检测：插件记下启动时的值，`sources.status` 和 `config.inspect` 在配置里的值与之不同时写出“待重启：<字段>（当前生效 X，配置为 Y）”。源码里有一个测试扫描对启动时配置副本的读取，新增这类读取而没登记到 `RESTART_FIELDS` 会失败。
-
-### agent 覆盖层与 `config.*`
-
-profile 配置是用户的基线，**agent 不直接改它**。agent 要调整来源顺序或加一个 CLI 时用 `config` 组的动作，它们写一个单独的**覆盖层**，叠在基线上、立即生效，设置面板里能看到并一键采纳或撤销。设计说明见 [docs/overlay-design.md](docs/overlay-design.md)。
-
-- **文件**：`$DSH_HOME/data/web-search-pro/overlay.json`，和 `dbPath` 同一个目录（改了 `dbPath` 就跟着走）。内容：`version`、`revision`（乐观锁）、`checksum`（sha256）、`values`、最近 50 条审计记录；先写临时文件再改名，权限 0600。按 mtime 和大小缓存，变了才重新读取并校验，不用 fs.watch。
-- **能覆盖的只有这些**：`engines`（整列表）、`sources.priority` / `sources.disabled`（整列表）、`sources.confidence.<id>`（单项）、`platformBackends.<平台>`（单个平台的整条链）、`cliAdapters.<id>`（整份规格）。Key、路径、预算、开关、证据与评分设置都碰不到；覆盖层只能新增或替换，不能删除基线条目（停用基线里的 CLI 用 `sources.disabled`；`config.remove_cli` 只删覆盖层自己加的）。
-- **合并**：`dynamic()` 返回“基线 + 覆盖层”，所有消费者下一次调用就看到。校验与设置面板、`sources.status` 用同一批函数（`cliIssues`、`sourcesIssues`、CLI 规格校验、来源 id 规则）；只有覆盖层**新增**的问题才算数。整个文件解析失败、校验和不符、值被校验拒绝或与基线不再一致（链里引用了用户删掉的 CLI）时，**整体忽略、按基线运行**，在 `sources.status` / `config.inspect` 报告原因，绝不只应用一半；坏文件挡住写入，直到 `config.reset {scope:"all"}`（或面板的“全部撤销”）把它挪开。
-- **动作**：`config.inspect`（每个键的生效值与来源、`revision`、最近审计、覆盖层是否有效、待重启项）、`config.set_order {engines?, priority?, disabled?, platform?, backends?}`、`config.set_confidence {id, value}`（省略 `value` 删除覆盖项）、`config.upsert_cli {id, spec}`、`config.remove_cli {id}`、`config.reset {scope: all|order|confidence|cli|platform, id?}`、`config.export`（导出生效的可覆盖设置为 YAML，可贴进 profile）。每次写入必须有 3–300 字符的 `reason`，可带 `expectedRevision`（不匹配就拒绝）；成功后 `revision + 1` 并写一条审计（时间、动作、键、前后值摘要、reason、sessionId、actor）。没有变化的写入不落盘、不增加 revision。
-- **审批**：见上面“审批、并发与超时”。`config.upsert_cli` 一律询问，其余不询问；headless 下 `upsert_cli` 被拒。
-- **设置面板**：被覆盖的行带“agent 修改”标记（悬停看值、reason、时间）；新分组“agent 修改”列出全部覆盖项和最近的审计，每项“采纳到配置”（用与保存条相同的原子 `mutate` 写进 profile，成功后才让插件删掉这一项覆盖）和“撤销”，另有“全部撤销”和“刷新”（面板打开时读取一次）。
-
-## 设置面板
-
-0.2.3 起设置面板按“状态摘要 + 手风琴分组 + 列表与弹窗 + 固定保存条”重做（风格与 `@anweat/dsh-browser` 0.2.2 的设置页一致）；保存结构、Config schema 与运行时行为不变。顶部是**状态摘要**：实际尝试顺序的默认引擎链、已配置 Key 的来源数、“常用”的 DeepSeek 是否就绪、内置 web 工具是否经本插件、评分模型、工具面，以及校验提示的数量（点开看详情）；agent 改过设置时多一个“agent 修改 N 项”入口，插件有设置要重启才生效时多一个“待重启 N 项”徽标。下面是十二个分组（常用 · 搜索顺序 · 来源 · 自定义 CLI · 读取与证据 · 评分模型 · 内置 web 工具路由 · 运行时与后端 · 网络与缓存 · 排序加权 · agent 修改 · 高级），**默认只展开“常用”**；每个字段是“标签 + 一行说明”，长说明放在 `?` 气泡里，被覆盖的字段带“已覆盖”徽标和就地“恢复默认”，未覆盖的显示当前值（灰色）。底部的保存条一直可见，显示“N 项未保存的修改”，有“放弃修改”和“保存”。
-
-| 分组 | 内容 |
-|---|---|
-| 常用（默认展开） | 它**实际**会怎么排的一行预览（与路由器用同一个函数，带“编辑顺序”链接）、默认结果数、并行融合、工具面（下拉）、`allowProxyFakeIp`（带“网络”标注）、DeepSeek 搜索 / 抓取（“常用”）一行和 `deepseekFetch` 开关（带“计费”标注） |
-| 搜索顺序 | **通用搜索顺序**：`engines` 是一个可排序的列表（每行：位置、名称、就绪状态——Key 或地址是否已设，已保存的自定义 CLI 用插件自己的本地探测——置信度和一个置信度输入框，上移 / 下移 / 移除），下拉框里是还能加入的来源（内置引擎，加上标记为“通用引擎”的自定义 CLI），“恢复默认顺序”删掉 `engines` 这个键；列表下面是**实际生效顺序**预览和一句“为什么和列表不同”（DeepSeek 因为有 Key 排最前、`sources.disabled` 去掉了谁、`sources.priority` 提前了谁、只用免费来源时没加谁、你自己写的顺序不自动加 DeepSeek）；一段说明三者的关系：调用里显式给的 `engines` > `sources.priority` / `sources.disabled` > 默认规则，并链接到“来源”。**平台后端顺序**：每个有后端链的平台一行（没改过的灰色显示内置默认链并标“默认”），弹窗里用同样的列表编辑；可选后端 = 该平台的内置后端加上**声明服务该平台**的自定义 CLI；“恢复默认”删除 `platformBackends.<平台>` 这一项（最后一项删掉时整个字段 `unset`） |
-| 来源 | 来源策略（`evidence.sourcePolicy` 下拉、`sources.priority` / `sources.disabled` 标签）；**来源列表**：DeepSeek（常用）、博查、Tavily、Brave、Linkup、Serper、秘塔、智谱、百度千帆、Exa、Jina、GitHub、SearXNG，每行显示层级（付费 / 有免费额度 / 免 Key）、Key 是否已设和请求上限，点“编辑”在**弹窗**里改 Key 引用名、写入式密钥（遮罩，只显示“已配置”）、接口地址、请求额度（`sources.budget.<id>.total` / `daily`）；匿名来源参考表和 `openalexMailto` 在折叠区 |
-| 读取与证据 | `fetchDefaultChars`、`exaContentsPerUrlChars` / `TotalChars`、`evidence.autoProviders` / `maxRounds` / `maxQueries`（带单位的数字输入）。`minKeep` 与证据包字符预算没有配置项 |
-| 评分模型 | `evidence.judge.mode` 下拉（off / shadow / control / hybrid，同时写旧键 `jevMode` / `scorer`）、provider 下拉、`hybridBorderline`、`maxJevQuestions`、`allowLlm`；折叠区：覆盖判定（模式、provider、阈值）与用量上限；自定义 provider / 按 provider 上限是 JSON 列表（弹窗里编辑，校验与服务端共用，拒绝在定义里放密钥）；**提示词（rubric）列表**：每行显示名称、生效版本、默认 / 已覆盖，“编辑”打开弹窗，左边是默认文本、右边是你的覆盖，“从默认文本开始覆盖”“恢复默认” |
-| 内置 web 工具路由 | `registerProvider` 开关；打开后才出现 `providerId`、`provider.evidence`、`provider.deadlineMs`；折叠区给出选中本插件所需的 profile patch（随 `providerId` 变化） |
-| 自定义 CLI | 列表（id、命令行、用途——通用引擎 / 服务的平台、置信度、规格合法或问题数）和新增 / “用 echo 做示例” / 编辑 / 复制 / 删除；**编辑弹窗是表单**：命令、参数模板（一格一个 token，`{query}` `{count}` `{terms}` 提示，允许的子命令从模板自动推出并显示）、输出格式、“整段输出”开关、结果数组路径、四个字段路径、超时、用途、置信度；折叠区有高级项（安装说明、帮助命令、帮助里必须出现的内容、输出上限）、**试运行**和**查看 JSON**（直接编辑整份规格，与表单双向同步；服务端的校验函数实时校验，每条消息显示在对应的控件旁；规格有问题时“完成”不可点） |
-| 运行时与后端 | CLI / OpenCLI / Agent Reach 开关；Twitter / X 登录值（弹窗：两个引用名与两个写入式密钥）；JSON 对象列表：Playwright、自定义平台、平台选择器覆盖、浏览器绑定（每项一个弹窗） |
-| 网络与缓存 | `timeoutMs`、`ttlSeconds`、`memoryCacheEntries`、`dbPath`、`verbose` |
-| 排序加权（高级） | `rrfConstant`、`freshnessBoost` / `freshnessDays`、`authorityBoost` / `authorityDomains` |
-| agent 修改 | agent 经 `config.*` 做的修改：每项显示类型、生效值与你配置里的值、reason、时间、sessionId，带“采纳到配置”和“撤销”；“全部撤销”（也用来修复被忽略的坏文件）、“刷新”、覆盖文件路径与版本、最近的审计记录（折叠） |
-| 高级：文本模式与原始 JSON | 折叠区“原始 JSON”：`platformBackends` 与 `cliAdapters` 的整段 JSON（不再是主要入口）；当前草稿的设置（不含密钥）打印成**每个键前都带注释**的 YAML：用途、取值或范围、默认值、风险，中英文随界面语言；只读视图，可复制；去掉 `#` 行后剩下的恰好是你覆盖的键 |
-
-- **弹窗里的改动**先留在草稿里，点底部“保存”才写入；“放弃修改”丢掉全部草稿。
-- **写入方式**：保存是一次原子的 `mutate`，按字段路径逐项写入（`evidence.maxRounds`、`sources.budget.deepseek.daily`、`playwright.enabled` …），而不是整体写回 `evidence` / `sources` 容器；宿主只接受声明了 `.volatile()` 的字段之下的编辑，整体写容器会被拒绝（0.2.2 的面板在 rc.3 宿主上保存这些字段会失败，见 CHANGELOG）。恢复默认会 `unset` 那一项，宿主不会清掉留下的空容器（`evidence: {}` 之类，无害）；不认识的同级键原样保留。
-- 密钥通过 DSH Credentials 写入，页面只显示“已配置 / 未配置”，不读回明文，也不写进 `settings.yaml`；写密钥发生在设置写入成功之后。
-
-校验与服务端共用同一批纯函数（`pipeline/rubrics-spec.ts`、`judges/providers-spec.ts`、`judges/calibration-spec.ts`、`coverage.ts`、`budget-spec.ts`、`default-chain.ts`、`config-fillers.ts`），它们不引入 Node 模块，客户端 bundle 只依赖宿主模块表里的少数模块（`react`、`@deepseek-ai/dsh-client-ui-slots`、`dsh-client-store`、cordis 与 `@deepseek-ai/dsh-client-ui-primitives`；`pnpm run test:client-bundle` 检查）。0.2.3 新增 peer `@deepseek-ai/dsh-client-ui-primitives`（可选，与其他 `dsh-client-*` peer 同一范围）：开关、按钮、徽标、弹窗和 `?` 气泡用宿主自己的组件，下拉、标签输入、手风琴、列表行宿主没有，用原生元素搭，颜色全部来自宿主的 `--dsw-alias-*` 变量，浅色 / 深色 / 窄宽度都跟随。
-
-## CLI 适配 / CLI adapters
-
-**中文**　平台不再几乎只靠 dsh-browser 的 OpenCLI：本插件有一层声明式的 CLI 适配（`src/cli/`）。一个适配规格 `CliAdapterSpec` 写明：命令名（`bins`，包名可与命令名不同，记在 `packageNote`）、探测契约（`probe`：`--version`、最低版本、`--help` 里必须出现的子命令 / 参数）、搜索命令（`search.argv` 是**数组**，只有 `{query}`、`{count}` 两个占位符，永不经过 shell）、输出格式（`json` / `ndjson` / `yaml` / `text`）与字段映射、`emptyWhen` / `notLoggedInPatterns`、环境变量白名单（`env.required` / `passthrough`，只写名字）、超时与输出上限。执行器按 UTF-8 解码，超时 / 取消 / 输出超限都有结构化错误：`CLI_NOT_FOUND`、`CLI_CONTRACT_MISMATCH`、`CLI_NOT_LOGGED_IN`（独立 CLI 提示“请自行运行 `<cli> login`”；`opencli` 提示“在你的 Chrome 里登录 <站点> 后重试（opencli 使用 Chrome 的登录态）”）、`ENGINE_EMPTY`、`CLI_FAILED`；错误文字里不会出现环境变量的值。规格可以带 `errorCodes`，说明工具自己的失败格式：`opencli` 把失败以 YAML（`ok: false` / `error: {code, message}`）写在 stderr，`AUTH_REQUIRED`（退出码 77）映射为未登录；`LOGIN_WALL`、`SECURITY_BLOCK`、`RATE_LIMITED`，以及 Reddit 实测遇到的 `UNKNOWN: Unexpected token '<' … is not valid JSON`（站点回了网页而不是 JSON）映射为 `CLI_FAILED`，消息明确写“站点返回了网页而不是数据，可能是风控、IP 被拦或需要登录”；`EMPTY_RESULT` → 无结果，`BROWSER_CONNECT` → 连不上浏览器扩展，`TIMEOUT` → 超时，其余错误码保留工具自己的原话。任何命令输出若是 HTML 文档（而不是 JSON / YAML），同样按“站点返回了网页”报告。
-
-**只读保证**（内置和用户自定义规格同样适用）：规格必须声明 `allowedSubcommands`，argv 里用到的子命令都得在其中，且不得命中全局拒绝表（`login`、`logout`、`post`、`comment`、`delete*`、`like`、`follow`、`favorite`、`upvote`、`save`、`subscribe`、`publish`、`ask`、`article`、`pin`、`setup`、`init`、`install`、`update` 等）；会读取浏览器 Cookie 或把凭据放进参数的 flag（`--cookie-source`、`--cookies-from-browser`、`--token`、`--password`……）一律拒绝。插件**永不运行任何登录命令**，也不代用户登录：需要登录的 CLI 由你自己运行它的 `login`；没有已保存登录的 xhs / rdt / zhihu 不会被运行（它们在没有登录时会自己去读浏览器 Cookie）。子进程只拿到最小环境（PATH、HOME、代理、证书，加规格点名的变量），不继承你整个环境。
-
-**探测**只在本地：找命令、跑 `--version` 和规格里的 `--help`，检查版本与契约，缓存 60 秒；**不搜索、不登录**。同名但契约不同的程序（如 PyPI 上另一个 `bili-cli`）报 `incompatible` 并写明原因，不会被当成可用。`sources.deps` 显示每个 CLI 的 `installation`（missing / detected / incompatible）、版本、适配验证程度；`sources.status` 的每个平台带 `chain`：每条后端的顺序、状态、被跳过的原因。
-
-| 内置规格 | 命令 | 已验证版本（2026-10-06；yt-dlp 与 twitter 为 2026-10-11） | 验证程度 |
-|---|---|---|---|
-| `bili`（bilibili） | `bili` | 0.6.2 | **live**（2026-10-26：中英文与特殊字符查询实测；约五分之一的条目是没有链接的课程/系列，适配层多要 3 条以凑够 count） |
-| `gh`（github / github-issues / github-code 的回退） | `gh` | 2.101.0 | **live**（2026-10-26：仓库、issues、code 搜索均实测；查询按词拆成多个参数，因为 gh 会把单个参数当精确短语） |
-| `omnireach`（`wechat` 与多源 `omnireach`） | `omnireach` | 0.19.0-alpha | **live**（`--on wechat`；多源命令 2026-10-26 实测，显式 `--on hackernews,youtube,github,wechat,bilibili`——工具自带的自动路由在 PATH 上有 `opencli` 时会加入走你 Chrome 的 google / twitter 源，所以从不使用） |
-| `yt-dlp`（youtube） | `yt-dlp` | 2026.08.19 | **live**：真实运行 `ytsearch2:` 搜索并解析（2026-10-11） |
-| `twitter`（可选后备） | `twitter` | 0.8.5 | contract-only：`--json` 信封与字段来自已装 0.8.5 的源码和 issue #38 里的真实输出；需要你的 Token，我们没运行过搜索 |
-| `xhs`（xiaohongshu，可选后备） | `xhs` | 0.6.4 | **live**（2026-10-27：用你自己保存的登录实测；一次返回 22 项，其中 `hot_query` 建议卡片被跳过，发布时间取 `note_card.corner_tag_info` 里的 `publish_time`，`MM-DD` / `YYYY-MM-DD` / `N小时前` 等保守解析，认不出的不填） |
-| `zhihu`（可选后备） | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
-| `rdt`（reddit，可选后备） | `rdt` | 0.4.2 | contract-only（同上） |
-| 独立 `opencli`（按站点，登录类平台的**首选**后端） | `opencli` | 1.8.8 | 只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json`。**twitter、zhihu：live**（2026-10-27 用你日常 Chrome 实测；twitter 的 `created_at` 转成 ISO，标题 / 摘要照 twitter 后端：作者 · likes · views · 时间；zhihu 只有标题 / 类型 / 作者 / 赞同数 / 链接，没有摘要和时间）。**xiaohongshu、reddit：contract-only（未实测）**——那次 Chrome 里没有小红书登录（`AUTH_REQUIRED`），Reddit 在代理出口下回了网页（见下）；字段取自 opencli 1.8.8 适配器源码里的输出列。其余站点：contract-only |
-| `wx-search-cli`（wechat 第二后端） | `wx-search-cli` | 0.1.0 | **live**（2026-10-26：中英文与无结果查询实测；一页固定 10 条，适配层按 count 截取；搜狗反爬时它输出 `[]` 且退出码 0，与“无结果”无法区分） |
-| `tanso` | `tanso` | 2.0.2 | docs-only：按上游 README，未安装；只选 `bocha_web` 与 `zhihu_search` |
-
-目录里另有只列条目、没有适配的 `douyin-cli`（它的 README 没写搜索记录的字段）。contract-only 的字段映射来自工具自己的帮助 / 源码，并有标成 “constructed” 的夹具测试；它们在真实登录后的输出上还没被确认。live 的夹具（`test/fixtures/cli/live-*`）保持真实输出的**形状**，内容一律是合成的占位值（仓库公开，不放真实作者、正文、id 或 token）。
-
-**默认后端链**（`platformBackends` 可改，未列出的平台用默认顺序）：
-
-| 平台 | 默认链 |
-|---|---|
-| xiaohongshu | `opencli`（独立）→ `xhs` → `browser-opencli`（dsh-browser） |
-| reddit | `opencli` → `rdt` → `browser-opencli` |
-| zhihu | `opencli` → `zhihu` → `browser-search`（dsh-browser 搜索页） |
-| twitter | `opencli` → `twitter` → `browser-opencli` |
-| bilibili / youtube | `bili` / `yt-dlp` |
-| github、github-issues、github-code | `rest`（现有 REST）→ `gh` |
-| wechat（公众号，新） | `omnireach` → `wx-search-cli` |
-| omnireach（多源，不自动选入；只用五个免 Key 源） | `omnireach` |
-| instagram / facebook | `browser-opencli`；weibo、douban、tieba、douyin、kuaishou：`browser-search` |
-
-链上缺失、不兼容、未登录、被风控或出错的后端被跳过并记下原因（结果的 `notes` 里写 `skipped backends: opencli: …`，历史里记下最终回答的后端）；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。你显式配置的 `platformBackends` 原样优先，不会被新的默认顺序改写。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
-
-**登录类平台（小红书、知乎、Reddit、X）怎么用——登录完全交给你**：推荐的做法是在你**日常使用的 Chrome** 里登录这些站点，再装好 [OpenCLI](https://github.com/jackwener/opencli)（`npm i -g @jackwener/opencli`）和它的 **OpenCLI Browser Bridge** 扩展（`opencli doctor` 全 OK 即连通）。独立 `opencli` 是这四个平台的首选后端，直接使用那个 Chrome 的登录态：插件不提供任何登录流程、不运行任何登录命令、不读浏览器 Cookie，登录态过期时报“在你的 Chrome 里登录 <站点> 后重试”。调用时插件给站点命令带上 `--window background --site-session ephemeral --keep-tab false`（opencli 1.8.8 的浏览器命令都支持，也是它的默认值）：在后台窗口里跑、不抢你的焦点、用完关标签页；只对 `opencli <site> search --help` 里列出这三个参数的命令传（本地探测，不搜索），老版本或不开浏览器的命令不传。独立 CLI（`xhs`、`rdt`、`zhihu`、`twitter`）只是**可选后备**：想用就按它们自己的方式登录（下面），仍由你自己运行，插件只检查登录文件是否存在，没有就跳过。
-
-**2026-10-27 的实测结论**（opencli 1.8.8，用户在场）：`opencli twitter search` 与 `zhihu search` 成功并已适配；`opencli xiaohongshu search` 退出码 77 `AUTH_REQUIRED`（那个 Chrome 里没有小红书登录），已映射为未登录；`opencli reddit search` 退出码 1，Reddit 返回的是网页（`Unexpected token '<'`）——这台机器的网络是代理出口，Reddit 的登录页也显示“网络安全部门已屏蔽你的请求”，所以 **Reddit 在代理 IP 下会被拦**，换网络出口后才能验证它；`xhs search` 用用户保存的登录成功。
-
-**启用一个独立 CLI（可选后备）**：按 `sources.deps` 给出的命令安装（`sources.install` 需要你的审批），再**自己**运行它的登录命令（`xhs login`、`rdt login`、`zhihu login`、`gh auth login`；twitter 要 `TWITTER_AUTH_TOKEN` / `TWITTER_CT0`：在设置面板写入 DSH Credentials，或设在**宿主进程**的环境变量里，只写进 shell 配置文件（`~/.zshrc` 等）不够，宿主进程读不到。解析顺序同插件其他密钥：设置里的字面量 `twitterAuthToken` / `twitterCt0` → 凭据引用 `twitterAuthTokenEnv` / `twitterCt0Env` → 进程环境变量；值只通过子进程的环境变量交给 `twitter`，不进命令行、日志或错误信息，`sources.status` 缺失时会写明查过哪里）。想优先用它，就改链序：
-
-    web-search-pro:
-      platformBackends:
-        xiaohongshu: [xhs, opencli, browser-opencli]   # 例：想让 xhs 排在 opencli 前面
-      cliAdapters:                     # 自定义只读适配（同样的校验），注册为 custom-cli:mytool
-        mytool:
-          bins: [mytool]
-          packageNote: 'mytool (npm i -g mytool)'
-          engine: true                 # 通用搜索引擎：可写进 engines: [ddg, custom-cli:mytool]
-          platforms: []                # 或声明它服务哪些平台（platformBackends.<平台> 里才能放它）
-          confidence: 0.7              # 0–1，默认 0.5
-          probe: { versionArgs: ['--version'], helpArgs: ['search', '--help'], mustContain: ['--json'] }
-          allowedSubcommands: [search]
-          search:
-            argv: [search, '{query}', '--limit', '{count}', '--json']
-            maxCount: 10
-            output: { format: json, itemsPath: data, fields: { url: url, title: title, snippet: summary } }
-          env: {}
-          needsLogin: false
-          timeoutMs: 30000
-          maxOutputBytes: 1048576
-
-无效的 `cliAdapters` 条目被忽略，原因出现在 `sources.status` 的 `notes`；设置面板里有“自定义 CLI”表单（和它的 JSON 视图），校验与服务端是同一批函数。
-
-**自定义 CLI（0.2.3）**：规格新增三项（只用于用户规格，内置规格写会被拒绝）：
-
-- `engine: true`：作为**通用搜索引擎**，`engines` 里写 `custom-cli:<id>`；它和其他引擎一样按顺序回退，`multi` / `parallelEngines` 时参与融合与去重。`platforms` 现在是它**声明服务的平台**（`platformBackends.<平台>` 里放它之前必须声明；声明了没有后端链的平台会在 `sources.status` 和面板里报问题）；只做通用引擎时可以为空。它同时仍是平台 `custom-cli:<id>`（`search.run platform=custom-cli:<id>`）。
-- `confidence`（0–1，默认 0.5）：见下“置信度”。
-- `search.output.lines: { mode: whole, maxChars? }`（`format: text`）：**整段输出**。不想写字段映射、只输出一段文本的工具：stdout 整体作为**一条**结果，标题是“`<id>: <查询>`”，链接是占位的 `cli://<id>?q=<查询>`，文本截到 `maxChars`（默认 2000，最大 8000）并在末尾写明“truncated: N of M characters shown”，空输出是 `ENGINE_EMPTY`。**限制**：这个链接不是网页——证据模式（`task` / `profile`）把它列为来源（它的文本就是摘要），但**不会抓取它**，也不占读页名额；它不会产生证据摘录。结果只在普通搜索结果和证据包的 `sources` 里；多来源融合时换行会折成空格。只读保证、禁用词、不经 shell、超时、输出上限对它照常生效。
-
-**结果打包**：自定义 CLI 的结果与其他来源同一个结构（标题、链接、摘要、时间、`engine`、`backend`），另带三个可选字段：`via`（`custom-cli:<id>`）、`confidence`（低于 1 时）和 `tag`（“user-defined, not verified by the plugin (用户自定义，未经插件验证)”）；文本渲染成 `[via custom-cli:echo, confidence 0.5, user-defined, not verified by the plugin (…)]`，证据摘录行同样带上。缓存命中、历史里的结果保留这三项。
-
-**置信度（0–1）**：自定义 CLI 写在规格里（默认 0.5），任何来源或平台后端都能用 `sources.confidence.<id>` 覆盖（内置来源默认 1；平台的结果取“平台自己的 × 回答的后端的”）。作用方式很保守，只在多个来源融合排名时起作用：
-
-    factor(c)  = 1 − 0.2 · (1 − c)                          ∈ [0.8, 1]，c = 1 时不乘（恰好 1）
-    rrf(d)     = Σ_来源  factor(c_来源) / (k + 该来源给 d 的最好名次)
-    bonus(d)  *= max_来源 factor(c_来源)                    只有被存疑来源返回的 URL，新鲜度 / 权威 / 评分信号的加分按比例减少
-
-即置信度 c 的来源像是它的列表整体往后排了 (k+1)·(1/factor − 1) 位：k = 60 时 c = 0.5 约 7 位、c = 0 约 16 位；多个来源都返回的结果几乎不受影响，只有存疑来源有的结果沉向队尾，但**它最好的那条仍保证留在展示的列表里**（并行搜索的前 `count` 条；证据模式里是会被读页的前几条；最多占 `size−1` 个位置）。内置来源全是 1 时融合分数与原来**逐位相同**（单元测试固定；`bench:eval-pack` 在 v1 / v2 上的报告与改动前逐字段相同）。一次只用一个引擎（顺序回退）时没有融合，置信度只作标注。`sources.status` 显示每个来源和每个后端的置信度，设置面板的搜索顺序列表每行显示并可改。
-
-**English**　Platforms no longer depend almost entirely on dsh-browser's OpenCLI. A declarative adapter layer (`src/cli/`) describes each standalone CLI: `bins` (the package name may differ from the command, see `packageNote`), a contract `probe` (version floor, subcommands / flags that must appear in `--help`), a `search.argv` ARRAY with `{query}` / `{count}` placeholders (never a shell string), the output format and field mapping, `env.required` / `passthrough` NAMES only, timeout and output cap. The runner decodes UTF-8 and maps failures to `CLI_NOT_FOUND`, `CLI_CONTRACT_MISMATCH`, `CLI_NOT_LOGGED_IN` (hint: run `<cli> login` yourself; for `opencli`: log in to the site in your own Chrome and retry, since opencli uses Chrome's login), `ENGINE_EMPTY`, `CLI_FAILED`; environment values never appear in errors. A spec may carry `errorCodes` describing the tool's failure format: opencli prints `ok: false / error: {code, message}` as YAML on stderr; `AUTH_REQUIRED` (exit 77) is not-logged-in, `LOGIN_WALL` / `SECURITY_BLOCK` / `RATE_LIMITED` and the `Unexpected token '<'` JSON error (the site answered a web page, measured on Reddit) are `CLI_FAILED` saying the site returned a web page instead of data or blocked the request (risk control, IP block, login wall), `EMPTY_RESULT` is empty, `BROWSER_CONNECT` / `TIMEOUT` have their own messages; an HTML document printed by any command is reported the same way. **Read-only guarantee** for built-in and user specs alike: every command word must be in the spec's `allowedSubcommands` and none may match the global deny-list (login, logout, post, comment, delete*, like, follow, favorite, upvote, save, subscribe, publish, ask, article, pin, setup, init, ...); flags that read browser cookies or carry credentials are rejected. The plugin never runs a login and never logs in for you; xhs / rdt / zhihu are not run without a saved login (without one they read your browser cookies themselves). Children get a minimal environment. Probes are local (version + help, cached 60 s), never search or log in; a same-named program with another contract is `incompatible`. The table above lists each built-in spec with the verified version and how far it was checked (live / contract-only / docs-only). **Login platforms (Xiaohongshu, Zhihu, Reddit, X): logging in is entirely yours.** Log in to the sites in your day-to-day Chrome and install OpenCLI (`npm i -g @jackwener/opencli`) with its OpenCLI Browser Bridge extension (`opencli doctor` all OK); the standalone `opencli` is the first backend of these four chains and uses that Chrome's login. The plugin has no login flow, runs no login command and reads no browser cookies; an expired login is reported as "log in to <site> in your own Chrome and retry". It passes `--window background --site-session ephemeral --keep-tab false` (supported by the 1.8.8 browser commands, and their defaults) so your Chrome keeps its focus and the tab is closed, only when `opencli <site> search --help` lists those options. The standalone CLIs (`xhs`, `rdt`, `zhihu`, `twitter`) are optional fallbacks that you log in yourself with the tool's own command; without a saved login they are skipped. Measured 2026-10-27 (opencli 1.8.8): twitter and zhihu searches work and are mapped (live); xiaohongshu answered `AUTH_REQUIRED` (no login in that Chrome); Reddit answered a web page behind a proxied IP (Reddit blocks proxied addresses), so those two mappings are contract-only; `xhs search` with a saved login works (live; `hot_query` cards skipped, publish time parsed conservatively). Each platform has an ordered backend chain (table above, configurable with `platformBackends`; an explicit setting always wins); skipped backends show their reason in `sources.status` (`providers[].chain`) and in the error when the whole chain is down. Your own adapters go in `cliAdapters` (validated by the same rules; registered as `custom-cli:<id>`).
-
-## 外部依赖（按需）
-
-多数后端需要系统额外安装的工具；插件提供 `sources.deps` / `sources.install` 动作检测与安装：
-
-| 依赖 | 用途 | 安装 |
-|---|---|---|
-| bili-cli `0.6.2` | B站后端 | `uv tool install --force git+https://github.com/public-clis/bilibili-cli@489607468f967e0e11f3cdff6efc022d011e982a` |
-| yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
-| opencli（经 dsh-browser） | 小红书/Twitter/Reddit/IG/FB 的 `browser-opencli` 后备后端 | dsh-browser 0.2.2 起**不再内置**，在 PATH、全局 npm 目录等位置找同一份 `opencli`（`npm i -g @jackwener/opencli`，见 dsh-browser 的说明）；扩展未连接时用 `opencli doctor` 诊断 |
-| 独立 `opencli` | 小红书 / 知乎 / Reddit / Twitter 的首选后端，用你日常 Chrome 的登录态（需 OpenCLI Browser Bridge 扩展） | `npm i -g @jackwener/opencli`；站点登录由你在 Chrome 里完成 |
-| 其余适配 CLI（`xhs`、`zhihu`、`rdt`、`omnireach`、`gh`、`wx-search-cli`、`tanso`） | 见上面的 [CLI 适配](#cli-适配--cli-adapters) | `sources.deps` 列出安装命令；登录由你自己完成 |
-| twitter-cli（命令 `twitter`） | Twitter 平台的可选后备（排在独立 OpenCLI 之后；执行 `twitter search … --json`，需要 0.8.5 或更新；另需 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`，见上） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
-| agent-reach（可选） | 仅作安装助手，本插件不直接执行它；装了它**不代表** Twitter 搜索可用 | `uv tool install agent-reach` / `pip install agent-reach` |
-| mcporter | 无裸 API Key 时的 Exa MCP 回退 | `npm i -g mcporter` |
-| playwright / patchright | 渲染/截图后端 | 由 dsh-browser 内置；默认 Playwright，兼容场景可显式切 Patchright；缺 Chromium 时调用 `runtime.install`（`browser_call`） |
-
-> B站后端使用 `public-clis/bilibili-cli` 的 `bili` 命令；上述提交对应上游
-> `v0.6.2`。不要安装 PyPI 上同名的 `bili-cli 0.1.1`，它是另一个项目且不提供
-> `bili search` 契约。`sources.deps` 会同时检查版本和 `--json` 搜索能力，避免只因
-> PATH 中存在一个同名命令就误报可用。
-
-> Windows 上这些 CLI 必须能被 `where` 解析（插件按 PATH 查找）：安装后若
-> `sources.deps` 仍报缺失，把可执行文件所在目录加入 PATH，或直接把
-> `bili.exe`/`yt-dlp.exe` 放进一个已在 PATH 的目录。用 `uv` 安装时可先重定向工具目录，
-> 避免默认写入系统盘：`UV_TOOL_DIR`、`UV_TOOL_BIN_DIR`、`UV_PYTHON_INSTALL_DIR`。
-
-## 平台与引擎
-
-`seam`（ctx.web/DeepSeek 原生）· `exa` · `bocha`（博查，中文强项，需 Key）· `ddg` · `bing` · `jina` · `github`（REST 搜索 API，免 CLI；可选 `$GITHUB_TOKEN`/`githubToken` 提升限额并解锁代码搜索）· `bilibili` · `v2ex` · `youtube`。默认顺序 `ddg, bing, exa, seam, jina`（免费优先），失败自动回退；失败后短时冷却，`sources.status` 可查看原因；`multi` 并行融合。
-
-Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包含/排除、发布时间范围和 category。若没有 API Key、但启用了 CLI 后端且 `mcporter` 里配置了 Exa MCP（`https://mcp.exa.ai/mcp`，匿名、有限额），搜索会自动通过 `mcporter` 完成——**这是匿名路线（2026-10-04 实测：无 Key 的 `exa.web_search_exa` 调用成功，结果可被插件解析），证据模式的英文任务默认先用它**；该路线只支持 query + 结果数，高级筛选和 `read.contents` 仍要求 `EXA_API_KEY`。不同选项、结果数、引擎顺序和单/多引擎模式使用不同缓存指纹。
-
-### 博查（Bocha）与搜索 provider 注册器 / Bocha and the provider registry
-
-**中文**　博查是第一个中文搜索增量（`POST {bochaBaseUrl}/v1/web-search`，Bearer Key，默认 `https://api.bocha.cn`（官方 MIT 参考实现 `bocha-ai/dsh-web-search-bocha` 用的地址，已实测）；`https://api.bochaai.com` 用同一个 Key 也返回同样的结构，可用 `bochaBaseUrl` 切换）。引擎 id `bocha`，也可写 `builtin:bocha`。
-
-- **配置**：Key 来自 `bochaApiKey`、凭据 / 环境变量 `BOCHA_SEARCH_API_KEY`（名称由 `bochaApiKeyEnv` 配置），找不到时回退 `BOCHA_JEV_API_KEY`（博查文档对同一账号的说明；用同一个 Key 也行）。用官方 provider 的 `BOCHA_API_KEY` 的话，把 `bochaApiKeyEnv: BOCHA_API_KEY` 即可。`bochaSummary`（默认 true）请求较长的页面摘要，更利于证据评分。
-- **费用**：按请求计费（余额或套餐），插件只记录请求数（用量账本里的 `bocha-search`，token 不适用、金额未知，`sources.status` 显示当日请求数）。**账号没有搜索余额 / 套餐时服务返回 HTTP 403 “You do not have enough money or package quota”**：插件把它归为不可重试的 `ENGINE_QUOTA`（与 401 的 `ENGINE_AUTH` 一样不进冷却），先到博查控制台确认搜索额度。429 按 `Retry-After` 冷却。
-- **原生过滤**（证据模式）：硬性 `site` / `exclude_site` → `include` / `exclude`，硬性 `time_window` → `freshness` 的 `起始..今天` 日期区间；其余约束（`exclude_term` 等）仍在本地校验，`verification.native / local` 如实报告。
-- **验证状态**：2026-10-04 用已开通额度的搜索 Key 实测 4 次请求（`api.bocha.cn` 3 次、`api.bochaai.com` 1 次）：成功响应的结构（`code` 为数字 200、`data.webPages.value[]`、`summary` 与约 100 字的 `snippet`）、`include` / `exclude`（含子域名）、`freshness` 日期区间都按预期生效，两个域名都接受该 Key。此前（2026-10-02，Jev Key）的 403 只说明当时账号没有搜索额度。脱敏样本：`test/fixtures/bocha-web-search.json`、`bocha-filters.json`。**博查是付费来源**：只在你配置了它的 Key 时才进入中文任务的第一轮；可选地用 `sources.budget.bocha` 限制请求数（例：账号有 1000 次请求，写 `total: 1000, daily: 50`）。
-
-**注册器**：搜索来源是 `ProviderDescriptor`（稳定命名空间 id `builtin:ddg`、`aliases`（旧短 id `ddg`）、`operations`、`taskProfiles`、`languages`、`regions`、`resultKinds`、`sourceFamily`（未知留空，绝不假定独立）、`requirements`（Key 环境变量 / CLI）、`supportedFilters`、`costModel`）加运行时（`probeLocal()` 只做本地检查、不联网；`create(deps)` 返回 Engine）。工具参数 `engines`、配置 `engines`、历史与缓存都接受别名或完整 id，输出沿用短 id；未知 id 报错并列出可用项。重复 id / 别名冲突直接抛错，`register()` 返回注销函数（暂不做外部动态加载）。新增来源 = 一个 descriptor + adapter 文件，不改路由器和计划器。
-
-**证据模式的来源规划（S1）按语言**：见下一节“来源策略”。简言之：什么都没配置时用匿名 / 免费来源（英文先 Exa 的无 Key 路线，再 `ddg`；中文 `ddg` + `bing`）；你配置了 Key 的来源按任务语言提前；`ddg` 等通用网页引擎退为一个后备（其余留给第二轮），GitHub / arXiv 等垂直来源不受影响。`academic` 保持 arxiv / openalex / pubmed。显式 `engines` 不受影响；`evidence.autoProviders: false` 关闭自动提前。`sources.status` 的 `providers` 列出每个来源的 installation / credential / health（`health` 只有真实调用成功才是 `ready`，仅通过本地探测为 `unknown`）。
-
-**English**　Bocha (`bocha` / `builtin:bocha`) is a Chinese-strong key-based search source: `POST /v1/web-search`, Bearer key from `bochaApiKey` or `$BOCHA_SEARCH_API_KEY` (env name configurable via `bochaApiKeyEnv`), falling back to `$BOCHA_JEV_API_KEY` (same account). Billed per request; the plugin counts requests in the usage ledger (`bocha-search`, tokens n/a, price unknown). HTTP 401/403 are non-retryable (no cooldown; "no balance or package" is reported as quota), 429 cools down for `Retry-After`. Hard site / exclude_site / time_window are pushed down (`include` / `exclude` / `freshness` date range); everything else is verified locally and reported. The success path was verified live on 2026-10-04 (4 requests: success shape, include / exclude / freshness range, both hosts accept the key); the default host is `https://api.bocha.cn`. Search sources are registry entries (descriptor + adapter, namespaced ids with legacy aliases, duplicates throw, `register` returns an unregister function); evidence-mode source planning is described in the next section.
-
-### DeepSeek 搜索 / 抓取（常用）/ DeepSeek Search and Fetch (common)
-
-**中文**　[DeepSeek Search / Fetch API](https://api-docs.deepseek.com/guides/search/)（2026-10-17 上线）是本插件标为“**常用**”的来源：引擎 id `deepseek`，也可写 `builtin:deepseek`。`POST https://api.deepseek.com/v1/tools/search`，`Authorization: Bearer <DeepSeek API Key>`；抓取端点是同一个 base 的 `/fetch`。与宿主自带的 `deepseek-search-api` 不同，它不只映射 snippet 与日期（宿主那一路只带这两样）。
-
-- **配置**：Key 与 DeepSeek 模型用的是同一个 `DEEPSEEK_API_KEY`，解析顺序和插件其他密钥一致：设置里的密钥字段（`keyedSources.deepseek.apiKey`，面板里的写入式输入会写进 DSH Credentials）→ DSH 凭据引用（默认名 `DEEPSEEK_API_KEY`，可用 `keyedSources.deepseek.apiKeyEnv` 改）→ 进程环境变量（“只写 shell 配置文件宿主读不到”）。值不进日志、状态输出、错误信息和历史。`keyedSources.deepseek.baseUrl` 可改接口（默认 `https://api.deepseek.com/v1/tools`）；请求的 `count` 跟调用走（证据模式每个来源要 10 条，与服务默认值一致），上限 50。
-- **“常用”的含义**：解析到 Key 时，中文和英文任务的默认优先级都把它放第一位 —— 证据模式的自动规划里排在 Exa / 博查 / 其余需 Key 来源之前；没有指定 `engines` 的普通 `search.run` 也先用它（**仅当 `engines` 还是默认列表时**；你自己写过 `engines` 就按你写的，写进去的位置也尊重）。仍然服从你说的话：调用里的 `engines` / `platform` > `sources.priority` / `sources.disabled` > 这条默认规则；`evidence.sourcePolicy: anonymous-only` 不会自动使用它（它是付费来源）；`sources.budget.deepseek` 的请求额度照常生效（用完被跳过并回退）。没有 Key 时它不在默认链里，`sources.status` 的“常用 (common)”行写明去哪里配置；`search.recommend` 把它标为“常用”，已配置时排在其他已就绪的需 Key 来源之前。面板里它在“来源”分组、需 Key 的来源列表的第一项，带“常用”标记。
-- **字段映射**：`summary`（给模型看的长摘要，约 600–800 字，实测有更长的；截到 1000 字符并去掉与标题重复的一级标题）→ 摘录文本（门限和评分看的就是它），没有 `summary` 时用 `snippet`；`date`（RFC 3339 或 null）→ `publishedAt`；`rerank_score`（0–3，综合相关性、权威性和时效）→ `rerankScore`，`authority`（0–4，-1 未知则不给）→ `authority`，作为**来源元数据**随结果输出（`[rerank 2.3/3, authority 4/4]`）。不请求 `content`（`need_content: false`）。
-- **证据评分里的权重（保守）**：只用在候选融合（S3）这一步，和已有的新鲜度 / 权威域名加分同类 —— 加分 = `0.3 ×（0.7 × rerank/3 + 0.3 × authority/4）` 个“排名单位”（一个排名单位 = 同一来源里相邻两名的分差）。默认三项加分（新鲜度 0.2、域名权威 0.25、来源评分 0.3）全拿满也只有 0.75 个单位：能在两个来源把同几个 URL 排成并列时分出先后，**不能**把某来源的第 10 名抬到第 1 名之上；一个 URL 被多个来源返回时每个字段取最大值，不叠加。没有这些字段的来源（其余所有来源）一分不加。块级评分（S6）不使用它们。
-- **查询**：服务只收 1–128 字符。硬约束 `site` / `exclude_site` / `exclude_term` / `time_window` 编成服务支持的 `site:a OR site:b`、`-site:`、`-词`、`after:YYYY-MM-DD` 写进查询；`ori_question` 用任务的 `goal`（没有就取第一个关键 need），截到 128 字符。超过 128 字符时保留全部运算符，截掉自由文本的尾部，并在结果说明里写明（普通搜索的 `fallbackNote`，证据包的 `notes`）。
-- **费用**：Search 与 Fetch 各为每 1000 次**成功**请求 $0.75，空结果、失败和超时不计费，`count` 不影响价格。经 DeepSeek Harness / Claude Code / Codex 的服务端工具调用在 2026-11-01 00:00（北京时间）前免费；**文档没写插件直接调用是否在这个免费范围内，所以本插件按会计费处理**。账号级限流：Search 100 QPS，Fetch 25 QPS 另有按域名的限制。请求数记入用量账本（`deepseek-search` / `deepseek-fetch`，金额插件不知道），只记会计费的那种（有结果的 200）。
-- **错误与重试**：408 / 429 / 5xx 按文档“等一会儿再试”：最多共 3 次，等待取 `Retry-After`，否则 0.8 秒、1.6 秒；`Retry-After` 超过 8 秒就不干等，直接失败并把它作为冷却时间。401 / 403 → `ENGINE_AUTH`；**402 → `ENGINE_QUOTA`，提示“余额不足”并让你去 platform.deepseek.com 充值**（不重试、不冷却）；其余 4xx 不重试。错误信息带 `request_id`（找 DeepSeek 支持用）。
-- **抓取后端（默认关闭）**：设置 `deepseekFetch: true` 后，`read.fetch` 的 `mode: auto` 在 Jina 和直连都没拿到正文时，改用 Fetch API（Markdown），之后才轮到浏览器渲染；`mode: deepseek` 显式指定（关闭时会说明为什么不行，不会偷偷花钱）。它不报目标页面的状态码；**403（安全策略拒绝）/ 404（取不到可用内容）是 DeepSeek 自己的判断，不是目标页面的 HTTP 状态**，错误信息里这样写，`auto` 模式下记成一次失败的尝试（`attempts` 里 `deepseek: error`）。
-- **验证状态**：2026-10-26 真实调用 8 次 Search + 4 次 Fetch（`docs/validation/dsh-web-search-pro-0.2.3.md`）：结果结构与全部字段、`site:` / `-site:` / `after:` 运算符、128 字符上限（超出 HTTP 400）、401 / 404 错误体、Fetch 的 Markdown。**没有亲眼验证的**：403 的 Fetch 拒绝（只在文档里）、402 余额不足、429 / 408 / 5xx 的重试路径（用模拟响应测试）、`localization`（没有发送）。
-
-**English**　The DeepSeek Search / Fetch API ([docs](https://api-docs.deepseek.com/guides/search/)) is this plugin's common (常用) source: engine id `deepseek` (`builtin:deepseek`), `POST https://api.deepseek.com/v1/tools/search` with a Bearer key; Fetch is `/fetch` on the same base. Unlike the host's own `deepseek-search-api` it maps more than snippet and date.
-
-- **Configuration**: the key is the same `DEEPSEEK_API_KEY` the DeepSeek models use, resolved like every other key of the plugin: the settings key field (`keyedSources.deepseek.apiKey`; the panel's write-only input stores it as a DSH credential) -> a DSH credentials reference (default `DEEPSEEK_API_KEY`, renamed by `keyedSources.deepseek.apiKeyEnv`) -> the process environment. The value never reaches logs, status output, errors or history. `keyedSources.deepseek.baseUrl` overrides the endpoint (default `https://api.deepseek.com/v1/tools`); `count` follows the call (evidence mode asks each source for 10, the service default), at most 50.
-- **What "common" means**: once a key resolves, DeepSeek leads the default order for Chinese AND English tasks: first in the evidence plan (ahead of Exa, Bocha and the other keyed sources) and first in a plain `search.run` without `engines` (only while `engines` is still the default list; a list you wrote is yours, and a position you gave `deepseek` in it is kept). It yields to what you said: `engines` / `platform` in the call > `sources.priority` / `sources.disabled` > this default; `evidence.sourcePolicy: anonymous-only` never plans it automatically (it is paid); `sources.budget.deepseek` applies as for any source. Without a key it is not in the default chain, `sources.status` has a "常用 (common)" line saying where to configure it, `search.recommend` marks it and, once configured, ranks it ahead of the other ready keyed sources.
-- **Field mapping**: `summary` (the long, model-ready text; cut at 1,000 characters, the H1 that repeats the title dropped) is the excerpt the gate and the scorer read, `snippet` when there is no summary; `date` -> `publishedAt`; `rerank_score` (0-3) -> `rerankScore`, `authority` (0-4; -1 = unknown = not given) -> `authority`, shown as source metadata (`[rerank 2.3/3, authority 4/4]`). `content` is never requested.
-- **Weight in evidence scoring (conservative)**: only in candidate fusion (S3), next to the existing freshness / authority-domain bonuses: bonus = `0.3 x (0.7 x rerank/3 + 0.3 x authority/4)` of one rank step (the score gap between adjacent ranks of one provider). With the other defaults the three bonuses together top out at 0.75 of a step: they break ties between providers, and cannot lift a rank-10 result over a rank-1 one; the best value per field wins when several providers return a URL; providers that give no grades add nothing. Block scoring (S6) ignores them.
-- **Query**: the API takes 1-128 characters. Hard `site` / `exclude_site` / `exclude_term` / `time_window` constraints are written as `site:a OR site:b`, `-site:`, `-term`, `after:YYYY-MM-DD`; `ori_question` is the task goal (else the first critical need), cut to 128. A longer query keeps every operator, loses the tail of the free text, and says so in the result notes.
-- **Cost**: Search and Fetch are each $0.75 per 1,000 SUCCESSFUL requests (empty results, failures and timeouts are free; `count` does not change the price). Calls through DeepSeek Harness / Claude Code / Codex server-side tools are free until 2026-11-01 00:00 Beijing time; the docs do not say whether a plugin calling the API directly is inside that window, **so the plugin treats every call as billed**. Account limits: Search 100 QPS, Fetch 25 QPS plus per-domain limits. Requests are counted in the usage ledger (`deepseek-search` / `deepseek-fetch`; the plugin does not know money), only the billed kind (a 200 with results).
-- **Errors and retries**: 408 / 429 / 5xx are retried as the docs say, at most 3 tries in all, waiting `Retry-After`, else 0.8 s and 1.6 s; a `Retry-After` over 8 s is not slept through (it becomes the cooldown). 401 / 403 -> `ENGINE_AUTH`; **402 -> `ENGINE_QUOTA` with an insufficient-balance message (余额不足) pointing at platform.deepseek.com**, not retried; other 4xx are not retried. Messages carry the `request_id`.
-- **Fetch backend (off by default)**: with `deepseekFetch: true`, `read.fetch mode=auto` falls back to the Fetch API (Markdown) when Jina and a direct request produced no content, before browser rendering; `mode=deepseek` asks for it explicitly (when the setting is off it says why instead of spending money). No target status code is claimed; **403 (security policy) and 404 (no usable content) are DeepSeek's own verdicts, not the target page's HTTP status**, and the message says so; in auto mode they are a failed attempt (`deepseek: error` in `attempts`).
-- **Verification**: 2026-10-26, 8 live Search and 4 live Fetch requests (`docs/validation/dsh-web-search-pro-0.2.3.md`): result shape and all fields, the `site:` / `-site:` / `after:` operators, the 128-character limit (HTTP 400), the 401 and 404 bodies, Fetch Markdown. **Not observed**: the 403 Fetch refusal (docs only), 402 insufficient balance, the 429 / 408 / 5xx retry paths (tested with simulated responses), `localization` (not sent).
-
-### 来源策略 / Source policy
-
-**中文**　插件主要依赖**免费 / 匿名额度**的来源；付费来源是预留接口，**不会因为存在 Key 之外的任何原因成为默认**。每个来源有成本层级（`search.recommend`、`sources.status` 与目录的 `costTier` 都显示）：
-
-| 层级 | 含义 | 来源 |
-|---|---|---|
-| `anonymous` | 无需 Key、账号或付费（只有限流） | `ddg`、`bing`、`exa`（匿名 MCP 路线）、`wikipedia`、`hackernews`、`stackexchange`、`openalex`、`semanticscholar`、`anysearch`、`github`、`arxiv`、`pubmed`、`v2ex`、`rss`、`searxng`、`bilibili`、`youtube`、`seam`（成本由宿主决定） |
-| `free-quota` | 需要 Key / 账号 / 登录，可免费使用（有文档可查的免费额度，或只需免费账号） | `tavily`（每月 1000 credits）、`brave`（每月 $5 额度，需绑卡验证身份）、`linkup`（专业邮箱注册送 $20，符合条件的账号每月补足）、`serper`（注册送 2500 次，一次性）、`jina`（每个新 Key 1000 万 token，一次性）、`baidu-qianfan`（每日 100 次）、`exa`（有 API Key 时每月 $10）、`github-code`（免费 Token）、各登录态平台 |
-| `paid` | 需要 Key 并按次计费；官方页面未能确认免费额度 | `deepseek`（每 1000 次成功请求 $0.75，见上节）、`bocha`、`metaso`、`zhipu` |
-
-免费额度的依据写在目录条目的 `cost` 里（带官方页面 URL，读于 2026-10-04）；确认不了的一律标 `paid`。Exa 有两条路线，按**实际会走的那条**报告层级：没有 Key 走匿名 MCP 路线（`anonymous`），配置了 Key 走 API（`free-quota`）。
-
-**自动规划的优先顺序**（证据模式第一轮至多 3 个来源，同一 `sourceFamily` 只取一个）：
-
-1. 调用里明确写的 `engines` / `platform`——永远最优先，不受下面任何设置影响。
-2. 你的偏好 `sources.priority: [id, …]`：列出的、已就绪且适合任务 profile 和语言的来源按此顺序排最前；`sources.disabled: [id, …]` 的来源完全不用（自动规划和 `engines` 配置列表都不用）。
-3. 你**配置了 Key** 的来源按任务语言 / profile 提前（最多 2 个，其余留给第二轮）：这是“排名跟着用户的需要走”——配了的可以排在前面，付费的也一样；其中“常用”的 `deepseek` 在中文和英文任务里都排最前（见上节）。
-4. 什么都没配置时用匿名 / 免费默认：**英文先 Exa 的无 Key 路线**（需要 `mcporter` 且其中配置了 Exa MCP），再 `ddg`；**中文** `ddg` + `bing`（Exa 擅长英文，退到第二轮）；`academic` / `experience` / `docs_code` 的垂直来源不变。
-
-`evidence.sourcePolicy: anonymous-only` 让自动规划**绝不**使用需要 Key、账号或登录的来源（即使配置了；`priority` 也不能把它们带回来；Exa 一旦有 API Key 走的就是付费 / 额度路线，也会被排除）。默认 `default`。
-
-**置信度（可选）**：`sources.confidence.<id>: 0–1`，只在多来源融合时让它的权重略低并随结果标注，默认 1（内置）/ 规格里的值（自定义 CLI，默认 0.5）；公式与保证见上文“CLI 适配”一节的“置信度”。
-
-**请求额度（可选）**：`sources.budget.<id>: { total?, daily? }`，**默认不设任何上限**——例如博查账号有 1000 次请求，可写 `sources: { budget: { bocha: { total: 1000, daily: 50 } } }`（这只是示例，不是插件默认值）。计数在用量账本里（持久化，重启后仍有效；发送前在立即事务里预留一次请求，两个搜索或两个进程不会同时花掉最后一次；适配器自己的计数会结算这次预留，所以一次请求只算一次；失败的请求归还预留，空结果算一次）。用完后该来源被**跳过并回退到其他来源**，记一条 “request budget used up” 的说明，**不是错误**；`web_call sources.status` 显示每个设了额度的来源的已用 / 剩余与策略一行。`daily` 的日界线取 `evidence.budget.timezone`。
-
-**English**　The plugin relies mainly on sources with a free or anonymous allowance; paid sources are reserved interfaces and never become the default for any reason other than the user configuring their key. Cost tiers (shown by `search.recommend`, `sources.status` and the catalog's `costTier`): `anonymous` (no key, account or money), `free-quota` (needs a key / account / login, free to use; the allowance and its official page are cited in the catalog `cost` note) and `paid` (billed per use; a free allowance could not be confirmed). Exa reports the tier of the route that would run: keyless MCP is `anonymous`, an API key is `free-quota`. Precedence of the automatic plan: (1) `engines` / `platform` in the call, always; (2) the user's `sources.priority` (ready sources that fit the profile and language go first, in order) and `sources.disabled` (never used); (3) sources the user configured a key for are promoted for their language and profile (at most two, one per family), paid ones included: ranking follows the user's needs, and the common (常用) `deepseek` goes first of them in both languages; (4) otherwise the anonymous / free defaults: English leads with Exa over its keyless MCP route (needs `mcporter` with an Exa MCP server), then `ddg`; Chinese uses `ddg` and `bing`. `evidence.sourcePolicy: anonymous-only` never plans a source that needs a key, account or login, even a configured one. `sources.budget.<id>: { total?, daily? }` is optional and unset by default (the Bocha example `total: 1000, daily: 50` is documentation, not a default): counted in the usage ledger, reserved atomically before the request, persistent across restarts; a used-up source is skipped with a note and the plan falls back, never an error; `sources.status` shows used and remaining.
-
-### 匿名来源与来源目录 / Anonymous sources and the source catalog
-
-**中文**　无需 Key 的官方开放接口（引擎 id 同名，也可写 `builtin:<id>`）：`wikipedia`（MediaWiki 搜索，按任务语言选 zh / en 版，事实与背景）· `hackernews`（Algolia，英文社区经验）· `stackexchange`（Stack Overflow，匿名每日配额 300 次 / IP，遵守 `backoff`）· `openalex`（学术；匿名额度较小，可选免费 `$OPENALEX_API_KEY` 提升约十倍，`openalexMailto` 写进 User-Agent）· `semanticscholar`（学术；匿名共享池常 429，可选 `$SEMANTIC_SCHOLAR_API_KEY`）· `anysearch`（匿名按 IP 限额，可选 `$ANYSEARCH_API_KEY`；匿名超额时服务的 402 响应会夹带自动生成的账号凭据，适配器**丢弃**它们，只报 `quota_exhausted` 并暂停一小时）· `searxng`（仅当设置 `searxngUrl` 指向你自己的实例且开启 JSON 格式时可用；该地址是你的配置，允许内网地址，不内置公共实例）。它们都走 SSRF 防护的 HTTP 通道（`allowProxyFakeIp` 同样适用），使用礼貌的 User-Agent，请求数记入用量账本（token 不适用）；硬 `time_window` 下推为各自的日期过滤。它们是垂直 / 补充来源，S1 不会把它们提到网页搜索之前：`academic` 为 arxiv / openalex / pubmed（semanticscholar、ddg 留给第二轮），`experience` 为 ddg / bing 加按任务语言排序的社区来源（英文任务 hackernews / stackexchange，中文 v2ex），Wikipedia 与 Stack Overflow 分别是 `news_fact` / `general` 与 `docs_code` 的第二轮补充。`semanticscholar` 的成功响应未能实测（两次匿名请求都是 429），`searxng` 从未对真实实例运行，`sources.status` 标为 `[not verified live]`。
-
-**来源目录**：`catalog/sources.v1.json`（随包发布，纯数据，不执行任何东西）列出已知来源——API、CLI（bili、yt-dlp、twitter、OpenCLI 各站命令及“没有 search 命令”的反例、wx-search-cli、OmniReach）、MCP 与需要 Browser 的平台——每条带认证、安装 / 配置说明、许可证、成本、`sourceFamily`、核验状态与反例。`search.recommend`（可带 `task` / `profile` / `query` / `language` / `platform`）按任务至多给出 3 个来源：已就绪的在前，其次是缺什么、怎么装；目录里没有适配器的条目永远不可执行。常驻提示只加了一句“不要遍历全部来源”。设置：`searxngUrl`、`openalexMailto`（settings.yaml，设置面板暂无字段）。
-
-**English**　Keyless official APIs: `wikipedia` (zh/en edition from the task language), `hackernews` (Algolia), `stackexchange` (anonymous quota 300/day/IP, `backoff` honoured), `openalex` (small keyless budget; optional free key; contact address in the User-Agent), `semanticscholar` (shared pool, often 429; optional key), `anysearch` (anonymous per-IP quota; a 402 may carry auto-generated credentials which the adapter discards, reporting only `quota_exhausted` and pausing for an hour) and `searxng` (only with your own `searxngUrl`, JSON format enabled; private addresses are allowed because the URL is your configuration). All use the SSRF-safe HTTP path (`allowProxyFakeIp` applies), a polite User-Agent and count requests in the usage ledger. They are vertical / supplementary: S1 never promotes them ahead of web search (academic: arxiv/openalex/pubmed; experience: language-ordered community sources; Wikipedia and Stack Overflow are second-round supplements). `catalog/sources.v1.json` is pure data about known sources (never executed); `search.recommend` returns at most 3 sources for a task, ready ones first, then what is missing and how to set it up; catalog-only entries are never executable.
-
-### 付费 / 需 Key 的来源（预留接口）/ Keyed sources (reserved interfaces)
-
-**中文**　七个需要 Key 的搜索 API 已有“描述符 + 适配器”，**配置 Key 之前不会执行**：没有 Key 时 `sources.status` 显示 `credential: missing`，`search.recommend` 把它们列为“缺什么 + 怎么配置”的建议（永远 `executable: false`）；配置后进入可执行候选。**全部未对真实服务调用过**（没有 Key），描述符标 `verification.live=false`、`sources.status` 显示 `[not verified live]`，响应样例（`test/fixtures/*-search.json`）都在文件头声明“由文档构造，非真实抓取”。Key 解析顺序：settings 的 `keyedSources.<id>.apiKey` → 凭据引用 → 环境变量；变量名可用 `keyedSources.<id>.apiKeyEnv` 改，`baseUrl` 可改端点。
-
-| 来源（id） | 语言 | 默认环境变量 | 官方文档 / 参考 | 原生过滤 | 说明与未采用 / 存疑字段 |
-|---|---|---|---|---|---|
-| Tavily（`tavily`） | en | `TAVILY_API_KEY` | docs.tavily.com 搜索 API 参考；MIT `crayonlu/dsh-web-search-tavily` | `include_domains`（≤300）/ `exclude_domains`（≤150）/ `start_date` | 不请求也不读 `answer`；432 / 433 为套餐上限（quota）；未用 `country` / `language` |
-| Brave（`brave`，family `brave`） | en | `BRAVE_API_KEY` | api-dashboard.search.brave.com 文档与 API 参考、限速指南 | 查询里的 `site:` / `-site:` / `-term`；`freshness` 日期区间 | 查询按较小的文档值截断（400 字符 / 50 词，API 参考写 600 / 75）；错误体格式文档未给出；限速头 `X-RateLimit-*` 的第二个值为 0 = 月额度用尽 |
-| Linkup（`linkup`） | en | `LINKUP_API_KEY` | docs.linkup.so `/search` 参考、错误页、限速页 | `includeDomains`（≤100）/ `excludeDomains` / `fromDate` | 只用 `outputType: searchResults`（排序后的 URL，从不用 `sourcedAnswer`）；429 同时表示额度不足和并发过高，按信息判断；402（x402 付款）一律不付款 |
-| Serper（`serper`，family `google`） | en | `SERPER_API_KEY` | **无公开 API 参考**：取自 MIT 参考代码（LangChain `GoogleSerperAPIWrapper`、`searchsuite`） | 查询里的 Google 运算符 | 只读 `organic`；`gl` / `hl` / `tbs` 未发送（取值未经确认）；与其他 Google 系来源不算独立印证 |
-| 秘塔（`metaso`） | zh | `METASO_API_KEY` | 官方页面是脚本渲染读不到；取自两个 MIT 参考（`TZHR-invest/dsh-plugins`、`HundunOnline/mcp-metaso`） | 无（全部本地核验） | 仅 `webpage` scope；`size` 取 ≤20（两个参考写 100 与 20）；reader 留待后续；不请求综合摘要 |
-| 智谱（`zhipu`） | zh | `ZHIPU_API_KEY` | docs.bigmodel.cn 搜索指南、API 参考、错误码页 | `search_domain_filter`（单个域名）/ `search_recency_filter`（仅整日 / 周 / 月 / 年窗口算原生） | 只读 `search_result`（不是 GLM 生成回答）；查询 ≤70 字符；按文档的业务错误码映射（1113 / 1308–1310 quota，1302 / 1701 限速） |
-| 百度千帆（`baidu-qianfan`，family `baidu`） | zh | `QIANFAN_API_KEY`，其次 `BAIDU_API_KEY` | ai.baidu.com AppBuilder「百度搜索」页；Qianfan v2 约定；MIT `searchsuite` | `search_filter.match.site`（≤20）/ `block_websites` / `range.page_time` | **官方页请求头自相矛盾**（表里同时列 `Authorization` 与 `X-Appbuilder-Authorization`，curl 只用后者）：两个头都发送同一个 Bearer 值，待真实调用确认；只读 `references`；查询按参考 SDK 截到 72 单位（汉字算 2） |
-
-错误映射与博查一致：401 / 403 / 402 不可重试、不进冷却，信息含余额 / 额度 / credit 的归 `ENGINE_QUOTA`；429 按 `Retry-After`（Brave 用限速头）冷却；空结果 `ENGINE_EMPTY`；请求不跟随重定向（Key 不会被转发到别的域）；报错和日志不含 Key。请求数记入用量账本（provider 为来源 id，token 不适用、金额未知）。S1：就绪且有 Key 的英文来源在英文任务里、中文来源在中文任务里提前，优先级低于 Exa（10）与博查（10）（秘塔 20、智谱 30、千帆 40；Tavily 20、Brave 30、Linkup 40、Serper 60）；一次至多提前 2 个，同一 `sourceFamily` 只算一个，其余留给第二轮，所以第一轮仍至多 3 个来源且留一个免费引擎。
-
-**English**　Seven keyed search APIs ship as descriptor + adapter pairs that are inactive until a key is configured: without one `sources.status` shows `credential: missing` and `search.recommend` lists them as setup steps (never executable). None was ever called live (no keys), every descriptor says `verification.live=false`, and the sample responses under `test/fixtures` state they are constructed from the docs, not captured. Key order: `keyedSources.<id>.apiKey` -> credentials ref -> environment (name via `keyedSources.<id>.apiKeyEnv`, endpoint via `baseUrl`). Defaults: `TAVILY_API_KEY`, `BRAVE_API_KEY`, `LINKUP_API_KEY`, `SERPER_API_KEY`, `METASO_API_KEY`, `ZHIPU_API_KEY`, `QIANFAN_API_KEY` (then `BAIDU_API_KEY`). Only ranked results are used (Tavily `answer`, Linkup `sourcedAnswer`, Zhipu `search_intent`, Baidu chat answers and Serper answer boxes are ignored). Serper has no public API reference (contract from MIT reference code) and is `sourceFamily: google`, so it is not independent corroboration of other Google-based sources. Metaso's docs page is script-rendered (contract from two agreeing MIT references; webpage scope only). Baidu Qianfan's page contradicts itself on the auth header, so both documented headers carry the same bearer value until a live call settles it. Errors follow Bocha: 401 / 403 / 402 are non-retryable with no cooldown (credit / quota wording is `ENGINE_QUOTA`), 429 cools down for `Retry-After`, redirects are refused, errors never contain the key. Ready keyed sources are promoted for their language below Exa / Bocha (at most two per task, one per index family) so round 1 stays at three providers with a free engine left.
-
-## 开发
-
-```bash
-pnpm install
-pnpm test
-pnpm build        # tsc src → lib
-```
-
-源码在 `src/`；`lib/` 为发布产物（已提交）。
+| `engines` | `[ddg, bing, exa, seam, jina]` | 通用搜索的回退顺序 |
+| `sources.priority` / `sources.disabled` | 空 | 提前 / 完全不用的来源 id（如 `disabled: [deepseek]`） |
+| `searchMaxResults` | `8` | 普通搜索的默认结果数 |
+| `evidence.jevMode` | `off` | 博查 Jev 评分：`off` \| `shadow` \| `control` \| `hybrid`（付费，默认不调用） |
+| `evidence.sourcePolicy` | `default` | `anonymous-only` = 自动规划绝不用需要 Key / 账号 / 登录的来源 |
+| `deepseekFetch` | `false` | `true` = `read.fetch` 可用 DeepSeek Fetch API（按请求计费） |
+| `fetchDefaultChars` | `20000` | `read.fetch` 默认返回字符数 |
+| `toolSurface` | `indexed` | `flat` = 每个动作一个工具（仅对照与调试）；**需重启** |
+| `registerProvider` | `false` | 让宿主内置 `web_search` / `web_fetch` 经过本插件；**需重启** |
+
+需要重启插件的只有 `toolSurface`、`registerProvider`、`providerId`、`timeoutMs`、`memoryCacheEntries`、`dbPath`、`verbose`、`playwright.snapshotDir`。全部键与默认值见 [配置参考](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/config.md)。
+
+## 文档索引
+
+详细文档（中文）在 [docs/](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/README.md)：
+
+- 使用：[安装与首次使用](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/install.md) · [搜索用法与证据包](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/search-and-evidence.md) · [工具与动作](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/tools-and-actions.md) · [历史管理](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/history.md)
+- 配置：[配置参考](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/config.md) · [设置面板](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/settings-panel.md) · [来源与引擎](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/sources.md) · [内置 web 工具路由](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/web-provider.md) · [Jev 评分](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/evidence-scoring.md)
+- 平台与 CLI：[平台登录态](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/platform-login.md) · [CLI 适配与自定义 CLI](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/cli-adapters.md) · [外部依赖](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/dependencies.md) · [自定义平台](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/custom-platforms.md) · [浏览器脚本与自动化分层](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/browser-scripts.md)
+- 版本与开发：[兼容范围](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md) · [CHANGELOG](./CHANGELOG.md) · [开发](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/development.md) · [设计与调研记录](https://github.com/anweat/dsh-web-search-pro/tree/master/docs/dev) · [验证记录](https://github.com/anweat/dsh-web-search-pro/tree/master/docs/validation)
 
 ## License
 
-MIT
-
-
-## 中文社区平台登录态
-
-zhihu / weibo / douban / tieba / douyin / kuaishou 的免登录公开接口都被风控，
-所以走 **Playwright 驱动登录态浏览器**（借鉴 MediaCrawler 思路、MIT 独立实现，未用其签名算法）：
-
-1. 登录一次保存登录态：`node scripts/save-login.mjs all login-state.json`
-2. 在 dsh-browser 配置中声明按域名隔离的 `authProfiles`
-3. 在 `browserBindings` 把平台绑定到 profile；站点改版时用 `platformRules` 或 dsh-browser `rulePacks`
-
-详见 [LOGIN.md](./LOGIN.md)。
-
-
-## 历史管理
-
-`history.list` 支持 kind/query/engine/platform 过滤（`kind=all` 等同省略 kind），`history.replay` 与 `history.export` 回放与导出 JSON。search/platform 回放保存的来源；fetch/snapshot 回放当次持久化的正文、HTML/截图路径。旧数据库会自动迁移 pages 表；历史上无法关联 queryId 的旧页面按 URL 做兼容回放。
-
-## 自定义平台
-
-在 settings.yaml 里定义任意站点（URL 模板 + 结果选择器），
-`search.run` 传 `platform` 就能直接搜它——不需要改代码：
-
-    web-search-pro:
-      customPlatforms:
-        mybili:
-          name: '我的B站'
-          url: 'https://search.bilibili.com/all?keyword={query}'
-          item: '.bili-video-card'
-          title: '.bili-video-card__info--tit'
-          link: 'a'
-        # 需要登录时优先通过 browserBindings 绑定命名 authProfile。
-        myforum:
-          name: '某论坛'
-          url: 'https://forum.example.com/search?q={query}'
-          item: '.thread'
-          title: '.thread-title a'
-          link: '.thread-title a'
-      browserBindings:
-        myforum:
-          authProfile: forum
-
-旧版 `customPlatforms.*.cookie` 仍兼容，但会让 Cookie 明文进入配置；新配置应使用 dsh-browser 的命名 AuthProfile，状态文件不要提交到仓库。
+MIT。路由控制面借鉴 Agent-Reach 的后端探测、顺序选择和失败冷却思路，核心逻辑为本项目原生 TypeScript 实现。
