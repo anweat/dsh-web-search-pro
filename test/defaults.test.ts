@@ -59,11 +59,14 @@ test('defaults: Bocha is not an engine unless configured, and it is only availab
   } finally { names.forEach((n, i) => { if (saved[i] === undefined) delete process.env[n]; else process.env[n] = saved[i]! }) }
 })
 
-test('defaults are stated plainly in the README quick start (zh and en)', () => {
-  const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8')
-  assert.match(readme, /默认关闭 Jev/)
-  assert.match(readme, /evidence\.jevMode: off/)
-  assert.match(readme, /Jev is off by default/)
-  assert.match(readme, /no model is called/i)
-  assert.match(readme, /Bocha is used only when you configure a key|只有配置了博查 Key 才会使用博查/)
+test('defaults are stated plainly in the README first-use section (zh in README.md, en in README.en.md)', () => {
+  const zh = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8')
+  const en = fs.readFileSync(new URL('../README.en.md', import.meta.url), 'utf8')
+  assert.match(zh, /默认关闭 Jev/)
+  assert.match(zh, /evidence\.jevMode: off/)
+  assert.match(zh, /只有配置了博查 Key 才会使用博查/)
+  assert.match(en, /Jev is off by default/)
+  assert.match(en, /evidence\.jevMode: off/)
+  assert.match(en, /no model is called/i)
+  assert.match(en, /Bocha is used only when you configure a key/)
 })
