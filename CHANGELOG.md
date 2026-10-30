@@ -2,13 +2,14 @@
 
 ## 未发布
 
+- 兼容：新增实测 `dsh-v0.2.1-rc.5`（npm `@deepseek-ai/dsh@0.2.1-rc.5`，dist-tag `next`，2026-10-30 验证）。**插件源码与 peer 范围没有改动**：rc.5 与 rc.4 的依赖版本相同，源码差异只在客户端对话的推理块渲染，不涉及插件用到的宿主接口。npm 上已发布的 `0.2.3`（搭配 `@anweat/dsh-browser@0.2.2`）在 rc.5 宿主上干净安装（pnpm 11.7.0 与 12.4.2 都退出码 0、无警告）、headless 下 `web_index` / `web_call` 可用、Web 设置卡片渲染并保存一项都通过。`test:peers` 的受支持基线加了 `0.2.1-rc.5`。验证记录见 [docs/validation/2026-10-30-dsh-rc5.md](docs/validation/2026-10-30-dsh-rc5.md)。
 - 文档整理：README 精简为中文入口并新增英文版 `README.en.md`；其余内容按主题拆到 `docs/guide/`，设计与调研记录移到 `docs/dev/`；`LOGIN.md` 并入 `docs/guide/platform-login.md` 并按当前的 opencli 优先做法改写（登录由用户自己完成，插件没有登录窗口）；README 里的兼容表与升级说明移到本文件；新增 `scripts/check-docs-links.mjs`（`pnpm run check:docs`，已并入 `verify`）检查文档链接、锚点和中英文 README 的标题数量。没有改动运行时行为。
 
 ## 从旧版本升级
 
 适用于 0.2.x 各版本之间的升级（0.1.x 宿主或 dsh-browser 0.1.x 请不要升级，停留在 `dsh-web-search-pro@0.1.15`，见[兼容与发布通道（历史）](#兼容与发布通道历史)）。DSH Desktop 用户在插件页卸载后重新 Add plugin，写法见 [安装与首次使用](docs/guide/install.md#用-dsh-desktop-安装)。
 
-先确认宿主是 `dsh-v0.2.0-rc.2` 或 `dsh-v0.2.1-rc.2` ~ `rc.4`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
+先确认宿主是 `dsh-v0.2.0-rc.2` 或 `dsh-v0.2.1-rc.2` ~ `rc.5`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
 
 ```bash
 dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3

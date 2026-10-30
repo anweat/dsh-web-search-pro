@@ -7,7 +7,7 @@
 ## 用 DSH CLI 安装
 
 ```bash
-# 默认安装（面向 dsh-v0.2.0-rc.2 与 dsh-v0.2.1-rc.2 ~ rc.4 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
+# 默认安装（面向 dsh-v0.2.0-rc.2 与 dsh-v0.2.1-rc.2 ~ rc.5 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
 dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
 # 不需要浏览器能力时，只装本插件即可：
 dsh plugin --profile web add dsh-web-search-pro@0.2.3
