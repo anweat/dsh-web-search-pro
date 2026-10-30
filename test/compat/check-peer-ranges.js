@@ -19,7 +19,7 @@
  * 本脚本自带最小 semver 实现（插件仓库没有 semver 依赖，也不该为了这个检查新增依赖）：
  * 只支持本仓库 peer 范围实际用到的写法（^ / ~ / >= / > / <= / < / =、`||` 分组、空格并列），
  * 以及 semver 的预发布优先级与上面那条“同号预发布”规则。
- * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：两段范围——0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.4），
+ * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：两段范围——0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.5），
  * 各自带 `-0` 上界；两条线之间（0.2.1-alpha.x / 0.2.1-rc.1）不放行，因为没有在它们上面验证过。
  * 另外校验 cordis peer 同时容纳两条线自带的 4.0.4 / 4.0.5，并挡住 4.1.0。
  */
@@ -157,8 +157,8 @@ function satisfies(version, range, options = {}) {
 }
 
 // ── 策略与检查 ────────────────────────────────────────────────────────────────
-/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.4）两段。 */
-const SUPPORTED_BASELINES = ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4']
+/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.5）两段。 */
+const SUPPORTED_BASELINES = ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5']
 /**
  * 必须被拒绝的宿主版本（runtime 与 install 两种模式都不能满足）：
  * 已放弃的旧线、上一条基线（含它的预发布）、以及不放行的下一个次版本的预发布。
@@ -166,7 +166,7 @@ const SUPPORTED_BASELINES = ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc
 const REJECTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.1-alpha.5', '0.2.1-rc.1', '0.2.2-alpha.1']
 /** 用于说明范围宽窄的代表性版本（只做展示，不影响退出码）。 */
 const MATRIX_VERSIONS = [
-  '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-alpha.1', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4',
+  '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-alpha.1', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5',
   '0.2.1', '0.2.2-alpha.1', '0.2.2', '0.3.0-rc.1',
 ]
 
@@ -217,6 +217,7 @@ function selftest() {
     [dual, '0.2.1-rc.1', false, false],
     [dual, '0.2.1-rc.2', true, true],
     [dual, '0.2.1-rc.4', true, true],
+    [dual, '0.2.1-rc.5', true, true],          // 第四个 0.2.1 基线（与 rc.4 同依赖、同 peer 面）
     [dual, '0.2.2-alpha.1', false, false],     // 上界仍是 <0.2.2-0
     [dual, '0.3.0-rc.1', false, false],
   ]
