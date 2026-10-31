@@ -692,6 +692,19 @@ export class SearchRouter {
     return Math.round(own(provider) * (via === undefined ? 1 : own(via)) * 10_000) / 10_000
   }
 
+  /** The local readiness of a platform's backend chain (no network), or undefined for a platform without one. */
+  async platformChain(platform: string): Promise<ChainReport | undefined> {
+    this.syncBackends()
+    const adapter = this.registry.resolve(platform)
+    if (!adapter?.chain) return undefined
+    return adapter.chain(await this.probeEnv())
+  }
+
+  /** Requests booked today (calendar day of the budget time zone) under a ledger provider name, e.g. `tencent-wsa`. */
+  requestsToday(provider: string): number {
+    return this.usageRecorder().today?.(provider) ?? 0
+  }
+
   /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
   private usageRecorder(): UsageRecorder {
     return {

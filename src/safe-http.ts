@@ -54,13 +54,29 @@ export interface ResolvePublicUrlOptions {
   allowProxyFakeIp?: boolean
   /** Test seam; production callers use node:dns/promises lookup. */
   lookup?: (hostname: string) => Promise<{ address: string; family?: number }[]>
+  /**
+   * One exact origin (`http://127.0.0.1:5000`) that skips the private-network checks: the address the user typed into a setting
+   * for a service of their own. Nothing else is relaxed: the scheme and credential rules apply, any other URL (a redirect
+   * included) is judged as usual, and the origin must match exactly (scheme, host, port).
+   */
+  allowOrigin?: string
 }
 
-export function assertSafePublicUrl(raw: string | URL): URL {
+/** Whether `url` is on the one origin the caller was explicitly allowed to reach (an invalid allowance matches nothing). */
+export function isAllowedOrigin(url: URL, allowOrigin: string | undefined): boolean {
+  if (!allowOrigin) return false
+  try {
+    const allowed = new URL(allowOrigin)
+    return (allowed.protocol === 'http:' || allowed.protocol === 'https:') && !allowed.username && !allowed.password && allowed.origin === url.origin
+  } catch { return false }
+}
+
+export function assertSafePublicUrl(raw: string | URL, allowOrigin?: string): URL {
   let url: URL
   try { url = raw instanceof URL ? new URL(raw.href) : new URL(raw) } catch { throw new Error('URL is not valid') }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('only public HTTP(S) URLs are allowed')
   if (url.username || url.password) throw new Error('URL credentials are not allowed')
+  if (isAllowedOrigin(url, allowOrigin)) return url
   const host = url.hostname.toLowerCase().replace(/\.$/, '')
   if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || privateIp(host)) {
     throw new Error('private or local network targets are not allowed')
@@ -69,7 +85,8 @@ export function assertSafePublicUrl(raw: string | URL): URL {
 }
 
 export async function assertResolvedPublicUrl(raw: string | URL, options: ResolvePublicUrlOptions = {}): Promise<URL> {
-  const url = assertSafePublicUrl(raw)
+  const url = assertSafePublicUrl(raw, options.allowOrigin)
+  if (isAllowedOrigin(url, options.allowOrigin)) return url
   if (net.isIP(url.hostname.replace(/^\[|\]$/g, ''))) return url
   let addresses: { address: string }[]
   try {

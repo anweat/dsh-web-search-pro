@@ -17,6 +17,7 @@ import { browserGap, type BrowserMethod } from '../browser-access.ts'
 import type { CustomPlatformSpec } from '../config.ts'
 import { chainReport, resolveChain } from '../cli/chain.ts'
 import { validateCliAdapterSpec, type CliAdapterSpec } from '../cli/spec.ts'
+import { noteLayerFailure, noteLayerOk } from '../wechat/health.ts'
 import { attachNotices, noticesOf, uniqueNotices, type Notice } from '../wechat/notices.ts'
 import { descriptor } from './descriptor.ts'
 import type { ProbeEnv, ProviderAdapter, ProviderDescriptor, Readiness, Requirement } from './registry.ts'
@@ -35,6 +36,7 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
         if (!engine.available()) { notes.push(engine.id + ': ' + (engine.unavailableReason?.() ?? 'unavailable')); continue }
         try {
           const outcome = await engine.search(query, count, signal, options)
+          noteLayerOk(id + ':' + (engine.backend ?? engine.id))
           // The legs that were passed over are named with their reasons, so a fall-through is never silent.
           const passed = notes.length ? ['skipped backends: ' + notes.join('; ')] : []
           const notices = uniqueNotices([...failedNotices, ...outcome.notices ?? []])
@@ -42,6 +44,8 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
         } catch (error) {
           if (signal?.aborted) throw error
           failedNotices.push(...noticesOf(error))
+          // An empty answer is the leg working; anything else is what `wechat.status` shows as its last failure.
+          if ((error as { code?: unknown } | null)?.code === 'ENGINE_EMPTY') noteLayerOk(id + ':' + (engine.backend ?? engine.id)); else noteLayerFailure(id + ':' + (engine.backend ?? engine.id), error)
           errors.push(error)
           notes.push(engine.id + ': ' + (error instanceof Error ? error.message : String(error)))
         }

@@ -15,6 +15,7 @@ const EXPECTED_ACTIONS = [
   'rules.list', 'rules.upsert', 'rules.remove', 'rules.import', 'rules.export',
   'cache.clear', 'cache.stats',
   'config.inspect', 'config.set_order', 'config.set_confidence', 'config.upsert_cli', 'config.remove_cli', 'config.reset', 'config.export',
+  'wechat.status', 'wechat.album', 'wechat.accounts', 'wechat.articles',
 ]
 
 test('the registry holds exactly the planned actions, named group.action', () => {

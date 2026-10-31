@@ -12,9 +12,10 @@ import { SOURCES_ACTIONS } from './sources.ts'
 import { RULES_ACTIONS } from './rules.ts'
 import { CACHE_ACTIONS } from './cache.ts'
 import { CONFIG_ACTIONS } from './config.ts'
+import { WECHAT_ACTIONS } from './wechat.ts'
 
 export const ACTIONS: readonly ActionDef[] = [
-  ...SEARCH_ACTIONS, ...READ_ACTIONS, ...HISTORY_ACTIONS, ...SOURCES_ACTIONS, ...RULES_ACTIONS, ...CACHE_ACTIONS, ...CONFIG_ACTIONS,
+  ...SEARCH_ACTIONS, ...READ_ACTIONS, ...HISTORY_ACTIONS, ...SOURCES_ACTIONS, ...RULES_ACTIONS, ...CACHE_ACTIONS, ...CONFIG_ACTIONS, ...WECHAT_ACTIONS,
 ]
 
 const BY_NAME = new Map(ACTIONS.map(action => [action.name, action]))
@@ -27,6 +28,7 @@ export const GROUP_SUMMARIES: Record<ActionGroup, string> = {
   rules: 'per-site extraction rules: list, upsert, remove, import, export',
   cache: 'clear the cache, store statistics',
   config: 'read and change the search order, confidence and custom CLIs at run time (agent overlay)',
+  wechat: 'WeChat official accounts: layer status, login-free album listing, whole-account history through your own service',
 }
 
 export function isActionGroup(value: unknown): value is ActionGroup {

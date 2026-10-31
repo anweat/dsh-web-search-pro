@@ -7,7 +7,7 @@ description: "Web research with web_call search.run (an evidence pack: only the 
 
 Two tools. `web_index` shows what exists; `web_call` runs one action and returns `{ok, action, result | error{code,message,hint,schema?}}`. Actions are named `group.action`; do not guess other names.
 
-For web research prefer `search.run` over `web_search` + `web_fetch`: it returns filtered evidence, not whole result lists and pages. A Host `web_search` that answers with an `Evidence pack ...` (routed through this plugin) is a `search.run` pack: read gaps, then `history.expand` or `read.fetch`.
+For web research prefer `search.run` over `web_search` + `web_fetch`: it returns filtered evidence, not whole result lists and pages. A Host `web_search` answering with an `Evidence pack ...` (routed through this plugin) is a `search.run` pack: read gaps, then `history.expand` or `read.fetch`.
 
 ## 1. Search: evidence mode first
 
@@ -45,7 +45,7 @@ A long page is capped; the reply gives `nextOffset`. Continue with `offset` (fro
 {"action":"read.fetch","args":{"url":"https://nodejs.org/api/sqlite.html","offset":20000}}
 ```
 
-`shellPage` / `pageClass` (js_shell, login_wall, captcha) mean the text is not the content: follow the links the reply lists, or hand off to the browser (section 6). A "提醒用户 / Tell the user" block (`notices`: rate limit, expiring link, copyright) is for the user: relay it, an `action` one plainly (`references/sources.md`). `read.contents` fetches up to 100 URLs through Exa (needs its key); `read.snapshot` renders a page in the browser.
+`shellPage` / `pageClass` (js_shell, login_wall, captcha) mean the text is not the content: follow the links the reply lists, or hand off to the browser (section 6). A "提醒用户 / Tell the user" block (`notices`: rate limit, expiring link, copyright) is for the user: relay it, an `action` one plainly. 公众号 (`platform=wechat`, `wechat.*`): `references/wechat.md`. `read.contents` fetches up to 100 URLs through Exa (needs its key); `read.snapshot` renders a page in the browser.
 
 ## 3. Choose sources: 1 or 2, never all
 
@@ -55,7 +55,7 @@ A long page is capped; the reply gives `nextOffset`. Continue with `offset` (fro
 
 returns at most 3 sources, ready ones first, with how to call each (`use`) and what is missing. Use one or two; add another only when the evidence is insufficient. Needs setup: tell the user what is missing, do not call it.
 
-Name sources only when you have a reason:
+Name sources only with a reason:
 
 ```json call
 {"action":"search.run","args":{"query":"transformer attention survey","task":"find survey papers on attention","profile":"academic","engines":"arxiv"}}
@@ -96,4 +96,4 @@ Pages that need interaction, login or a rendered DOM: the dsh-browser plugin (it
 | `DEADLINE` | retry narrower, fewer engines |
 | `ACTION_FAILED` | read the message; empty or failed engines are listed in the result (`enginesTried`, `fallbackNote`) |
 
-Quota, fake-IP, cooldowns: `references/troubleshooting.md`. Judge providers, rubrics (settings): `references/judges.md`. Keyed sources, catalog: `references/sources.md`. Bad extraction: `rules.upsert`, then `read.fetch` `fresh:true`.
+Quota, fake-IP, cooldowns: `references/troubleshooting.md`. Judges, rubrics: `references/judges.md`. Keyed sources: `references/sources.md`. Bad extraction: `rules.upsert`, then `read.fetch` `fresh:true`.

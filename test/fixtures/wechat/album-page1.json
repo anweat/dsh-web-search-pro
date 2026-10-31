@@ -1,0 +1,90 @@
+{
+ "base_resp": {
+  "exportkey_token": "",
+  "ret": 0
+ },
+ "getalbum_resp": {
+  "article_list": [
+   {
+    "cover_img_1_1": "https://mmbiz.qpic.cn/FIXTURE/300",
+    "create_time": "1675661062",
+    "is_pay_subscribe": "0",
+    "is_read": "0",
+    "item_show_type": "0",
+    "itemidx": "1",
+    "key": "3070376195_2650941860_1",
+    "msgid": "2650941860",
+    "pos_num": "96",
+    "title": "胡鑫宇们，需要的不是那“五分钟”",
+    "title_gen_type": "0",
+    "tts_is_ban": "0",
+    "url": "http://mp.weixin.qq.com/s?__biz=MzA3MDM3NjE5NQ==&mid=2650941860&idx=1&sn=FIXTURESN&chksm=FIXTURECHKSM#rd",
+    "user_read_status": "0"
+   },
+   {
+    "cover_img_1_1": "https://mmbiz.qpic.cn/FIXTURE/300",
+    "create_time": "1670217943",
+    "is_pay_subscribe": "0",
+    "is_read": "0",
+    "item_show_type": "0",
+    "itemidx": "1",
+    "key": "3070376195_2650937570_1",
+    "msgid": "2650937570",
+    "pos_num": "95",
+    "title": "未来我们依然需要一种苛刻的勇敢",
+    "title_gen_type": "0",
+    "tts_is_ban": "0",
+    "url": "http://mp.weixin.qq.com/s?__biz=MzA3MDM3NjE5NQ==&mid=2650937570&idx=1&sn=FIXTURESN&chksm=FIXTURECHKSM#rd",
+    "user_read_status": "0"
+   },
+   {
+    "cover_img_1_1": "https://mmbiz.qpic.cn/FIXTURE/300",
+    "create_time": "1669093736",
+    "is_pay_subscribe": "0",
+    "is_read": "0",
+    "item_show_type": "0",
+    "itemidx": "1",
+    "key": "3070376195_2650936806_1",
+    "msgid": "2650936806",
+    "pos_num": "94",
+    "title": "当一切都被管理，问题就解决了吗？",
+    "title_gen_type": "0",
+    "tts_is_ban": "0",
+    "url": "http://mp.weixin.qq.com/s?__biz=MzA3MDM3NjE5NQ==&mid=2650936806&idx=1&sn=FIXTURESN&chksm=FIXTURECHKSM#rd",
+    "user_read_status": "0"
+   }
+  ],
+  "base_info": {
+   "article_count": "96",
+   "brand_icon": "https://example.invalid/brand_icon",
+   "cover": "",
+   "cover_ban": "0",
+   "description": "(合集简介)",
+   "fee": "0",
+   "is_first_screen": "1",
+   "is_numbered": "1",
+   "is_paid": "0",
+   "is_reverse": "1",
+   "isupdating": "1",
+   "needpay": "0",
+   "nickname": "某某专栏号",
+   "public_tag_content_num": "96",
+   "public_tag_link": "https://example.invalid/public_tag_link",
+   "read_count": "19070",
+   "service_type": "0",
+   "share_brand_icon": "https://example.invalid/share_brand_icon",
+   "subtype": "0",
+   "title": "李想主义",
+   "type": "0",
+   "update_frequence": {
+    "month": "0"
+   },
+   "username": "gh_fixture"
+  },
+  "continue_flag": "1",
+  "is_pay_subscribe": "0",
+  "is_show_subscribe": "0",
+  "reverse_continue_flag": "0",
+  "verify_status": "2"
+ }
+}

@@ -47,11 +47,7 @@ Every platform is ONE source with an ordered chain of backends; the first usable
 
 ## WeChat official accounts (`platform=wechat`)
 
-- Search: `search.run platform=wechat` (add `task` for an evidence pack). Results link to `mp.weixin.qq.com` with a **signature** that expires within minutes to hours; the first 3 are resolved, later ones keep a `weixin.sogou.com/link` URL that `read.fetch` resolves. Read an article soon after finding it. A bare `mp.weixin.qq.com/s?__biz=...` link without `signature` is normally answered with a verification page: use the signed link from the search, do not guess links.
-- `read.fetch` reads `mp.weixin.qq.com` over HTTP first and puts `公众号 · 发布时间` above the body. `pageClass` `captcha` / `shell` = no article text; `error` = the article was removed (the text says why).
-- Sogou is rate limited. When it shows a captcha the search fails or comes back partly unresolved and carries a `wechat.antispider` notice; do not retry in a loop.
-- **Notices.** A result may contain `notices` (rendered as "提醒用户 / Tell the user"): each is `{level, code, message}`. Pass them on to the user in your answer, in the user's language; an `action` notice needs the user to do something and must be said plainly. Each code is shown once per session, so a notice that is absent now was already shown.
-- `sources.status` shows an `access` line under each wechat backend (login, risk, billing): say so when the user asks why a source is risky or unavailable.
+Search (Sogou, paid 元宝搜索), reading, albums, account history, the notices and the access lines of `sources.status`: see `references/wechat.md`. Sogou is rate limited; on a `wechat.antispider` notice do not retry in a loop.
 
 ## Platforms (one site or community)
 

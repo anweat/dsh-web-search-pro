@@ -117,7 +117,7 @@ export interface HttpResult {
  */
 export async function httpGet(
   url: string,
-  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean; /** Test seams: replace the global fetch and the DNS lookup. */ fetchImpl?: typeof fetch; lookup?: ResolvePublicUrlOptions['lookup'] } = { signal: undefined },
+  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean; /** One exact origin of the user's own service that may be private (safe-http `allowOrigin`). */ allowOrigin?: string; /** Test seams: replace the global fetch and the DNS lookup. */ fetchImpl?: typeof fetch; lookup?: ResolvePublicUrlOptions['lookup'] } = { signal: undefined },
 ): Promise<HttpResult> {
   const controller = new AbortController()
   const timer = opts.timeoutMs ? setTimeout(() => controller.abort(new Error('dsh-web-search-pro: request timed out')), opts.timeoutMs) : undefined
@@ -125,7 +125,7 @@ export async function httpGet(
   if (opts.signal?.aborted) onAbort()
   else opts.signal?.addEventListener('abort', onAbort)
   try {
-    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false, ...opts.lookup ? { lookup: opts.lookup } : {} }
+    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false, ...opts.lookup ? { lookup: opts.lookup } : {}, ...opts.allowOrigin ? { allowOrigin: opts.allowOrigin } : {} }
     const doFetch = opts.fetchImpl ?? fetch
     let current = (await assertResolvedPublicUrl(url, resolution)).href
     let method = opts.method ?? 'GET'
