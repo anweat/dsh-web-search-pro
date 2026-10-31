@@ -68,7 +68,6 @@ export declare function httpGet(url: string, opts?: {
 }): Promise<HttpResult>;
 /** Decode bytes honoring charset; UTF-8 first with GBK fallback on garbage. */
 export declare function decodeText(buf: Buffer, contentType?: string): string;
-/** Decode common HTML entities in a string. */
 export declare function htmlDecode(input: string): string;
 /** Strip HTML tags (used for titles / snippets inside already-scoped strings). */
 export declare function stripTags(input: string): string;

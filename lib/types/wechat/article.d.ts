@@ -17,6 +17,11 @@ export declare const WECHAT_MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0
 export declare function isWechatArticleUrl(url: string): boolean;
 /** A search-result link that carries its signature (`signature=` in the query): readable for a while, then it expires. */
 export declare function isSignedWechatUrl(url: string): boolean;
+/**
+ * Whether text another reader (Jina, the browser) made of a WeChat article URL is that page's chrome and not an article: the
+ * "Parameter error" page, or the like / share buttons with almost no prose (measured 2026-11-01 on Jina).
+ */
+export declare function isWechatReaderJunk(text: string): boolean;
 export type WechatPageKind = 'content' | 'shell' | 'captcha' | 'error';
 export interface WechatArticle {
     kind: WechatPageKind;
