@@ -24,6 +24,7 @@ import { EvidenceService } from './pipeline/service.ts';
 import type { ProviderState } from './provider.ts';
 import type { OverlayStore } from './overlay.ts';
 import type { PendingRestart } from './restart.ts';
+import { NoticeBoard } from './wechat/notices.ts';
 export interface ToolDeps {
     ctx: Context;
     config: ResolvedConfig;
@@ -46,5 +47,7 @@ export interface ToolDeps {
     overlay?: OverlayStore;
     /** Settings changed in the configuration that only take effect at the next start. */
     pendingRestart?: () => PendingRestart[];
+    /** The plugin instance's notice board; one is made when omitted. */
+    notices?: NoticeBoard;
 }
 export declare function registerTools(deps: ToolDeps): void;

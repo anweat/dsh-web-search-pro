@@ -21,6 +21,8 @@ export declare function normalizeHost(hostname: string): string;
  * built-in rules.
  */
 export declare function matchRule(hostname: string, rules: readonly ExtractRule[]): ExtractRule | undefined;
+/** Readable text of one parsed element: the walker of {@link extractText}, cleaned the same way. */
+export declare function nodeToText(node: any): string;
 export interface ExtractResult {
     title: string;
     text: string;

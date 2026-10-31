@@ -18,6 +18,7 @@ import { type BackendDiagnostic } from './backend-registry.ts';
 import { type ExaResult } from './exa-client.ts';
 import type { ProviderCall, ProviderOutcome } from './pipeline/run.ts';
 import type { ProviderStatus } from './pipeline/plan.ts';
+import { type Notice } from './wechat/notices.ts';
 export interface RouterSearchOptions {
     query: string;
     /** Engine ids to try, in order. Defaults to config.engines. */
@@ -69,6 +70,8 @@ export interface RouterSearchResult {
     fallbackNote?: string;
     /** Platform search: the backend of its chain that answered (`bili`, `browser-opencli`). */
     backend?: string;
+    /** Messages for the user from this run (a captcha wall a leg hit): raw, the action layer shows each once per session. Not stored: a cache hit carries none. */
+    notices?: Notice[];
 }
 /** One provider as `sources.status` reports it: the registry descriptor plus local readiness by dimension. */
 export interface ProviderReport {

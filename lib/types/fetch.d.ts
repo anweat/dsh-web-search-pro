@@ -9,6 +9,8 @@ import type { BrowserService } from './browser-service.ts';
 import { type BrowserGetter } from './browser-access.ts';
 import type { ExtractRule } from './extract.ts';
 import { type DeepSeekFetchAccess } from './providers/deepseek.ts';
+import { type Notice } from './wechat/notices.ts';
+import { type Throttle } from './wechat/sogou.ts';
 export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright' | 'deepseek';
 export interface FetchOptions {
     mode: FetchMode;
@@ -40,6 +42,8 @@ export interface FetchResult {
     nextOffset?: number;
     /** Length of the whole page text; absent when the page was cut at the read cap and the true length is unknown. */
     totalChars?: number;
+    /** Messages for the user this read implies (a WeChat article's copyright, a signed link that expires). Raw: the action layer shows each once per session. */
+    notices?: Notice[];
 }
 /** Pages are read and stored up to this many characters even when the caller wants less, so `offset` can continue from the snapshot. */
 export declare const FETCH_STORE_CHARS = 100000;
@@ -92,18 +96,37 @@ export declare class FetchService {
     private readonly store;
     private readonly config;
     private readonly deepseek?;
+    /** Test seams of the Sogou link resolution (a weixin.sogou.com/link URL read by read.fetch). */
+    private readonly sogouSeams;
     private readonly memory;
     /** In-flight de-duplication of identical non-fresh fetches (C3). */
     private readonly flights;
     private readonly getBrowser;
-    constructor(store: Store, config: ResolvedConfig | (() => ResolvedConfig), browser?: BrowserService | BrowserGetter, deepseek?: DeepSeekFetchAccessProvider | undefined);
+    constructor(store: Store, config: ResolvedConfig | (() => ResolvedConfig), browser?: BrowserService | BrowserGetter, deepseek?: DeepSeekFetchAccessProvider | undefined, 
+    /** Test seams of the Sogou link resolution (a weixin.sogou.com/link URL read by read.fetch). */
+    sogouSeams?: {
+        fetchImpl?: typeof fetch;
+        lookup?: (hostname: string) => Promise<{
+            address: string;
+            family?: number;
+        }[]>;
+        throttle?: Throttle;
+        now?: () => number;
+    });
     private cfg;
     /** True when the optional browser can render right now (enabled in config and the service has render()). */
     private canRender;
+    /**
+     * A weixin.sogou.com/link URL (what a Sogou search result links to) names its article only through a script on the Sogou
+     * side: it is resolved to the signed mp.weixin.qq.com URL first, and that URL is what is read and returned.
+     */
+    private resolveSogouUrl;
     fetchPage(url: string, opts: FetchOptions): Promise<FetchResult>;
     /** Fetch (or serve from cache) the WHOLE page text up to `readCap`; callers slice their window out of it. */
     private runFetch;
     private fetchJina;
+    /** A WeChat article page (src/wechat/article.ts): phone UA + referer, the parser's own title / account / time and page class. */
+    private fetchWechat;
     private fetchHttp;
     /** One page through the DeepSeek Fetch API. 403 / 404 are DeepSeek's own verdicts (see `DeepSeekFetchError`), never the target page's status. */
     private fetchDeepSeek;

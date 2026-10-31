@@ -15,6 +15,7 @@
  * back with `partial: true`.
  * @module web-search-pro/pipeline/run
  */
+import type { Notice } from '../wechat/notices.ts';
 import type { SourcePolicy } from '../config-enums.ts';
 import { type ProviderOutput, type ProviderSource } from './candidates.ts';
 import { type SplitOptions } from './blocks.ts';
@@ -45,18 +46,22 @@ export type ProviderOutcome = {
     state: 'ok';
     sources: readonly ProviderSource[]; /** The backend of a platform chain that answered. */
     backend?: string; /** The engine's own remarks (a query it had to cut, results it dropped); they reach the pack notes. */
-    notes?: readonly string[];
+    notes?: readonly string[]; /** Messages for the user (a captcha wall a leg hit); the evidence service passes them on as the pack's `notices`. */
+    notices?: readonly Notice[];
 }
 /** `detail` carries the provider's own explanation of an empty answer (e.g. a login hint), when it gave one. */
  | {
     state: 'empty';
     detail?: string;
+    notices?: readonly Notice[];
 } | {
     state: 'skipped';
     reason: string;
+    notices?: readonly Notice[];
 } | {
     state: 'error';
     message: string;
+    notices?: readonly Notice[];
 };
 /** A page as S5 needs it: text, plus ready-made blocks when the caller already split it. */
 export interface PageInput {

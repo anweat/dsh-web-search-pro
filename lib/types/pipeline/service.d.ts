@@ -13,6 +13,7 @@ import { shapeSources } from '../util.ts';
 import { type TaskInput } from './task.ts';
 import type { EvidencePack } from './types.ts';
 import type { ProviderRegistry } from '../providers/registry.ts';
+import { type Notice } from '../wechat/notices.ts';
 export interface EvidenceRequest extends TaskInput {
     /** Explicit engine ids (tool `engines`). */
     engines?: string[] | undefined;
@@ -54,9 +55,11 @@ export interface EvidenceServiceDeps {
     now?: () => number;
 }
 /** Pack as returned by the tool: `sources` shaped like every other exit. */
+/** `notices`: messages for the user that the run's sources and pages produced (raw: the action layer decides which are shown). */
 export type EvidenceOutput = Omit<EvidencePack, 'sources'> & {
     sources: ReturnType<typeof shapeSources>;
     fromCache: false;
+    notices?: Notice[];
 };
 export declare const PAGE_MAX_CHARS = 60000;
 export declare class EvidenceService {
