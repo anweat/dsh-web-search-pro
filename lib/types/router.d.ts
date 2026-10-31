@@ -244,6 +244,10 @@ export declare class SearchRouter {
      * for every built-in source, so the built-in ones are 1 unless the user set something.
      */
     confidenceOf(route: string, backend?: string): number;
+    /** The local readiness of a platform's backend chain (no network), or undefined for a platform without one. */
+    platformChain(platform: string): Promise<ChainReport | undefined>;
+    /** Requests booked today (calendar day of the budget time zone) under a ledger provider name, e.g. `tencent-wsa`. */
+    requestsToday(provider: string): number;
     /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
     private usageRecorder;
     /** Whether any configured engine is currently usable. */

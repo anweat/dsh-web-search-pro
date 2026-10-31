@@ -7,7 +7,8 @@
 import { OPENCLI_SITE_OF } from './opencli-sites.ts';
 /**
  * The default chain of each platform: first usable backend answers, empty or failing ones fall through in order. `wechat` ends with
- * the built-in `sogou` leg, which needs no CLI. The platforms
+ * the built-in `sogou` leg, which needs no CLI; the paid `tencent-wsa` leg is NOT in it: `resolveChain` puts it first only while
+ * `wechat.wsa.enabled` is set, and an explicit `platformBackends.wechat` uses it only where the user wrote it. The platforms
  * that need a login (xiaohongshu, reddit, twitter, zhihu) try the standalone OpenCLI first: it reads the login of the user's
  * own day-to-day Chrome through the OpenCLI Browser Bridge, so nothing is logged in by the plugin. The standalone CLIs
  * (xhs, rdt, twitter, zhihu) stay as the optional fallback for users who logged them in themselves.
@@ -24,8 +25,10 @@ export declare const BROWSER_SEARCH_PLATFORMS: readonly string[];
 export declare const REST_PLATFORMS: readonly string[];
 /** Platforms the plugin's own Sogou client serves (src/wechat/sogou.ts). */
 export declare const SOGOU_PLATFORMS: readonly string[];
+/** Platforms the paid 元宝搜索 (Tencent WSA) leg serves: it is restricted to mp.weixin.qq.com (src/wechat/wsa.ts). */
+export declare const WSA_PLATFORMS: readonly string[];
 /** Backend ids that are not CLI specs. */
-export declare const FIXED_BACKENDS: readonly ["opencli", "browser-opencli", "browser-search", "rest", "sogou"];
+export declare const FIXED_BACKENDS: readonly ["opencli", "browser-opencli", "browser-search", "rest", "sogou", "tencent-wsa"];
 /** Whether `id` names a platform backend: a built-in CLI spec, a fixed backend, or a custom CLI (`custom-cli:<id>`). */
 export declare function isBackendId(id: string): boolean;
 export interface BackendServing {

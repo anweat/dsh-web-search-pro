@@ -12,7 +12,7 @@ import type { ResolvedConfig } from '../config.ts';
 import { CHAIN_PLATFORMS, DEFAULT_CHAINS } from './chains-spec.ts';
 import { type CliAdapterSpec } from './spec.ts';
 import { type AccessProfile } from '../wechat/access.ts';
-export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'sogou' | 'custom-cli';
+export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'sogou' | 'tencent-wsa' | 'custom-cli';
 export { DEFAULT_CHAINS, CHAIN_PLATFORMS };
 export interface LegReadiness {
     ready: boolean;

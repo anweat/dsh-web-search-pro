@@ -2,9 +2,9 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store';
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import { type RubricKind } from '../pipeline/rubrics-spec.ts';
 import type { Context } from './context-types.ts';
-import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, type CredentialId, type FieldSpec, type SettingField } from './form-specs.ts';
+import { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, WECHAT_SPECS, type CredentialId, type FieldSpec, type SettingField } from './form-specs.ts';
 import { type OverlayView, type StatusView, type TrialRequest, type TrialResult } from '../rpc-types.ts';
-export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS };
+export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, WECHAT_SPECS };
 export type { CredentialId, SettingField };
 export interface CardFieldState {
     text: string;

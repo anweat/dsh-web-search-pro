@@ -1,15 +1,15 @@
 /**
- * The settings of the WeChat integration, in one place. Phase A needs only a few: the notice mode and the built-in Sogou leg
- * (enabled, how many results get their signed link resolved, the pause between Sogou requests). They are read from an OPTIONAL
- * `wechat` object of the configuration that the schema does not declare yet: unknown keys survive `resolveConfig`, so a profile
- * can already set them, and every missing or malformed value is its default.
- *
- * TODO(phase B): declare the top-level `wechat` group in config.ts / config-groups.ts (settings card, text view, dictionaries),
- * add `wsa` and `history`, and replace {@link wechatSettings}'s cast by the resolved field. Nothing else in the integration
- * reads the raw config.
+ * The settings of the WeChat integration, in one place: the `wechat` group of the configuration (docs/dev/wechat-design.md section 5).
+ * `notices` is the reminder mode, `sogou` the built-in Sogou leg, `wsa` the paid 元宝搜索 (Tencent WSA) leg, `history` the user's own
+ * wechat-download-api service. {@link wechatSettings} reads the group from a (resolved or raw) configuration and turns every
+ * missing or malformed value into its default, so nothing else reads the raw config. Pure: the client bundle includes this file.
  * @module web-search-pro/wechat/settings
  */
 import { type NoticeMode } from './notices.ts';
+export declare const WSA_EDITIONS: readonly ["lite", "standard", "flagship"];
+export type WsaEdition = typeof WSA_EDITIONS[number];
+export declare const WSA_MODES: readonly [0, 1, 2];
+export type WsaMode = typeof WSA_MODES[number];
 export interface WechatSettings {
     notices: NoticeMode;
     sogou: {
@@ -17,7 +17,26 @@ export interface WechatSettings {
         resolveLinks: number;
         minIntervalMs: number;
     };
+    wsa: {
+        enabled: boolean;
+        /** The key itself (a literal in the configuration); usually absent: the credentials ref / environment variable named by `apiKeyEnv` holds it. */
+        apiKey?: string;
+        apiKeyEnv: string;
+        /** Endpoint override; the default is {@link WSA_DEFAULT_BASE_URL}. */
+        baseUrl?: string;
+        edition: WsaEdition;
+        mode: WsaMode;
+        /** Requests per calendar day the plugin allows itself; more are refused (the money guard). */
+        dailyLimit: number;
+    };
+    history: {
+        /** The user's wechat-download-api service (`http://127.0.0.1:5000`); empty = the history actions are off. */
+        baseUrl: string;
+        minIntervalMs: number;
+    };
 }
+export declare const WSA_DEFAULT_BASE_URL = "https://api.wsa.cloud.tencent.com";
+export declare const WSA_DEFAULT_KEY_ENV = "TENCENT_WSA_API_KEY";
 export declare const WECHAT_DEFAULTS: WechatSettings;
-/** The WeChat settings of a (resolved) configuration. */
+/** The WeChat settings of a (resolved or raw) configuration. */
 export declare function wechatSettings(config: unknown): WechatSettings;

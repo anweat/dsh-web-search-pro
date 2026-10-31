@@ -90,6 +90,8 @@ export interface UsageRecorder {
         requests: number;
         note?: string;
     }): void;
+    /** Requests booked today (calendar day of the budget time zone) under a ledger provider name; absent where there is no ledger. */
+    today?(provider: string): number;
 }
 export interface EngineDeps {
     web?: WebRuntime;
@@ -126,6 +128,8 @@ export interface EngineDeps {
     anysearchApiKey?: string;
     /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
     githubToken?: string;
+    /** 元宝搜索 (Tencent WSA) service API key: config `wechat.wsa.apiKey` -> credentials ref -> environment (`wechat.wsa.apiKeyEnv`, default TENCENT_WSA_API_KEY). Never logged. */
+    wechatWsaKey?: string;
     /**
      * Credential variables of the CLI adapters by the name the tool reads (`TWITTER_AUTH_TOKEN`, `TWITTER_CT0`), resolved by the router:
      * config literal -> credentials ref -> process environment. Handed to a command only through its environment, never in argv.

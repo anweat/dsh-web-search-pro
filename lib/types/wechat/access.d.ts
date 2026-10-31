@@ -17,7 +17,7 @@ export interface AccessProfile {
     /** What it costs (`元宝搜索 14-20 元/千次`), when it is billed. */
     billing?: string;
 }
-/** Profiles by `<platform>:<backend id>`. Phase B adds `wechat:tencent-wsa` (api-key, low, billed) and the history service (qr-scan, high). */
+/** Profiles by `<platform>:<backend id>`; `wechat:history` is the user's own wechat-download-api service (not a chain leg: the wechat.* actions use it). */
 export declare const ACCESS_PROFILES: Readonly<Record<string, AccessProfile>>;
 /** The access profile of a backend as a leg of a platform chain, when it has one. */
 export declare function accessProfileOf(platform: string, backend: string): AccessProfile | undefined;

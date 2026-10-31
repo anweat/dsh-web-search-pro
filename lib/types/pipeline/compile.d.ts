@@ -108,6 +108,11 @@ export declare function hardWindows(task: TaskLike, now: Date): {
  */
 export declare function compileKeyed(task: TaskLike, providerId: string, now: Date, caps: KeyedCaps): CompiledQuery;
 /**
+ * The wechat platform: a HARD time_window becomes `options.since`, which the paid 元宝搜索 leg turns into its `Freshness` filter
+ * (the other legs ignore it). No constraint counts as native: whichever leg answers, the local check still enforces the window.
+ */
+export declare function compileWechat(task: TaskLike, providerId: string, now: Date): CompiledQuery;
+/**
  * DeepSeek Search takes `site:` (several joined by `OR`), `-site:`, `-term`, `"phrase"`, `lang:`, `after:` and `before:` inside
  * the query. Hard constraints become those operators (the engine keeps them whole when it has to cut a long query). An operator the
  * query already spells is not repeated; a hard site when the query already restricts to other sites stays local (two `site:`

@@ -20,13 +20,13 @@ export interface Notice {
 export type NoticeMode = 'once' | 'always' | 'off';
 export declare const NOTICE_MODES: readonly NoticeMode[];
 /**
- * The known notices. Phase B adds `wechat.paid`, `wechat.login-expired` (action), `wechat.account-risk` and `wechat.rate-limited`
- * (see docs/dev/wechat-design.md section 1) here; `notice(code)` builds one with its default level and text.
+ * The known notices (docs/dev/wechat-design.md section 1); `notice(code)` builds one with its default level and text. A caller that
+ * knows more (today's usage, the failing reason) passes its own message.
  */
 export declare const NOTICE_TABLE: {
     readonly 'wechat.antispider': {
         readonly level: "warn";
-        readonly message: "搜狗微信搜索触发了反爬验证，这次没有拿到完整结果。请降低搜索频率、换一个出口 IP 或稍后再试；公众号搜索的稳定性取决于搜狗，不是关键词的问题。";
+        readonly message: "搜狗微信搜索触发了反爬验证，这次没有拿到完整结果。请降低搜索频率、换一个出口 IP 或稍后再试；公众号搜索的稳定性取决于搜狗，不是关键词的问题。也可以改配置元宝搜索（付费，设置里 wechat.wsa），它走腾讯云接口，不受搜狗验证码影响。";
     };
     readonly 'wechat.signed-url': {
         readonly level: "info";
@@ -35,6 +35,30 @@ export declare const NOTICE_TABLE: {
     readonly 'wechat.bare-url': {
         readonly level: "info";
         readonly message: "这个公众号链接没有签名（裸链接），服务器直接抓取通常只能得到验证页或空壳页，读不到正文。请改用 search.run platform=wechat 搜索结果里的签名链接，或让用户在微信里复制文章的分享链接。";
+    };
+    readonly 'wechat.paid': {
+        readonly level: "info";
+        readonly message: "这次公众号搜索用了元宝搜索（腾讯云，按次计费：极速 14 / 标准 20 / 旗舰 26 元每千次；新账号可能有免费额度，以控制台为准）。";
+    };
+    readonly 'wechat.wsa-setup': {
+        readonly level: "action";
+        readonly message: "元宝搜索不可用，需要你处理：未开通服务、API Key 不对或已删除、子账号没有授权，或账户欠费。请到腾讯云控制台「元宝搜索 → 服务 API KEY」检查，并在插件设置的「微信 / 公众号」里填好 Key（环境变量 TENCENT_WSA_API_KEY 或 DSH 凭据）。";
+    };
+    readonly 'wechat.wsa-limit': {
+        readonly level: "warn";
+        readonly message: "元宝搜索今天的请求数已达到设置的每日上限（wechat.wsa.dailyLimit），插件不再请求，已改用其它后端。要继续用请在设置里调高上限。";
+    };
+    readonly 'wechat.login-expired': {
+        readonly level: "action";
+        readonly message: "整号历史服务的微信登录已失效或还没登录。请到你的 wechat-download-api 管理页面重新扫码登录，登录约 4 天后过期。";
+    };
+    readonly 'wechat.account-risk': {
+        readonly level: "warn";
+        readonly message: "整号历史走的是你自己公众号后台的接口：高频请求会被微信限流，严重时可能封号。请保持低频，不要批量翻页抓取。";
+    };
+    readonly 'wechat.rate-limited': {
+        readonly level: "warn";
+        readonly message: "微信对你的公众号后台接口限流了（如 ret=200013）。请暂停一段时间再用；账号级的限流可能持续数天，重新扫码登录也不会解除。";
     };
     readonly 'wechat.copyright': {
         readonly level: "info";

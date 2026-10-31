@@ -8,6 +8,7 @@ import type { JudgeSettings } from './pipeline/judges/providers.ts';
 import type { BudgetInput } from './pipeline/ledger.ts';
 import type { RubricOverride } from './pipeline/rubrics.ts';
 import type { SourceBudgetInput } from './pipeline/sources-spec.ts';
+import { type WechatSettings, type WsaEdition, type WsaMode } from './wechat/settings.ts';
 import { type SourcePolicy, type ToolSurface } from './config-enums.ts';
 export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES } from './config-enums.ts';
 export type { SourcePolicy, ToolSurface };
@@ -175,6 +176,32 @@ export interface Config {
     searxngUrl?: string;
     /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
     openalexMailto?: string;
+    /**
+     * WeChat official accounts (docs/dev/wechat-design.md): the reminder mode (`notices`), the built-in Sogou leg (`sogou`), the paid
+     * 元宝搜索 leg (`wsa`: off by default, key by literal / credentials ref / `$TENCENT_WSA_API_KEY`) and the user's own
+     * wechat-download-api service (`history.baseUrl`). Every value is optional; `wechat.*` defaults live in src/wechat/settings.ts.
+     */
+    wechat?: {
+        notices?: 'once' | 'always' | 'off';
+        sogou?: {
+            enabled?: boolean;
+            resolveLinks?: number;
+            minIntervalMs?: number;
+        };
+        wsa?: {
+            enabled?: boolean;
+            apiKey?: string;
+            apiKeyEnv?: string;
+            baseUrl?: string;
+            edition?: WsaEdition;
+            mode?: WsaMode;
+            dailyLimit?: number;
+        };
+        history?: {
+            baseUrl?: string;
+            minIntervalMs?: number;
+        };
+    };
     /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
     cliAdapters?: Record<string, Record<string, unknown>>;
     /** Evidence pipeline (S6 scoring). */
@@ -307,6 +334,77 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     githubTokenEnv: z<string, string, "volatile-defined">;
     searxngUrl: z<string, string, "volatile">;
     openalexMailto: z<string, string, "volatile">;
+    wechat: z<Schemastery.ObjectS<NoInfer<{
+        notices: z<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+        sogou: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        wsa: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        history: z<Schemastery.ObjectS<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        notices: z<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+        sogou: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        wsa: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        history: z<Schemastery.ObjectS<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+    }>>, "plain">;
     cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
@@ -774,6 +872,77 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     githubTokenEnv: z<string, string, "volatile-defined">;
     searxngUrl: z<string, string, "volatile">;
     openalexMailto: z<string, string, "volatile">;
+    wechat: z<Schemastery.ObjectS<NoInfer<{
+        notices: z<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+        sogou: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        wsa: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        history: z<Schemastery.ObjectS<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        notices: z<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+        sogou: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            resolveLinks: z<number, number, "volatile-defined">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        wsa: z<Schemastery.ObjectS<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            enabled: z<boolean, boolean, "volatile-defined">;
+            apiKey: z<string, string, "volatile">;
+            apiKeyEnv: z<string, string, "volatile-defined">;
+            baseUrl: z<string, string, "volatile">;
+            edition: z<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+            mode: z<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+            dailyLimit: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+        history: z<Schemastery.ObjectS<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            baseUrl: z<string, string, "volatile">;
+            minIntervalMs: z<number, number, "volatile-defined">;
+        }>>, "plain">;
+    }>>, "plain">;
     cliAdapters: z<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
     evidence: z<Schemastery.ObjectS<NoInfer<{
         scorer: z<"jev" | "rule", "jev" | "rule", "volatile-defined">;
@@ -1210,6 +1379,7 @@ export interface ResolvedConfig extends Config {
     searxngUrl?: string;
     openalexMailto?: string;
     keyedSources?: Config['keyedSources'];
+    wechat: WechatSettings;
     playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>;
     sources: Required<SourcesConfig>;
     evidence: EvidenceConfig;

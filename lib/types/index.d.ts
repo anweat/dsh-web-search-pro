@@ -80,6 +80,77 @@ declare const _default: {
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        wechat: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            notices: import("@deepseek-ai/schemastery").default<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+            sogou: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            wsa: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            history: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            notices: import("@deepseek-ai/schemastery").default<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+            sogou: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            wsa: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            history: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+        }>>, "plain">;
         cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
@@ -547,6 +618,77 @@ declare const _default: {
         githubTokenEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
         searxngUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
         openalexMailto: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+        wechat: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+            notices: import("@deepseek-ai/schemastery").default<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+            sogou: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            wsa: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            history: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+        }>>, Schemastery.ObjectT<NoInfer<{
+            notices: import("@deepseek-ai/schemastery").default<"once" | "always" | "off", "once" | "always" | "off", "volatile-defined">;
+            sogou: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                resolveLinks: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            wsa: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                enabled: import("@deepseek-ai/schemastery").default<boolean, boolean, "volatile-defined">;
+                apiKey: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                apiKeyEnv: import("@deepseek-ai/schemastery").default<string, string, "volatile-defined">;
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                edition: import("@deepseek-ai/schemastery").default<"lite" | "standard" | "flagship", "lite" | "standard" | "flagship", "volatile-defined">;
+                mode: import("@deepseek-ai/schemastery").default<0 | 1 | 2, 0 | 1 | 2, "volatile-defined">;
+                dailyLimit: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+            history: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, Schemastery.ObjectT<NoInfer<{
+                baseUrl: import("@deepseek-ai/schemastery").default<string, string, "volatile">;
+                minIntervalMs: import("@deepseek-ai/schemastery").default<number, number, "volatile-defined">;
+            }>>, "plain">;
+        }>>, "plain">;
         cliAdapters: import("@deepseek-ai/schemastery").default<NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, NoInfer<import("@deepseek-ai/cosmokit").Dict<import("@deepseek-ai/cosmokit").Dict<any, string>, string>>, "volatile">;
         evidence: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
             scorer: import("@deepseek-ai/schemastery").default<"jev" | "rule", "jev" | "rule", "volatile-defined">;
