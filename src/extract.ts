@@ -39,6 +39,8 @@ export const BUILTIN_RULES: ExtractRule[] = [
   { hostname: 'sspai.com', contentSelectors: ['article'] },
   { hostname: 'ithome.com', contentSelectors: ['#paragraph', 'article'] },
   { hostname: 'huxiu.com', contentSelectors: ['#article_content', 'article'] },
+  // WeChat official-account articles (src/wechat/article.ts reads the page itself; the rule serves the browser render and rule-based paths).
+  { hostname: 'mp.weixin.qq.com', contentSelectors: ['#js_content', '.rich_media_content'] },
 ]
 
 /** Normalize a hostname for matching (strip www. and port). */
@@ -142,6 +144,11 @@ function elementToText(node: any, depth: number): string {
   }
   if (BLOCK_TAGS.has(tag)) out = '\n' + out + '\n'
   return out
+}
+
+/** Readable text of one parsed element: the walker of {@link extractText}, cleaned the same way. */
+export function nodeToText(node: any): string {
+  return elementToText(node, 0).replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim()
 }
 
 /** Pick the main content element: rule selectors first, then generic heuristics. */

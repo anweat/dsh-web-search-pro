@@ -4,7 +4,7 @@ import { normalizeCoverage, normalizeJudge, normalizeRubrics } from '../config-f
 import { BUILTIN_RUBRIC_IDS, builtinDef, type RubricKind } from '../pipeline/rubrics-spec.ts'
 import type { Context } from './context-types.ts'
 import {
-  BUDGET_SPECS, CREDENTIAL_IDS, CONFIDENCE_PREFIX, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, applyOps, confidenceSpec, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
+  BUDGET_SPECS, CREDENTIAL_IDS, CONFIDENCE_PREFIX, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, WECHAT_SPECS, applyOps, confidenceSpec, credentialRef, deepMerge, getAt, hasAt, isPathSpec, isRecord,
   rubricField, rubricSpec,
   type CredentialId, type FieldSpec, type FieldWrite, type Json, type PathOp, type PathSpec, type RootKey, type SettingField,
 } from './form-specs.ts'
@@ -13,7 +13,7 @@ import { adoptionOf } from './overlay-ops.ts'
 import { RESTART_FIELD_LIST } from '../restart.ts'
 import { cliIssues, evidenceIssues, sourcesIssues, nextVersion, providerChoices, unknownRubricIds, type Issue } from './validators.ts'
 
-export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS }
+export { BUDGET_SPECS, CREDENTIAL_IDS, FIELD_SPECS, KEYED_SPECS, PATH_SPECS, WECHAT_SPECS }
 export type { CredentialId, SettingField }
 
 export interface CardFieldState {
@@ -106,7 +106,7 @@ interface PlanItem { target: string; write: FieldWrite | undefined }
 type SectionOp = { op: 'set'; path: string[]; value: unknown } | { op: 'unset'; path: string[] }
 interface Analysis { settings: PlanItem[]; ops: SectionOp[]; issues: Issue[]; blocked: Set<SettingField>; evidence: Json }
 
-const ROOTS: readonly RootKey[] = ['evidence', 'provider', 'keyedSources', 'sources']
+const ROOTS: readonly RootKey[] = ['evidence', 'provider', 'keyedSources', 'sources', 'wechat']
 /** Top-level fields that are objects whose keys, not the object, are the live (volatile) settings of the plugin schema. */
 const CONTAINER_FIELDS: readonly string[] = ['playwright']
 
@@ -124,7 +124,7 @@ function same(left: unknown, right: unknown): boolean {
   return stable(left) === stable(right)
 }
 
-const SPECS: readonly FieldSpec[] = [...FIELD_SPECS, ...PATH_SPECS, ...KEYED_SPECS, ...BUDGET_SPECS, ...BUILTIN_RUBRIC_IDS.map(rubricSpec)]
+const SPECS: readonly FieldSpec[] = [...FIELD_SPECS, ...PATH_SPECS, ...WECHAT_SPECS, ...KEYED_SPECS, ...BUDGET_SPECS, ...BUILTIN_RUBRIC_IDS.map(rubricSpec)]
 /** Every field spec of the form model, in display order. */
 export const ALL_SPECS: readonly FieldSpec[] = SPECS
 const SPEC_BY_FIELD = new Map<SettingField, FieldSpec>(SPECS.map(spec => [spec.field, spec]))

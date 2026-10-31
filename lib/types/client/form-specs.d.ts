@@ -14,7 +14,9 @@ export type Json = Record<string, unknown>;
 /** Top-level config fields (one Host write each). */
 export type TopField = 'engines' | 'parallelEngines' | 'searchMaxResults' | 'timeoutMs' | 'fetchDefaultChars' | 'exaContentsPerUrlChars' | 'exaContentsTotalChars' | 'exaApiKeyEnv' | 'jinaApiKeyEnv' | 'githubTokenEnv' | 'twitterAuthTokenEnv' | 'twitterCt0Env' | 'bochaApiKeyEnv' | 'bochaBaseUrl' | 'bochaSummary' | 'deepseekFetch' | 'searxngUrl' | 'openalexMailto' | 'enableCliBackends' | 'opencliEnabled' | 'agentReachEnabled' | 'providerId' | 'registerProvider' | 'toolSurface' | 'playwright' | 'ttlSeconds' | 'memoryCacheEntries' | 'rrfConstant' | 'freshnessBoost' | 'freshnessDays' | 'authorityBoost' | 'authorityDomains' | 'dbPath' | 'allowProxyFakeIp' | 'platformRules' | 'customPlatforms' | 'browserBindings' | 'platformBackends' | 'cliAdapters' | 'verbose';
 /** Options inside `evidence` / `provider`, addressed by their dotted config path. */
-export type PathField = 'evidence.autoProviders' | 'evidence.sourcePolicy' | 'evidence.maxRounds' | 'evidence.maxQueries' | 'evidence.judge.mode' | 'evidence.hybridBorderline' | 'evidence.judge.provider' | 'evidence.maxJevQuestions' | 'evidence.judge.allowLlm' | 'evidence.judge.providers' | 'evidence.coverage.mode' | 'evidence.coverage.provider' | 'evidence.coverage.thresholds.weak' | 'evidence.coverage.thresholds.covered' | 'evidence.budget.perSearchInputTokens' | 'evidence.budget.dailyInputTokens' | 'evidence.budget.timezone' | 'evidence.budget.providers' | 'provider.evidence' | 'provider.deadlineMs' | 'sources.priority' | 'sources.disabled';
+export type PathField = 'evidence.autoProviders' | 'evidence.sourcePolicy' | 'evidence.maxRounds' | 'evidence.maxQueries' | 'evidence.judge.mode' | 'evidence.hybridBorderline' | 'evidence.judge.provider' | 'evidence.maxJevQuestions' | 'evidence.judge.allowLlm' | 'evidence.judge.providers' | 'evidence.coverage.mode' | 'evidence.coverage.provider' | 'evidence.coverage.thresholds.weak' | 'evidence.coverage.thresholds.covered' | 'evidence.budget.perSearchInputTokens' | 'evidence.budget.dailyInputTokens' | 'evidence.budget.timezone' | 'evidence.budget.providers' | 'provider.evidence' | 'provider.deadlineMs' | 'sources.priority' | 'sources.disabled' | WechatField;
+/** Options inside `wechat` (src/wechat/settings.ts). The write-only key literal `wechat.wsa.apiKey` is a credential, not a field. */
+export type WechatField = 'wechat.notices' | 'wechat.sogou.enabled' | 'wechat.sogou.resolveLinks' | 'wechat.sogou.minIntervalMs' | 'wechat.wsa.enabled' | 'wechat.wsa.apiKeyEnv' | 'wechat.wsa.baseUrl' | 'wechat.wsa.edition' | 'wechat.wsa.mode' | 'wechat.wsa.dailyLimit' | 'wechat.history.baseUrl' | 'wechat.history.minIntervalMs';
 /** One rubric override entry (`evidence.rubrics.<id>`) and one keyed-source field. */
 export type RubricField = `evidence.rubrics.${string}`;
 export type KeyedField = `keyedSources.${string}.apiKeyEnv` | `keyedSources.${string}.baseUrl`;
@@ -23,7 +25,7 @@ export type BudgetField = `sources.budget.${string}.${'total' | 'daily'}`;
 /** The confidence of one source or platform backend (`sources.confidence.<id>`): the ids are open, so these fields are made on demand. */
 export type ConfidenceField = `sources.confidence.${string}`;
 export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField | ConfidenceField;
-export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources';
+export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources' | 'wechat';
 export type FieldWrite = {
     kind: 'set';
     value: unknown;
@@ -89,6 +91,7 @@ export declare const DEFAULTS: {
         readonly perSearchInputTokens: 60000;
         readonly dailyInputTokens: 1000000;
     };
+    readonly wechat: import("../wechat/settings.ts").WechatSettings;
     readonly toolSurface: "indexed";
     readonly bochaApiKeyEnv: "BOCHA_SEARCH_API_KEY";
     readonly twitterAuthTokenEnv: "TWITTER_AUTH_TOKEN";
@@ -101,6 +104,8 @@ export declare const DEFAULTS: {
 export declare const FIELD_SPECS: readonly FieldSpec[];
 /** Fields inside `evidence` and `provider`, in display order. */
 export declare const PATH_SPECS: readonly PathSpec[];
+/** Fields inside `wechat`, in display order. */
+export declare const WECHAT_SPECS: readonly PathSpec[];
 /** The keyed sources the card has controls for: route id and the environment variable its key is read from by default. */
 export declare const KEYED_SOURCES: readonly {
     id: string;
@@ -118,7 +123,7 @@ export declare const CONFIDENCE_PREFIX = "sources.confidence.";
 export declare const rubricSpec: (id: string) => PathSpec;
 export declare const rubricField: (id: string) => RubricField;
 /** Fields that a Host write can never take as text (credentials go through the credentials remote). */
-export declare const CREDENTIAL_IDS: readonly ["exa", "jina", "github", "bocha", "twitter-auth-token", "twitter-ct0", ...`keyed:${string}`[]];
+export declare const CREDENTIAL_IDS: readonly ["exa", "jina", "github", "bocha", "twitter-auth-token", "twitter-ct0", "wechat-wsa", ...`keyed:${string}`[]];
 export type CredentialId = typeof CREDENTIAL_IDS[number];
 /** The settings field holding the credentials ref / environment variable name of each credential, and its default name. */
 export declare function credentialRef(id: CredentialId): {

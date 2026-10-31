@@ -10,6 +10,7 @@ import { ACTION_GROUPS } from '../src/actions/types.ts'
 import { validateArgs } from '../src/actions/schema.ts'
 import { COMPACT_GUIDE, renderIndex } from '../src/actions/index-view.ts'
 import { LEGACY_TOOL_NAMES } from '../src/actions/legacy.ts'
+import { NOTICE_TABLE } from '../src/wechat/notices.ts'
 import { SKILL_DIR, SKILL_NAME, createSkillProvider, parseSkillFile, readSkill } from '../src/skill.ts'
 import { CONSTRAINT_KINDS, PROFILES } from '../src/pipeline/types.ts'
 import { parseConstraints, parseNeeds } from '../src/pipeline/task.ts'
@@ -70,7 +71,7 @@ test('the skill body points models at search.run over web_search + web_fetch and
 
 test('every reference file is linked from SKILL.md', () => {
   const body = read('SKILL.md')
-  assert.deepEqual(SKILL_FILES.filter(file => file !== 'SKILL.md').sort(), ['references/config.md', 'references/judges.md', 'references/sources.md', 'references/troubleshooting.md'])
+  assert.deepEqual(SKILL_FILES.filter(file => file !== 'SKILL.md').sort(), ['references/config.md', 'references/judges.md', 'references/sources.md', 'references/troubleshooting.md', 'references/wechat.md'])
   for (const file of SKILL_FILES.filter(file => file !== 'SKILL.md')) assert.ok(body.includes(file), `${file} is not referenced`)
   for (const [, link] of body.matchAll(/`(references\/[\w.-]+)`/g)) assert.ok(SKILL_FILES.includes(link!), `dangling reference ${link}`)
 })
@@ -83,7 +84,10 @@ test('skill text and examples cannot drift from the action registry', () => {
   for (const file of SKILL_FILES) {
     const text = read(file)
     assert.doesNotMatch(text, LEGACY, `${file} names a tool that no longer exists`)
-    for (const match of text.matchAll(groupPattern)) {
+    // Notice codes (`wechat.paid`, `wechat.login-expired`) and the settings of the wechat group (`wechat.wsa.dailyLimit`) look like
+    // `group.action` names but are not actions.
+    const withoutNoticeCodes = Object.keys(NOTICE_TABLE).reduce((acc, code) => acc.split(code).join('<notice>'), text).replace(/wechat\.(?:wsa|history|sogou|notices)(?:\.\w+)*/g, '<setting>')
+    for (const match of withoutNoticeCodes.matchAll(groupPattern)) {
       assert.ok(findAction(match[0]), `${file} mentions unknown action ${match[0]}`)
       namesChecked += 1
     }

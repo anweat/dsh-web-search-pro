@@ -61,13 +61,13 @@ export declare function httpGet(url: string, opts?: {
     method?: string;
     body?: string;
     maxBytes?: number;
-    allowProxyFakeIp?: boolean; /** Test seams: replace the global fetch and the DNS lookup. */
+    allowProxyFakeIp?: boolean; /** One exact origin of the user's own service that may be private (safe-http `allowOrigin`). */
+    allowOrigin?: string; /** Test seams: replace the global fetch and the DNS lookup. */
     fetchImpl?: typeof fetch;
     lookup?: ResolvePublicUrlOptions['lookup'];
 }): Promise<HttpResult>;
 /** Decode bytes honoring charset; UTF-8 first with GBK fallback on garbage. */
 export declare function decodeText(buf: Buffer, contentType?: string): string;
-/** Decode common HTML entities in a string. */
 export declare function htmlDecode(input: string): string;
 /** Strip HTML tags (used for titles / snippets inside already-scoped strings). */
 export declare function stripTags(input: string): string;

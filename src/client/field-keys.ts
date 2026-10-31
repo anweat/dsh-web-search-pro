@@ -15,6 +15,9 @@ const EXPLICIT: Readonly<Record<string, string>> = {
   'evidence.coverage.thresholds.weak': 'thresholdWeak', 'evidence.coverage.thresholds.covered': 'thresholdCovered',
   'evidence.budget.perSearchInputTokens': 'budgetPerSearch', 'evidence.budget.dailyInputTokens': 'budgetDaily', 'evidence.budget.timezone': 'budgetTimezone', 'evidence.budget.providers': 'budgetProviders',
   'provider.evidence': 'providerEvidence', 'provider.deadlineMs': 'providerDeadlineMs', 'sources.priority': 'srcPriority', 'sources.disabled': 'srcDisabled',
+  'wechat.notices': 'wxNotices', 'wechat.sogou.enabled': 'wxSogouEnabled', 'wechat.sogou.resolveLinks': 'wxSogouResolve', 'wechat.sogou.minIntervalMs': 'wxSogouInterval',
+  'wechat.wsa.enabled': 'wxWsaEnabled', 'wechat.wsa.apiKeyEnv': 'wxWsaEnv', 'wechat.wsa.baseUrl': 'wxWsaBase', 'wechat.wsa.edition': 'wxWsaEdition', 'wechat.wsa.mode': 'wxWsaMode',
+  'wechat.wsa.dailyLimit': 'wxWsaDaily', 'wechat.history.baseUrl': 'wxHistBase', 'wechat.history.minIntervalMs': 'wxHistInterval',
 }
 
 export function labelKey(field: string): string {
@@ -33,6 +36,7 @@ export const WITH_HELP: ReadonlySet<string> = new Set([
   'engines', 'toolSurface', 'allowProxyFakeIp', 'deepseekFetch', 'registerProvider', 'evidence.sourcePolicy', 'sources.priority', 'sources.disabled', 'evidence.judge.mode', 'evidence.hybridBorderline',
   'evidence.judge.allowLlm', 'evidence.coverage.mode', 'evidence.coverage.thresholds.weak', 'rrfConstant', 'freshnessBoost', 'authorityBoost', 'enableCliBackends', 'opencliEnabled', 'agentReachEnabled',
   'evidence.autoProviders', 'timeoutMs', 'ttlSeconds', 'sources.budget.total', 'sources.budget.daily', 'bochaSummary',
+  'wechat.wsa.enabled', 'wechat.wsa.dailyLimit', 'wechat.history.baseUrl',
 ])
 
 /** `?` text applies to the generic budget keys too. */

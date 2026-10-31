@@ -339,7 +339,7 @@ test('default chains: the order the plan fixes', () => {
   assert.deepEqual(DEFAULT_CHAINS.bilibili, ['bili'])
   assert.deepEqual(DEFAULT_CHAINS.youtube, ['yt-dlp'])
   for (const p of ['github', 'github-issues', 'github-code']) assert.deepEqual(DEFAULT_CHAINS[p], ['rest', 'gh'])
-  assert.deepEqual(DEFAULT_CHAINS.wechat, ['omnireach', 'wx-search-cli'])
+  assert.deepEqual(DEFAULT_CHAINS.wechat, ['omnireach', 'wx-search-cli', 'sogou'])
   assert.deepEqual(DEFAULT_CHAINS.omnireach, ['omnireach'])
 })
 

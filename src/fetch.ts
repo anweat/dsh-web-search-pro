@@ -15,6 +15,10 @@ import { LruCache } from './memory-cache.ts'
 import { assertSafePublicUrl } from './safe-http.ts'
 import { SingleFlight } from './singleflight.ts'
 import { deepseekFetchPage, type DeepSeekFetchAccess } from './providers/deepseek.ts'
+import { uniqueNotices, type Notice } from './wechat/notices.ts'
+import { WECHAT_MOBILE_UA, WECHAT_REFERER, classifyWechatMarker, isWechatArticleUrl, isWechatReaderJunk, parseWechatArticle, readNotices, type WechatPageKind } from './wechat/article.ts'
+import { isSogouLink, resolveSogouLink, sogouIo, type Throttle } from './wechat/sogou.ts'
+import { wechatSettings } from './wechat/settings.ts'
 
 export type FetchMode = 'auto' | 'jina' | 'http' | 'playwright' | 'deepseek'
 
@@ -49,6 +53,8 @@ export interface FetchResult {
   nextOffset?: number
   /** Length of the whole page text; absent when the page was cut at the read cap and the true length is unknown. */
   totalChars?: number
+  /** Messages for the user this read implies (a WeChat article's copyright, a signed link that expires). Raw: the action layer shows each once per session. */
+  notices?: Notice[]
 }
 
 /** Pages are read and stored up to this many characters even when the caller wants less, so `offset` can continue from the snapshot. */
@@ -142,7 +148,7 @@ export interface FetchAttempt {
   detail?: string
 }
 
-const CAPTCHA_PHRASES = /(captcha|are you (a )?(human|robot)|verify (that )?you(?:'re| are) (a )?human|unusual traffic|checking your (browser|connection)|just a moment\.\.\.|attention required|access denied|ddos protection|人机验证|验证码|安全验证|请完成.{0,6}验证|滑动验证|访问过于频繁)/i
+const CAPTCHA_PHRASES = /(captcha|are you (a )?(human|robot)|verify (that )?you(?:'re| are) (a )?human|unusual traffic|checking your (browser|connection)|just a moment\.\.\.|attention required|access denied|ddos protection|人机验证|验证码|安全验证|请完成.{0,6}验证|滑动验证|访问过于频繁|环境异常|完成验证|去验证)/i
 const JS_PHRASES = /(?:(?:you (?:need|must) to|you must|please|must|need to)\s+(?:enable|turn on|activate)\s+javascript|javascript\s+(?:is\s+)?(?:required|disabled|turned off|must be enabled)|(?:this (?:site|page|app|application|website|content)|it)\s+(?:requires|needs)\s+javascript|enable javascript (?:to|and|in order)|<noscript|(?:请|需要)(?:启用|开启|打开)\s*javascript|浏览器.{0,12}(?:禁用|未启用|不支持).{0,6}javascript)/i
 /** `<noscript>You need to enable JavaScript…</noscript>` (an analytics `<noscript><iframe>` does not match). */
 const NOSCRIPT_NEEDS_JS = /<noscript[^>]*>[^<]*java\s?script/i
@@ -223,6 +229,8 @@ export class FetchService {
     private readonly config: ResolvedConfig | (() => ResolvedConfig),
     browser?: BrowserService | BrowserGetter,
     private readonly deepseek?: DeepSeekFetchAccessProvider,
+    /** Test seams of the Sogou link resolution (a weixin.sogou.com/link URL read by read.fetch). */
+    private readonly sogouSeams: { fetchImpl?: typeof fetch; lookup?: (hostname: string) => Promise<{ address: string; family?: number }[]>; throttle?: Throttle; now?: () => number } = {},
   ) {
     this.getBrowser = toBrowserGetter(browser)
   }
@@ -236,8 +244,22 @@ export class FetchService {
     return this.cfg().playwright?.enabled !== false && !browserGap(this.getBrowser(), 'render', '')
   }
 
+  /**
+   * A weixin.sogou.com/link URL (what a Sogou search result links to) names its article only through a script on the Sogou
+   * side: it is resolved to the signed mp.weixin.qq.com URL first, and that URL is what is read and returned.
+   */
+  private async resolveSogouUrl(url: string, signal: AbortSignal | undefined): Promise<string> {
+    if (!isSogouLink(url)) return url
+    const cfg = this.cfg()
+    const settings = wechatSettings(cfg).sogou
+    if (!settings.enabled) throw new Error('weixin.sogou.com links are resolved by the built-in Sogou client, which is disabled in settings (wechat.sogou.enabled)')
+    const signed = await resolveSogouLink(url, sogouIo({ allowProxyFakeIp: cfg.allowProxyFakeIp, ...this.sogouSeams }, settings, signal, this.sogouSeams))
+    return normalizeUrl(signed)
+  }
+
   async fetchPage(url: string, opts: FetchOptions): Promise<FetchResult> {
-    const normalized = normalizeUrl(url)
+    const requested = normalizeUrl(url)
+    const normalized = await this.resolveSogouUrl(requested, opts.signal)
     const maxChars = Math.min(Math.max(opts.maxChars, 1_000), FETCH_HARD_MAX_CHARS)
     const offset = Math.max(Math.floor(opts.offset ?? 0), 0)
     // Backends read at least FETCH_STORE_CHARS (the snapshot `offset` continues from), more when the window needs it.
@@ -245,7 +267,10 @@ export class FetchService {
     const memoryKey = ['page', normalized, opts.mode, opts.persist ? 'persist' : 'ephemeral'].join('|')
     const run = (signal: AbortSignal | undefined): Promise<FetchResult> => this.runFetch(normalized, readCap, offset + maxChars, memoryKey, opts, signal)
     const full = opts.fresh ? await run(opts.signal) : await this.flights.do(memoryKey + '|' + readCap, run, opts.signal)
-    return sliceFetchResult(full, offset, maxChars)
+    const page = sliceFetchResult(full, offset, maxChars)
+    // Derived from the URL and the page class alone, so a cached copy carries the same notices.
+    const notices = uniqueNotices(readNotices({ requestedUrl: normalized, url: page.url, ...page.pageClass ? { pageClass: page.pageClass } : {} }))
+    return notices.length ? { ...page, notices } : page
   }
 
   /** Fetch (or serve from cache) the WHOLE page text up to `readCap`; callers slice their window out of it. */
@@ -261,7 +286,7 @@ export class FetchService {
       // backend is a caller contract and must not silently replay another mode.
       const cached = this.store.bestEffort('page cache read', () => this.store.getPage(normalized, this.cfg().ttlSeconds, opts.mode === 'auto' ? undefined : opts.mode))
       if (cached && cached.text && covers(cached.text, needEnd)) {
-        const cls = classifyPage(cached.text, typeof cached.status === 'number' ? { statusCode: cached.status } : {})
+        const cls: PageClass = classifyWechatMarker(cached.text) ?? classifyPage(cached.text, typeof cached.status === 'number' ? { statusCode: cached.status } : {})
         // A cheap-backend snapshot that was only a shell / login wall must not pin the page for the whole TTL
         // once a browser can render it; the render result (source playwright) is then what gets cached.
         const stale = opts.mode === 'auto' && ESCALATE_CLASSES.has(cls) && cached.source !== 'playwright' && this.canRender()
@@ -288,10 +313,13 @@ export class FetchService {
     const tried: { result: FetchResult; cls: PageClass }[] = []
     // One backend attempt: classified and recorded. Explicit modes rethrow (the caller asked for exactly that backend);
     // in auto mode a failing backend is just another attempt.
-    const attempt = async (source: FetchAttempt['source'], run: () => Promise<FetchResult & { jsHint?: boolean }>): Promise<void> => {
+    const attempt = async (source: FetchAttempt['source'], run: () => Promise<FetchResult & { jsHint?: boolean; classHint?: WechatPageKind }>): Promise<void> => {
       try {
-        const { jsHint, ...result } = await run()
-        const cls = classifyPage(result.text, { ...result.statusCode !== undefined ? { statusCode: result.statusCode } : {}, ...jsHint ? { jsHint } : {} })
+        const { jsHint, classHint, ...result } = await run()
+        // A WeChat page was read by its own parser, which knows an article from a verification wall or a removed article.
+        let cls = classHint ?? classifyPage(result.text, { ...result.statusCode !== undefined ? { statusCode: result.statusCode } : {}, ...jsHint ? { jsHint } : {} })
+        // Jina / the browser on a WeChat URL without an article return the page's buttons, which read as text.
+        if (cls === 'content' && !classHint && isWechatArticleUrl(normalized) && isWechatReaderJunk(result.text)) cls = 'shell'
         tried.push({ result, cls })
         attempts.push({ source, class: cls, chars: result.text.length })
       } catch (error) {
@@ -301,8 +329,13 @@ export class FetchService {
     }
     const hasContent = (): boolean => tried.some(t => t.cls === 'content')
 
-    if (opts.mode === 'auto' || opts.mode === 'jina') await attempt('jina', () => this.fetchJina(normalized, opts, maxChars))
-    if (opts.mode === 'http' || (opts.mode === 'auto' && !hasContent())) await attempt('http', () => this.fetchHttp(normalized, opts, maxChars, rules))
+    // mp.weixin.qq.com articles: the plain request with a phone UA and the site as referer is what returns the full page of a signed
+    // link, so in auto mode it goes first; Jina and the browser follow only when it did not give an article. A removed article is final.
+    const wechatFirst = opts.mode === 'auto' && isWechatArticleUrl(normalized)
+    if (wechatFirst) await attempt('http', () => this.fetchHttp(normalized, opts, maxChars, rules))
+    const gone = (): boolean => wechatFirst && tried.some(t => t.cls === 'error')
+    if (opts.mode === 'jina' || (opts.mode === 'auto' && !hasContent() && !gone())) await attempt('jina', () => this.fetchJina(normalized, opts, maxChars))
+    if (opts.mode === 'http' || (opts.mode === 'auto' && !wechatFirst && !hasContent())) await attempt('http', () => this.fetchHttp(normalized, opts, maxChars, rules))
 
     // DeepSeek Fetch API (paid, off unless `deepseekFetch`): explicit `mode: deepseek`, or in auto mode when the free backends found no content.
     if (opts.mode === 'deepseek' || (opts.mode === 'auto' && this.cfg().deepseekFetch === true && !hasContent())) await attempt('deepseek', () => this.fetchDeepSeek(normalized, opts, maxChars))
@@ -382,7 +415,25 @@ export class FetchService {
     return { url, ...title ? { title } : {}, text: capText(body.trim(), maxChars), source: 'jina', fromCache: false }
   }
 
-  private async fetchHttp(url: string, opts: FetchOptions, maxChars: number, rules: ExtractRule[]): Promise<FetchResult & { jsHint?: boolean }> {
+  /** A WeChat article page (src/wechat/article.ts): phone UA + referer, the parser's own title / account / time and page class. */
+  private async fetchWechat(url: string, opts: FetchOptions, maxChars: number): Promise<FetchResult & { classHint: WechatPageKind }> {
+    const res = await httpGet(url, { headers: { 'user-agent': WECHAT_MOBILE_UA, referer: WECHAT_REFERER }, signal: opts.signal, timeoutMs: 30_000, allowProxyFakeIp: this.cfg().allowProxyFakeIp })
+    const article = parseWechatArticle(res.text, res.finalUrl)
+    return {
+      // The verification page's own address (a one-off token) says nothing: the result stays the link that was asked for.
+      url: article.kind === 'captcha' ? url : res.finalUrl,
+      ...article.title ? { title: article.title } : {},
+      text: capText(article.text, maxChars),
+      source: 'http',
+      fromCache: false,
+      statusCode: res.status,
+      usedRule: 'mp.weixin.qq.com',
+      classHint: article.kind,
+    }
+  }
+
+  private async fetchHttp(url: string, opts: FetchOptions, maxChars: number, rules: ExtractRule[]): Promise<FetchResult & { jsHint?: boolean; classHint?: WechatPageKind }> {
+    if (isWechatArticleUrl(url)) return this.fetchWechat(url, opts, maxChars)
     const res = await httpGet(url, { signal: opts.signal, timeoutMs: 30_000, allowProxyFakeIp: this.cfg().allowProxyFakeIp })
     const contentType = res.contentType ?? ''
     const isHtml = /html|xml/i.test(contentType) || /<\s*!doctype|<!DOCTYPE|(<html[\s>])/i.test(res.text.slice(0, 2000))

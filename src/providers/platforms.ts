@@ -17,6 +17,8 @@ import { browserGap, type BrowserMethod } from '../browser-access.ts'
 import type { CustomPlatformSpec } from '../config.ts'
 import { chainReport, resolveChain } from '../cli/chain.ts'
 import { validateCliAdapterSpec, type CliAdapterSpec } from '../cli/spec.ts'
+import { noteLayerFailure, noteLayerOk } from '../wechat/health.ts'
+import { attachNotices, noticesOf, uniqueNotices, type Notice } from '../wechat/notices.ts'
 import { descriptor } from './descriptor.ts'
 import type { ProbeEnv, ProviderAdapter, ProviderDescriptor, Readiness, Requirement } from './registry.ts'
 
@@ -28,25 +30,32 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
     async search(query, count, signal, options) {
       const errors: unknown[] = []
       const notes: string[] = []
+      // Messages for the user that a failed leg carried (a captcha wall): shown with the answer of a later leg, or with the error.
+      const failedNotices: Notice[] = []
       for (const engine of chain) {
         if (!engine.available()) { notes.push(engine.id + ': ' + (engine.unavailableReason?.() ?? 'unavailable')); continue }
         try {
           const outcome = await engine.search(query, count, signal, options)
+          noteLayerOk(id + ':' + (engine.backend ?? engine.id))
           // The legs that were passed over are named with their reasons, so a fall-through is never silent.
           const passed = notes.length ? ['skipped backends: ' + notes.join('; ')] : []
-          return { ...outcome, via: outcome.via ?? engine.id, backend: outcome.backend ?? engine.backend ?? engine.id, ...passed.length || outcome.notes?.length ? { notes: [...passed, ...outcome.notes ?? []] } : {} }
+          const notices = uniqueNotices([...failedNotices, ...outcome.notices ?? []])
+          return { ...outcome, via: outcome.via ?? engine.id, backend: outcome.backend ?? engine.backend ?? engine.id, ...passed.length || outcome.notes?.length ? { notes: [...passed, ...outcome.notes ?? []] } : {}, ...notices.length ? { notices } : {} }
         } catch (error) {
           if (signal?.aborted) throw error
+          failedNotices.push(...noticesOf(error))
+          // An empty answer is the leg working; anything else is what `wechat.status` shows as its last failure.
+          if ((error as { code?: unknown } | null)?.code === 'ENGINE_EMPTY') noteLayerOk(id + ':' + (engine.backend ?? engine.id)); else noteLayerFailure(id + ':' + (engine.backend ?? engine.id), error)
           errors.push(error)
           notes.push(engine.id + ': ' + (error instanceof Error ? error.message : String(error)))
         }
       }
       if (!errors.length) throw new EngineError(label + ' unavailable' + (notes.length ? ': ' + notes.join('; ') : ''), 'ENGINE_UNAVAILABLE', false)
       // One backend failed and nothing else ran: its own error. Backends that were passed over before or after it are named too.
-      if (errors.length === 1 && notes.length === 1) throw errors[0]
+      if (errors.length === 1 && notes.length === 1) throw attachNotices(errors[0], failedNotices)
       const code = (error: unknown): unknown => (error as { code?: unknown } | null)?.code
-      if (errors.every(error => code(error) === 'ENGINE_EMPTY')) throw new EngineError(notes.join('; '), 'ENGINE_EMPTY', false)
-      throw new EngineError(notes.join('; '), 'ENGINE_ERROR', errors.some(error => (error as { retryable?: unknown } | null)?.retryable !== false))
+      if (errors.every(error => code(error) === 'ENGINE_EMPTY')) throw attachNotices(new EngineError(notes.join('; '), 'ENGINE_EMPTY', false), failedNotices)
+      throw attachNotices(new EngineError(notes.join('; '), 'ENGINE_ERROR', errors.some(error => (error as { retryable?: unknown } | null)?.retryable !== false)), failedNotices)
     }
   }
 }
@@ -188,12 +197,15 @@ export const platformAdapters: readonly ProviderAdapter[] = [
   browserPlatform('douyin', '抖音', { resultKinds: ['video'], domains: ['douyin.com'] }),
   browserPlatform('kuaishou', '快手', { resultKinds: ['video'], domains: ['kuaishou.com'] }),
 
-  // WeChat official accounts (dev-plan M12): OmniReach's wechat source (Sogou, no key, no login), then wx-search-cli.
+  // WeChat official accounts (dev-plan M12): OmniReach's wechat source (Sogou, no key, no login), then wx-search-cli, then the plugin's own Sogou client (src/wechat/sogou.ts), which needs no CLI.
   cliPlatform('wechat', '微信公众号', {
     languages: ['zh'], regions: ['cn'], domains: ['mp.weixin.qq.com', 'weixin.qq.com'], taskProfiles: ['news_fact', 'experience'], resultKinds: ['social'],
-    requirements: [cliReq('omnireach', 'first backend: OmniReach (`--on wechat`, Sogou, no key)'), cliReq('wx-search-cli', 'second backend: wx-search-cli (Sogou)')],
-    costModel: { kind: 'free', note: 'Sogou WeChat search through a local CLI; no key, no login; rate limits and captchas apply' }, costTier: 'anonymous',
-    verification: { live: true, note: 'omnireach 0.19.0-alpha (--on wechat) and wx-search-cli 0.1.0 searches parsed live on 2026-10-26' },
+    requirements: [
+      cliReq('omnireach', 'first backend: OmniReach (`--on wechat`, Sogou, no key)'), cliReq('wx-search-cli', 'second backend: wx-search-cli (Sogou)'),
+      { kind: 'service', id: 'sogou', optional: true, note: 'last backend: the plugin\'s own Sogou client (no CLI, no key, no login; settings wechat.sogou)' },
+    ],
+    costModel: { kind: 'free', note: 'Sogou WeChat search (local CLIs, or the plugin\'s own client); no key, no login; rate limits and captchas apply (sources.status shows each backend\'s access profile)' }, costTier: 'anonymous',
+    verification: { live: true, note: 'omnireach 0.19.0-alpha (--on wechat) and wx-search-cli 0.1.0 searches parsed live on 2026-10-26; the built-in Sogou client (search page, /link resolution, article page) was measured live on 2026-11-01' },
   }),
 
   // OmniReach as its own multi-source provider: addressable (`platform=omnireach`), never planned on its own.

@@ -39,6 +39,8 @@ import { automationModeOf, resolveWebCall, webCallDecision } from './actions/app
 import { registerRpc } from './rpc.ts'
 import { OverlayStore, overlayFileFor } from './overlay.ts'
 import { pendingRestart, restartValues } from './restart.ts'
+import { NoticeBoard } from './wechat/notices.ts'
+import { wechatSettings } from './wechat/settings.ts'
 
 export const name = 'web-search-pro'
 // `browser` (dsh-browser) is deliberately NOT injected: Cordis 4.0.4 treats every
@@ -114,8 +116,10 @@ export function apply(ctx: Context, config: Config): void {
   const skill = registerSkillWhenAvailable(ctx)
   //    One evidence service serves search.run and the ctx.web provider (it keeps no per-call state).
   const evidence = new EvidenceService({ router, fetch: fetchSvc, store, dynamic })
+  //    Which notices for the user were already shown in this plugin instance (`wechat.notices`); shared by the actions and the ctx.web route.
+  const notices = new NoticeBoard(() => wechatSettings(dynamic()).notices)
   const providerState = (): ProviderState => readProviderState({ web: ctx.get('web'), registered: providerRegistered, id: dynamic().providerId, evidence: dynamic().provider.evidence })
-  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser, evidence, providerState, skillAvailable: skill.isAvailable, overlay, pendingRestart: pending })
+  registerTools({ ctx, config: resolved, dynamic, store, router, fetch: fetchSvc, browser: getBrowser, evidence, providerState, skillAvailable: skill.isAvailable, overlay, pendingRestart: pending, notices })
 
   //    Approval is decided per ACTION: web_call (and each flat tool) is resolved to its action first, so the user
   //    is asked about `cache.clear` or `sources.install bili`, not about a generic dispatcher. The old tools were
@@ -139,8 +143,8 @@ export function apply(ctx: Context, config: Config): void {
   const web = ctx.get('web')
   let providerRegistered = false
   if (web && resolved.registerProvider) {
-    web.registerSearchProvider(createSearchProvider({ router, evidence: () => evidence, dynamic, id: () => dynamic().providerId, surface: resolved.toolSurface }))
-    web.registerFetchProvider(createFetchProvider({ fetch: fetchSvc, dynamic, id: () => dynamic().providerId, surface: resolved.toolSurface }))
+    web.registerSearchProvider(createSearchProvider({ router, evidence: () => evidence, dynamic, id: () => dynamic().providerId, surface: resolved.toolSurface, notices }))
+    web.registerFetchProvider(createFetchProvider({ fetch: fetchSvc, dynamic, id: () => dynamic().providerId, surface: resolved.toolSurface, notices }))
     providerRegistered = true
   }
 

@@ -18,7 +18,8 @@ import type { BrowserGetter } from '../browser-access.ts';
 import type { ProviderState } from '../provider.ts';
 import type { OverlayStore } from '../overlay.ts';
 import type { PendingRestart } from '../restart.ts';
-export declare const ACTION_GROUPS: readonly ["search", "read", "history", "sources", "rules", "cache", "config"];
+import type { Notice, NoticeBoard } from '../wechat/notices.ts';
+export declare const ACTION_GROUPS: readonly ["search", "read", "history", "sources", "rules", "cache", "config", "wechat"];
 export type ActionGroup = typeof ACTION_GROUPS[number];
 /**
  * One parameter node. A subset of the Host's tool parameter DSL, so the same
@@ -82,6 +83,8 @@ export interface ActionServices {
     overlay?: OverlayStore;
     /** Settings changed in the configuration that the running plugin only reads at start-up. */
     pendingRestart?: () => PendingRestart[];
+    /** The plugin instance's notice board (which notices for the user were already shown, `wechat.notices` mode); absent = every notice is shown. */
+    notices?: Pick<NoticeBoard, 'take'> & Partial<Pick<NoticeBoard, 'reset'>>;
 }
 export interface ActionContext extends ActionServices {
     signal: AbortSignal;
@@ -151,6 +154,8 @@ export interface ActionErrorBody {
     hint?: string;
     /** Compact parameter schema, attached to INVALID_ARGS so the model can fix the call at once. */
     schema?: string;
+    /** Messages for the user that came with the failure (a captcha wall): the model passes them on. */
+    notices?: Notice[];
 }
 export interface ActionEnvelope {
     ok: boolean;

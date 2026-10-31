@@ -228,6 +228,15 @@ export function compileKeyed(task: TaskLike, providerId: string, now: Date, caps
   return { ...finish(task, providerId, task.query, native), ...Object.keys(options).length ? { options } : {} }
 }
 
+/**
+ * The wechat platform: a HARD time_window becomes `options.since`, which the paid 元宝搜索 leg turns into its `Freshness` filter
+ * (the other legs ignore it). No constraint counts as native: whichever leg answers, the local check still enforces the window.
+ */
+export function compileWechat(task: TaskLike, providerId: string, now: Date): CompiledQuery {
+  const win = hardWindows(task, now)
+  return { ...finish(task, providerId, task.query, []), ...win.length ? { options: { since: win[0]!.start } } : {} }
+}
+
 // ── DeepSeek Search API ─────────────────────────────────────────────────────
 
 /** The question the caller asked, for `ori_question`: the task goal, else the first critical (then first) need, when it adds something to the query. */
@@ -367,6 +376,7 @@ export function compileQuery(task: TaskLike, providerId: string, now: Date = new
   if (providerId === 'exa') return compileExa(task, providerId, now)
   if (providerId === 'bocha') return compileBocha(task, providerId, now)
   if (providerId === 'deepseek') return compileDeepSeek(task, providerId, now)
+  if (providerId === 'wechat') return compileWechat(task, providerId, now)
   if (providerId === 'github' || providerId.startsWith('github-')) return compileGithub(task, providerId)
   return finish(task, providerId, task.query, [])
 }

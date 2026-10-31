@@ -4,14 +4,14 @@
  * settings card's text view, the group a field belongs to in the card's tests, and the docs. A test pins the schema to this
  * list, so a new field cannot be added without choosing its group.
  *
- * The groups follow the settings page, most used first: common, search order, sources and keys, custom CLI, reading and
+ * The groups follow the settings page, most used first: common, search order, sources and keys, WeChat, custom CLI, reading and
  * evidence, platforms and runtime, advanced and diagnostics. Only top-level `Config` keys are listed; a key that is an object
  * (`sources`, `evidence`, `provider`, `keyedSources`, `playwright`) takes all of its nested options with it.
  *
  * Pure and free of imports: the client bundle includes this file.
  * @module web-search-pro/config-groups
  */
-export declare const CONFIG_GROUP_IDS: readonly ["common", "order", "sources", "cli", "evidence", "runtime", "advanced"];
+export declare const CONFIG_GROUP_IDS: readonly ["common", "order", "sources", "wechat", "cli", "evidence", "runtime", "advanced"];
 export type ConfigGroupId = typeof CONFIG_GROUP_IDS[number];
 /** Top-level `Config` keys by group, in display order. */
 export declare const CONFIG_GROUPS: Readonly<Record<ConfigGroupId, readonly string[]>>;

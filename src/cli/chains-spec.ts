@@ -10,7 +10,9 @@ import { OPENCLI_SITE_OF } from './opencli-sites.ts'
 import { platformBackendProblems, resolveCliAdapters } from './spec.ts'
 
 /**
- * The default chain of each platform: first usable backend answers, empty or failing ones fall through in order. The platforms
+ * The default chain of each platform: first usable backend answers, empty or failing ones fall through in order. `wechat` ends with
+ * the built-in `sogou` leg, which needs no CLI; the paid `tencent-wsa` leg is NOT in it: `resolveChain` puts it first only while
+ * `wechat.wsa.enabled` is set, and an explicit `platformBackends.wechat` uses it only where the user wrote it. The platforms
  * that need a login (xiaohongshu, reddit, twitter, zhihu) try the standalone OpenCLI first: it reads the login of the user's
  * own day-to-day Chrome through the OpenCLI Browser Bridge, so nothing is logged in by the plugin. The standalone CLIs
  * (xhs, rdt, twitter, zhihu) stay as the optional fallback for users who logged them in themselves.
@@ -25,7 +27,7 @@ export const DEFAULT_CHAINS: Readonly<Record<string, readonly string[]>> = {
   github: ['rest', 'gh'],
   'github-issues': ['rest', 'gh'],
   'github-code': ['rest', 'gh'],
-  wechat: ['omnireach', 'wx-search-cli'],
+  wechat: ['omnireach', 'wx-search-cli', 'sogou'],
   omnireach: ['omnireach'],
   tanso: ['tanso'],
   instagram: ['browser-opencli'],
@@ -48,9 +50,13 @@ export const BROWSER_OPENCLI_PLATFORMS: readonly string[] = ['xiaohongshu', 'twi
 export const BROWSER_SEARCH_PLATFORMS: readonly string[] = ['zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou']
 /** Platforms the plugin's own REST client serves. */
 export const REST_PLATFORMS: readonly string[] = ['github', 'github-issues', 'github-code']
+/** Platforms the plugin's own Sogou client serves (src/wechat/sogou.ts). */
+export const SOGOU_PLATFORMS: readonly string[] = ['wechat']
+/** Platforms the paid 元宝搜索 (Tencent WSA) leg serves: it is restricted to mp.weixin.qq.com (src/wechat/wsa.ts). */
+export const WSA_PLATFORMS: readonly string[] = ['wechat']
 
 /** Backend ids that are not CLI specs. */
-export const FIXED_BACKENDS = ['opencli', 'browser-opencli', 'browser-search', 'rest'] as const
+export const FIXED_BACKENDS = ['opencli', 'browser-opencli', 'browser-search', 'rest', 'sogou', 'tencent-wsa'] as const
 
 /** Whether `id` names a platform backend: a built-in CLI spec, a fixed backend, or a custom CLI (`custom-cli:<id>`). */
 export function isBackendId(id: string): boolean {
@@ -68,6 +74,8 @@ export function backendServes(id: string, platform: string, specPlatforms: Reado
   if (id === 'browser-opencli') return BROWSER_OPENCLI_PLATFORMS.includes(platform) ? { ok: true } : { ok: false, why: 'does not serve platform ' + platform }
   if (id === 'browser-search') return BROWSER_SEARCH_PLATFORMS.includes(platform) ? { ok: true } : { ok: false, why: 'does not serve platform ' + platform }
   if (id === 'rest') return REST_PLATFORMS.includes(platform) ? { ok: true } : { ok: false, why: 'does not serve platform ' + platform }
+  if (id === 'sogou') return SOGOU_PLATFORMS.includes(platform) ? { ok: true } : { ok: false, why: 'does not serve platform ' + platform }
+  if (id === 'tencent-wsa') return WSA_PLATFORMS.includes(platform) ? { ok: true } : { ok: false, why: 'does not serve platform ' + platform }
   const platforms = specPlatforms.get(id)
   if (!platforms) return { ok: false, why: 'is not a known backend (built-in ids: ' + [...specPlatforms.keys()].filter(k => !k.startsWith('custom-cli:')).join(', ') + ', ' + FIXED_BACKENDS.join(', ') + ')' }
   // A custom CLI is the platform `custom-cli:<id>` of its own and serves exactly the platforms its spec declares.

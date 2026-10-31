@@ -11,6 +11,8 @@
  * @module web-search-pro/client/form-specs
  */
 
+import { NOTICE_MODES } from '../wechat/notices.ts'
+import { WECHAT_DEFAULTS, WSA_EDITIONS, WSA_MODES } from '../wechat/settings.ts'
 import { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES } from '../config-enums.ts'
 import { COVERAGE_MODES } from '../pipeline/coverage.ts'
 import { DEFAULT_BUDGET } from '../pipeline/budget-spec.ts'
@@ -41,6 +43,13 @@ export type PathField =
   | 'evidence.budget.perSearchInputTokens' | 'evidence.budget.dailyInputTokens' | 'evidence.budget.timezone' | 'evidence.budget.providers'
   | 'provider.evidence' | 'provider.deadlineMs'
   | 'sources.priority' | 'sources.disabled'
+  | WechatField
+
+/** Options inside `wechat` (src/wechat/settings.ts). The write-only key literal `wechat.wsa.apiKey` is a credential, not a field. */
+export type WechatField =
+  | 'wechat.notices' | 'wechat.sogou.enabled' | 'wechat.sogou.resolveLinks' | 'wechat.sogou.minIntervalMs'
+  | 'wechat.wsa.enabled' | 'wechat.wsa.apiKeyEnv' | 'wechat.wsa.baseUrl' | 'wechat.wsa.edition' | 'wechat.wsa.mode' | 'wechat.wsa.dailyLimit'
+  | 'wechat.history.baseUrl' | 'wechat.history.minIntervalMs'
 
 /** One rubric override entry (`evidence.rubrics.<id>`) and one keyed-source field. */
 export type RubricField = `evidence.rubrics.${string}`
@@ -52,7 +61,7 @@ export type ConfidenceField = `sources.confidence.${string}`
 
 export type SettingField = TopField | PathField | RubricField | KeyedField | BudgetField | ConfidenceField
 
-export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources'
+export type RootKey = 'evidence' | 'provider' | 'keyedSources' | 'sources' | 'wechat'
 
 export type FieldWrite = { kind: 'set'; value: unknown } | { kind: 'clear' }
 export type PathOp = { op: 'set'; path: string[]; value: unknown } | { op: 'unset'; path: string[] }
@@ -184,6 +193,17 @@ const enumField = (field: SettingField, values: readonly string[], fallback: str
   },
 })
 
+/** A closed list of numbers written as text (`0`, `1`, `2`); the stored value is the number. */
+const numberEnumField = (field: SettingField, values: readonly number[], fallback: number): FieldSpec => ({
+  field,
+  format: value => typeof value === 'number' ? String(value) : String(fallback),
+  parse(text) {
+    if (text === '') return { kind: 'clear' }
+    const value = Number(text)
+    return values.includes(value) ? { kind: 'set', value } : undefined
+  },
+})
+
 const csvField = (field: SettingField, required = false): FieldSpec => ({
   field,
   format: value => Array.isArray(value) ? value.filter(item => typeof item === 'string').join(', ') : '',
@@ -218,6 +238,7 @@ export const DEFAULTS = {
   coverage: { mode: 'off' },
   provider: { evidence: 'auto', deadlineMs: 25_000 },
   budget: { ...DEFAULT_BUDGET },
+  wechat: WECHAT_DEFAULTS,
   toolSurface: 'indexed',
   bochaApiKeyEnv: 'BOCHA_SEARCH_API_KEY',
   twitterAuthTokenEnv: 'TWITTER_AUTH_TOKEN',
@@ -325,6 +346,25 @@ export const PATH_SPECS: readonly PathSpec[] = [
   path(csvField('sources.disabled'), 'sources', ['disabled']),
 ]
 
+const W = 'wechat' as const
+const WD = WECHAT_DEFAULTS
+
+/** Fields inside `wechat`, in display order. */
+export const WECHAT_SPECS: readonly PathSpec[] = [
+  path(enumField('wechat.notices', NOTICE_MODES, WD.notices), W, ['notices']),
+  path(booleanField('wechat.sogou.enabled', WD.sogou.enabled), W, ['sogou', 'enabled']),
+  path(numberField('wechat.sogou.resolveLinks', { min: 0, max: 10, integer: true }), W, ['sogou', 'resolveLinks'], { read: w => getAt(w, ['sogou', 'resolveLinks']) ?? WD.sogou.resolveLinks }),
+  path(numberField('wechat.sogou.minIntervalMs', { min: 0, max: 60_000, integer: true }), W, ['sogou', 'minIntervalMs'], { read: w => getAt(w, ['sogou', 'minIntervalMs']) ?? WD.sogou.minIntervalMs }),
+  path(booleanField('wechat.wsa.enabled', WD.wsa.enabled), W, ['wsa', 'enabled']),
+  path(textField('wechat.wsa.apiKeyEnv', { pattern: KEY_REF_PATTERN }), W, ['wsa', 'apiKeyEnv']),
+  path(textField('wechat.wsa.baseUrl', { url: true }), W, ['wsa', 'baseUrl']),
+  path(enumField('wechat.wsa.edition', WSA_EDITIONS, WD.wsa.edition), W, ['wsa', 'edition']),
+  path(numberEnumField('wechat.wsa.mode', WSA_MODES, WD.wsa.mode), W, ['wsa', 'mode']),
+  path(numberField('wechat.wsa.dailyLimit', { min: 1, max: 1_000_000, integer: true }), W, ['wsa', 'dailyLimit'], { read: w => getAt(w, ['wsa', 'dailyLimit']) ?? WD.wsa.dailyLimit }),
+  path(textField('wechat.history.baseUrl', { url: true }), W, ['history', 'baseUrl']),
+  path(numberField('wechat.history.minIntervalMs', { min: 0, max: 600_000, integer: true }), W, ['history', 'minIntervalMs'], { read: w => getAt(w, ['history', 'minIntervalMs']) ?? WD.history.minIntervalMs }),
+]
+
 /** The keyed sources the card has controls for: route id and the environment variable its key is read from by default. */
 export const KEYED_SOURCES: readonly { id: string; defaultEnv: string }[] = KEYED_SOURCE_IDS.map(id => ({ id, defaultEnv: KEYED_SOURCE_ENVS[id]![0]! }))
 
@@ -351,7 +391,7 @@ export const rubricSpec = (id: string): PathSpec => path(jsonField(`evidence.rub
 export const rubricField = (id: string): RubricField => `evidence.rubrics.${id}`
 
 /** Fields that a Host write can never take as text (credentials go through the credentials remote). */
-export const CREDENTIAL_IDS = ['exa', 'jina', 'github', 'bocha', 'twitter-auth-token', 'twitter-ct0', ...KEYED_SOURCE_IDS.map(id => `keyed:${id}` as const)] as const
+export const CREDENTIAL_IDS = ['exa', 'jina', 'github', 'bocha', 'twitter-auth-token', 'twitter-ct0', 'wechat-wsa', ...KEYED_SOURCE_IDS.map(id => `keyed:${id}` as const)] as const
 export type CredentialId = typeof CREDENTIAL_IDS[number]
 
 /** The settings field holding the credentials ref / environment variable name of each credential, and its default name. */
@@ -363,6 +403,7 @@ export function credentialRef(id: CredentialId): { field: SettingField; default:
     case 'bocha': return { field: 'bochaApiKeyEnv', default: DEFAULTS.bochaApiKeyEnv }
     case 'twitter-auth-token': return { field: 'twitterAuthTokenEnv', default: DEFAULTS.twitterAuthTokenEnv }
     case 'twitter-ct0': return { field: 'twitterCt0Env', default: DEFAULTS.twitterCt0Env }
+    case 'wechat-wsa': return { field: 'wechat.wsa.apiKeyEnv', default: WD.wsa.apiKeyEnv }
     default: {
       const source = id.slice('keyed:'.length)
       return { field: `keyedSources.${source}.apiKeyEnv`, default: KEYED_SOURCE_ENVS[source]![0]! }

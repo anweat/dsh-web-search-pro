@@ -25,6 +25,7 @@
 | | `deps` / `install` | 检测 / 安装搜索后端的外部依赖（bili/yt-dlp/twitter/agent-reach/mcporter；每项探测的是后端真正执行的命令）；浏览器依赖由 dsh-browser 管理 |
 | `rules` | `list` / `upsert` / `remove` / `import` / `export` | 持久化按站提取规则（脚本猫式）；export 会写出可再导入的版本化 JSON rule pack |
 | `cache` | `clear` / `stats` | 按时间/引擎清缓存 / 存储统计 |
+| `wechat` | `status` / `album` / `accounts` / `articles` | 微信公众号：各层状态与访问画像（`status`，`probe` 可探测整号历史服务）、免登录的合集列表（`album`）、经你自己的 wechat-download-api 搜公众号和列文章（`accounts` / `articles`，需 `wechat.history.baseUrl`）；都只读、不询问，整号历史的风险以提醒（`notices`）告知，见[微信公众号](./sources.md#微信公众号platformwechat) |
 | `config` | `inspect` / `set_order` / `set_confidence` / `upsert_cli` / `remove_cli` / `reset` / `export` | agent 覆盖层：读取生效值与来源，运行时改搜索顺序、来源优先 / 停用、置信度、平台后端顺序、自定义 CLI；改动即时生效，用户可在设置面板采纳或撤销（见[agent 覆盖层与 `config.*`](./config.md#agent-覆盖层与-config)） |
 
 每个动作的参数与输出 schema 是封闭的（未声明字段不会出现，除必需字段外都是可选字段）。

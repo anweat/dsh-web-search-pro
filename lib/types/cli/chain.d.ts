@@ -11,7 +11,8 @@ import { type Engine, type EngineDeps } from '../engines.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { CHAIN_PLATFORMS, DEFAULT_CHAINS } from './chains-spec.ts';
 import { type CliAdapterSpec } from './spec.ts';
-export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'custom-cli';
+import { type AccessProfile } from '../wechat/access.ts';
+export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'sogou' | 'tencent-wsa' | 'custom-cli';
 export { DEFAULT_CHAINS, CHAIN_PLATFORMS };
 export interface LegReadiness {
     ready: boolean;
@@ -59,6 +60,8 @@ export interface ChainEntryReport {
     credential?: string;
     reason?: string;
     verification: string;
+    /** What the backend asks of the user and what it risks (login, risk level, billing): only backends with a profile (the wechat legs). */
+    access?: AccessProfile;
 }
 /**
  * What a chain can do right now, one word for the text and the structured fields alike:

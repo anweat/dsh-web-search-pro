@@ -13,6 +13,7 @@ import type { ResolvedConfig, ToolSurface } from './config.ts';
 import type { FetchService } from './fetch.ts';
 import type { SearchRouter } from './router.ts';
 import type { EvidenceService } from './pipeline/service.ts';
+import { type NoticeBoard } from './wechat/notices.ts';
 /** How far past the pipeline's own deadline the provider waits before it gives up on the pipeline and returns plain sources. */
 export declare const EVIDENCE_GUARD_MS = 3000;
 /** The call a model makes for an action on the active tool surface (`web_call history.expand` / flat `web_history_expand`). */
@@ -30,6 +31,8 @@ export interface SearchProviderDeps {
     surface: ToolSurface;
     /** Test seam: wait this long past the pipeline's own deadline before giving up on it. */
     guardMs?: number;
+    /** The plugin instance's notice board (notices for the user are shown once per session); absent = every notice is shown. */
+    notices?: Pick<NoticeBoard, 'take'>;
 }
 /**
  * Search provider: evidence pack when `provider.evidence` is `auto`, the plain router search otherwise.
@@ -42,6 +45,8 @@ export interface FetchProviderDeps {
     dynamic: () => ResolvedConfig;
     id: () => string;
     surface: ToolSurface;
+    /** The plugin instance's notice board; absent = every notice is shown. */
+    notices?: Pick<NoticeBoard, 'take'>;
 }
 /** Fetch provider: the same fetch pipeline as `read.fetch`, under a fixed budget (the request carries no size). */
 export declare function createFetchProvider(deps: FetchProviderDeps): WebFetchProvider;

@@ -48,7 +48,7 @@ before(async () => {
   }
 })
 
-const GROUPS = ['common', 'order', 'sources', 'cli', 'reading', 'judge', 'route', 'runtime', 'network', 'ranking', 'agent', 'advanced']
+const GROUPS = ['common', 'order', 'sources', 'wechat', 'cli', 'reading', 'judge', 'route', 'runtime', 'network', 'ranking', 'agent', 'advanced']
 
 /** The card and every dialog body, parsed. `user` is the stored settings; `credentials` the refs that hold a secret. */
 function page(lang: 'zh' | 'en', user: Record<string, unknown> = {}, credentials: Record<string, string> = {}) {
@@ -64,7 +64,7 @@ function page(lang: 'zh' | 'en', user: Record<string, unknown> = {}, credentials
 
 const entriesOf = (root: ReturnType<typeof parse>, field: string) => root.querySelectorAll(`[data-wsp-field="${field}"]`).length
 
-test('the card is a status summary, twelve accordion groups of which only Common is open, and a sticky save bar', async () => {
+test('the card is a status summary, thirteen accordion groups of which only Common is open, and a sticky save bar', async () => {
   const { root } = await page('en')
   assert.ok(root.querySelector('[data-wsp-summary]'), 'status summary on top')
   assert.deepEqual(root.querySelectorAll('details[data-wsp-group]').map(node => node.getAttribute('data-wsp-group')), GROUPS)
@@ -85,7 +85,7 @@ test('every public config field has exactly one entry in the card (or in the dia
   }
   for (const id of CREDENTIAL_IDS) {
     assert.equal(root.querySelectorAll(`[data-wsp-credential="${id}"]`).length + formsRoot.querySelectorAll(`[data-wsp-credential="${id}"]`).length, 1, `credential ${id}`)
-    assert.ok(formsRoot.querySelector(`input[id="web-search-pro-credential-${id}"][type=password]`), `write-only input of ${id}`)
+    assert.ok(formsRoot.querySelector(`input[id="web-search-pro-credential-${id}"][type=password]`) ?? root.querySelector(`input[id="web-search-pro-credential-${id}"][type=password]`), `write-only input of ${id}`)
   }
   assert.equal(parse(html).querySelectorAll('input[type=password]').length, CREDENTIAL_IDS.length)
   // Every control has an accessible name: a label tied to its id, or an aria-label (switches, chips, secrets).
@@ -240,4 +240,18 @@ test('the sources list is pinned to the provider registry: ids, tiers, the commo
   }
   for (const id of KEYED_SOURCE_IDS) assert.ok(SOURCE_DEFS.some(def => def.id === id), `${id} has a row`)
   assert.deepEqual(SOURCE_DEFS.filter(def => def.common).map(def => def.id), ['deepseek'])
+})
+
+test('the WeChat group renders its twelve fields and the write-only 元宝搜索 key, which shows only whether it is stored', async () => {
+  const { root, html } = await page('zh', { wechat: { wsa: { apiKey: 'sk-wsa-LITERAL-should-never-render', enabled: true } } }, { TENCENT_WSA_API_KEY: 'sk-wsa-STORED-should-never-render' })
+  const group = root.querySelector('details[data-wsp-group="wechat"]')!
+  assert.ok(group, 'the wechat group')
+  assert.match(group.querySelector('summary strong')!.text, /微信 \/ 公众号/)
+  const fields = group.querySelectorAll('[data-wsp-field]').map(node => node.getAttribute('data-wsp-field'))
+  assert.deepEqual(fields, ['wechat.notices', 'wechat.sogou.enabled', 'wechat.sogou.resolveLinks', 'wechat.sogou.minIntervalMs', 'wechat.wsa.enabled', 'wechat.wsa.apiKeyEnv', 'wechat.wsa.edition', 'wechat.wsa.mode', 'wechat.wsa.dailyLimit', 'wechat.wsa.baseUrl', 'wechat.history.baseUrl', 'wechat.history.minIntervalMs'])
+  const key = group.querySelector('[data-wsp-credential="wechat-wsa"]')!
+  assert.match(key.text, /已配置/)
+  assert.equal(key.querySelector('input[type=password]')!.getAttribute('value') ?? '', '')
+  assert.doesNotMatch(html, /should-never-render/)
+  assert.match(group.text, /元宝搜索（付费，默认关闭）/)
 })

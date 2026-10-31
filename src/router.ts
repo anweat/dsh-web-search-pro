@@ -25,7 +25,7 @@ import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
 import { SEMANTICSCHOLAR_KEY_ENV } from './providers/semanticscholar.ts'
 import { ANYSEARCH_KEY_ENV } from './providers/anysearch.ts'
 import { KEYED_SOURCE_ENVS } from './providers/keyed.ts'
-import { resolveBudget, UsageLedger, type RequestBudgetState, type RequestTicket } from './pipeline/ledger.ts'
+import { resolveBudget, UsageLedger, usageProviderOf, type RequestBudgetState, type RequestTicket } from './pipeline/ledger.ts'
 import { resolveSources, type SourceBudgetInput } from './pipeline/sources-spec.ts'
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
@@ -40,6 +40,8 @@ import { guaranteeSeats } from './pipeline/confidence.ts'
 import { fuseCandidates } from './pipeline/fusion.ts'
 import type { ProviderCall, ProviderOutcome } from './pipeline/run.ts'
 import type { ProviderStatus } from './pipeline/plan.ts'
+import { attachNotices, noticesOf, type Notice } from './wechat/notices.ts'
+import { wechatSettings } from './wechat/settings.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -87,6 +89,8 @@ export interface RouterSearchResult {
   fallbackNote?: string
   /** Platform search: the backend of its chain that answered (`bili`, `browser-opencli`). */
   backend?: string
+  /** Messages for the user from this run (a captcha wall a leg hit): raw, the action layer shows each once per session. Not stored: a cache hit carries none. */
+  notices?: Notice[]
 }
 
 /** Where a result came from, as it is stored in `results.extra` and read back on a cache hit. */
@@ -268,7 +272,8 @@ export class SearchRouter {
           if ('refused' in reserved) throw new EngineError(id + ': ' + reserved.refused, 'ENGINE_BUDGET', false)
           ticket = reserved
         }
-        const engine = await this.build(id, input.skipSeam, ticket ? { record: entry => { if (ticket && !ticket.closed) ticket.settle(entry.requests, entry.note); else this.usageRecorder().record(entry) } } : undefined).catch((error: unknown) => { ticket?.release(); throw error })
+        // Only the rows of this route's own ledger name settle the reservation; a leg that bills elsewhere (tencent-wsa) books its own row.
+        const engine = await this.build(id, input.skipSeam, ticket ? { ...this.usageRecorder(), record: entry => { if (ticket && !ticket.closed && entry.provider === usageProviderOf(id)) ticket.settle(entry.requests, entry.note); else this.usageRecorder().record(entry) } } : undefined).catch((error: unknown) => { ticket?.release(); throw error })
         if (!engine.available()) { ticket?.release(); throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false) }
         try {
           const outcome = await engine.search(input.query, input.count, input.signal, this.withBindings(id, input.options))
@@ -458,19 +463,22 @@ export class SearchRouter {
         { preferred: this.canonicalIds([call.id]), signal: call.signal },
       )
       const sources = selected.value.sources
-      return sources.length ? { state: 'ok', sources, ...selected.value.backend ? { backend: selected.value.backend } : {}, ...selected.value.notes?.length ? { notes: selected.value.notes } : {} } : { state: 'empty' }
+      const answerNotices = selected.value.notices?.length ? { notices: selected.value.notices } : {}
+      return sources.length ? { state: 'ok', sources, ...selected.value.backend ? { backend: selected.value.backend } : {}, ...selected.value.notes?.length ? { notes: selected.value.notes } : {}, ...answerNotices } : { state: 'empty', ...answerNotices }
     } catch (error) {
       if (call.signal.aborted) throw error
+      const carried = noticesOf(error)
+      const failNotices = carried.length ? { notices: carried } : {}
       if (error instanceof NoBackendError) {
         if (allAttemptsEmpty(error.attempts)) {
           // Generic "returned no results" texts add nothing; a provider-specific hint (login, selectors) does.
           const detail = error.attempts.map(a => a.detail).find(d => d && !/returned no (results|parseable results)\b|^no results$/i.test(d) )
-          return { state: 'empty', ...detail ? { detail } : {} }
+          return { state: 'empty', ...detail ? { detail } : {}, ...failNotices }
         }
         const skipped = error.attempts.find(a => a.outcome === 'skipped')
-        if (skipped && allAttemptsBenign(error.attempts)) return { state: 'skipped', reason: skipped.detail ?? 'unavailable' }
+        if (skipped && allAttemptsBenign(error.attempts)) return { state: 'skipped', reason: skipped.detail ?? 'unavailable', ...failNotices }
       }
-      return { state: 'error', message: error instanceof Error ? error.message : String(error) }
+      return { state: 'error', message: error instanceof Error ? error.message : String(error), ...failNotices }
     }
   }
 
@@ -527,8 +535,12 @@ export class SearchRouter {
     const anysearchApiKey = await this.resolveKey(ANYSEARCH_KEY_ENV)
     const keyed = await this.keyedSources(cfg, (ref, literal) => this.resolveKey(ref, literal))
     const cliEnv = await this.cliEnv()
+    // The 元宝搜索 key is looked up only while the leg is on: literal -> credentials ref -> environment, like a keyed source.
+    const wsa = wechatSettings(cfg).wsa
+    const wechatWsaKey = wsa.enabled ? await this.resolveKey(wsa.apiKeyEnv, wsa.apiKey) : undefined
     return {
       ...keyed,
+      ...wechatWsaKey ? { wechatWsaKey } : {},
       ...Object.keys(cliEnv).length ? { cliEnv } : {},
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
@@ -568,8 +580,11 @@ export class SearchRouter {
     const anysearchApiKey = process.env[ANYSEARCH_KEY_ENV]
     const keyed = this.keyedSourcesSync(cfg)
     const cliEnv = this.cliEnvSync()
+    const wsa = wechatSettings(cfg).wsa
+    const wechatWsaKey = wsa.enabled ? wsa.apiKey || process.env[wsa.apiKeyEnv] : undefined
     return {
       ...keyed,
+      ...wechatWsaKey ? { wechatWsaKey } : {},
       ...Object.keys(cliEnv).length ? { cliEnv } : {},
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
@@ -677,11 +692,28 @@ export class SearchRouter {
     return Math.round(own(provider) * (via === undefined ? 1 : own(via)) * 10_000) / 10_000
   }
 
+  /** The local readiness of a platform's backend chain (no network), or undefined for a platform without one. */
+  async platformChain(platform: string): Promise<ChainReport | undefined> {
+    this.syncBackends()
+    const adapter = this.registry.resolve(platform)
+    if (!adapter?.chain) return undefined
+    return adapter.chain(await this.probeEnv())
+  }
+
+  /** Requests booked today (calendar day of the budget time zone) under a ledger provider name, e.g. `tencent-wsa`. */
+  requestsToday(provider: string): number {
+    return this.usageRecorder().today?.(provider) ?? 0
+  }
+
   /** Counts a metered, non-model request (Bocha search) in the usage ledger; best effort, never throws into the search. */
   private usageRecorder(): UsageRecorder {
     return {
       record: entry => {
         try { new UsageLedger(this.store, resolveBudget(this.dynamic().evidence?.budget).caps).recordRequests(entry) } catch { /* the ledger is advisory for these providers */ }
+      },
+      today: provider => {
+        const ledger = new UsageLedger(this.store, resolveBudget(this.dynamic().evidence?.budget).caps)
+        return this.store.requestCounts(provider, ledger.day()).today
       },
     }
   }
@@ -919,7 +951,7 @@ export class SearchRouter {
           // A platform that is down is an error with its reason; one that answered with nothing is an empty result that says so.
           if (platform) return this.platformFailure(platform.id, error)
           // Every engine answered empty or was skipped (no runtime failure): report that, do not fail or cache it.
-          if (allAttemptsBenign(error.attempts)) return this.emptyResult(ids, 'none', error.attempts)
+          if (allAttemptsBenign(error.attempts)) return this.emptyResult(ids, 'none', error.attempts, noticesOf(error))
         }
         throw error
       }
@@ -953,6 +985,7 @@ export class SearchRouter {
       availableCount,
       ...backendId ? { backend: backendId } : {},
       ...fallbackNote ? { fallbackNote } : {},
+      ...outcome.notices?.length ? { notices: outcome.notices } : {},
     }
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).
     this.memory.set(memoryKey, result)
@@ -963,9 +996,10 @@ export class SearchRouter {
    * No engine failed at runtime: each returned ENGINE_EMPTY or was skipped
    * (unavailable / cooldown). Zero sources plus an explanation (never cached).
    */
-  private emptyResult(ids: readonly string[], engine: string, attempts: readonly BackendAttempt[] = []): RouterSearchResult {
+  private emptyResult(ids: readonly string[], engine: string, attempts: readonly BackendAttempt[] = [], notices: readonly Notice[] = []): RouterSearchResult {
     const skipped = attempts.filter(a => a.outcome === 'skipped')
     return {
+      ...notices.length ? { notices: [...notices] } : {},
       sources: [],
       engine,
       enginesTried: [...ids],
@@ -981,14 +1015,15 @@ export class SearchRouter {
    * (login, selectors); anything else is the error `platform <id> unavailable (tried: ...): <reason>`.
    */
   private platformFailure(id: string, error: NoBackendError): RouterSearchResult {
+    const notices = noticesOf(error)
     if (allAttemptsEmpty(error.attempts)) {
-      return { sources: [], engine: id, enginesTried: [id], fromCache: false, availableCount: 0, fallbackNote: 'no results: ' + (error.attempts[0]?.detail ?? id) }
+      return { sources: [], engine: id, enginesTried: [id], fromCache: false, availableCount: 0, fallbackNote: 'no results: ' + (error.attempts[0]?.detail ?? id), ...notices.length ? { notices } : {} }
     }
     const last = [...error.attempts].reverse().find(a => a.detail)
     const message = 'platform ' + id + ' unavailable (tried: ' + error.attempts.map(a => a.id).join(', ') + ')' + (last?.detail ? ': ' + last.detail : '')
     // Never ran (failed its local probe, cooling down): a structured "not available", with what is missing.
-    if (error.attempts.length && error.attempts.every(a => a.outcome === 'skipped')) throw new SourceUnavailableError(message, id, error.attempts.map(a => a.detail ?? 'unavailable'))
-    throw new Error(message)
+    if (error.attempts.length && error.attempts.every(a => a.outcome === 'skipped')) throw attachNotices(new SourceUnavailableError(message, id, error.attempts.map(a => a.detail ?? 'unavailable')), notices)
+    throw attachNotices(new Error(message), notices)
   }
 
   /**

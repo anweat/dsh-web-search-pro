@@ -11,6 +11,7 @@ import { type BrowserMethod } from './browser-access.ts';
 import type { CustomPlatformSpec } from './config.ts';
 import { type ExaSearchRequest } from './exa-client.ts';
 import { EngineError } from './engine-error.ts';
+import type { Notice } from './wechat/notices.ts';
 /**
  * A source row as an engine returns it: the host's `WebSearchSource` plus the provider's own quality signals, when it has any
  * (DeepSeek Search: `rerank_score` 0..3 and `authority` 0..4). They travel with the row as source metadata and are one small
@@ -38,6 +39,8 @@ export interface SearchOutcome {
     backend?: string;
     /** Short notes for the caller: backends skipped on the way, results dropped. */
     notes?: string[];
+    /** Messages for the USER (a captcha wall, a link that expires), not for the model: the action layer shows them once per session (src/wechat/notices.ts). */
+    notices?: Notice[];
 }
 export interface Engine {
     id: string;
@@ -87,6 +90,8 @@ export interface UsageRecorder {
         requests: number;
         note?: string;
     }): void;
+    /** Requests booked today (calendar day of the budget time zone) under a ledger provider name; absent where there is no ledger. */
+    today?(provider: string): number;
 }
 export interface EngineDeps {
     web?: WebRuntime;
@@ -123,6 +128,8 @@ export interface EngineDeps {
     anysearchApiKey?: string;
     /** GitHub API token (config githubToken / $GITHUB_TOKEN / $GH_TOKEN). */
     githubToken?: string;
+    /** 元宝搜索 (Tencent WSA) service API key: config `wechat.wsa.apiKey` -> credentials ref -> environment (`wechat.wsa.apiKeyEnv`, default TENCENT_WSA_API_KEY). Never logged. */
+    wechatWsaKey?: string;
     /**
      * Credential variables of the CLI adapters by the name the tool reads (`TWITTER_AUTH_TOKEN`, `TWITTER_CT0`), resolved by the router:
      * config literal -> credentials ref -> process environment. Handed to a command only through its environment, never in argv.

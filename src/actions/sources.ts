@@ -16,6 +16,7 @@ import { ActionArgError, type ActionDef, type OutputNode } from './types.ts'
 import type { OverlayStore } from '../overlay.ts'
 import { overlayKeys } from '../overlay-types.ts'
 import { pendingRestartLine, type PendingRestart } from '../restart.ts'
+import { ACCESS_SCHEMA, renderAccess } from '../wechat/access.ts'
 
 /** One registry provider in `sources.status` (all fields beyond id / label / readiness.available are optional extensions). */
 const PROVIDER_REPORT_SCHEMA: OutputNode = {
@@ -37,7 +38,7 @@ const PROVIDER_REPORT_SCHEMA: OutputNode = {
     confidence: { type: 'number' },
     chain: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
       id: { type: 'string', required: true }, kind: { type: 'string', required: true }, label: { type: 'string', required: true }, order: { type: 'number', required: true }, state: { type: 'string', required: true },
-      installation: { type: 'string' }, version: { type: 'string' }, credential: { type: 'string' }, reason: { type: 'string' }, verification: { type: 'string', required: true }, confidence: { type: 'number' },
+      installation: { type: 'string' }, version: { type: 'string' }, credential: { type: 'string' }, reason: { type: 'string' }, verification: { type: 'string', required: true }, confidence: { type: 'number' }, access: ACCESS_SCHEMA,
     } } },
     readiness: { type: 'object', additionalProperties: false, properties: {
       available: { type: 'boolean', required: true }, state: { type: 'string' }, installation: { type: 'string' }, credential: { type: 'string' }, health: { type: 'string' }, reason: { type: 'string' }, diagnosticCode: { type: 'string' },
@@ -210,7 +211,10 @@ export const SOURCES_ACTIONS: ActionDef[] = [
         const r = p.readiness
         const dims = [r.installation && 'installation=' + r.installation, r.credential && 'credential=' + r.credential, r.health && 'health=' + r.health, r.state && 'state=' + r.state].filter(Boolean).join(' ')
         lines.push('  ' + (p.kind === 'platform' ? 'platform ' : 'provider ') + p.route + (p.id !== p.route ? ' (' + p.id + ')' : '') + ': ' + dims + ' · ' + (p.languages.join('/') || '*') + ' · ' + p.taskProfiles.join('/') + (p.costTier ? ' · ' + p.costTier : '') + (p.common ? ' · 常用 (common)' : '') + (p.confidence !== undefined && p.confidence < 1 ? ' · confidence ' + p.confidence : '') + (p.sourceFamily ? ' · family ' + p.sourceFamily : '') + (p.unverified ? ' · [not verified live]' : '') + (r.available ? '' : ' [' + (r.reason ?? 'unavailable') + ']'))
-        for (const leg of p.chain ?? []) lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + (verificationTag(leg.verification) ?? leg.verification) + (leg.confidence !== undefined && leg.confidence < 1 ? ' · confidence ' + leg.confidence : '') + (leg.reason ? ' — ' + leg.reason : ''))
+        for (const leg of p.chain ?? []) {
+          lines.push('    ' + leg.order + '. ' + leg.id + ' [' + leg.state + (leg.version ? ' ' + leg.version : '') + '] ' + (verificationTag(leg.verification) ?? leg.verification) + (leg.confidence !== undefined && leg.confidence < 1 ? ' · confidence ' + leg.confidence : '') + (leg.reason ? ' — ' + leg.reason : ''))
+          if (leg.access) lines.push('       access: ' + renderAccess(leg.access))
+        }
         const b = p.budget
         if (b) lines.push('    request budget ' + p.route + ': ' + [b.total && 'total ' + b.total.used + '/' + b.total.limit + ' (' + b.total.remaining + ' left)', b.daily && 'today ' + b.daily.used + '/' + b.daily.limit + ' (' + b.daily.remaining + ' left)'].filter(Boolean).join(', ') + (b.exhausted ? ' — used up: skipped, the plan falls back to other sources' : ''))
       }

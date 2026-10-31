@@ -117,7 +117,7 @@ export interface HttpResult {
  */
 export async function httpGet(
   url: string,
-  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean; /** Test seams: replace the global fetch and the DNS lookup. */ fetchImpl?: typeof fetch; lookup?: ResolvePublicUrlOptions['lookup'] } = { signal: undefined },
+  opts: { headers?: Record<string, string>; signal: AbortSignal | undefined; timeoutMs?: number; redirect?: 'follow' | 'error'; method?: string; body?: string; maxBytes?: number; allowProxyFakeIp?: boolean; /** One exact origin of the user's own service that may be private (safe-http `allowOrigin`). */ allowOrigin?: string; /** Test seams: replace the global fetch and the DNS lookup. */ fetchImpl?: typeof fetch; lookup?: ResolvePublicUrlOptions['lookup'] } = { signal: undefined },
 ): Promise<HttpResult> {
   const controller = new AbortController()
   const timer = opts.timeoutMs ? setTimeout(() => controller.abort(new Error('dsh-web-search-pro: request timed out')), opts.timeoutMs) : undefined
@@ -125,7 +125,7 @@ export async function httpGet(
   if (opts.signal?.aborted) onAbort()
   else opts.signal?.addEventListener('abort', onAbort)
   try {
-    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false, ...opts.lookup ? { lookup: opts.lookup } : {} }
+    const resolution = { allowProxyFakeIp: opts.allowProxyFakeIp ?? false, ...opts.lookup ? { lookup: opts.lookup } : {}, ...opts.allowOrigin ? { allowOrigin: opts.allowOrigin } : {} }
     const doFetch = opts.fetchImpl ?? fetch
     let current = (await assertResolvedPublicUrl(url, resolution)).href
     let method = opts.method ?? 'GET'
@@ -184,10 +184,18 @@ export function decodeText(buf: Buffer, contentType?: string): string {
 }
 
 /** Decode common HTML entities in a string. */
+/** Named entities seen in Chinese result pages (Sogou WeChat titles and summaries use the quote and dash ones). */
+const NAMED_ENTITIES: Record<string, string> = {
+  ldquo: '\u201c', rdquo: '\u201d', lsquo: '\u2018', rsquo: '\u2019', mdash: '\u2014', ndash: '\u2013', hellip: '\u2026', middot: '\u00b7',
+  rarr: '\u2192', larr: '\u2190', bull: '\u2022', times: '\u00d7', copy: '\u00a9', reg: '\u00ae', trade: '\u2122', yen: '\u00a5', deg: '\u00b0',
+  laquo: '\u00ab', raquo: '\u00bb',
+}
+
 export function htmlDecode(input: string): string {
   return input
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&(ldquo|rdquo|lsquo|rsquo|mdash|ndash|hellip|middot|rarr|larr|bull|times|copy|reg|trade|yen|deg|laquo|raquo);/g, (_, name: string) => NAMED_ENTITIES[name]!)
     .replace(/&amp;/g, '&')
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
