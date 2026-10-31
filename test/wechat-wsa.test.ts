@@ -341,6 +341,10 @@ test('the whole plugin: search.run platform=wechat shows the paid notice once (w
     assert.equal(second.result.notices, undefined, 'once: the second search is quiet')
     const quiet = await off.envelope('search.run', { query: '备案', platform: 'wechat', fresh: true })
     assert.equal(quiet.result.notices, undefined)
+    const status = (await once.envelope('wechat.status')).result
+    assert.deepEqual([status.wsa.usedToday, status.wsa.remaining, status.wsa.keyConfigured], [2, 98, true], 'wechat.status reads today\'s requests from the usage ledger')
+    assert.equal(status.layers[0].id, 'tencent-wsa')
+    assert.ok(status.layers[0].lastOk)
     assert.doesNotMatch(JSON.stringify([first, second, quiet]), new RegExp(KEY))
   } finally { net.restore(); once.cleanup(); off.cleanup() }
 })
