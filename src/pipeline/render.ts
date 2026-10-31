@@ -6,6 +6,7 @@
  */
 
 import type { EvidencePack } from './types.ts'
+import { renderNotices, type Notice } from '../wechat/notices.ts'
 
 export interface RenderSource { url: string; title?: string; snippet?: string; publishedAt?: string; rerankScore?: number; authority?: number; lowConfidence?: boolean; via?: string; confidence?: number; tag?: string }
 
@@ -31,7 +32,7 @@ const hostOf = (url: string): string => { try { return new URL(url).hostname } c
 /** One line under the header (dev-plan M3b): "covered" is a lexical judgement, and a missing passage proves nothing. */
 export const COVERAGE_CAVEAT = 'Coverage is heuristic: no evidence here does not mean it does not exist; fetch/expand before concluding.'
 
-export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'> & Partial<Pick<EvidencePack, 'uncertainNeeds'>>, sources: readonly RenderSource[], engineLine: string, expandLine = 'To read around an excerpt: history.expand evidenceId=<id>.'): string {
+export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profile' | 'needs' | 'evidence' | 'coveredNeeds' | 'gaps' | 'partial' | 'notes' | 'verification'> & Partial<Pick<EvidencePack, 'uncertainNeeds'>> & { notices?: readonly Notice[] | undefined }, sources: readonly RenderSource[], engineLine: string, expandLine = 'To read around an excerpt: history.expand evidenceId=<id>.'): string {
   const parts: string[] = []
   const covered = new Set(pack.coveredNeeds)
   const unsure = new Set(pack.uncertainNeeds ?? [])
@@ -59,6 +60,7 @@ export function renderEvidencePack(pack: Pick<EvidencePack, 'resultId' | 'profil
   if (v.native.length || v.local.length) parts.push('Constraints — enforced by the search provider: ' + (v.native.join(', ') || 'none') + '; checked locally only: ' + (v.local.join(', ') || 'none') + '.')
   parts.push(engineLine + (pack.notes.length ? '\nNotes: ' + pack.notes.join(' | ') : ''))
   if (pack.evidence.length) parts.push(expandLine)
+  if (pack.notices?.length) parts.push(renderNotices(pack.notices))
   return parts.join('\n\n')
 }
 

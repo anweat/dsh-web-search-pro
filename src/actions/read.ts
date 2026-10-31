@@ -8,6 +8,7 @@ import { mergedRules } from '../fetch.ts'
 import { capText } from '../util.ts'
 import { ActionArgError, type ActionDef } from './types.ts'
 import { DEFAULT_FETCH_CHARS, fairShareLimit } from './format.ts'
+import { NOTICES_SCHEMA, renderNotices, takeNotices, type Notice } from '../wechat/notices.ts'
 
 /** One-line explanation per non-content page class (read.fetch render). */
 const PAGE_CLASS_NOTE: Record<string, string> = {
@@ -22,8 +23,8 @@ export const READ_ACTIONS: ActionDef[] = [
   {
     name: 'read.fetch',
     group: 'read',
-    summary: 'Fetch a page as readable text: Jina, then HTTP with per-site rules, then a browser render when the result is a shell or login wall and dsh-browser is ready. Output is capped; a truncated result gives nextOffset.',
-    notes: 'Read on with offset (served from the stored snapshot). A shell/login-wall reply lists links worth fetching instead.',
+    summary: 'Fetch a page as readable text: Jina, then HTTP with per-site rules, then a browser render when the result is a shell or login wall and dsh-browser is ready. Output is capped; a truncated result gives nextOffset. WeChat articles (mp.weixin.qq.com, or a weixin.sogou.com/link result) are read over HTTP first.',
+    notes: 'Read on with offset (served from the stored snapshot). A shell/login-wall reply lists links worth fetching instead. If the reply has a "Tell the user" block (notices), pass it on in your answer.',
     params: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to fetch.' },
       mode: { type: 'string', enum: ['auto', 'jina', 'http', 'playwright', 'deepseek'], description: 'auto (default), jina, http, playwright (needs dsh-browser; auto skips it when absent) or deepseek (DeepSeek Fetch API; billed, needs the deepseekFetch setting; auto uses it only when that setting is on).' },
@@ -48,6 +49,7 @@ export const READ_ACTIONS: ActionDef[] = [
         truncated: { type: 'boolean' },
         nextOffset: { type: 'number' },
         totalChars: { type: 'number' },
+        notices: NOTICES_SCHEMA,
       },
     },
     approval: 'none', mutating: false, concurrencySafe: true,
@@ -68,6 +70,7 @@ export const READ_ACTIONS: ActionDef[] = [
         fresh: args.fresh ?? false,
         persist: args.persist ?? true,
       })
+      const notices = takeNotices(ctx.notices, page.notices)
       return {
         url: page.url,
         ...page.title ? { title: page.title } : {},
@@ -82,10 +85,11 @@ export const READ_ACTIONS: ActionDef[] = [
         ...page.truncated ? { truncated: true } : {},
         ...page.nextOffset !== undefined ? { nextOffset: page.nextOffset } : {},
         ...page.totalChars !== undefined ? { totalChars: page.totalChars } : {},
+        ...notices?.length ? { notices } : {},
       }
     },
     render(value) {
-      const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; pageClass?: string; attempts?: { source: string; class: string; detail?: string }[]; truncated?: boolean; nextOffset?: number; totalChars?: number }
+      const v = value as { url: string; title?: string; text: string; source: string; fromCache: boolean; shellPage?: boolean; pageClass?: string; attempts?: { source: string; class: string; detail?: string }[]; truncated?: boolean; nextOffset?: number; totalChars?: number; notices?: Notice[] }
       const parts: string[] = []
       if (v.title) parts.push('Title: ' + v.title)
       // A navigation/JS/form shell has no data: say so and point the model at the links it contains instead of re-fetching the same page.
@@ -100,6 +104,7 @@ export const READ_ACTIONS: ActionDef[] = [
       const browserFailure = v.attempts?.find(a => a.source === 'playwright' && a.class === 'error' && a.detail)
       if (browserFailure) parts.push('Browser render did not run: ' + browserFailure.detail)
       if (v.nextOffset !== undefined) parts.push('more: call read.fetch with offset=' + v.nextOffset + (v.totalChars !== undefined ? ' (page has ' + v.totalChars + ' chars)' : ''))
+      if (v.notices?.length) parts.push(renderNotices(v.notices))
       return parts.join('\n\n')
     },
   },

@@ -26,6 +26,8 @@ import { EvidenceService } from './pipeline/service.ts'
 import type { ProviderState } from './provider.ts'
 import type { OverlayStore } from './overlay.ts'
 import type { PendingRestart } from './restart.ts'
+import { NoticeBoard } from './wechat/notices.ts'
+import { wechatSettings } from './wechat/settings.ts'
 import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
 import { renderIndex, type IndexEnvironment } from './actions/index-view.ts'
 import { renderEnvelope, runAction } from './actions/run.ts'
@@ -56,6 +58,8 @@ export interface ToolDeps {
   overlay?: OverlayStore
   /** Settings changed in the configuration that only take effect at the next start. */
   pendingRestart?: () => PendingRestart[]
+  /** The plugin instance's notice board; one is made when omitted. */
+  notices?: NoticeBoard
 }
 
 const ENVELOPE_SCHEMA = {
@@ -73,6 +77,7 @@ const ENVELOPE_SCHEMA = {
         message: { type: 'string' as const, required: true as const },
         hint: { type: 'string' as const },
         schema: { type: 'string' as const },
+        notices: { type: 'array' as const, items: { type: 'object' as const, additionalProperties: false, properties: { level: { type: 'string' as const, required: true as const }, code: { type: 'string' as const, required: true as const }, message: { type: 'string' as const, required: true as const } } } },
       },
     },
     truncation: {
@@ -94,6 +99,7 @@ export function registerTools(deps: ToolDeps): void {
     ...deps.providerState ? { providerState: deps.providerState } : {},
     ...deps.overlay ? { overlay: deps.overlay } : {},
     ...deps.pendingRestart ? { pendingRestart: deps.pendingRestart } : {},
+    notices: deps.notices ?? new NoticeBoard(() => wechatSettings(dynamic()).notices),
     evidence: () => (evidenceService ??= new EvidenceService({ router, fetch: fetchSvc, store, dynamic })),
     /** Default characters one text exit may return (config `fetchDefaultChars`). */
     outputCap: () => dynamic().fetchDefaultChars ?? DEFAULT_FETCH_CHARS,

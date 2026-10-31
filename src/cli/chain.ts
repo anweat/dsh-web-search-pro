@@ -21,8 +21,11 @@ import { listOpencliSites, OPENCLI_PROBE, opencliSiteVerification, planOpencliSe
 import { cachedProbe, probeCli } from './probe.ts'
 import { CliAdapterError, runCliSearchDetailed } from './runner.ts'
 import { resolveCliAdapters, USER_DEFINED, type CliAdapterSpec } from './spec.ts'
+import { accessProfileOf, type AccessProfile } from '../wechat/access.ts'
+import { sogouEngine } from '../wechat/sogou.ts'
+import { wechatSettings } from '../wechat/settings.ts'
 
-export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'custom-cli'
+export type BackendKind = 'cli' | 'opencli' | 'browser-opencli' | 'browser-search' | 'rest' | 'sogou' | 'custom-cli'
 
 export { DEFAULT_CHAINS, CHAIN_PLATFORMS }
 
@@ -162,6 +165,20 @@ function restLeg(platform: string, ctx: ChainContext): ChainLeg {
   }
 }
 
+/** The built-in Sogou WeChat leg (src/wechat/sogou.ts): HTTP only, no CLI, no login. */
+function sogouLeg(ctx: ChainContext): ChainLeg {
+  const settings = wechatSettings(ctx.config).sogou
+  const engine = sogouEngine(ctx.deps, settings)
+  return {
+    id: 'sogou', kind: 'sogou', label: 'Sogou WeChat (built-in)', engine, verification: 'live',
+    async readiness() {
+      return settings.enabled
+        ? { ready: true, installation: 'not_required', credential: 'not_required' }
+        : { ready: false, installation: 'not_required', credential: 'not_required', reason: 'sogou: disabled in settings (wechat.sogou.enabled)', code: 'disabled' }
+    },
+  }
+}
+
 /** The chain of one platform: the configured (`platformBackends`) or default order, each id turned into a leg or into a diagnostic. */
 export function resolveChain(platform: string, ctx: ChainContext): ChainResolution {
   const { specs } = allSpecs(ctx.config)
@@ -179,6 +196,7 @@ export function resolveChain(platform: string, ctx: ChainContext): ChainResoluti
     else if (id === 'browser-opencli') legs.push(browserOpencliLeg(platform, ctx))
     else if (id === 'browser-search') legs.push(browserSearchLeg(platform, ctx))
     else if (id === 'rest') legs.push(restLeg(platform, ctx))
+    else if (id === 'sogou') legs.push(sogouLeg(ctx))
     else legs.push(specLeg(id, specs.get(id)!, platform, ctx))
   }
   return { legs, diagnostics }
@@ -195,6 +213,8 @@ export interface ChainEntryReport {
   credential?: string
   reason?: string
   verification: string
+  /** What the backend asks of the user and what it risks (login, risk level, billing): only backends with a profile (the wechat legs). */
+  access?: AccessProfile
 }
 
 /**
@@ -231,6 +251,7 @@ export async function chainReport(platform: string, ctx: ChainContext): Promise<
   const entries: ChainEntryReport[] = checked.map(({ leg, r }, index) => ({
     id: leg.id, kind: leg.kind, label: leg.label, order: index + 1, state: r.ready ? 'ready' : 'skipped', installation: r.installation,
     ...r.version ? { version: r.version } : {}, ...r.credential ? { credential: r.credential } : {}, ...r.reason ? { reason: r.reason } : {}, verification: leg.verification,
+    ...accessProfileOf(platform, leg.id) ? { access: accessProfileOf(platform, leg.id)! } : {},
   }))
   const firstReady = checked.find(c => c.r.ready)
   const rank = { detected: 3, incompatible: 2, not_required: 3, missing: 1 } as const

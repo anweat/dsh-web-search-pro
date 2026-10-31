@@ -1,3 +1,5 @@
+import { attachNotices, noticesOf, type Notice } from './wechat/notices.ts'
+
 export interface BackendProbe { available: boolean; reason?: string }
 /** Quality verdict for a successful run: ok, low-quality (usable but thin), or error. */
 export interface BackendRunResult { ok: boolean; lowQuality?: boolean; detail?: string }
@@ -100,6 +102,8 @@ export class BackendRegistry<I, O> {
     const ids = options.override ? [options.override] : options.preferred
     const errors: string[] = []
     const attempts: BackendAttempt[] = []
+    // Notices for the user that failed engines carried (a captcha wall): they ride on the NoBackendError when nothing answers.
+    const notices: Notice[] = []
     let fallback: { id: string; value: O; detail?: string } | undefined
     for (const id of ids) {
       if (signal?.aborted) throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError')
@@ -124,6 +128,7 @@ export class BackendRegistry<I, O> {
         // A cancelled caller is not an engine fault: never cool down, never fall through.
         if (signal?.aborted) throw error
         const message = error instanceof Error ? error.message : String(error)
+        notices.push(...noticesOf(error))
         errors.push(id + ': ' + message)
         if (isEmptyError(error)) {
           // The engine answered (with nothing): try the next one, keep this one hot.
@@ -136,7 +141,7 @@ export class BackendRegistry<I, O> {
       }
     }
     if (fallback) return { id: fallback.id, value: fallback.value, attempts }
-    throw new NoBackendError('no backend succeeded: ' + errors.join('; '), attempts)
+    throw attachNotices(new NoBackendError('no backend succeeded: ' + errors.join('; '), attempts), notices)
   }
 
   diagnostics(): BackendDiagnostic[] {

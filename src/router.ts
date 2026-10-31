@@ -40,6 +40,7 @@ import { guaranteeSeats } from './pipeline/confidence.ts'
 import { fuseCandidates } from './pipeline/fusion.ts'
 import type { ProviderCall, ProviderOutcome } from './pipeline/run.ts'
 import type { ProviderStatus } from './pipeline/plan.ts'
+import { attachNotices, noticesOf, type Notice } from './wechat/notices.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -87,6 +88,8 @@ export interface RouterSearchResult {
   fallbackNote?: string
   /** Platform search: the backend of its chain that answered (`bili`, `browser-opencli`). */
   backend?: string
+  /** Messages for the user from this run (a captcha wall a leg hit): raw, the action layer shows each once per session. Not stored: a cache hit carries none. */
+  notices?: Notice[]
 }
 
 /** Where a result came from, as it is stored in `results.extra` and read back on a cache hit. */
@@ -458,19 +461,22 @@ export class SearchRouter {
         { preferred: this.canonicalIds([call.id]), signal: call.signal },
       )
       const sources = selected.value.sources
-      return sources.length ? { state: 'ok', sources, ...selected.value.backend ? { backend: selected.value.backend } : {}, ...selected.value.notes?.length ? { notes: selected.value.notes } : {} } : { state: 'empty' }
+      const answerNotices = selected.value.notices?.length ? { notices: selected.value.notices } : {}
+      return sources.length ? { state: 'ok', sources, ...selected.value.backend ? { backend: selected.value.backend } : {}, ...selected.value.notes?.length ? { notes: selected.value.notes } : {}, ...answerNotices } : { state: 'empty', ...answerNotices }
     } catch (error) {
       if (call.signal.aborted) throw error
+      const carried = noticesOf(error)
+      const failNotices = carried.length ? { notices: carried } : {}
       if (error instanceof NoBackendError) {
         if (allAttemptsEmpty(error.attempts)) {
           // Generic "returned no results" texts add nothing; a provider-specific hint (login, selectors) does.
           const detail = error.attempts.map(a => a.detail).find(d => d && !/returned no (results|parseable results)\b|^no results$/i.test(d) )
-          return { state: 'empty', ...detail ? { detail } : {} }
+          return { state: 'empty', ...detail ? { detail } : {}, ...failNotices }
         }
         const skipped = error.attempts.find(a => a.outcome === 'skipped')
-        if (skipped && allAttemptsBenign(error.attempts)) return { state: 'skipped', reason: skipped.detail ?? 'unavailable' }
+        if (skipped && allAttemptsBenign(error.attempts)) return { state: 'skipped', reason: skipped.detail ?? 'unavailable', ...failNotices }
       }
-      return { state: 'error', message: error instanceof Error ? error.message : String(error) }
+      return { state: 'error', message: error instanceof Error ? error.message : String(error), ...failNotices }
     }
   }
 
@@ -919,7 +925,7 @@ export class SearchRouter {
           // A platform that is down is an error with its reason; one that answered with nothing is an empty result that says so.
           if (platform) return this.platformFailure(platform.id, error)
           // Every engine answered empty or was skipped (no runtime failure): report that, do not fail or cache it.
-          if (allAttemptsBenign(error.attempts)) return this.emptyResult(ids, 'none', error.attempts)
+          if (allAttemptsBenign(error.attempts)) return this.emptyResult(ids, 'none', error.attempts, noticesOf(error))
         }
         throw error
       }
@@ -953,6 +959,7 @@ export class SearchRouter {
       availableCount,
       ...backendId ? { backend: backendId } : {},
       ...fallbackNote ? { fallbackNote } : {},
+      ...outcome.notices?.length ? { notices: outcome.notices } : {},
     }
     // 4. Warm the in-process LRU (memory-only; survives across SQLite hits).
     this.memory.set(memoryKey, result)
@@ -963,9 +970,10 @@ export class SearchRouter {
    * No engine failed at runtime: each returned ENGINE_EMPTY or was skipped
    * (unavailable / cooldown). Zero sources plus an explanation (never cached).
    */
-  private emptyResult(ids: readonly string[], engine: string, attempts: readonly BackendAttempt[] = []): RouterSearchResult {
+  private emptyResult(ids: readonly string[], engine: string, attempts: readonly BackendAttempt[] = [], notices: readonly Notice[] = []): RouterSearchResult {
     const skipped = attempts.filter(a => a.outcome === 'skipped')
     return {
+      ...notices.length ? { notices: [...notices] } : {},
       sources: [],
       engine,
       enginesTried: [...ids],
@@ -981,14 +989,15 @@ export class SearchRouter {
    * (login, selectors); anything else is the error `platform <id> unavailable (tried: ...): <reason>`.
    */
   private platformFailure(id: string, error: NoBackendError): RouterSearchResult {
+    const notices = noticesOf(error)
     if (allAttemptsEmpty(error.attempts)) {
-      return { sources: [], engine: id, enginesTried: [id], fromCache: false, availableCount: 0, fallbackNote: 'no results: ' + (error.attempts[0]?.detail ?? id) }
+      return { sources: [], engine: id, enginesTried: [id], fromCache: false, availableCount: 0, fallbackNote: 'no results: ' + (error.attempts[0]?.detail ?? id), ...notices.length ? { notices } : {} }
     }
     const last = [...error.attempts].reverse().find(a => a.detail)
     const message = 'platform ' + id + ' unavailable (tried: ' + error.attempts.map(a => a.id).join(', ') + ')' + (last?.detail ? ': ' + last.detail : '')
     // Never ran (failed its local probe, cooling down): a structured "not available", with what is missing.
-    if (error.attempts.length && error.attempts.every(a => a.outcome === 'skipped')) throw new SourceUnavailableError(message, id, error.attempts.map(a => a.detail ?? 'unavailable'))
-    throw new Error(message)
+    if (error.attempts.length && error.attempts.every(a => a.outcome === 'skipped')) throw attachNotices(new SourceUnavailableError(message, id, error.attempts.map(a => a.detail ?? 'unavailable')), notices)
+    throw attachNotices(new Error(message), notices)
   }
 
   /**

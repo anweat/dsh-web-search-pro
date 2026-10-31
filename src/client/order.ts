@@ -100,7 +100,7 @@ export const PLATFORM_NAMES: Readonly<Record<string, string>> = {
 
 /** Display names of the fixed (non-CLI) backends. */
 export const BACKEND_NAMES: Readonly<Record<string, string>> = {
-  opencli: 'OpenCLI', 'browser-opencli': 'dsh-browser OpenCLI', 'browser-search': 'dsh-browser search page', rest: 'REST API',
+  opencli: 'OpenCLI', 'browser-opencli': 'dsh-browser OpenCLI', 'browser-search': 'dsh-browser search page', rest: 'REST API', sogou: 'Sogou WeChat (built-in)',
 }
 
 /** The platforms the card lists: every one with a backend chain. */

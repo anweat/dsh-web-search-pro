@@ -16,6 +16,7 @@ import { EngineError } from './engine-error.ts'
 import { cliSpecEngine, specEnv } from './cli/engine.ts'
 import { builtinSpecById } from './cli/builtin-specs.ts'
 import { buildArgv, missingEnv, parseCliOutput } from './cli/runner.ts'
+import type { Notice } from './wechat/notices.ts'
 
 /**
  * A source row as an engine returns it: the host's `WebSearchSource` plus the provider's own quality signals, when it has any
@@ -45,6 +46,8 @@ export interface SearchOutcome {
   backend?: string
   /** Short notes for the caller: backends skipped on the way, results dropped. */
   notes?: string[]
+  /** Messages for the USER (a captcha wall, a link that expires), not for the model: the action layer shows them once per session (src/wechat/notices.ts). */
+  notices?: Notice[]
 }
 
 export interface Engine {

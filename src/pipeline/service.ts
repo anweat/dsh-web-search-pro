@@ -23,6 +23,7 @@ import type { EvidencePack } from './types.ts'
 import { compileQuery } from './compile.ts'
 import type { ProviderRegistry } from '../providers/registry.ts'
 import { SourceUnavailableError } from '../providers/unavailable.ts'
+import { attachNotices, noticesOf, uniqueNotices, type Notice } from '../wechat/notices.ts'
 
 export interface EvidenceRequest extends TaskInput {
   /** Explicit engine ids (tool `engines`). */
@@ -58,7 +59,8 @@ export interface EvidenceServiceDeps {
 }
 
 /** Pack as returned by the tool: `sources` shaped like every other exit. */
-export type EvidenceOutput = Omit<EvidencePack, 'sources'> & { sources: ReturnType<typeof shapeSources>; fromCache: false }
+/** `notices`: messages for the user that the run's sources and pages produced (raw: the action layer decides which are shown). */
+export type EvidenceOutput = Omit<EvidencePack, 'sources'> & { sources: ReturnType<typeof shapeSources>; fromCache: false; notices?: Notice[] }
 
 export const PAGE_MAX_CHARS = 60_000
 /** Route id of the ctx.web engine (see providers/builtin.ts). */
@@ -168,11 +170,19 @@ export class EvidenceService {
     const skipSeam = request.skipSeam === true
     const isSeam = (id: string): boolean => (registry ? registry.routeId(id) ?? id : id) === SEAM_ROUTE_ID
     const usable = (ids: readonly string[]): string[] => normalize(ids).filter(id => !(skipSeam && isSeam(id)))
+    // Messages for the user that providers and pages raise along the way (a captcha wall, a copyright line).
+    const raised: Notice[] = []
     const deps: PipelineDeps = {
       providerStatus: ids => router.providerStatuses(ids),
-      searchProvider: async call => skipSeam && isSeam(call.id) ? { state: 'skipped', reason: 'ctx.web engine is not used inside the ctx.web provider' } : router.runProvider(call, { skipSeam }),
+      searchProvider: async call => {
+        if (skipSeam && isSeam(call.id)) return { state: 'skipped', reason: 'ctx.web engine is not used inside the ctx.web provider' }
+        const outcome = await router.runProvider(call, { skipSeam })
+        if (outcome.notices?.length) raised.push(...outcome.notices)
+        return outcome
+      },
       fetchPage: async (url, signal) => {
         const page = await fetchSvc.fetchPage(url, { mode: 'auto', signal, maxChars: PAGE_MAX_CHARS, fresh: false, persist: true })
+        if (page.notices?.length) raised.push(...page.notices)
         return { url: page.url, ...page.title ? { title: page.title } : {}, text: page.text, ...page.shellPage ? { shellPage: true } : {}, source: page.source }
       },
       scorers,
@@ -213,11 +223,18 @@ export class EvidenceService {
       maxRounds: cfg.evidence.maxRounds,
       maxQueries: cfg.evidence.maxQueries,
     }
-    const result = await runPipeline(spec, deps, options)
+    let result: PipelineResult
+    try {
+      result = await runPipeline(spec, deps, options)
+    } catch (error) {
+      // Nothing was found, but the user may still need to hear why (Sogou's captcha wall).
+      throw attachNotices(error, [...raised, ...noticesOf(error)])
+    }
     result.pack.notes.unshift(...specNotes, ...scorerNotes, ...platformNotes)
     this.persist(result, request)
     const { sources, ...rest } = result.pack
-    return { ...rest, sources: shapeSources(sources, request.count), fromCache: false }
+    const notices = uniqueNotices(raised)
+    return { ...rest, sources: shapeSources(sources, request.count), fromCache: false, ...notices.length ? { notices } : {} }
   }
 
   /** Best-effort: the pack already exists, a storage failure must not lose it. */

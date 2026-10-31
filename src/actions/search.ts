@@ -11,7 +11,9 @@ import { browserState } from '../browser-access.ts'
 import { renderEvidenceOutput } from '../pipeline/render.ts'
 import { PROFILES, type Profile } from '../pipeline/types.ts'
 import type { EvidenceOutput } from '../pipeline/service.ts'
-import { ActionArgError, type ActionDef, type OutputNode } from './types.ts'
+import { ActionArgError, type ActionContext, type ActionDef, type OutputNode } from './types.ts'
+import { NOTICES_SCHEMA, renderNotices, takeNotices, type Notice } from '../wechat/notices.ts'
+import { searchResultNotices } from '../wechat/article.ts'
 import { formatSources } from './format.ts'
 
 const EVIDENCE_ITEM_SCHEMA: OutputNode = {
@@ -36,6 +38,7 @@ const EVIDENCE_OUTPUT_PROPERTIES: Record<string, OutputNode> = {
   uncertainNeeds: { type: 'array', items: { type: 'string' } },
   partial: { type: 'boolean' },
   notes: { type: 'array', items: { type: 'string' } },
+  notices: NOTICES_SCHEMA,
   verification: { type: 'object', additionalProperties: false, properties: { native: { type: 'array', required: true, items: { type: 'string' } }, local: { type: 'array', required: true, items: { type: 'string' } } } },
   stats: {
     type: 'object', additionalProperties: false,
@@ -60,6 +63,12 @@ const RECOMMEND_PROPERTIES: Record<string, OutputNode> = {
   } } },
   instruction: { type: 'string', required: true },
   notes: { type: 'array', items: { type: 'string' } },
+}
+
+/** The `notices` field of a result: the raw notices of the run plus the ones its result URLs imply, through the instance's board (each shown once per session). */
+function shownNotices(ctx: ActionContext, raw: readonly Notice[] | undefined, urls: readonly string[]): { notices?: Notice[] } {
+  const shown = takeNotices(ctx.notices, [...raw ?? [], ...searchResultNotices(urls)])
+  return shown?.length ? { notices: shown } : {}
 }
 
 const EXA_FIELDS = ['exaType', 'includeDomains', 'excludeDomains', 'startPublishedDate', 'endPublishedDate', 'category'] as const
@@ -139,7 +148,8 @@ export const SEARCH_ACTIONS: ActionDef[] = [
           signal: ctx.signal,
         })
         const ignored = [args.fresh !== undefined && 'fresh', args.multi !== undefined && 'multi', EXA_FIELDS.some(key => args[key]) && 'exa options'].filter(Boolean)
-        return { ...out, ...ignored.length ? { notes: [...out.notes, 'ignored in evidence mode: ' + ignored.join(', ')] } : {} }
+        const { notices: raised, ...pack } = out
+        return { ...pack, ...ignored.length ? { notes: [...out.notes, 'ignored in evidence mode: ' + ignored.join(', ')] } : {}, ...shownNotices(ctx, raised, [...out.evidence.map(e => e.url), ...out.sources.map(s => s.url)]) }
       }
       if (args.allowFallback !== undefined && !evidenceMode) throw new ActionArgError('allowFallback only applies in evidence mode', 'Pass task or profile with it: it lets an unavailable platform fall back to the web engines.')
       if (args.platform) {
@@ -155,7 +165,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
           return runEvidence(query, { platform: { id: resolved.id, ...resolved.url ? { url: resolved.url } : {}, ...resolved.authProfile ? { authProfile: resolved.authProfile } : {}, ...resolved.rulePack ? { rulePack: resolved.rulePack } : {} } })
         }
         const result = await ctx.router.search({ query: args.query ?? '', count: args.count ?? 8, fresh: args.fresh ?? false, multi: false, signal: ctx.signal, platform: request })
-        return { platform: args.platform, sources: result.sources, engine: result.engine, ...result.backend ? { backend: result.backend } : {}, ...result.enginesTried ? { enginesTried: result.enginesTried } : {}, fromCache: result.fromCache, ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {} }
+        return { platform: args.platform, sources: result.sources, engine: result.engine, ...result.backend ? { backend: result.backend } : {}, ...result.enginesTried ? { enginesTried: result.enginesTried } : {}, fromCache: result.fromCache, ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {}, ...shownNotices(ctx, result.notices, result.sources.map(s => s.url)) }
       }
       for (const key of ['url', 'authProfile', 'rulePack'] as const) if (args[key] !== undefined) throw new ActionArgError(key + ' only applies together with platform')
       if (!args.query) throw new ActionArgError('query is required', 'Pass query, or platform=rss with url.')
@@ -186,15 +196,17 @@ export const SEARCH_ACTIONS: ActionDef[] = [
         enginesTried: result.enginesTried,
         fromCache: result.fromCache,
         ...result.fallbackNote ? { fallbackNote: result.fallbackNote } : {},
+        ...shownNotices(ctx, result.notices, result.sources.map(s => s.url)),
       }
     },
     render(value) {
-      const v = value as { content?: string; platform?: string; sources: SourceRow[]; engine: string; backend?: string; enginesTried?: string[]; fromCache: boolean; fallbackNote?: string }
-      if (v.platform !== undefined) return 'Platform: ' + v.platform + ' (via ' + (v.backend ?? v.engine) + (v.fromCache ? ', cached' : '') + ')\n\n' + formatSources(v.sources) + (v.fallbackNote ? '\n\n' + v.fallbackNote : '')
+      const v = value as { content?: string; platform?: string; sources: SourceRow[]; engine: string; backend?: string; enginesTried?: string[]; fromCache: boolean; fallbackNote?: string; notices?: Notice[] }
+      const withNotices = (text: string): string => (v.notices?.length ? text + '\n\n' + renderNotices(v.notices) : text)
+      if (v.platform !== undefined) return withNotices('Platform: ' + v.platform + ' (via ' + (v.backend ?? v.engine) + (v.fromCache ? ', cached' : '') + ')\n\n' + formatSources(v.sources) + (v.fallbackNote ? '\n\n' + v.fallbackNote : ''))
       const tried = v.enginesTried ?? []
       const pack = value as unknown as Partial<EvidenceOutput>
       if (pack.resultId !== undefined && pack.evidence && pack.needs && pack.coveredNeeds && pack.gaps && pack.verification) {
-        return renderEvidenceOutput({ resultId: pack.resultId, profile: pack.profile ?? 'general', needs: pack.needs, evidence: pack.evidence, coveredNeeds: pack.coveredNeeds, gaps: pack.gaps, ...pack.uncertainNeeds ? { uncertainNeeds: pack.uncertainNeeds } : {}, partial: pack.partial === true, notes: pack.notes ?? [], verification: pack.verification, sources: v.sources, engine: v.engine, enginesTried: tried })
+        return renderEvidenceOutput({ resultId: pack.resultId, profile: pack.profile ?? 'general', needs: pack.needs, evidence: pack.evidence, coveredNeeds: pack.coveredNeeds, gaps: pack.gaps, ...pack.uncertainNeeds ? { uncertainNeeds: pack.uncertainNeeds } : {}, partial: pack.partial === true, notes: pack.notes ?? [], verification: pack.verification, ...v.notices?.length ? { notices: v.notices } : {}, sources: v.sources, engine: v.engine, enginesTried: tried })
       }
       const parts: string[] = []
       if (v.content) parts.push(v.content)
@@ -205,7 +217,7 @@ export const SEARCH_ACTIONS: ActionDef[] = [
       const withSnippet = v.sources.filter(s => s.snippet && s.snippet.trim()).length
       if (!v.sources.length) parts.push('No usable results for this query. Retry with a different phrasing, a site: filter, or the "api documentation" / "<host> API" form.')
       else if (withSnippet < v.sources.length) parts.push('These are navigation targets — several lack snippets. Fetch the most relevant 1-2 (read.fetch) before answering.')
-      return parts.join('\n\n')
+      return withNotices(parts.join('\n\n'))
     },
   },
   {

@@ -13,6 +13,7 @@ import { CALL_TOOL, INDEX_TOOL, findAction, similarActions } from './registry.ts
 import { compactSchema, preflightArgs } from './schema.ts'
 import { DeadlineError, abortedByDeadline, hintFor, mapError } from './errors.ts'
 import { isLegacyToolName, mapLegacyCall } from './legacy.ts'
+import { noticesOf, takeNotices } from '../wechat/notices.ts'
 
 /** Serialized-result cap; larger results get their longest strings shortened. */
 export const RESULT_CHAR_LIMIT = 100_000
@@ -142,6 +143,9 @@ export async function runAction(name: unknown, rawArgs: unknown, services: Actio
   } catch (error) {
     const body = mapError(error, { signal: workSignal })
     if (body.code === 'INVALID_ARGS') body.schema = compactSchema(action.name, action.params)
+    // Notices a failed backend carried (Sogou's captcha wall) still go to the user.
+    const carried = takeNotices(services.notices, noticesOf(error))
+    if (carried?.length) body.notices = carried
     return failure(action.name, body)
   }
 }

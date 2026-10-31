@@ -16,6 +16,8 @@ import type { SearchRouter } from './router.ts'
 import { renderEvidenceOutput } from './pipeline/render.ts'
 import type { EvidenceOutput, EvidenceService } from './pipeline/service.ts'
 import { flatToolName, findAction } from './actions/registry.ts'
+import { renderNotices, takeNotices, type NoticeBoard } from './wechat/notices.ts'
+import { searchResultNotices } from './wechat/article.ts'
 
 /** How far past the pipeline's own deadline the provider waits before it gives up on the pipeline and returns plain sources. */
 export const EVIDENCE_GUARD_MS = 3_000
@@ -45,11 +47,15 @@ export interface SearchProviderDeps {
   surface: ToolSurface
   /** Test seam: wait this long past the pipeline's own deadline before giving up on it. */
   guardMs?: number
+  /** The plugin instance's notice board (notices for the user are shown once per session); absent = every notice is shown. */
+  notices?: Pick<NoticeBoard, 'take'>
 }
 
 /** The pack as the built-in tool gets it: text in `content`, sources as before, `truncated` only when sources were left out. */
-function packResult(out: EvidenceOutput, surface: ToolSurface): WebSearchResult {
-  const text = renderEvidenceOutput(out, { omitOtherSources: true, expandLine: expandHint(surface) })
+function packResult(out: EvidenceOutput, surface: ToolSurface, board?: Pick<NoticeBoard, 'take'>): WebSearchResult {
+  const { notices: raw, ...pack } = out
+  const notices = takeNotices(board, [...raw ?? [], ...searchResultNotices([...out.evidence.map(e => e.url), ...out.sources.map(s => s.url)])])
+  const text = renderEvidenceOutput({ ...pack, ...notices ? { notices } : {} }, { omitOtherSources: true, expandLine: expandHint(surface) })
   return {
     content: text,
     sources: out.sources.map(s => ({ url: s.url, ...s.title ? { title: s.title } : {}, ...s.snippet ? { snippet: s.snippet } : {}, ...s.publishedAt ? { publishedAt: s.publishedAt } : {} })),
@@ -86,7 +92,7 @@ export function createSearchProvider(deps: SearchProviderDeps): WebSearchProvide
           timer = setTimeout(() => { guard.abort(); reject(new Error('evidence run did not finish within ' + waitMs + ' ms')) }, waitMs)
           timer.unref?.()
         })
-        return packResult(await Promise.race([run, watchdog]), deps.surface)
+        return packResult(await Promise.race([run, watchdog]), deps.surface, deps.notices)
       } catch (error) {
         // The caller gave up: nothing to fall back to. Anything else (timeout, pipeline error) must not cost the plain result.
         if (signal?.aborted) throw error
@@ -103,6 +109,8 @@ export interface FetchProviderDeps {
   dynamic: () => ResolvedConfig
   id: () => string
   surface: ToolSurface
+  /** The plugin instance's notice board; absent = every notice is shown. */
+  notices?: Pick<NoticeBoard, 'take'>
 }
 
 /** Fetch provider: the same fetch pipeline as `read.fetch`, under a fixed budget (the request carries no size). */
@@ -122,10 +130,12 @@ export function createFetchProvider(deps: FetchProviderDeps): WebFetchProvider {
         persist: true,
       })
       const truncated = out.truncated ?? false
+      const notices = takeNotices(deps.notices, out.notices)
+      const text = truncated ? out.text + continueHint(deps.surface, out.url, out.nextOffset) : out.text
       return {
         url: out.url,
         statusCode: out.statusCode ?? 200,
-        body: { kind: 'text', content: truncated ? out.text + continueHint(deps.surface, out.url, out.nextOffset) : out.text },
+        body: { kind: 'text', content: notices ? text + '\n\n' + renderNotices(notices) : text },
         truncated,
       }
     },
