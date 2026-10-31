@@ -49,11 +49,12 @@ interface AccessProfile {
 
 ### 2.2 元宝搜索 leg `tencent-wsa`（付费，单独设置）
 
-- 腾讯云 `wsa` `SearchPro`（API 版本 2025-05-08），TC3-HMAC-SHA256 签名，`Query`、`Mode`（默认 2 混合）、`Site=mp.weixin.qq.com`、`Cnt`、`Freshness`。响应 `Pages[]` 为 JSON 字符串：`title / date / url / passage / site …`。
-- 凭据：`wechat.wsa.secretId / secretKey`（字面量、DSH credentials 引用或环境变量 `TENCENTCLOUD_SECRET_ID` / `TENCENTCLOUD_SECRET_KEY`），`wechat.wsa.enabled` 默认 false；两者齐全且 enabled 才 ready。
+- 走官方「服务 API Key」通道：`POST https://api.wsa.cloud.tencent.com/SearchPro`，`Authorization: Bearer <key>`，JSON body，无需 TC3 签名（控制台创建，每账号最多 3 个，只显示一次）。字段：`Query`、`Mode`（默认 2 混合）、`Site=mp.weixin.qq.com`、`Cnt`（只能 10/20/30/40/50）、`Freshness`（`dN`/`mN`/`yN`/日期/日期区间）。响应 `Response.Pages[]` 为 JSON 字符串，二次解析：`title / url / date / passage / content / site / score / pics|images`。极速版不支持 `Mode`/`Cnt`/`Industry`。
+- 凭据：`wechat.wsa.apiKey`（字面量、DSH credentials 引用，或环境变量 `TENCENT_WSA_API_KEY`），`wechat.wsa.enabled` 默认 false；enabled 且 key 能解析才 ready。可选 `wechat.wsa.baseUrl`、`wechat.wsa.edition: lite | standard`（lite 不发 Mode/Cnt）。
+- 错误：`ResourceNotFound`（未开通）/ `UnauthorizedOperation` / `AuthFailure.*` → 不可重试 + `wechat.wsa-setup`（action）；`ResourceUnavailable`（欠费）→ `ENGINE_QUOTA` + action 提醒；`RequestLimitExceeded` → 限流；`Msg: hit black query` → 空结果并在 notes 说明。
 - ready 时排在 wechat 链首（用户自己配的付费源优先，符合源策略）；显式 `platformBackends.wechat` 时按用户写的顺序。
-- 每次调用计入 usage ledger；可选 `wechat.wsa.dailyLimit`（默认 100），超出拒绝并提醒。
-- 访问画像：`login: api-key`、`risk: low`、`billing: 14–20 元/千次`。无 key 无法实测：`verification: docs-only`。
+- 每次调用计入 usage ledger；`wechat.wsa.dailyLimit`（默认 100），超出拒绝并提醒。
+- 访问画像：`login: api-key`、`risk: low`、`billing: 极速 14 / 标准 20 / 旗舰 26 元每千次（新账号可能有每月免费额度，以控制台为准）`。无 key 无法实测：`verification: docs-only`。
 
 ## 3. 读取层（read.fetch）
 
@@ -73,7 +74,7 @@ interface AccessProfile {
 | `wechat.articles` | `wechat.history.baseUrl` | 按 fakeid 列文章（分页）；正文用 read.fetch 读 |
 | `wechat.status` | 无 | 列出 wechat 各层的就绪状态、访问画像、今日元宝用量、上次失败原因 |
 
-- 整号历史服务地址由用户填（常见是 `http://127.0.0.1:<port>`）：只对**这个配置的 origin** 放开回环地址，safe-http 的其它限制不变。可选 `wechat.history.apiKey`。
+- 整号历史服务地址由用户填（默认端口 5000，常见是 `http://127.0.0.1:5000`）：只对**这个配置的 origin** 放开回环地址，safe-http 的其它限制不变。服务的 REST 接口本身无鉴权（只有 /mcp 有 token），所以不需要 key；提醒用户不要把它暴露到公网（服务端 CORS 为 *）。该项目是 AGPL-3.0，只作为独立服务对接，不拷贝其代码。
 - 接口契约以 tmwgsicp/wechat-download-api 源码为准（`routes/search.py`、`routes/articles.py`），标 `contract-only`；未登录 / 失效映射到 `wechat.login-expired`，限流映射到 `wechat.rate-limited`。
 - 访问画像：`login: qr-scan`、`loginTtl: 约 4 天`、`risk: high`（未公开接口、限流、封号）。
 
@@ -85,7 +86,7 @@ interface AccessProfile {
 wechat:
   notices: once            # once | always | off
   sogou: { enabled: true, resolveLinks: 3, minIntervalMs: 1500 }
-  wsa: { enabled: false, secretId: ..., secretKey: ..., mode: 2, dailyLimit: 100 }
+  wsa: { enabled: false, apiKey: ..., edition: standard, mode: 2, dailyLimit: 100 }
   history: { baseUrl: "", apiKey: ... }
 ```
 
@@ -94,5 +95,5 @@ wechat:
 ## 6. 验证
 
 - 搜狗、签名链接、文章页、合集接口：匿名、低频（单次实测 ≤ 10 个请求）现场抓取后脱敏存为 fixture；单测全部离线。
-- 元宝搜索：按官方文档与签名规范写，签名用官方文档的示例向量做单测；不发真实请求。
+- 元宝搜索：按官方文档写（API Key 通道），单测用 stub；不发真实请求。
 - 整号历史：读上游源码定契约，单测用本地 stub 服务；不部署、不登录。
