@@ -184,10 +184,18 @@ export function decodeText(buf: Buffer, contentType?: string): string {
 }
 
 /** Decode common HTML entities in a string. */
+/** Named entities seen in Chinese result pages (Sogou WeChat titles and summaries use the quote and dash ones). */
+const NAMED_ENTITIES: Record<string, string> = {
+  ldquo: '\u201c', rdquo: '\u201d', lsquo: '\u2018', rsquo: '\u2019', mdash: '\u2014', ndash: '\u2013', hellip: '\u2026', middot: '\u00b7',
+  rarr: '\u2192', larr: '\u2190', bull: '\u2022', times: '\u00d7', copy: '\u00a9', reg: '\u00ae', trade: '\u2122', yen: '\u00a5', deg: '\u00b0',
+  laquo: '\u00ab', raquo: '\u00bb',
+}
+
 export function htmlDecode(input: string): string {
   return input
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&(ldquo|rdquo|lsquo|rsquo|mdash|ndash|hellip|middot|rarr|larr|bull|times|copy|reg|trade|yen|deg|laquo|raquo);/g, (_, name: string) => NAMED_ENTITIES[name]!)
     .replace(/&amp;/g, '&')
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))

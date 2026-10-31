@@ -9,7 +9,7 @@ import { resolveConfig } from '../src/config.ts'
 import { Store } from '../src/store.ts'
 import { noticesOf } from '../src/wechat/notices.ts'
 import {
-  classifyWechatMarker, isSignedWechatUrl, isWechatArticleUrl, parseWechatArticle, readNotices, searchResultNotices,
+  classifyWechatMarker, isSignedWechatUrl, isWechatArticleUrl, isWechatReaderJunk, parseWechatArticle, readNotices, searchResultNotices,
 } from '../src/wechat/article.ts'
 import { dropSharedSession, resetSogouBlock } from '../src/wechat/sogou.ts'
 import { PUBLIC } from './keyed-harness.ts'
@@ -232,4 +232,23 @@ test('read.fetch of a sogou link: antispider fails the read with the wechat.anti
   try {
     await assert.rejects(off.svc.fetchPage(link, auto()), /disabled in settings \(wechat\.sogou\.enabled\)/)
   } finally { off.cleanup() }
+})
+
+test('live 2026-11-01 follow-ups: "Parameter error" is a final error, Jina page chrome is not an article', async () => {
+  const bad = parseWechatArticle('<html><body><div class="weui-msg"><p>Parameter error</p></div></body></html>')
+  assert.equal(bad.kind, 'error')
+  assert.match(bad.text, /链接参数无效/)
+  const chrome = 'Title: Weixin Official Accounts Platform\n\n: ，，，，.Video Mini Program Like，轻点两下取消赞 Wow，轻点两下取消在看 Share Comment Favorite 听过'
+  assert.equal(isWechatReaderJunk(chrome), true)
+  assert.equal(isWechatReaderJunk(chrome), true, 'no regex state between calls')
+  assert.equal(isWechatReaderJunk('Markdown Content:\nParameter error'), true)
+  assert.equal(isWechatReaderJunk('检索增强生成通过引入外部知识库改进大模型的回答，'.repeat(6) + ' 轻点两下取消赞'), false, 'an article that keeps the buttons is still an article')
+  const h = service()
+  const net = stubNetwork(url => (url.startsWith('https://mp.weixin.qq.com/s?') ? html(SHELL) : url.startsWith('https://r.jina.ai/') ? new Response(chrome) : undefined))
+  try {
+    const out = await h.svc.fetchPage(BARE + '&y=2', auto())
+    assert.equal(out.pageClass, 'shell')
+    assert.deepEqual(out.attempts!.map(a => [a.source, a.class]), [['http', 'shell'], ['jina', 'shell']])
+    assert.deepEqual(out.notices!.map(n => n.code), ['wechat.bare-url'])
+  } finally { net.restore(); h.cleanup() }
 })

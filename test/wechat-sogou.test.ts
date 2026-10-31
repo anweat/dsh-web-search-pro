@@ -364,3 +364,8 @@ test('chainEngine: a failed leg\'s notices ride on the answer of a later leg and
   assert.equal(two.code, 'ENGINE_ERROR')
   assert.deepEqual(noticesOf(two).map(n => n.code), ['wechat.antispider'])
 })
+
+test('Sogou titles and summaries decode the named quote / dash / arrow entities (live 2026-11-01)', async () => {
+  const { htmlDecode } = await import('../src/util.ts')
+  assert.equal(htmlDecode('&ldquo;RAG&rdquo; &mdash;&mdash; 试水&rarr; &hellip; a &amp;ldquo; b'), '\u201cRAG\u201d \u2014\u2014 试水\u2192 \u2026 a &ldquo; b')
+})

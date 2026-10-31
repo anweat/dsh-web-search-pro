@@ -16,7 +16,7 @@ import { assertSafePublicUrl } from './safe-http.ts'
 import { SingleFlight } from './singleflight.ts'
 import { deepseekFetchPage, type DeepSeekFetchAccess } from './providers/deepseek.ts'
 import { uniqueNotices, type Notice } from './wechat/notices.ts'
-import { WECHAT_MOBILE_UA, WECHAT_REFERER, classifyWechatMarker, isWechatArticleUrl, parseWechatArticle, readNotices, type WechatPageKind } from './wechat/article.ts'
+import { WECHAT_MOBILE_UA, WECHAT_REFERER, classifyWechatMarker, isWechatArticleUrl, isWechatReaderJunk, parseWechatArticle, readNotices, type WechatPageKind } from './wechat/article.ts'
 import { isSogouLink, resolveSogouLink, sogouIo, type Throttle } from './wechat/sogou.ts'
 import { wechatSettings } from './wechat/settings.ts'
 
@@ -317,7 +317,9 @@ export class FetchService {
       try {
         const { jsHint, classHint, ...result } = await run()
         // A WeChat page was read by its own parser, which knows an article from a verification wall or a removed article.
-        const cls = classHint ?? classifyPage(result.text, { ...result.statusCode !== undefined ? { statusCode: result.statusCode } : {}, ...jsHint ? { jsHint } : {} })
+        let cls = classHint ?? classifyPage(result.text, { ...result.statusCode !== undefined ? { statusCode: result.statusCode } : {}, ...jsHint ? { jsHint } : {} })
+        // Jina / the browser on a WeChat URL without an article return the page's buttons, which read as text.
+        if (cls === 'content' && !classHint && isWechatArticleUrl(normalized) && isWechatReaderJunk(result.text)) cls = 'shell'
         tried.push({ result, cls })
         attempts.push({ source, class: cls, chars: result.text.length })
       } catch (error) {
