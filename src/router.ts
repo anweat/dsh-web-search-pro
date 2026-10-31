@@ -25,7 +25,7 @@ import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
 import { SEMANTICSCHOLAR_KEY_ENV } from './providers/semanticscholar.ts'
 import { ANYSEARCH_KEY_ENV } from './providers/anysearch.ts'
 import { KEYED_SOURCE_ENVS } from './providers/keyed.ts'
-import { resolveBudget, UsageLedger, type RequestBudgetState, type RequestTicket } from './pipeline/ledger.ts'
+import { resolveBudget, UsageLedger, usageProviderOf, type RequestBudgetState, type RequestTicket } from './pipeline/ledger.ts'
 import { resolveSources, type SourceBudgetInput } from './pipeline/sources-spec.ts'
 import { normQuery, shapeSources } from './util.ts'
 import { LruCache } from './memory-cache.ts'
@@ -41,6 +41,7 @@ import { fuseCandidates } from './pipeline/fusion.ts'
 import type { ProviderCall, ProviderOutcome } from './pipeline/run.ts'
 import type { ProviderStatus } from './pipeline/plan.ts'
 import { attachNotices, noticesOf, type Notice } from './wechat/notices.ts'
+import { wechatSettings } from './wechat/settings.ts'
 
 export interface RouterSearchOptions {
   query: string
@@ -271,7 +272,8 @@ export class SearchRouter {
           if ('refused' in reserved) throw new EngineError(id + ': ' + reserved.refused, 'ENGINE_BUDGET', false)
           ticket = reserved
         }
-        const engine = await this.build(id, input.skipSeam, ticket ? { record: entry => { if (ticket && !ticket.closed) ticket.settle(entry.requests, entry.note); else this.usageRecorder().record(entry) } } : undefined).catch((error: unknown) => { ticket?.release(); throw error })
+        // Only the rows of this route's own ledger name settle the reservation; a leg that bills elsewhere (tencent-wsa) books its own row.
+        const engine = await this.build(id, input.skipSeam, ticket ? { ...this.usageRecorder(), record: entry => { if (ticket && !ticket.closed && entry.provider === usageProviderOf(id)) ticket.settle(entry.requests, entry.note); else this.usageRecorder().record(entry) } } : undefined).catch((error: unknown) => { ticket?.release(); throw error })
         if (!engine.available()) { ticket?.release(); throw new EngineError(engine.label + ' unavailable', 'ENGINE_UNAVAILABLE', false) }
         try {
           const outcome = await engine.search(input.query, input.count, input.signal, this.withBindings(id, input.options))
@@ -533,8 +535,12 @@ export class SearchRouter {
     const anysearchApiKey = await this.resolveKey(ANYSEARCH_KEY_ENV)
     const keyed = await this.keyedSources(cfg, (ref, literal) => this.resolveKey(ref, literal))
     const cliEnv = await this.cliEnv()
+    // The 元宝搜索 key is looked up only while the leg is on: literal -> credentials ref -> environment, like a keyed source.
+    const wsa = wechatSettings(cfg).wsa
+    const wechatWsaKey = wsa.enabled ? await this.resolveKey(wsa.apiKeyEnv, wsa.apiKey) : undefined
     return {
       ...keyed,
+      ...wechatWsaKey ? { wechatWsaKey } : {},
       ...Object.keys(cliEnv).length ? { cliEnv } : {},
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
@@ -574,8 +580,11 @@ export class SearchRouter {
     const anysearchApiKey = process.env[ANYSEARCH_KEY_ENV]
     const keyed = this.keyedSourcesSync(cfg)
     const cliEnv = this.cliEnvSync()
+    const wsa = wechatSettings(cfg).wsa
+    const wechatWsaKey = wsa.enabled ? wsa.apiKey || process.env[wsa.apiKeyEnv] : undefined
     return {
       ...keyed,
+      ...wechatWsaKey ? { wechatWsaKey } : {},
       ...Object.keys(cliEnv).length ? { cliEnv } : {},
       ...openalexApiKey ? { openalexApiKey } : {},
       ...semanticScholarApiKey ? { semanticScholarApiKey } : {},
@@ -688,6 +697,10 @@ export class SearchRouter {
     return {
       record: entry => {
         try { new UsageLedger(this.store, resolveBudget(this.dynamic().evidence?.budget).caps).recordRequests(entry) } catch { /* the ledger is advisory for these providers */ }
+      },
+      today: provider => {
+        const ledger = new UsageLedger(this.store, resolveBudget(this.dynamic().evidence?.budget).caps)
+        return this.store.requestCounts(provider, ledger.day()).today
       },
     }
   }

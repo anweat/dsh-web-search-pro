@@ -29,8 +29,13 @@ const SIGNED = 'https://mp.weixin.qq.com/s?src=11&timestamp=1793462540&ver=7060&
 const antispider = (): Notice => notice('wechat.antispider')
 const codes = (list: readonly Notice[] | undefined): string[] => (list ?? []).map(n => n.code)
 
-test('the phase A notice codes: level, English code, Chinese message', () => {
-  assert.deepEqual(Object.entries(NOTICE_TABLE).map(([code, e]) => [code, e.level]), [['wechat.antispider', 'warn'], ['wechat.signed-url', 'info'], ['wechat.bare-url', 'info'], ['wechat.copyright', 'info']])
+test('the notice codes (phase A and B): level, English code, Chinese message', () => {
+  assert.deepEqual(Object.entries(NOTICE_TABLE).map(([code, e]) => [code, e.level]), [
+    ['wechat.antispider', 'warn'], ['wechat.signed-url', 'info'], ['wechat.bare-url', 'info'], ['wechat.paid', 'info'], ['wechat.wsa-setup', 'action'], ['wechat.wsa-limit', 'warn'],
+    ['wechat.login-expired', 'action'], ['wechat.account-risk', 'warn'], ['wechat.rate-limited', 'warn'], ['wechat.copyright', 'info'],
+  ])
+  assert.match(NOTICE_TABLE['wechat.antispider'].message, /元宝搜索/, 'the antispider text names 元宝搜索 as the alternative')
+  assert.match(NOTICE_TABLE['wechat.login-expired'].message, /重新扫码登录.*4 天/)
   for (const e of Object.values(NOTICE_TABLE)) assert.match(e.message, /[一-鿿]/)
   assert.deepEqual(notice('wechat.copyright', 'custom'), { level: 'info', code: 'wechat.copyright', message: 'custom' })
 })

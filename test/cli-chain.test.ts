@@ -80,7 +80,7 @@ test('chain resolution: default orders, a configured order replaces them, and un
     assert.match(resolved.diagnostics.join('\n'), /"browser-search" does not serve platform xiaohongshu/)
     assert.deepEqual(platformBackendIssues({ xiaohongshu: ['xhs'], nowhere: ['xhs'], reddit: ['custom-cli:ghost'] }, undefined).map(m => m.replace(/ \(known:.*\)/, '')), [
       'platformBackends.nowhere: no such platform with a backend chain',
-      'platformBackends.reddit: "custom-cli:ghost" is not a known backend (built-in ids: bili, yt-dlp, twitter, xhs, zhihu, rdt, omnireach, gh, wx-search-cli, tanso, opencli, browser-opencli, browser-search, rest, sogou)',
+      'platformBackends.reddit: "custom-cli:ghost" is not a known backend (built-in ids: bili, yt-dlp, twitter, xhs, zhihu, rdt, omnireach, gh, wx-search-cli, tanso, opencli, browser-opencli, browser-search, rest, sogou, tencent-wsa)',
     ])
   } finally { h.cleanup() }
 })
@@ -100,7 +100,7 @@ test('a backend that is missing is skipped with the reason and the next one answ
       await h.search('人工智能 周报', 'wechat')
       assert.match(JSON.stringify(h.store.listQueries({ kind: 'platform' })[0]!.detail), /skipped backends: omnireach: the omnireach command is not installed: install it/)
       const report = await chainReport('wechat', { deps: h.deps(), config: h.config })
-      assert.deepEqual(report.entries.map(e => [e.id, e.state, e.installation, e.verification]), [['omnireach', 'skipped', 'missing', 'live'], ['wx-search-cli', 'ready', 'detected', 'live'], ['sogou', 'ready', 'not_required', 'live']])
+      assert.deepEqual(report.entries.map(e => [e.id, e.state, e.installation, e.verification]), [['omnireach', 'skipped', 'missing', 'live'], ['wx-search-cli', 'ready', 'detected', 'live'], ['sogou', 'ready', 'not_required', 'live'], ['tencent-wsa', 'skipped', 'not_required', 'docs-only']])
       assert.match(report.entries[0]!.reason!, /omnireach: omnireach not found on PATH.*omnireach/)
       assert.equal(report.available, true)
       assert.equal(report.installation, 'detected')
@@ -263,7 +263,7 @@ test('sources.deps / sources.status / search.recommend agree with the chains: in
         // The plugin's own Sogou leg is the last backend of the chain: wechat stays ready without any CLI.
         assert.equal(wechat.readiness.available, true)
         assert.equal(wechat.chain[0].state, installed ? 'ready' : 'skipped')
-        assert.deepEqual(wechat.chain.map((e: any) => [e.id, e.access?.login]), [['omnireach', 'none'], ['wx-search-cli', 'none'], ['sogou', 'none']])
+        assert.deepEqual(wechat.chain.map((e: any) => [e.id, e.access?.login]), [['omnireach', 'none'], ['wx-search-cli', 'none'], ['sogou', 'none'], ['tencent-wsa', 'api-key']])
         assert.match(renderResult('sources.status', status), /3\. sogou \[ready\] live\n {7}access: 免登录 · 风险中: 搜狗对高频请求会弹出验证码/, 'sources.status lists the access profile under each wechat leg')
         assert.match(renderResult('sources.status', status), installed ? /1\. omnireach \[ready 0\.19\.0\] live/ : /1\. omnireach \[skipped\] live — omnireach: omnireach not found on PATH/)
         const deps = await callAction(defs, 'sources.deps')

@@ -295,7 +295,7 @@ test('chainReport: the sogou leg is ready without any CLI, carries its access pr
     assert.equal(sogouEntry.access!.login, 'none')
     assert.equal(sogouEntry.access!.risk, 'medium')
     assert.ok(sogouEntry.access!.riskNotes.some(n => /antispider/.test(n)))
-    assert.deepEqual(report.entries.map(e => [e.id, e.access?.login]), [['omnireach', 'none'], ['wx-search-cli', 'none'], ['sogou', 'none']])
+    assert.deepEqual(report.entries.map(e => [e.id, e.access?.login]), [['omnireach', 'none'], ['wx-search-cli', 'none'], ['sogou', 'none'], ['tencent-wsa', 'api-key']])
     assert.equal(report.available, true, 'wechat is usable with nothing installed')
     assert.equal(report.state, 'ready')
     assert.equal((await chainReport('twitter', { deps: h.deps(), config: h.config })).entries.every(e => e.access === undefined), true, 'platforms without a profile report none')
