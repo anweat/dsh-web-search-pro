@@ -55,10 +55,10 @@
          rulePack: zhihu-enhanced
    ```
 
-   **字段顺序**：配置 schema、宿主的通用配置视图、`--dump-config` 和设置面板的文本视图按同一份分组排列（`src/config-groups.ts`，字段名、默认值和语义不变）：常用 → 搜索顺序（`engines`、`sources`、`platformBackends`）→ 来源与密钥 → 自定义 CLI（`cliAdapters`）→ 读取与证据（`evidence` 等）→ 平台与运行时 → 高级与诊断（缓存、排序加权、`dbPath`、`verbose`）。文本视图的每一段有中文 / 英文分节标题注释，需要重启的键在注释里写明。
+   **字段顺序**：配置 schema、宿主的通用配置视图、`--dump-config` 和设置面板的文本视图按同一份分组排列（`src/config-groups.ts`，字段名、默认值和语义不变）：常用 → 搜索顺序（`engines`、`sources`、`platformBackends`）→ 来源与密钥 → 微信 / 公众号（`wechat`）→ 自定义 CLI（`cliAdapters`）→ 读取与证据（`evidence` 等）→ 平台与运行时 → 高级与诊断（缓存、排序加权、`dbPath`、`verbose`）。文本视图的每一段有中文 / 英文分节标题注释，需要重启的键在注释里写明。
 
 3. **cordis.yml `config:`**（部署级默认值，见 `cordis.patch.yml`）。
-4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）。这些引用名与密钥都可以在面板“来源”分组里设置。
+4. **环境变量 / 凭据**：`$EXA_API_KEY`、`$JINA_API_KEY`、`$BOCHA_SEARCH_API_KEY`（或 `$BOCHA_JEV_API_KEY`）（`exaApiKeyEnv`/`jinaApiKeyEnv`/`bochaApiKeyEnv` 引用）；元宝搜索是 `$TENCENT_WSA_API_KEY`（`wechat.wsa.apiKeyEnv`）。这些引用名与密钥都可以在面板“来源”分组里设置。
 
 ## 全部顶层配置键
 
@@ -83,6 +83,18 @@
 | | `githubToken` / `githubTokenEnv` | — / `GITHUB_TOKEN` | 提升 GitHub 限额并解锁代码搜索 | |
 | | `searxngUrl` | 空 | 你自己的 SearXNG 实例（JSON 格式），设置后才有 `searxng` 来源 | |
 | | `openalexMailto` | 空 | 写进 OpenAlex 请求 User-Agent 的联系邮箱（礼貌性） | |
+| 微信 / 公众号 | `wechat.notices` | `once` | 公众号提醒方式：`once`（每类提醒每个会话一次）\| `always` \| `off` | |
+| | `wechat.sogou.enabled` | `true` | 内置搜狗直连（免登录，默认链最后一档）；`false` = 跳过 | |
+| | `wechat.sogou.resolveLinks` | `3` | 搜索时还原成带签名链接的条数（0–10） | |
+| | `wechat.sogou.minIntervalMs` | `1500` | 两次搜狗请求的最小间隔（0–60000） | |
+| | `wechat.wsa.enabled` | `false` | 元宝搜索（腾讯云，**按次计费**）；开启并有 Key 后排在 wechat 链最前 | |
+| | `wechat.wsa.apiKey` / `wechat.wsa.apiKeyEnv` | — / `TENCENT_WSA_API_KEY` | 服务 API Key（字面量不推荐）/ 保存它的 DSH 凭据或环境变量名；设置面板里的写入式密钥存在这个名字下 | |
+| | `wechat.wsa.baseUrl` | 空 | 接口地址，空 = `https://api.wsa.cloud.tencent.com` | |
+| | `wechat.wsa.edition` | `standard` | `lite`（不发 `Mode` / `Cnt`）\| `standard` \| `flagship` | |
+| | `wechat.wsa.mode` | `2` | `0` 全网 \| `1` 垂类 \| `2` 混合 | |
+| | `wechat.wsa.dailyLimit` | `100` | 每自然日最多请求次数（用量账本统计，时区同 `evidence.budget.timezone`），超出拒绝并提醒 | |
+| | `wechat.history.baseUrl` | 空 | 你自己的 wechat-download-api（如 `http://127.0.0.1:5000`），空 = `wechat.accounts` / `wechat.articles` 关闭；只对这个地址放开回环 | |
+| | `wechat.history.minIntervalMs` | `2000` | 对该服务两次请求的最小间隔（0–600000） | |
 | 自定义 CLI | `cliAdapters` | 空 | 用户自定义的只读 CLI 适配，见 [CLI 适配](./cli-adapters.md#自定义-cli) | |
 | 读取与证据 | `evidence` | 见下 | 证据包与评分：`scorer`（`rule`）、`jevMode`（`off`）、`hybridBorderline`（`false`）、`maxJevQuestions`（`64`）、`autoProviders`（`true`）、`sourcePolicy`（`default`）、`maxRounds`（`2`）、`maxQueries`（`4`），以及 `rubrics` / `judge` / `coverage` / `budget`，见 [Jev 评分](./evidence-scoring.md) | |
 | | `fetchDefaultChars` | `20000` | `read.fetch` 默认返回字符数（1000–500000） | |

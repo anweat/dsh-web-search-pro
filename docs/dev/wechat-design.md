@@ -97,3 +97,16 @@ wechat:
 - 搜狗、签名链接、文章页、合集接口：匿名、低频（单次实测 ≤ 10 个请求）现场抓取后脱敏存为 fixture；单测全部离线。
 - 元宝搜索：按官方文档写（API Key 通道），单测用 stub；不发真实请求。
 - 整号历史：读上游源码定契约，单测用本地 stub 服务；不部署、不登录。
+
+## 7. 阶段 B 实现记录（2026-11-01）
+
+与上文设计的差异和补充：
+
+- **新增 notice code**：`wechat.wsa-setup`（action：未开通 / Key 不对 / 没授权 / 欠费）和 `wechat.wsa-limit`（warn：当天达到 `dailyLimit`）。`wechat.antispider` 的文字加上“可改配元宝搜索”。
+- **设置**：`wechat.wsa` 增加 `apiKeyEnv`（默认 `TENCENT_WSA_API_KEY`）、`baseUrl`、`edition` 加 `flagship`、`mode`；`wechat.history` 没有 `apiKey`（REST 接口无鉴权），只有 `baseUrl` 与 `minIntervalMs`（默认 2000）。全部热更新，不进 `RESTART_FIELDS`；`config.*`（agent 覆盖层）不能改它们。配置分组 id 是 `wechat`，排在“来源与密钥”之后。
+- **链位**：`tencent-wsa` 不在 `DEFAULT_CHAINS.wechat` 里；`resolveChain` 在 `wechat.wsa.enabled` 时把它插到最前，未开启时 `chainReport` 只在 `entries` 末尾列一行“off”（不参与 `available` / `state`）。显式 `platformBackends.wechat` 照写的顺序，只在写了 `tencent-wsa` 时使用。
+- **硬时间窗口**：`compileQuery('wechat')` 把硬 `time_window` 编译成 `options.since`，元宝搜索转成 `Freshness`；**不标为 native**（别的后端不支持，本地检查照旧）。
+- **用量**：`UsageRecorder` 新增可选 `today(provider)`；路由器给设了 `sources.budget.wechat` 的路由结算预留时只认该路由自己的账本名，`tencent-wsa` 的行单独记。每日上限是“读后写”，并发的搜索可能超出几次。
+- **整号历史**：`safe-http` 的 `allowOrigin` 只匹配完全相同的 origin（协议、主机、端口），重定向一律拒绝；`/api/public/articles` 的 `nextBegin = begin + 请求的 count`。
+- **合集**：实测（2 次匿名请求，RSSHub 文档里的公开合集）：默认最新在前，`continue_flag` 是字符串，`begin_msgid` / `begin_itemidx` 取上一页最后一篇即可续翻；`url` 是 `http://…#rd`，输出时改为 https。
+- **验证标记**：搜狗 / 合集 / 文章页 live；元宝搜索 docs-only；整号历史 contract-only。

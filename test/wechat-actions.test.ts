@@ -48,6 +48,16 @@ test('the wechat group: four read-only actions that need no approval, registered
     }
     assert.deepEqual(webPolicyDecision(action.name, {}, 'read-only'), { kind: 'allow' })
   }
+  // Closed all the way down: every object node of every output schema declares additionalProperties: false.
+  const open: string[] = []
+  const walk = (node: any, where: string): void => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'object' && node.additionalProperties !== false) open.push(where)
+    for (const [key, child] of Object.entries<any>(node.properties ?? {})) walk(child, where + '.' + key)
+    if (node.items) walk(node.items, where + '[]')
+  }
+  for (const action of group) walk(action.output, action.name)
+  assert.deepEqual(open, [])
   const root = renderIndex({}, { skillAvailable: true, browserReady: true }).text
   assert.match(root, /wechat \(4\) .*: status\|album\|accounts\|articles/)
   const listing = renderIndex({ group: 'wechat' }, { skillAvailable: true, browserReady: true }).text

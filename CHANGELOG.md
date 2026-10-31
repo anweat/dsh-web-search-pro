@@ -2,8 +2,12 @@
 
 ## 未发布
 
+- **微信公众号（阶段 B）**：
+  - **元宝搜索 `tencent-wsa`**（付费，默认关闭）：腾讯云元宝搜索（`SearchPro`，限定 `mp.weixin.qq.com`）走官方“服务 API KEY”通道，作为 `wechat` 平台的一档后端；`wechat.wsa.enabled` 且有 Key 时排在默认链最前，你写了 `platformBackends.wechat` 时按你的顺序。每个被回答的请求记入用量账本，`wechat.wsa.dailyLimit`（默认 100 / 天）超出即拒绝。docs-only：没有 Key，从未对真实服务发过请求。
+  - **新动作组 `wechat`**：`wechat.status`（各层就绪状态、访问画像、今日元宝搜索用量、上次失败，`probe` 探测整号历史服务）、`wechat.album`（免登录的合集列表，实测）、`wechat.accounts` / `wechat.articles`（经你自己的 wechat-download-api，需 `wechat.history.baseUrl`；contract-only）。只读、不询问；整号历史的风险用提醒告知，且插件只对你配置的那一个 origin 放开回环地址（`safe-http` 新增 `allowOrigin`，其它私网目标和重定向照旧拒绝）。
+  - **设置面板“微信 / 公众号”分组**与 `wechat` 配置对象（`notices` / `sogou` / `wsa` / `history`），Key 走写入式凭据，`config.inspect` / `config.export` 不含它。新增提醒 code：`wechat.paid`、`wechat.wsa-setup`、`wechat.wsa-limit`、`wechat.login-expired`、`wechat.account-risk`、`wechat.rate-limited`；`wechat.antispider` 的文字提到可改用元宝搜索。技能新增 `references/wechat.md`。详见[来源与引擎](docs/guide/sources.md#微信公众号platformwechat)。
 - **微信公众号（阶段 A）**：`wechat` 平台的默认链加上插件自带的 `sogou` 后端（`omnireach` → `wx-search-cli` → `sogou`），不需要 CLI、Key 或登录：直连搜狗微信搜索，解析标题 / 摘要 / 公众号 / 时间，用本次会话内存里的 Cookie 把前 3 条结果还原成带签名的 `mp.weixin.qq.com` 链接，请求间隔 ≥ 1500 ms，遇到搜狗验证码（antispider）按 `ENGINE_RATE_LIMIT` 处理并暂停两分钟。`read.fetch` 读 `mp.weixin.qq.com` 时在 auto 模式下先走 HTTP（iPhone UA + Referer），抽取 `#js_content` 正文、标题、公众号名和发布时间，把验证页、已删除 / 违规 / 已迁移的文章和空壳页分别判为 `captcha` / `error` / `shell`；`weixin.sogou.com/link` 链接读之前先还原。
-- **提醒（`notices`）**：`search.run`（经典、平台、证据三种模式）、`read.fetch`、`ctx.web` 路由和错误返回新增可选的 `notices`，文本里是单独的“提醒用户 / Tell the user”一段；阶段 A 的 code 是 `wechat.antispider`、`wechat.signed-url`、`wechat.bare-url`、`wechat.copyright`，同一插件实例里每个 code 默认只提醒一次。`sources.status` 在 wechat 的每个后端下列出访问画像（`access`：登录、风险、费用）。可选设置对象 `wechat: { notices: once | always | off, sogou: { enabled, resolveLinks, minIntervalMs } }` 已生效，设置面板里的“微信 / 公众号”分组随阶段 B 加入。详见[来源与引擎](docs/guide/sources.md#微信公众号platformwechat)。
+- **提醒（`notices`）**：`search.run`（经典、平台、证据三种模式）、`read.fetch`、`ctx.web` 路由和错误返回新增可选的 `notices`，文本里是单独的“提醒用户 / Tell the user”一段；阶段 A 的 code 是 `wechat.antispider`、`wechat.signed-url`、`wechat.bare-url`、`wechat.copyright`，同一插件实例里每个 code 默认只提醒一次。`sources.status` 在 wechat 的每个后端下列出访问画像（`access`：登录、风险、费用）。可选设置对象 `wechat: { notices: once | always | off, sogou: { enabled, resolveLinks, minIntervalMs } }` 已生效（设置面板分组见阶段 B）。详见[来源与引擎](docs/guide/sources.md#微信公众号platformwechat)。
 - 文档整理：README 精简为中文入口并新增英文版 `README.en.md`；其余内容按主题拆到 `docs/guide/`，设计与调研记录移到 `docs/dev/`；`LOGIN.md` 并入 `docs/guide/platform-login.md` 并按当前的 opencli 优先做法改写（登录由用户自己完成，插件没有登录窗口）；README 里的兼容表与升级说明移到本文件；新增 `scripts/check-docs-links.mjs`（`pnpm run check:docs`，已并入 `verify`）检查文档链接、锚点和中英文 README 的标题数量。没有改动运行时行为。
 
 ## 从旧版本升级

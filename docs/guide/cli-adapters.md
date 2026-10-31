@@ -42,7 +42,7 @@
 | twitter | `opencli` → `twitter` → `browser-opencli` |
 | bilibili / youtube | `bili` / `yt-dlp` |
 | github、github-issues、github-code | `rest`（现有 REST）→ `gh` |
-| wechat（公众号） | `omnireach` → `wx-search-cli` → `sogou`（插件自带的搜狗直连，不需要 CLI；见[微信公众号](sources.md#微信公众号platformwechat)） |
+| wechat（公众号） | `omnireach` → `wx-search-cli` → `sogou`（插件自带的搜狗直连，不需要 CLI）；开启 `wechat.wsa.enabled` 并配好 Key 后，付费的 `tencent-wsa`（元宝搜索）排在最前（见[微信公众号](sources.md#微信公众号platformwechat)） |
 | omnireach（多源，不自动选入；只用五个免 Key 源） | `omnireach` |
 | tanso | `tanso` |
 | instagram / facebook | `browser-opencli`；weibo、douban、tieba、douyin、kuaishou：`browser-search` |

@@ -68,13 +68,88 @@ Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包
 
 ## 微信公众号（`platform=wechat`）
 
-公众号没有公开搜索 API。`wechat` 平台是一条后端链 `omnireach` → `wx-search-cli` → `sogou`：前两个是本机 CLI（都经搜狗），最后的 **`sogou` 是插件自带的直连后端**——不要 CLI、不要 Key、不要登录，所以没装任何 CLI 时 `wechat` 也是 ready。
+公众号没有公开搜索 API，插件把能做的事分成四层：搜索、读取、合集列表、整号历史。**不需要账号或付费的能力默认可用，需要账号、Key 的能力单独设置、默认关闭；插件本身不做任何登录**（扫码、Cookie、token 都在你自己的服务里完成）。
 
-- **搜狗直连**：请求 `weixin.sogou.com/weixin?type=2`，解析标题、摘要、公众号名和发布时间；搜狗结果里的 `/link?url=…` 要先拿到搜狗在搜索响应里下发的 `SNUID` Cookie 才能还原成带签名的 `mp.weixin.qq.com/s?…signature=…` 直链（只存在本次请求的内存里，从不落盘；首页只给 SUID / ABTEST，不够）。默认还原前 3 条（`wechat.sogou.resolveLinks`），其余保留搜狗链接，`read.fetch` 读到时再还原。所有搜狗请求进程内串行并间隔 ≥ 1500 ms（`wechat.sogou.minIntervalMs`）；搜狗弹出验证码（antispider）时该后端对应 `ENGINE_RATE_LIMIT`，随后两分钟内不再请求搜狗。
+| 层 | 怎么用 | 登录 | 费用 | 风险 | 验证 |
+|---|---|---|---|---|---|
+| 搜索：搜狗（`omnireach`、`wx-search-cli`、内置 `sogou`） | `search.run platform=wechat` | 无 | 免费 | 中：搜狗验证码、出口 IP 被临时封锁、链接过期 | live |
+| 搜索：元宝搜索（`tencent-wsa`） | 同上；开启并配好 Key 后排在链首 | API Key | 按次：极速 14 / 标准 20 / 旗舰 26 元每千次（新账号可能有每月免费额度，以控制台为准） | 低；每日次数受 `wechat.wsa.dailyLimit` 限制 | docs-only |
+| 读正文 | `read.fetch` | 无 | 免费 | 低（裸链接会遇验证页） | live |
+| 合集列表 | `wechat.album` | 无 | 免费 | 低 | live |
+| 整号历史 | `wechat.accounts`、`wechat.articles`（经你自己的 wechat-download-api） | 微信扫码，约 4 天过期 | 免费 | **高**：走你自己公众号后台的未公开接口，高频会被限流（账号级，可能持续数天），严重时封号 | contract-only |
+
+`wechat.status` 一次列出各层的就绪状态、访问画像、今日元宝搜索用量和每层最近一次失败（`probe: true` 还会实际问一下整号历史服务）；`sources.status` 在 wechat 的每个后端下也列出 `access`。
+
+### 搜索：搜狗链（免配置）
+
+`wechat` 平台默认链是 `omnireach` → `wx-search-cli` → `sogou`：前两个是本机 CLI（都经搜狗），最后的 **`sogou` 是插件自带的直连后端**——不要 CLI、不要 Key、不要登录，所以没装任何 CLI 时 `wechat` 也是 ready。
+
+- **搜狗直连**：请求 `weixin.sogou.com/weixin?type=2`，解析标题、摘要、公众号名和发布时间；搜狗结果里的 `/link?url=…` 要先拿到搜狗在搜索响应里下发的 `SNUID` Cookie 才能还原成带签名的 `mp.weixin.qq.com/s?…signature=…` 直链（只存在本次请求的内存里，从不落盘；首页只给 SUID / ABTEST，不够）。默认还原前 3 条（`wechat.sogou.resolveLinks`），其余保留搜狗链接，`read.fetch` 读到时再还原。所有搜狗请求进程内串行并间隔 ≥ 1500 ms（`wechat.sogou.minIntervalMs`）；搜狗弹出验证码（antispider）时该后端对应 `ENGINE_RATE_LIMIT`，随后两分钟内不再请求搜狗。`wechat.sogou.enabled: false` 关掉这一档（`sources.status` 里显示为 disabled）。
 - **读正文**：`read.fetch` 对 `mp.weixin.qq.com` 在 auto 模式下先走 HTTP（iPhone UA + `Referer: https://mp.weixin.qq.com/`），再按原顺序试 Jina、浏览器渲染；正文取 `#js_content`，标题 `#activity-name`，公众号 `#js_name`，发布时间 `var ct`，结果文本开头带一行“公众号 · 发布时间”。无签名的裸链接多半被 302 到验证页（`pageClass: captcha`），也可能是空壳页（`shell`）；“已被发布者删除 / 违规无法查看 / 已迁移”是 `error`，文本里写明原因。`weixin.sogou.com/link?url=` 链接读之前先还原，结果的 `url` 是还原后的签名链接。签名链接几分钟到几小时后失效。
-- **访问画像**：`sources.status` 在每个 wechat 后端下列出 `access`（是否要登录、风险、费用）。三个后端都是免登录、风险“中”（反爬、IP 被临时封锁、链接过期）。
-- **提醒（notices）**：`search.run` 与 `read.fetch` 的结果可带 `notices`（`level`: `info` / `warn` / `action`，英文 `code`，中文 `message`），文本输出里是单独一段“提醒用户 / Tell the user”，由模型转告用户。阶段 A 的 code：`wechat.antispider`（搜狗反爬）、`wechat.signed-url`（签名链接会过期）、`wechat.bare-url`（读的是无签名裸链接）、`wechat.copyright`（首次返回公众号正文：版权归作者）。同一插件实例里每个 code 默认只提醒一次（`warn` 的文字变了会再提醒）；设置 `wechat.notices: always` 每次都提醒，`off` 不提醒。
-- **设置**（可选对象 `wechat`；设置面板里的分组在后续阶段加入）：`wechat: { notices: once, sogou: { enabled: true, resolveLinks: 3, minIntervalMs: 1500 } }`。
+
+### 搜索：元宝搜索（付费，单独设置）
+
+腾讯云“元宝搜索”（WSA `SearchPro`）限定 `Site=mp.weixin.qq.com`，只作为 `wechat` 平台的一档后端，**不注册成通用 web 源**（否则“已配置 Key 的来源会被提升”的规则会让每次中文搜索都花钱）。走官方“服务 API KEY”通道：`POST https://api.wsa.cloud.tencent.com/SearchPro`，`Authorization: Bearer <Key>`，不需要 TC3 签名。
+
+1. 在腾讯云控制台“元宝搜索 → 概览 → 服务 API KEY 方式”创建 Key（每账号最多 3 个，只显示一次；子账号要先在 CAM 里授权元宝搜索）。
+2. 把 Key 交给插件：设置面板“微信 / 公众号 → 元宝搜索”的写入式密钥框（存进 DSH 凭据，页面不回显），或环境变量 `TENCENT_WSA_API_KEY`（引用名可用 `wechat.wsa.apiKeyEnv` 改），或 `wechat.wsa.apiKey` 字面量（不推荐）。
+3. 打开 `wechat.wsa.enabled`。**Key 本身不会打开它**——这是花钱的开关。
+
+字段：`wechat.wsa.edition`（`lite` \| `standard`（默认）\| `flagship`；`lite` 不发 `Mode` / `Cnt`）、`mode`（`0` 全网 \| `1` 垂类 \| `2` 混合，默认 2）、`dailyLimit`（默认 100 次 / 自然日）、`baseUrl`（默认官方地址）。请求带 `Query`、`Site`、`Cnt`（把要的条数向上取到 10 / 20 / 30 / 40 / 50 再截取）、`Mode`，以及由硬 `time_window` 约束编译成的 `Freshness`（30 天内 `d<N>`，更久用日期区间）。
+
+- **链位**：开启后排在 wechat 默认链最前；没开启时它**不在链里**，不会在每次搜索的 “skipped backends” 里出现噪音，`sources.status` 把它列在链末并说明“关闭，付费”。你自己写了 `platformBackends.wechat` 时按你写的顺序，只在你写了 `tencent-wsa` 的地方使用。
+- **计费与上限**：每个被服务回答的请求记入用量账本（`tencent-wsa`，失败的请求腾讯不计费也不记）；当天达到 `dailyLimit` 后不再请求，返回不可重试的错误和 `wechat.wsa-limit` 提醒，链继续往下走。`wechat.paid` 提醒附带今日已用次数。
+- **错误**：`ResourceNotFound`（未开通，开通后几分钟生效）、`UnauthorizedOperation` / `AuthFailure.*`（Key 不对、已删除或子账号没授权）→ 不可重试 + `wechat.wsa-setup`（需要你处理）；`ResourceUnavailable`（欠费）→ `ENGINE_QUOTA` + `wechat.wsa-setup`；`RequestLimitExceeded` → `ENGINE_RATE_LIMIT`；`Msg: hit black query` → 空结果并写明。Key 不会出现在任何错误、日志或提醒里。
+- **验证状态**：docs-only。没有 Key，按官方文档和 SDK 实现，从未对真实服务发过请求；响应里页面的 `date` 格式、`pics` 与 `images` 的键名、错误是否在 `Response.Error` 里文档没写全，解析时都按“都容忍”处理。
+
+### 合集列表（免登录）
+
+`wechat.album` 读公众号“合集”页的 JSON 接口 `mp.weixin.qq.com/mp/appmsgalbum?…&f=json`，**匿名可用**（2026-11-01 实测 `ret:0`）。参数：合集页 URL（含 `__biz` 与 `album_id`），或 `biz` + `albumId`；`count`（1–20，默认 10）；`cursor`（上一页返回的 `nextCursor`，不透明）。返回合集标题、公众号名、总篇数（仅第一页）、每篇的标题 / 链接（https）/ 发布时间 / `msgid` / `itemidx`；最新的在前。只有一篇时 `article_list` 是对象而不是数组，已处理；`base_resp.ret` 非 0 报错。请求之间进程内至少隔 1 秒。链接是普通 `mp.weixin.qq.com` 链接，`read.fetch` 读它们可能遇到验证页。
+
+### 整号历史（可选，你自己的服务）
+
+`wechat.accounts`（按名字搜公众号拿 `fakeid`）、`wechat.articles`（按 `fakeid` 列文章）对接你自己部署的 [tmwgsicp/wechat-download-api](https://github.com/tmwgsicp/wechat-download-api)（AGPL-3.0：**只作为独立服务通过 REST 调用，插件不含它的代码**）。
+
+1. 自己部署并运行它，在它的管理页（`/login.html`）用公众号管理员的微信扫码登录；登录约 4 天过期，要重新扫码。
+2. 在设置里填 `wechat.history.baseUrl`（常见是 `http://127.0.0.1:5000`；留空 = 这两个动作关闭）和 `wechat.history.minIntervalMs`（对它的请求最小间隔，默认 2000）。
+3. 该服务的 REST 接口**没有鉴权**（只有 `/mcp` 有 token），服务端 CORS 是 `*`——不要把端口暴露到公网。
+
+插件只对**你配置的这个 origin** 放开回环 / 内网地址（`safe-http` 的 `allowOrigin`，其它私网地址、别的端口、重定向目标一律照旧拒绝）；对它的重定向直接拒绝；两次请求之间至少隔 `minIntervalMs`（服务自己不对这几个接口限速）。服务没启动时错误会写明地址并说明要你自己启动它。
+
+- `wechat.articles` 的 `begin` / `count` 是微信的“群发批次”，一个批次可含多篇文章，所以一页可能多于 `count` 篇；返回的 `nextBegin = begin + count`（页非空时给出），按它翻页，不要按文章数。`count` 最多 100，`keyword` 在号内按标题筛。正文用 `read.fetch` 读。
+- **提醒**：首次用整号历史带 `wechat.account-risk`（警告：走你自己公众号后台，高频会被限流甚至封号）；服务返回未登录 / 登录失效（“微信登录已过期…”“服务器未登录…”）→ `wechat.login-expired`（需要你处理：到服务管理页重新扫码）；`ret=200013` 或“频繁 / freq” → `wechat.rate-limited`（暂停；账号级限流可能持续数天，重新扫码也不会解除）；`wechat.articles` 的“服务器内部错误”通常是**没登录**（服务把自己的 401 吞成了这句话），错误信息会这样提示并建议 `wechat.status probe=true`。`wechat.status probe=true` 调它的 `/api/health` 和 `/api/admin/status`（`isExpired` 只是服务端的本地时钟判断，不代表微信那边一定还有效）。
+- **验证状态**：contract-only——按该项目源码（`routes/search.py`、`routes/articles.py`、`routes/admin.py`）读出契约，从未运行；测试用本地 stub 服务。
+
+### 提醒（notices）
+
+`search.run`、`read.fetch` 和 `wechat.*` 的结果（以及失败）可带 `notices`（`level`: `info` / `warn` / `action`，英文 `code`，中文 `message`），文本输出里是单独一段“提醒用户 / Tell the user”，由模型转告用户。同一插件实例里每个 code 默认只提醒一次（`warn` / `action` 的文字变了会再提醒；整号历史成功一次后，登录失效 / 限流的提醒会重新武装）；设置 `wechat.notices: always` 每次都提醒，`off` 不提醒。
+
+| code | level | 触发 |
+|---|---|---|
+| `wechat.antispider` | warn | 搜狗反爬；建议降频、换出口 IP，或改用元宝搜索 |
+| `wechat.signed-url` | info | 结果是带签名的 mp 链接，会过期 |
+| `wechat.bare-url` | info | 读的是无签名裸链接 / 空壳页 |
+| `wechat.paid` | info | 本次用了元宝搜索：计费，附今日已用次数 |
+| `wechat.wsa-setup` | action | 元宝搜索未开通 / Key 不对 / 没授权 / 欠费 |
+| `wechat.wsa-limit` | warn | 元宝搜索今天达到 `dailyLimit`，已不再请求 |
+| `wechat.login-expired` | action | 整号历史服务未登录或登录失效，需要你重新扫码 |
+| `wechat.account-risk` | warn | 首次用整号历史：走你自己的公众号后台，有限流 / 封号风险 |
+| `wechat.rate-limited` | warn | 微信对你的公众号后台限流（`ret=200013`） |
+| `wechat.copyright` | info | 首次返回公众号正文：版权归作者 |
+
+### 设置
+
+设置面板“微信 / 公众号”分组，或配置里的 `wechat` 对象（字段表见[配置参考](./config.md#全部顶层配置键)）：
+
+```yaml
+wechat:
+  notices: once              # once | always | off
+  sogou: { enabled: true, resolveLinks: 3, minIntervalMs: 1500 }
+  wsa: { enabled: false, apiKeyEnv: TENCENT_WSA_API_KEY, edition: standard, mode: 2, dailyLimit: 100 }
+  history: { baseUrl: "http://127.0.0.1:5000", minIntervalMs: 2000 }
+```
+
+这些设置都是热更新的（不需要重启插件）。`wechat.*` 的编辑是你自己的事（设置面板或配置文件）：agent 的覆盖层 `config.*` 不能改它们。
 
 ## 付费 / 需 Key 的来源（预留接口）
 
