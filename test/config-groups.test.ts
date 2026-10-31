@@ -14,7 +14,7 @@ test('the schema lists its fields group by group, in the order of config-groups.
 })
 
 test('every config field belongs to exactly one group, and the groups follow the settings page', () => {
-  assert.deepEqual([...CONFIG_GROUP_IDS], ['common', 'order', 'sources', 'cli', 'evidence', 'runtime', 'advanced'])
+  assert.deepEqual([...CONFIG_GROUP_IDS], ['common', 'order', 'sources', 'wechat', 'cli', 'evidence', 'runtime', 'advanced'])
   const seen = new Map<string, string>()
   for (const id of CONFIG_GROUP_IDS) {
     assert.ok(CONFIG_GROUPS[id].length > 0, id + ' is not empty')
@@ -29,6 +29,8 @@ test('every config field belongs to exactly one group, and the groups follow the
   assert.equal(groupOf('evidence.judge.mode'), 'evidence')
   assert.equal(groupOf('keyedSources.tavily.baseUrl'), 'sources')
   assert.equal(groupOf('dbPath'), 'advanced')
+  assert.equal(groupOf('wechat.wsa.enabled'), 'wechat')
+  assert.equal(CONFIG_GROUP_TITLES.zh.wechat, '微信 / 公众号')
   assert.equal(groupOf('nope'), undefined)
   for (const lang of ['en', 'zh'] as const) for (const id of CONFIG_GROUP_IDS) assert.ok(CONFIG_GROUP_TITLES[lang][id], lang + ' title of ' + id)
 })

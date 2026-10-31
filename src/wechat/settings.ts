@@ -1,37 +1,90 @@
 /**
- * The settings of the WeChat integration, in one place. Phase A needs only a few: the notice mode and the built-in Sogou leg
- * (enabled, how many results get their signed link resolved, the pause between Sogou requests). They are read from an OPTIONAL
- * `wechat` object of the configuration that the schema does not declare yet: unknown keys survive `resolveConfig`, so a profile
- * can already set them, and every missing or malformed value is its default.
- *
- * TODO(phase B): declare the top-level `wechat` group in config.ts / config-groups.ts (settings card, text view, dictionaries),
- * add `wsa` and `history`, and replace {@link wechatSettings}'s cast by the resolved field. Nothing else in the integration
- * reads the raw config.
+ * The settings of the WeChat integration, in one place: the `wechat` group of the configuration (docs/dev/wechat-design.md section 5).
+ * `notices` is the reminder mode, `sogou` the built-in Sogou leg, `wsa` the paid 元宝搜索 (Tencent WSA) leg, `history` the user's own
+ * wechat-download-api service. {@link wechatSettings} reads the group from a (resolved or raw) configuration and turns every
+ * missing or malformed value into its default, so nothing else reads the raw config. Pure: the client bundle includes this file.
  * @module web-search-pro/wechat/settings
  */
 
 import { noticeModeOf, type NoticeMode } from './notices.ts'
 
+export const WSA_EDITIONS = ['lite', 'standard', 'flagship'] as const
+export type WsaEdition = typeof WSA_EDITIONS[number]
+export const WSA_MODES = [0, 1, 2] as const
+export type WsaMode = typeof WSA_MODES[number]
+
 export interface WechatSettings {
   notices: NoticeMode
   sogou: { enabled: boolean; resolveLinks: number; minIntervalMs: number }
+  wsa: {
+    enabled: boolean
+    /** The key itself (a literal in the configuration); usually absent: the credentials ref / environment variable named by `apiKeyEnv` holds it. */
+    apiKey?: string
+    apiKeyEnv: string
+    /** Endpoint override; the default is {@link WSA_DEFAULT_BASE_URL}. */
+    baseUrl?: string
+    edition: WsaEdition
+    mode: WsaMode
+    /** Requests per calendar day the plugin allows itself; more are refused (the money guard). */
+    dailyLimit: number
+  }
+  history: {
+    /** The user's wechat-download-api service (`http://127.0.0.1:5000`); empty = the history actions are off. */
+    baseUrl: string
+    minIntervalMs: number
+  }
 }
 
-export const WECHAT_DEFAULTS: WechatSettings = { notices: 'once', sogou: { enabled: true, resolveLinks: 3, minIntervalMs: 1500 } }
+export const WSA_DEFAULT_BASE_URL = 'https://api.wsa.cloud.tencent.com'
+export const WSA_DEFAULT_KEY_ENV = 'TENCENT_WSA_API_KEY'
+
+export const WECHAT_DEFAULTS: WechatSettings = {
+  notices: 'once',
+  sogou: { enabled: true, resolveLinks: 3, minIntervalMs: 1500 },
+  wsa: { enabled: false, apiKeyEnv: WSA_DEFAULT_KEY_ENV, edition: 'standard', mode: 2, dailyLimit: 100 },
+  history: { baseUrl: '', minIntervalMs: 2000 },
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const intIn = (value: unknown, min: number, max: number, fallback: number): number => (typeof value === 'number' && Number.isFinite(value) ? Math.min(Math.max(Math.trunc(value), min), max) : fallback)
+const str = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
 
-/** The WeChat settings of a (resolved) configuration. */
+/** Unwrap schemastery `Volatile` leaves (`{ get() }`) anywhere below `value`. */
+function plain(value: unknown): unknown {
+  if (value !== null && typeof value === 'object' && 'get' in value && typeof (value as { get: unknown }).get === 'function') return plain((value as { get(): unknown }).get())
+  if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, plain(entry)]))
+  return value
+}
+
+/** The WeChat settings of a (resolved or raw) configuration. */
 export function wechatSettings(config: unknown): WechatSettings {
-  const raw = isRecord(config) && isRecord(config.wechat) ? config.wechat : {}
-  const sogou = isRecord(raw.sogou) ? raw.sogou : {}
+  const raw = plain(isRecord(config) ? config.wechat : undefined)
+  const group = isRecord(raw) ? raw : {}
+  const sogou = isRecord(group.sogou) ? group.sogou : {}
+  const wsa = isRecord(group.wsa) ? group.wsa : {}
+  const history = isRecord(group.history) ? group.history : {}
+  const edition = WSA_EDITIONS.find(e => e === wsa.edition) ?? WECHAT_DEFAULTS.wsa.edition
+  const mode = WSA_MODES.find(m => m === wsa.mode) ?? WECHAT_DEFAULTS.wsa.mode
+  const apiKey = str(wsa.apiKey)
+  const baseUrl = str(wsa.baseUrl)
   return {
-    notices: noticeModeOf(raw.notices),
+    notices: noticeModeOf(group.notices),
     sogou: {
       enabled: sogou.enabled !== false,
       resolveLinks: intIn(sogou.resolveLinks, 0, 10, WECHAT_DEFAULTS.sogou.resolveLinks),
       minIntervalMs: intIn(sogou.minIntervalMs, 0, 60_000, WECHAT_DEFAULTS.sogou.minIntervalMs),
+    },
+    wsa: {
+      enabled: wsa.enabled === true,
+      ...apiKey ? { apiKey } : {},
+      apiKeyEnv: str(wsa.apiKeyEnv) ?? WSA_DEFAULT_KEY_ENV,
+      ...baseUrl ? { baseUrl } : {},
+      edition, mode,
+      dailyLimit: intIn(wsa.dailyLimit, 1, 1_000_000, WECHAT_DEFAULTS.wsa.dailyLimit),
+    },
+    history: {
+      baseUrl: str(history.baseUrl) ?? '',
+      minIntervalMs: intIn(history.minIntervalMs, 0, 600_000, WECHAT_DEFAULTS.history.minIntervalMs),
     },
   }
 }

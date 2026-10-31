@@ -5,7 +5,7 @@ import { configuredDecider } from '../src/pipeline/judge-status.ts'
 import { BUILTIN_RUBRIC_IDS } from '../src/pipeline/rubrics-spec.ts'
 import { resolveAllRubrics } from '../src/pipeline/rubrics.ts'
 import { resolveProviders } from '../src/pipeline/judges/providers.ts'
-import { BUDGET_SPECS, BUDGETED_SOURCES, confidenceSpec, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
+import { BUDGET_SPECS, BUDGETED_SOURCES, confidenceSpec, DEFAULTS, FIELD_SPECS, KEYED_SOURCES, KEYED_SPECS, PATH_SPECS, WECHAT_SPECS, rubricField, type SettingField } from '../src/client/form-specs.ts'
 import { isPathSpec } from '../src/client/form-specs.ts'
 import { ALL_SPECS } from '../src/client/form.ts'
 import { BASE, harness, isVolatilePath, type SchemaNode as VolatileNode } from './settings-harness.ts'
@@ -23,7 +23,7 @@ test('every leaf of the Config schema is a control, a derived control, or a secr
   const found: { path: string; node: SchemaNode }[] = []
   leaves(Config as unknown as SchemaNode, '', found)
   const top = new Set(FIELD_SPECS.map(spec => spec.field as string))
-  const path = new Set(PATH_SPECS.map(spec => spec.field as string))
+  const path = new Set([...PATH_SPECS, ...WECHAT_SPECS].map(spec => spec.field as string))
   const missing: string[] = []
   for (const { path: leaf, node } of found) {
     if (node.meta?.role === 'secret') continue // credentials go through the credentials remote, never through settings
@@ -68,6 +68,7 @@ test('the defaults the card shows are the defaults of the schema', () => {
   assert.equal(resolved.evidence.jevMode, DEFAULTS.evidence.jevMode)
   assert.equal(resolved.provider.evidence, DEFAULTS.provider.evidence)
   assert.equal(resolved.provider.deadlineMs, DEFAULTS.provider.deadlineMs)
+  assert.deepEqual(resolved.wechat, DEFAULTS.wechat)
   assert.equal(resolved.toolSurface, DEFAULTS.toolSurface)
   assert.equal(resolved.bochaApiKeyEnv, DEFAULTS.bochaApiKeyEnv)
   assert.equal(resolved.bochaBaseUrl, DEFAULTS.bochaBaseUrl)

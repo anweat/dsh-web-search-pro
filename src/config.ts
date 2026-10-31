@@ -11,6 +11,7 @@ import type { JudgeSettings } from './pipeline/judges/providers.ts'
 import type { BudgetInput } from './pipeline/ledger.ts'
 import type { RubricOverride } from './pipeline/rubrics.ts'
 import type { SourceBudgetInput } from './pipeline/sources-spec.ts'
+import { wechatSettings, type WechatSettings, type WsaEdition, type WsaMode } from './wechat/settings.ts'
 import { PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES, type SourcePolicy, type ToolSurface } from './config-enums.ts'
 
 export { JUDGE_MODES, PROVIDER_EVIDENCE_MODES, SOURCE_POLICIES, TOOL_SURFACES } from './config-enums.ts'
@@ -197,6 +198,18 @@ export interface Config {
   searxngUrl?: string
   /** Contact address put in the User-Agent of OpenAlex requests (etiquette; optional). */
   openalexMailto?: string
+  // ── WeChat official accounts ──
+  /**
+   * WeChat official accounts (docs/dev/wechat-design.md): the reminder mode (`notices`), the built-in Sogou leg (`sogou`), the paid
+   * 元宝搜索 leg (`wsa`: off by default, key by literal / credentials ref / `$TENCENT_WSA_API_KEY`) and the user's own
+   * wechat-download-api service (`history.baseUrl`). Every value is optional; `wechat.*` defaults live in src/wechat/settings.ts.
+   */
+  wechat?: {
+    notices?: 'once' | 'always' | 'off'
+    sogou?: { enabled?: boolean; resolveLinks?: number; minIntervalMs?: number }
+    wsa?: { enabled?: boolean; apiKey?: string; apiKeyEnv?: string; baseUrl?: string; edition?: WsaEdition; mode?: WsaMode; dailyLimit?: number }
+    history?: { baseUrl?: string; minIntervalMs?: number }
+  }
   // ── Custom CLI: your own read-only command-line sources ──
   /** User-defined CLI adapter specs by id (validated like the built-in ones; invalid entries are ignored with a diagnostic in sources.status). */
   cliAdapters?: Record<string, Record<string, unknown>>
@@ -321,6 +334,28 @@ export const Config = z.object({
   githubTokenEnv: z.string().default('GITHUB_TOKEN').volatile(),
   searxngUrl: z.string().volatile(),
   openalexMailto: z.string().volatile(),
+  // ── WeChat official accounts: reminders, Sogou leg, 元宝搜索 (paid), the user's own history service ──
+  wechat: z.object({
+    notices: z.union(['once', 'always', 'off']).default('once').volatile(),
+    sogou: z.object({
+      enabled: z.boolean().default(true).volatile(),
+      resolveLinks: z.number().default(3).volatile(),
+      minIntervalMs: z.number().default(1500).volatile(),
+    }),
+    wsa: z.object({
+      enabled: z.boolean().default(false).volatile(),
+      apiKey: z.string().role('secret').volatile(),
+      apiKeyEnv: z.string().default('TENCENT_WSA_API_KEY').volatile(),
+      baseUrl: z.string().volatile(),
+      edition: z.union(['lite', 'standard', 'flagship']).default('standard').volatile(),
+      mode: z.union([0, 1, 2]).default(2).volatile(),
+      dailyLimit: z.number().default(100).volatile(),
+    }),
+    history: z.object({
+      baseUrl: z.string().volatile(),
+      minIntervalMs: z.number().default(2000).volatile(),
+    }),
+  }),
   // ── Custom CLI: your own read-only command-line sources ──
   cliAdapters: z.dict(z.dict(z.any())).volatile(),
   // ── Reading and evidence: page sizes, evidence pipeline, scoring model ──
@@ -444,6 +479,7 @@ export interface ResolvedConfig extends Config {
   searxngUrl?: string
   openalexMailto?: string
   keyedSources?: Config['keyedSources']
+  wechat: WechatSettings
   playwright: Required<Pick<Config['playwright'], 'enabled' | 'snapshotDir'>>
   sources: Required<SourcesConfig>
   evidence: EvidenceConfig
@@ -529,6 +565,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     customPlatforms: config.customPlatforms !== undefined ? v(config.customPlatforms) : undefined,
     browserBindings: config.browserBindings !== undefined ? v(config.browserBindings) : undefined,
     platformBackends: config.platformBackends !== undefined ? v(config.platformBackends) : undefined,
+    wechat: wechatSettings(config),
     cliAdapters: config.cliAdapters !== undefined ? v(config.cliAdapters) : undefined,
     playwright: {
       enabled: vOr(pw.enabled, true) as boolean,
