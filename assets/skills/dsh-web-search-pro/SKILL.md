@@ -21,13 +21,13 @@ Pass `task` (one sentence: your goal, not the chat) or `profile` for an evidence
 {"action":"search.run","args":{"query":"量子计算 最新进展 2026","task":"了解 2026 年量子计算的最新进展","profile":"news_fact","needs":"最新的纠错进展;主要厂商的路线图","constraints":"[{\"kind\":\"time_window\",\"value\":\"2026\",\"strength\":\"soft\"}]"}}
 ```
 
-`needs` are `;`-separated sub-questions (default: the task). The query may be English with a Chinese task.
+`needs` are `;`-separated sub-questions (default: the task).
 
 ## 2. Read the pack before answering
 
 - Cite the evidence URLs. Every excerpt has an `evidenceId`.
 - **Coverage is heuristic.** A need listed in `gaps`, or an empty pack, does not mean the answer does not exist. Before saying "not found": expand or fetch, then try another source or phrasing (`gaps[].reason`: `no_candidates`, `no_page_content`, `weak_support`, `budget`).
-- `low relevance` entries only avoid an empty pack; do not rely on them.
+- `low relevance` entries only avoid an empty pack.
 
 ```json call
 {"action":"history.expand","args":{"evidenceId":"e_1a2b3c"}}
@@ -39,13 +39,13 @@ Pass `task` (one sentence: your goal, not the chat) or `profile` for an evidence
 {"action":"read.fetch","args":{"url":"https://nodejs.org/api/sqlite.html"}}
 ```
 
-A long page is capped; the reply gives `nextOffset`. Continue with `offset` (served from the stored snapshot, no re-download):
+A long page is capped; the reply gives `nextOffset`. Continue with `offset` (from the stored snapshot):
 
 ```json call
 {"action":"read.fetch","args":{"url":"https://nodejs.org/api/sqlite.html","offset":20000}}
 ```
 
-`shellPage` / `pageClass` (js_shell, login_wall, captcha) mean the text is not the content: follow the links the reply lists, or hand off to the browser (section 6). `read.contents` fetches up to 100 URLs through Exa (needs its key); `read.snapshot` renders a page in the browser.
+`shellPage` / `pageClass` (js_shell, login_wall, captcha) mean the text is not the content: follow the links the reply lists, or hand off to the browser (section 6). A "提醒用户 / Tell the user" block (`notices`: rate limit, expiring link, copyright) is for the user: relay it, an `action` one plainly (`references/sources.md`). `read.contents` fetches up to 100 URLs through Exa (needs its key); `read.snapshot` renders a page in the browser.
 
 ## 3. Choose sources: 1 or 2, never all
 
@@ -53,7 +53,7 @@ A long page is capped; the reply gives `nextOffset`. Continue with `offset` (ser
 {"action":"search.recommend","args":{"task":"find the official documentation for Rust async runtimes","profile":"docs_code"}}
 ```
 
-returns at most 3 sources, ready ones first, with how to call each (`use`) and what is missing. Use one or two; add another only when the evidence is insufficient. Needs setup: tell the user what is missing (`references/sources.md`), do not call it.
+returns at most 3 sources, ready ones first, with how to call each (`use`) and what is missing. Use one or two; add another only when the evidence is insufficient. Needs setup: tell the user what is missing, do not call it.
 
 Name sources only when you have a reason:
 
@@ -77,7 +77,7 @@ Name sources only when you have a reason:
 
 - `budget` (evidence mode): excerpt characters, default 6000, max 30000. Gaps caused by budget say so: raise it or expand.
 - `count`: max results (1-20). A page read is capped at 20000 characters; `maxChars` raises it.
-- Model scoring (when enabled) has token caps; `sources.status` shows usage (`references/judges.md`).
+- Model scoring (when enabled) has token caps (`references/judges.md`).
 - `cache.clear`, `history.delete`, `rules.upsert|remove|import`, `sources.install` and `config.*` change local state or the machine: run them only when the user asks.
 - The user asks you to reorder sources, switch one off or add a CLI as a source: `config.inspect` first, then `config.set_order` / `set_confidence` / `upsert_cli` (asks the user) with a real `reason`: `references/config.md`.
 

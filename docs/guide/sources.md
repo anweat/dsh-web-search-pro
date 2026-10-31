@@ -66,6 +66,16 @@ Exa 优先使用原生 API 客户端：`search.run` 可传 `exaType`、域名包
 
 **来源目录**：`catalog/sources.v1.json`（随包发布，纯数据，不执行任何东西）列出已知来源——API、CLI（bili、yt-dlp、twitter、OpenCLI 各站命令及“没有 search 命令”的反例、wx-search-cli、OmniReach）、MCP 与需要 Browser 的平台——每条带认证、安装 / 配置说明、许可证、成本、`sourceFamily`、核验状态与反例。`search.recommend`（可带 `task` / `profile` / `query` / `language` / `platform`）按任务至多给出 3 个来源：已就绪的在前，其次是缺什么、怎么装；目录里没有适配器的条目永远不可执行。常驻提示只加了一句“不要遍历全部来源”。设置：`searxngUrl`、`openalexMailto`（settings.yaml；设置面板“来源”分组里也有这两个字段）。
 
+## 微信公众号（`platform=wechat`）
+
+公众号没有公开搜索 API。`wechat` 平台是一条后端链 `omnireach` → `wx-search-cli` → `sogou`：前两个是本机 CLI（都经搜狗），最后的 **`sogou` 是插件自带的直连后端**——不要 CLI、不要 Key、不要登录，所以没装任何 CLI 时 `wechat` 也是 ready。
+
+- **搜狗直连**：请求 `weixin.sogou.com/weixin?type=2`，解析标题、摘要、公众号名和发布时间；搜狗结果里的 `/link?url=…` 要先拿到搜狗在搜索响应里下发的 `SNUID` Cookie 才能还原成带签名的 `mp.weixin.qq.com/s?…signature=…` 直链（只存在本次请求的内存里，从不落盘；首页只给 SUID / ABTEST，不够）。默认还原前 3 条（`wechat.sogou.resolveLinks`），其余保留搜狗链接，`read.fetch` 读到时再还原。所有搜狗请求进程内串行并间隔 ≥ 1500 ms（`wechat.sogou.minIntervalMs`）；搜狗弹出验证码（antispider）时该后端对应 `ENGINE_RATE_LIMIT`，随后两分钟内不再请求搜狗。
+- **读正文**：`read.fetch` 对 `mp.weixin.qq.com` 在 auto 模式下先走 HTTP（iPhone UA + `Referer: https://mp.weixin.qq.com/`），再按原顺序试 Jina、浏览器渲染；正文取 `#js_content`，标题 `#activity-name`，公众号 `#js_name`，发布时间 `var ct`，结果文本开头带一行“公众号 · 发布时间”。无签名的裸链接多半被 302 到验证页（`pageClass: captcha`），也可能是空壳页（`shell`）；“已被发布者删除 / 违规无法查看 / 已迁移”是 `error`，文本里写明原因。`weixin.sogou.com/link?url=` 链接读之前先还原，结果的 `url` 是还原后的签名链接。签名链接几分钟到几小时后失效。
+- **访问画像**：`sources.status` 在每个 wechat 后端下列出 `access`（是否要登录、风险、费用）。三个后端都是免登录、风险“中”（反爬、IP 被临时封锁、链接过期）。
+- **提醒（notices）**：`search.run` 与 `read.fetch` 的结果可带 `notices`（`level`: `info` / `warn` / `action`，英文 `code`，中文 `message`），文本输出里是单独一段“提醒用户 / Tell the user”，由模型转告用户。阶段 A 的 code：`wechat.antispider`（搜狗反爬）、`wechat.signed-url`（签名链接会过期）、`wechat.bare-url`（读的是无签名裸链接）、`wechat.copyright`（首次返回公众号正文：版权归作者）。同一插件实例里每个 code 默认只提醒一次（`warn` 的文字变了会再提醒）；设置 `wechat.notices: always` 每次都提醒，`off` 不提醒。
+- **设置**（可选对象 `wechat`；设置面板里的分组在后续阶段加入）：`wechat: { notices: once, sogou: { enabled: true, resolveLinks: 3, minIntervalMs: 1500 } }`。
+
 ## 付费 / 需 Key 的来源（预留接口）
 
 七个需要 Key 的搜索 API 已有“描述符 + 适配器”，**配置 Key 之前不会执行**：没有 Key 时 `sources.status` 显示 `credential: missing`，`search.recommend` 把它们列为“缺什么 + 怎么配置”的建议（永远 `executable: false`）；配置后进入可执行候选。**全部未对真实服务调用过**（没有 Key），描述符标 `verification.live=false`、`sources.status` 显示 `[not verified live]`，响应样例（`test/fixtures/*-search.json`）都在文件头声明“由文档构造，非真实抓取”。Key 解析顺序：settings 的 `keyedSources.<id>.apiKey` → 凭据引用 → 环境变量；变量名可用 `keyedSources.<id>.apiKeyEnv` 改，`baseUrl` 可改端点。
