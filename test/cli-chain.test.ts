@@ -264,6 +264,7 @@ test('sources.deps / sources.status / search.recommend agree with the chains: in
         assert.equal(wechat.readiness.available, true)
         assert.equal(wechat.chain[0].state, installed ? 'ready' : 'skipped')
         assert.deepEqual(wechat.chain.map((e: any) => [e.id, e.access?.login]), [['omnireach', 'none'], ['wx-search-cli', 'none'], ['sogou', 'none']])
+        assert.match(renderResult('sources.status', status), /3\. sogou \[ready\] live\n {7}access: 免登录 · 风险中: 搜狗对高频请求会弹出验证码/, 'sources.status lists the access profile under each wechat leg')
         assert.match(renderResult('sources.status', status), installed ? /1\. omnireach \[ready 0\.19\.0\] live/ : /1\. omnireach \[skipped\] live — omnireach: omnireach not found on PATH/)
         const deps = await callAction(defs, 'sources.deps')
         assert.deepEqual(checkOutput(findAction('sources.deps')!.output, deps), [])
