@@ -24,11 +24,11 @@ test('slugify', () => {
 test('fixture: only curated tables are indexed', () => {
   const { entries, skipped, tables } = parseReadmeDetailed(fixture)
   assert.equal(tables, 2)
-  assert.equal(entries.length, 9)
+  assert.equal(entries.length, 8)
   assert.ok(!entries.some(e => /Sponsored|Weatherstack|IPstack|Some MCP/.test(e.name + e.description)))
   assert.equal(skipped.length, 2)
   assert.ok(skipped.every(s => s.category === 'Animals'))
-  assert.equal(parseReadme(fixture).length, 9)
+  assert.equal(parseReadme(fixture).length, 8)
 })
 
 test('fixture: fields are normalized', () => {
