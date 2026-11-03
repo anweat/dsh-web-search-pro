@@ -12,3 +12,5 @@ export { createSearcher, parseQuery, DEFAULT_LIMIT, MAX_LIMIT } from './search.t
 export { CATEGORY_ZH } from './zh.ts'
 export { startServer } from './server.ts'
 export type { RunningServer, ServeOptions } from './server.ts'
+export { pidAlive, readServerInfo, serverFilePath } from './discovery.ts'
+export type { ServerInfo } from './discovery.ts'

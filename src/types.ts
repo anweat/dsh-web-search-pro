@@ -63,6 +63,8 @@ export interface SearchItem {
   score: number
   title: string
   snippet: string
+  /** One-line hint for an agent: how (and whether) to call this API. */
+  how_to_call: string
 }
 
 export interface SearchResponse {
@@ -84,6 +86,8 @@ export interface CategoryInfo {
 export interface Searcher {
   search(query: string, opts?: SearchOptions): SearchResponse
   categories(): CategoryInfo[]
+  /** One entry by id, or null. */
+  get(id: string): SearchItem | null
 }
 
 /** Thrown for bad user input (unknown filter value etc.): CLI exit 2, HTTP 400. */

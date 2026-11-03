@@ -66,6 +66,11 @@ function authKind(auth: string): 'none' | 'apikey' | 'oauth' | 'other' {
   return a === 'none' ? 'none' : a === 'apikey' ? 'apikey' : a === 'oauth' ? 'oauth' : 'other'
 }
 
+export function howToCall(e: Pick<ApiEntry, 'auth' | 'url'>): string {
+  if (e.auth === 'none') return `no key needed: read the docs at ${e.url} to find the endpoint, then curl it`
+  return `needs ${e.auth}: only use if the user supplies a key; never invent or hardcode keys`
+}
+
 function toItem(e: ApiEntry, score: number): SearchItem {
   return {
     id: e.id,
@@ -79,6 +84,7 @@ function toItem(e: ApiEntry, score: number): SearchItem {
     score: Math.round(score * 1000) / 1000,
     title: `${e.name} — ${e.category}`,
     snippet: `${e.description} · Auth: ${e.auth} · HTTPS: ${e.https ? 'yes' : 'no'} · CORS: ${e.cors}`,
+    how_to_call: howToCall(e),
   }
 }
 
@@ -185,5 +191,10 @@ export function createSearcher(snapshot: Snapshot): Searcher {
     return respond(matches)
   }
 
-  return { search, categories: () => categoryList.map(c => ({ ...c })) }
+  const get = (id: string): SearchItem | null => {
+    const e = byId.get(id)
+    return e ? toItem(e, 0) : null
+  }
+
+  return { search, get, categories: () => categoryList.map(c => ({ ...c })) }
 }

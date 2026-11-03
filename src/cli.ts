@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { categoriesDocument, errorDocument, formatSearchText, searchDocument, SCHEMA_VERSION, sourceInfo } from './output.ts'
 import { createSearcher, DEFAULT_LIMIT, MAX_LIMIT } from './search.ts'
+import { readServerInfo } from './discovery.ts'
 import { startServer } from './server.ts'
 import { cacheHome, loadSnapshot } from './snapshot.ts'
 import { SyncError, syncSnapshot } from './sync.ts'
 import { InputError } from './types.ts'
 
 class UsageError extends Error {}
+class NotRunningError extends Error {}
 
 const version = (): string => {
   try {
@@ -25,7 +27,8 @@ Usage:
   public-apis-index categories [--json]           list categories with counts
   public-apis-index info [--json]                 show which snapshot is loaded
   public-apis-index sync [options]                refresh the local snapshot (the only command that fetches)
-  public-apis-index serve [options]               run a local HTTP search server
+  public-apis-index serve [options]               run a local HTTP search server (for agents using curl)
+  public-apis-index url [--json]                  print the URL of the running serve process
   public-apis-index --version | --help
 
 Run "public-apis-index <command> --help" for command options.
@@ -63,7 +66,9 @@ Behind an HTTP proxy, Node 24 needs NODE_USE_ENV_PROXY=1 (with HTTPS_PROXY set).
 
 const SERVE_HELP = `Usage: public-apis-index serve [options]
 
-Endpoints: GET /search?q=&limit=&category=&auth=&https=&cors=   GET /categories   GET /health   POST /sync (--allow-sync only)
+Endpoints: GET / (agent guide)  GET /search?q=&limit=&category=&auth=&keyless=&https=&cors=&format=text|json&pretty=1
+           GET /api/<id>  GET /categories  GET /health  POST /sync (--allow-sync only)
+Writes server.json ({url,pid,startedAt}) into the cache dir; "public-apis-index url" reads it.
 
 Options:
   --port <n>         default 8787 (0 = pick a free port)
@@ -101,6 +106,7 @@ async function main(argv: string[]): Promise<void> {
     let exit = 1
     let message = error instanceof Error ? error.message : String(error)
     if (error instanceof UsageError) { code = 'usage'; exit = 2 }
+    else if (error instanceof NotRunningError) code = 'not_running'
     else if (error instanceof InputError) { code = error.code; exit = 2 }
     else if (error instanceof SyncError) { code = error.code; exit = error.code === 'bad_argument' ? 2 : 1 }
     process.exitCode = exit
@@ -210,12 +216,21 @@ async function dispatch(argv: string[], json: boolean): Promise<void> {
       }
       const running = await startServer({
         port, ...(values.host ? { host: values.host } : {}), ...(refreshHours ? { refreshHours } : {}),
-        allowSync: values['allow-sync'] === true,
+        allowSync: values['allow-sync'] === true, serverFile: true,
       })
       out(`public-apis-index listening on ${running.url}\n`)
       const stop = () => { void running.close().then(() => process.exit(0)) }
       process.on('SIGINT', stop)
       process.on('SIGTERM', stop)
+      return
+    }
+    case 'url': {
+      if (wantsHelp) return out('Usage: public-apis-index url [--json]\n\nPrint the base URL of the running "serve" process (from server.json in the cache dir). Exit 1 if none is running.\n')
+      parse(rest, { json: { type: 'boolean' } })
+      const info = readServerInfo()
+      if (!info) throw new NotRunningError('no running public-apis-index server found (start one with: public-apis-index serve --port 8787)')
+      if (json) printJson({ ok: true, schema_version: SCHEMA_VERSION, ...info })
+      else out(info.url + '\n')
       return
     }
     default:
