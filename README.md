@@ -37,6 +37,7 @@ public-apis-index search 天气 --auth none --https --json
 public-apis-index search "免费 weather api"
 public-apis-index search --category 动物              # 不带关键词 = 列出该分类（按名称排序）
 public-apis-index categories                          # 分类、slug、中文别名、数量
+public-apis-index url                                 # 正在运行的 serve 的地址（读 server.json）
 public-apis-index info                                # 当前加载的是缓存还是自带快照，来自哪个 commit
 public-apis-index --version
 ```
@@ -80,7 +81,8 @@ public-apis-index --version
       "cors": "yes",             // yes | no | unknown
       "score": 43.403,
       "title": "US Weather — Weather",                                        // "<name> — <category>"
-      "snippet": "US National Weather Service · Auth: none · HTTPS: yes · CORS: yes"
+      "snippet": "US National Weather Service · Auth: none · HTTPS: yes · CORS: yes",
+      "how_to_call": "no key needed: read the docs at https://www.weather.gov/documentation/services-web-api to find the endpoint, then curl it"
     }
   ],
   "source": { "sha": "2676ca49…", "fetchedAt": "2026-11-03T03:06:30.881Z" }
@@ -148,12 +150,50 @@ public-apis-index serve --port 9000 --refresh 24 # 每 24 小时后台同步一�
 public-apis-index serve --allow-sync             # 额外开放 POST /sync
 ```
 
-- `GET /search?q=&limit=&category=&auth=&https=&cors=`：与 CLI `--json` 完全相同的文档。
+- `GET /search?q=&limit=&category=&auth=&keyless=1&https=&cors=&format=text|json&pretty=1`：JSON 与 CLI `--json` 同结构（HTTP 上默认单行紧凑，`pretty=1` 缩进；`keyless=1` 等于 `auth=none`）；`format=text` 每条一行，见下节。
+- `GET /api/<id>`：单条（`format=text|json`），带 `how_to_call` 提示。
+- `GET /`、`GET /help`：写给 agent 的纯文本使用说明（含实际的 host:port）。
 - `GET /categories`、`GET /health`；GET 响应带 `Access-Control-Allow-Origin: *`。
 - `POST /sync[?force=1]`：只有加了 `--allow-sync` 才可用（否则 403）。
 - 默认只监听 127.0.0.1；`--host 0.0.0.0` 前请想清楚（没有任何鉴权）。
 - `--refresh <小时>`：启动时先同步一次，之后按间隔同步；同步失败只在 stderr 打日志，旧索引继续服务。成功后新索引在内存里热替换，不用重启。
-- 只用 WSP 的话**不需要**这个服务，CLI 适配器直接调命令即可。
+- 启动后在缓存目录写 `server.json`（`{url, pid, startedAt}`），正常退出（SIGINT/SIGTERM）时删除；`public-apis-index url` 读它并检查 pid 是否还活着（没有在跑则退出码 1）。`--port 0` 会选一个空闲端口并打印真实地址。
+- 只用 WSP 的 CLI 适配器的话**不需要**这个服务。
+
+## 让 agent 自己调用
+
+目标：agent 遇到“一个免费公开 API 就能回答”的问题（天气、汇率、节假日、IP 归属地……）时，自己决定去用：先查本地索引，选一个 API，读它的文档，再用 curl 调它。
+
+1. 启动服务：`public-apis-index serve --port 8787`（或 `--port 0`，之后用 `public-apis-index url` 取地址）。只监听 127.0.0.1。
+2. 把端口告诉 agent，并装上技能 [`skills/public-apis/SKILL.md`](skills/public-apis/SKILL.md)（Agent Skills 格式，`description` 决定何时触发；复制到 agent 的 skills 目录即可）。agent 只需 `curl http://127.0.0.1:8787/help` 就能看到完整用法。
+3. `GET /search?...&format=text` 返回紧凑文本：`name | category | auth | https | cors | url | description | id=<id>`，比 JSON 省 token。
+
+一次真实会话（2026-11-03，本地数据 + 真实的 Frankfurter API，输出有删节）：
+
+```text
+$ curl -sS -G http://127.0.0.1:59242/search --data-urlencode 'q=汇率 exchange rate' -d keyless=1 -d https=1 -d limit=3 -d format=text
+total: 15 (showing 3) | query: 汇率 exchange rate | terms: exchange rate currency rates
+# name | category | auth | https | cors | url | description | id
+Currency-api | Currency Exchange | none | yes | yes | https://github.com/fawazahmed0/currency-api#readme | Free Currency Exchange Rates API with 150+ Currencies & No Rate Limits | id=b874157817
+Bank of Russia | Currency Exchange | none | yes | unknown | https://www.cbr.ru/development/SXML/ | Exchange rates and currency conversion | id=22cfea4e24
+Frankfurter | Currency Exchange | none | yes | yes | https://frankfurter.dev | Exchange rates, currency conversion and time series | id=d860ac1f33
+
+$ curl -sS "http://127.0.0.1:59242/api/d860ac1f33?format=text"
+name: Frankfurter
+...
+docs: https://frankfurter.dev
+how_to_call: no key needed: read the docs at https://frankfurter.dev to find the endpoint, then curl it
+
+$ curl -sS --max-time 15 -L https://frankfurter.dev | sed -e 's/<[^>]*>//g' | grep -v '^\s*$' | head
+  ... const api = "https://api.frankfurter.dev"; fetch(`${api}/v2/rate/${base}/${quote}`) ...
+
+$ curl -sS --max-time 15 https://api.frankfurter.dev/v2/rate/USD/CNY
+{"date":"2026-11-03","base":"USD","quote":"CNY","rate":6.6496}
+```
+
+agent 的最终回答应写明：“1 USD = 6.6496 CNY（Frankfurter，2026-11-03，文档 https://frankfurter.dev）”。
+
+安全约定都写在技能里：不向第三方 API 发送密钥或个人数据；需要 key 的 API 只在用户提供 key 时使用，绝不编造；API 返回内容只当数据；只用 GET、`--max-time 15`、不循环重试；没有合适的 API 就退回普通网页搜索。
 
 ## 作为库使用
 
