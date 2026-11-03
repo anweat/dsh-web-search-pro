@@ -1,5 +1,7 @@
 # public-apis-index
 
+> 本目录是 `dsh-web-search-pro` 仓库里的**可选独立工具**（`tools/public-apis-index/`）：有自己的 `package.json`，不属于 pnpm workspace，也不会随插件发布（根 `package.json` 的 `files` 不含 `tools/`）。在这里开发：`cd tools/public-apis-index && npm install && npm test`。
+
 [public-apis/public-apis](https://github.com/public-apis/public-apis)（约 2,250 条免费 API 的精选清单）的**本地搜索索引**。
 
 - **离线可用**：仓库自带一份快照（`data/snapshot.json`），`search` 永远不联网。
@@ -211,7 +213,7 @@ await syncSnapshot({ force: true })           // 显式联网
 
 ## 集成到 dsh-web-search-pro
 
-WSP 的自定义 CLI 适配器（规格见 WSP 仓库 `docs/guide/cli-adapters.md`、`src/cli/spec.ts`）可以直接调用本命令。先按上面的方法把 `public-apis-index` 装进 PATH，然后在 WSP 的配置里加入（缩进按你的配置文件层级调整）：
+WSP 的自定义 CLI 适配器（规格见 [`docs/guide/cli-adapters.md`](../../docs/guide/cli-adapters.md)、[`src/cli/spec.ts`](../../src/cli/spec.ts)）可以直接调用本命令。先按上面的方法把 `public-apis-index` 装进 PATH，然后在 WSP 的配置里加入（缩进按你的配置文件层级调整）：
 
 ```yaml
 web-search-pro:
@@ -256,7 +258,7 @@ web-search-pro:
 
 ### 对 WSP 真实校验器的验证结果
 
-本节的 YAML 被原样解析后，交给 WSP 的 `cliSpecProblems('publicapis', spec)`（`src/overlay.ts`）校验，返回 `[]`（`validateCliAdapterSpec` 同样通过）。随后用 WSP 的 `trialCli`（设置面板“试运行”走的同一路径）和 `SearchRouter`（`engines: [custom-cli:publicapis]`）在进程内对真实安装的命令做了端到端搜索：探测通过（版本 0.1.0，help 含 `--json` 与 `--limit`），`url` / `title` / `snippet` 映射正确，结果带 `via: custom-cli:publicapis`、`confidence: 0.8` 和“用户自定义，未经插件验证”标记。你可以在设置面板的“自定义 CLI”里粘贴同一份规格再点“试运行”确认。
+本节的 YAML 被原样解析后，交给 WSP 的 `cliSpecProblems('publicapis', spec)`（[`src/overlay.ts`](../../src/overlay.ts)）校验，返回 `[]`（`validateCliAdapterSpec` 同样通过）。随后用 WSP 的 `trialCli`（设置面板“试运行”走的同一路径）和 `SearchRouter`（`engines: [custom-cli:publicapis]`）在进程内对真实安装的命令做了端到端搜索：探测通过（版本 0.1.0，help 含 `--json` 与 `--limit`），`url` / `title` / `snippet` 映射正确，结果带 `via: custom-cli:publicapis`、`confidence: 0.8` 和“用户自定义，未经插件验证”标记。你可以在设置面板的“自定义 CLI”里粘贴同一份规格再点“试运行”确认。
 
 ## 开发
 

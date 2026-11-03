@@ -42,4 +42,4 @@ API | Description | Auth | HTTPS | CORS
 **[⬆ Back to Index](#index)**
 
 ## License
-[MIT](LICENSE)
+MIT
