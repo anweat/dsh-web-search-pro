@@ -1,0 +1,36 @@
+{
+  "name": "public-apis-index",
+  "version": "0.1.0",
+  "description": "Offline search index over the public-apis/public-apis list, with a JSON CLI for dsh-web-search-pro.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "public-apis-index": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "data",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build",
+    "test": "node --test --experimental-transform-types test/*.test.ts",
+    "snapshot": "npm run build && node scripts/snapshot.mjs",
+    "prepublishOnly": "npm test"
+  },
+  "dependencies": {
+    "minisearch": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  }
+}
