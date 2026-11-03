@@ -65,7 +65,7 @@ test('bad filter value: error document with exit 2; missing query too', async ()
   assert.equal(c.code, 2)
 })
 
-test('sync failure in JSON mode is an error document with exit 2', async () => {
+test('sync with a missing --from path is a usage-class error document, exit 2', async () => {
   const r = await runCli(['sync', '--from', '/definitely/not/here/README.md', '--json'], t.home)
   assert.equal(r.code, 2)
   assert.equal(JSON.parse(r.stdout).ok, false)

@@ -216,7 +216,7 @@ web-search-pro:
 
 ### 对 WSP 真实校验器的验证结果
 
-本节的 YAML 被原样解析后，交给 WSP 的 `cliSpecProblems('publicapis', spec)`（`src/overlay.ts`）校验，返回 `[]`；并用 WSP 的 `trialCli`（设置面板“试运行”所用的同一路径）与 `SearchRouter` 在进程内对真实安装的命令做了端到端搜索，结果映射正确（详细输出见提交说明/开发记录）。
+本节的 YAML 被原样解析后，交给 WSP 的 `cliSpecProblems('publicapis', spec)`（`src/overlay.ts`）校验，返回 `[]`（`validateCliAdapterSpec` 同样通过）。随后用 WSP 的 `trialCli`（设置面板“试运行”走的同一路径）和 `SearchRouter`（`engines: [custom-cli:publicapis]`）在进程内对真实安装的命令做了端到端搜索：探测通过（版本 0.1.0，help 含 `--json` 与 `--limit`），`url` / `title` / `snippet` 映射正确，结果带 `via: custom-cli:publicapis`、`confidence: 0.8` 和“用户自定义，未经插件验证”标记。你可以在设置面板的“自定义 CLI”里粘贴同一份规格再点“试运行”确认。
 
 ## 开发
 
