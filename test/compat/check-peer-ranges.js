@@ -19,9 +19,10 @@
  * 本脚本自带最小 semver 实现（插件仓库没有 semver 依赖，也不该为了这个检查新增依赖）：
  * 只支持本仓库 peer 范围实际用到的写法（^ / ~ / >= / > / <= / < / =、`||` 分组、空格并列），
  * 以及 semver 的预发布优先级与上面那条“同号预发布”规则。
- * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：两段范围——0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.4），
- * 各自带 `-0` 上界；两条线之间（0.2.1-alpha.x / 0.2.1-rc.1）不放行，因为没有在它们上面验证过。
- * 另外校验 cordis peer 同时容纳两条线自带的 4.0.4 / 4.0.5，并挡住 4.1.0。
+ * 与 anweat/dsh-browser 0.2.x 的 test/compat/check-peer-ranges.js 同一套策略：三段范围——0.2.0 线（rc.2）、
+ * 0.2.1 线（rc.2 ~ rc.5）与 0.2.2 线（rc.1 起），各自带 `-0` 上界；线之间（0.2.1-alpha.x / 0.2.1-rc.1 /
+ * 0.2.2-alpha.x）不放行，因为没有在它们上面验证过。
+ * 另外校验 cordis peer 同时容纳三条线自带的 4.0.4 / 4.0.5 / 4.1.0，并挡住 4.2.0。
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -157,17 +158,17 @@ function satisfies(version, range, options = {}) {
 }
 
 // ── 策略与检查 ────────────────────────────────────────────────────────────────
-/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：0.2.0 线（rc.2）与 0.2.1 线（rc.2 ~ rc.4）两段。 */
-const SUPPORTED_BASELINES = ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4']
+/** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线：0.2.0 线（rc.2）、0.2.1 线（rc.2 ~ rc.5）与 0.2.2 线（rc.1）三段。 */
+const SUPPORTED_BASELINES = ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5', '0.2.2-rc.1']
 /**
  * 必须被拒绝的宿主版本（runtime 与 install 两种模式都不能满足）：
  * 已放弃的旧线、上一条基线（含它的预发布）、以及不放行的下一个次版本的预发布。
  */
-const REJECTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.1-alpha.5', '0.2.1-rc.1', '0.2.2-alpha.1']
+const REJECTED_BASELINES = ['0.1.7-rc.2', '0.2.0-rc.1', '0.2.1-alpha.5', '0.2.1-rc.1', '0.2.2-alpha.1', '0.2.3-rc.1']
 /** 用于说明范围宽窄的代表性版本（只做展示，不影响退出码）。 */
 const MATRIX_VERSIONS = [
   '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.0', '0.2.1-alpha.1', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4',
-  '0.2.1', '0.2.2-alpha.1', '0.2.2', '0.3.0-rc.1',
+  '0.2.1-rc.5', '0.2.1', '0.2.2-alpha.1', '0.2.2-rc.1', '0.2.2', '0.2.3-rc.1', '0.2.3', '0.3.0-rc.1',
 ]
 
 const gatedPeers = (manifest) =>
@@ -192,6 +193,7 @@ function selftest() {
   const wide = '>=0.2.1-rc.2 <0.3.0'
   const foreignLower = '>=0.2.0-rc.2 <0.2.2-0'
   const dual = '>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0'
+  const triple = '>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0'
   const cases = [
     // range, version, runtime, install —— 期望值与真实 semver 7（npm/pnpm 默认解析、includePrerelease 解析）实测一致
     [pinned, '0.1.7-rc.2', false, false],     // 已放弃的旧线
@@ -219,6 +221,13 @@ function selftest() {
     [dual, '0.2.1-rc.4', true, true],
     [dual, '0.2.2-alpha.1', false, false],     // 上界仍是 <0.2.2-0
     [dual, '0.3.0-rc.1', false, false],
+    [triple, '0.2.0-rc.2', true, true],        // 加了第三段不影响前两段
+    [triple, '0.2.1-rc.5', true, true],
+    [triple, '0.2.2-alpha.1', false, false],   // 第三段的下界是 rc.1：alpha 不放行
+    [triple, '0.2.2-rc.1', true, true],        // 新基线；`>=0.2.2-rc.1` 自带同号预发布，是承重的
+    [triple, '0.2.2', true, true],             // 同 patch 线的正式版在 cap 之下
+    [triple, '0.2.3-rc.1', false, false],      // 上界是 <0.2.3-0：连 0.2.3 的预发布也挡掉
+    [triple, '0.3.0-rc.1', false, false],
   ]
   let failed = 0
   for (const [range, version, runtime, install] of cases) {
@@ -311,18 +320,21 @@ if (!json && targets.includes('0.2.1-rc.3')) {
   }
 }
 
-// cordis：0.2.0-rc.2 宿主依赖 ~4.0.4，0.2.1-rc.x 依赖 ~4.0.5（干净安装两者都解析到 4.0.5；有锁文件时 rc.2 宿主可能是 4.0.4）。
-// 插件的 cordis peer 必须容纳两者，并挡住 4.1.0（未验证的下一个次版本）。
+// cordis：0.2.0-rc.2 宿主依赖 ~4.0.4，0.2.1-rc.x 依赖 ~4.0.5（干净安装两者都解析到 4.0.5；有锁文件时 rc.2 宿主可能是 4.0.4），
+// 0.2.2-rc.1 宿主依赖 ~4.1.0。插件的 cordis peer 必须容纳这三条线，并挡住 4.2.0（未验证的下一个次版本）。
+// 不要用 ^4.0.4：它等于 <5.0.0，会把没验证过的 4.2 / 4.3 一并放进来，而 cordis 的次版本已经出现过一次
+// 破坏性变更（4.0 -> 4.1 改了 Fiber.config 的填充时机，没有配置的 entry 会整条挂不上）。
 const cordisRange = manifest.peerDependencies?.['@deepseek-ai/cordis']
 if (cordisRange !== undefined && versions.length === 0) {
-  for (const [version, expected] of [['4.0.4', true], ['4.0.5', true], ['4.1.0', false]]) {
+  const cordisCases = [['4.0.4', true], ['4.0.5', true], ['4.1.0', true], ['4.1.9', true], ['4.2.0', false], ['5.0.0', false]]
+  for (const [version, expected] of cordisCases) {
     const got = satisfies(version, cordisRange)
     if (got !== expected) {
       console.error(`  FAIL(cordis) ${version}  peer "${cordisRange}" ${expected ? '应当放行' : '不应放行'}`)
       bad += 1
     }
   }
-  if (!json) console.log(`  cordis peer "${cordisRange}"：4.0.4 / 4.0.5 放行，4.1.0 拒绝`)
+  if (!json) console.log(`  cordis peer "${cordisRange}"：4.0.4 / 4.0.5 / 4.1.x 放行，4.2.0 起拒绝`)
 }
 
 if (json) console.log(JSON.stringify(report, null, 2))

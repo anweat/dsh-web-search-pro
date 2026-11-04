@@ -2,13 +2,19 @@
 
 ## 未发布
 
+- 兼容 DSH 0.2.2 线（`0.2.2-rc.1` 起）。0.2.2 线把 cordis 从 4.0.x 升到 4.1.x，`Fiber.config` 的填充时机随之改变，因此除 peer 之外还有一处必须改的代码：
+  - **修复：没有配置的 entry 在 cordis 4.1 上无法挂载。** cordis 4.0.x 会给**没有配置**的 entry 也应用一遍 schema 默认值，`ctx.fiber.config` 因此总是对象；cordis 4.1.x 在这种情况下留 `undefined`。启动路径上的 `baseline()` 直接把它交给 `resolveConfig()`，后者立刻读 `config.dbPath`，于是抛 `TypeError: Cannot read properties of undefined (reading 'dbPath')`，整个 entry 静默不激活，所有工具缺席（宿主只报一行 `warning: 1 entry did not activate`）。改为 `resolveConfig((ctx.fiber.config ?? {}) as Config)`，空对象走 `resolveConfig` 自带的默认值分支，两代 cordis 结果一致。
+  - **peer：** 每个受管 `@deepseek-ai/dsh-*` 增加第三段 `>=0.2.2-rc.1 <0.2.3-0`，即 `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`。每段都显式写出该线的预发布元组，否则 Host 在组合期会跳过（`semver` 的默认预发布规则）。0.2.3 及更早的宿主线行为不变。
+  - **cordis peer** 从 `~4.0.4` 改为 `~4.0.4 || ~4.1.0`：0.2.0-rc.2 宿主依赖 `~4.0.4`、0.2.1-rc.x 依赖 `~4.0.5`、0.2.2-rc.1 依赖 `~4.1.0`，两段正好覆盖这三条线。没有用 `^4.0.4`，它等于 `<5.0.0`，会把没验证过的 4.2、4.3 一并放进来；cordis 已经出现过一次小版本破坏性变更，所以只放行实测过的两条线。
+  - 插件导入的宿主符号在 0.2.1-rc.5 与 0.2.2-rc.1 之间逐个核对存在：`defineTool`、`credentialRef`、`SnapshotStore`、`PropsLocale`、`Button`、`Modal`、`Switch`、`Tag`、`Tooltip`。
+  - 真实宿主验证（隔离 `DSH_HOME`，把 tgz 以 `file:` 安装，headless 驱动 `web_call` 并断言拿到 completed 的 tool result）：DSH `0.2.0-rc.2`（cordis 4.0.4）、`0.2.1-rc.2`（cordis 4.0.5）、`0.2.2-rc.1`（cordis 4.1.0）三个宿主全部通过。未打此补丁的 0.2.3 在 `0.2.2-rc.1` 上失败，宿主日志为 `warning: 1 entry did not activate`，与上面的分析一致。过程与局限见 [`docs/validation/2026-11-04-dsh-0.2.2-cordis-4.1.md`](docs/validation/2026-11-04-dsh-0.2.2-cordis-4.1.md)。
 - 文档整理：README 精简为中文入口并新增英文版 `README.en.md`；其余内容按主题拆到 `docs/guide/`，设计与调研记录移到 `docs/dev/`；`LOGIN.md` 并入 `docs/guide/platform-login.md` 并按当前的 opencli 优先做法改写（登录由用户自己完成，插件没有登录窗口）；README 里的兼容表与升级说明移到本文件；新增 `scripts/check-docs-links.mjs`（`pnpm run check:docs`，已并入 `verify`）检查文档链接、锚点和中英文 README 的标题数量。没有改动运行时行为。
 
 ## 从旧版本升级
 
 适用于 0.2.x 各版本之间的升级（0.1.x 宿主或 dsh-browser 0.1.x 请不要升级，停留在 `dsh-web-search-pro@0.1.15`，见[兼容与发布通道（历史）](#兼容与发布通道历史)）。DSH Desktop 用户在插件页卸载后重新 Add plugin，写法见 [安装与首次使用](docs/guide/install.md#用-dsh-desktop-安装)。
 
-先确认宿主是 `dsh-v0.2.0-rc.2` 或 `dsh-v0.2.1-rc.2` ~ `rc.4`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
+先确认宿主是 `dsh-v0.2.0-rc.2`、`dsh-v0.2.1-rc.2` ~ `rc.5` 或 `dsh-v0.2.2-rc.1` 起，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
 
 ```bash
 dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
