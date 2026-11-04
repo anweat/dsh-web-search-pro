@@ -18,9 +18,9 @@ An enhanced web search plugin for [DeepSeek Harness](https://github.com/deepseek
 | Item | Range |
 |---|---|
 | dsh-web-search-pro | `0.2.3` |
-| DSH host (peer) | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0`; verified on `0.2.0-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4` |
-| cordis (peer) | `~4.0.4` |
-| Optional companion `@anweat/dsh-browser` | `^0.2.0` (on 0.2.1-line hosts it must be `0.2.2` or later) |
+| DSH host (peer) | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0 \|\| >=0.2.2-rc.1 <0.2.3-0`; verified on `0.2.0-rc.2`, `0.2.1-rc.2`, `0.2.1-rc.4`, `0.2.2-rc.1` |
+| cordis (peer) | `~4.0.4 \|\| ~4.1.0` (0.2.2-line hosts ship 4.1.x) |
+| Optional companion `@anweat/dsh-browser` | `^0.2.0` (on 0.2.1- and 0.2.2-line hosts it must be `0.2.2` or later) |
 | DSH 0.1.x hosts or dsh-browser 0.1.x | Stay on `dsh-web-search-pro@0.1.15`; it is no longer updated |
 
 The compatibility table of earlier versions is in the [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史); how the peer range is written is explained in [Compatibility](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md) (Chinese).

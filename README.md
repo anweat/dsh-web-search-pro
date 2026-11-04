@@ -16,9 +16,9 @@
 | 项 | 范围 |
 |---|---|
 | dsh-web-search-pro | `0.2.3` |
-| DSH 宿主（peer） | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0`；实测 `0.2.0-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.4` |
-| cordis（peer） | `~4.0.4` |
-| 可选配套 `@anweat/dsh-browser` | `^0.2.0`（0.2.1 线宿主上必须是 `0.2.2` 起） |
+| DSH 宿主（peer） | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0 \|\| >=0.2.2-rc.1 <0.2.3-0`；实测 `0.2.0-rc.2`、`0.2.1-rc.2`、`0.2.1-rc.4`、`0.2.2-rc.1` |
+| cordis（peer） | `~4.0.4 \|\| ~4.1.0`（0.2.2 线宿主带 4.1.x） |
+| 可选配套 `@anweat/dsh-browser` | `^0.2.0`（0.2.1 及 0.2.2 线宿主上必须是 `0.2.2` 起） |
 | DSH 0.1.x 宿主或 dsh-browser 0.1.x | 固定使用 `dsh-web-search-pro@0.1.15`，不再更新 |
 
 历史版本的兼容表见 [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史)，peer 范围的写法见 [兼容范围](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md)。
