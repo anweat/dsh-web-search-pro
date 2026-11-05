@@ -23,7 +23,7 @@ An enhanced web search plugin for [DeepSeek Harness](https://github.com/deepseek
 | Optional companion `@anweat/dsh-browser` | `^0.2.0` (on 0.2.1- and 0.2.2-line hosts it must be `0.2.2` or later) |
 | DSH 0.1.x hosts or dsh-browser 0.1.x | Stay on `dsh-web-search-pro@0.1.15`; it is no longer updated |
 
-**Known limitation on 0.2.2-rc.1**: the host's `connection.rpc.handle()` throws for external plugins under cordis 4.1, so the settings card's private channel (live readiness, the "agent changes" panel, custom-CLI trial) is unavailable on 0.2.2-rc.1; everything else, including saving from the card, works. See the [CHANGELOG](./CHANGELOG.md) and the [validation record](docs/validation/2026-11-05-dsh-0.2.2.md) (Chinese).
+**Settings card channel on the 0.2.2 line**: the host's `connection.rpc.handle()` throws for external plugins under cordis 4.1 (root cause: the host's `dsh-client-connection` `register()` reads `owner.webServer`). The plugin tries `handle` first and falls back to the host's `register(owner, …)`; the fallback relies on a private host method and logs a warning if a host drops it. See the [CHANGELOG](./CHANGELOG.md) and the [validation record](docs/validation/2026-11-05-dsh-0.2.2.md) (Chinese).
 
 The compatibility table of earlier versions is in the [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史); how the peer range is written is explained in [Compatibility](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md) (Chinese).
 

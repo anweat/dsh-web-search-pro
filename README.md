@@ -21,7 +21,7 @@
 | 可选配套 `@anweat/dsh-browser` | `^0.2.0`（0.2.1 及 0.2.2 线宿主上必须是 `0.2.2` 起） |
 | DSH 0.1.x 宿主或 dsh-browser 0.1.x | 固定使用 `dsh-web-search-pro@0.1.15`，不再更新 |
 
-**0.2.2-rc.1 已知限制**：宿主的 `connection.rpc.handle()` 在 cordis 4.1 下对外部插件抛错，设置卡片的私有通道（实时就绪状态、“agent 修改”面板、自定义 CLI 试运行）在 0.2.2-rc.1 上不可用，其余功能与卡片保存都正常；详见 [CHANGELOG](./CHANGELOG.md) 与 [验证记录](docs/validation/2026-11-05-dsh-0.2.2.md)。
+**0.2.2 线的设置卡片通道**：宿主 0.2.2-rc.1 的 `connection.rpc.handle()` 在 cordis 4.1 下对外部插件抛错（根因在宿主 `dsh-client-connection` 的 `register()` 读 `owner.webServer`），插件先试 `handle`，失败再回退到宿主的 `register(owner, …)`；这条回退依赖宿主的一个私有方法，宿主去掉它时会在日志里报告。详见 [CHANGELOG](./CHANGELOG.md) 与 [验证记录](docs/validation/2026-11-05-dsh-0.2.2.md)。
 
 历史版本的兼容表见 [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史)，peer 范围的写法见 [兼容范围](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md)。
 
