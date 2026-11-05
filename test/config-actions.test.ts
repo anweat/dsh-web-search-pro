@@ -245,11 +245,13 @@ test('approval follows dsh-browser\'s automationMode when it is present: read-on
 })
 
 test('headless: an "ask" the Host cannot put to a person is refused, never run — the Host\'s own approval seam says so', () => {
-  // dsh-tools (0.2.1-rc.3) `serviceAsk`: an `ask` from tools/pre-execute goes to the `approval` service. Without that service the call is denied with the
+  // dsh-tools (0.2.1-rc.3, unchanged in 0.2.2-rc.1) `serviceAsk`: an `ask` from tools/pre-execute goes to the `approval` service. Without that service the call is denied with the
   // reason the plugin gave; with it but without an answerer (a headless run has no UI) the request comes back `unavailable` and is denied ("fail
   // closed"); a session policy of `never` rejects it at once. Only `allowed-once` runs the tool. This test pins those strings in the installed Host
   // so an upgrade that changes the behaviour is noticed here; test/config-actions.test.ts checks the plugin half (upsert_cli asks in every mode).
-  const host = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'node_modules', '@deepseek-ai', 'dsh-tools', 'lib', 'index.js'), 'utf8')
+  // 0.2.2 moved the tool pipeline (and `serviceAsk`) out of lib/index.js into lib/pipeline.js with the same behaviour, so search every lib file.
+  const toolsLib = path.resolve(import.meta.dirname, '..', 'node_modules', '@deepseek-ai', 'dsh-tools', 'lib')
+  const host = fs.readdirSync(toolsLib).filter(file => file.endsWith('.js')).map(file => fs.readFileSync(path.join(toolsLib, file), 'utf8')).join('\n')
   assert.match(host, /const gate = await this\.ctx\.waterfall\(carrier, "tools\/pre-execute"[\s\S]{0,200}gate\.kind === "ask" \? await this\.serviceAsk\(exec, gate\)/)
   assert.match(host, /const approval = this\.ctx\.get\("approval"\);\s*if \(approval === void 0\) return \{\s*decision: \{\s*kind: "deny",\s*reason: ask\.reason \?\? `tool "\$\{exec\.name\}" requires approval \(not yet supported\)`/)
   assert.match(host, /case "allowed-once": return \{\s*decision: \{ kind: "allow" \}/)
