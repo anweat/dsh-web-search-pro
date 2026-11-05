@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { openChannel, type ConnectionRegistrar } from '../src/rpc.ts'
+import { channelFailureMessage, openChannel, type ConnectionRegistrar } from '../src/rpc.ts'
 import { RPC_CHANNEL } from '../src/rpc-types.ts'
 
 const handler = async () => ({ ok: true as const, value: null })
@@ -28,10 +28,20 @@ test('rpc.handle throws and register exists: register gets the injecting owner, 
   assert.deepEqual(seen, [owner, RPC_CHANNEL, handler])
 })
 
-test('rpc.handle throws and register is missing: reported, then rethrown', () => {
-  const reports: string[] = []
+test('rpc.handle throws and register is missing: the original error propagates', () => {
   const connection: ConnectionRegistrar = { rpc: { handle: cordis41 } }
-  assert.throws(() => openChannel({}, connection, handler, m => reports.push(m)), /without inject/)
-  assert.equal(reports.length, 1)
-  assert.match(reports[0]!, /not mounted.*without inject.*no connection\.register/)
+  assert.throws(() => openChannel({}, connection, handler), /without inject/)
+})
+
+test('register itself throws: its error propagates', () => {
+  const connection: ConnectionRegistrar = { rpc: { handle: cordis41 }, register: () => { throw new Error('route already registered') } }
+  assert.throws(() => openChannel({}, connection, handler), /route already registered/)
+})
+
+test('the failure line names the channel and the reason, says what stops working, and carries no ANSI', () => {
+  const line = channelFailureMessage(new Error('\u001b[31mcannot get property "webServer"\u001b[39m'))
+  assert.ok(line.includes(RPC_CHANNEL))
+  assert.ok(line.includes('cannot get property "webServer"'))
+  assert.ok(!line.includes('\u001b'))
+  assert.match(line, /live status.*agent-edits panel.*custom-CLI dry-run/)
 })

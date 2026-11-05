@@ -53,9 +53,11 @@ export interface ConnectionRegistrar {
  * inject callback and was never reported: the channel stayed unmounted and the settings card got HTTP 405. The Host's `register(owner,
  * channel, handler)` takes the owner explicitly, so the fallback passes `owner`, the Context that did inject `webServer`: same route, same
  * transport and authentication. `rpc.handle` is tried first, so hosts where it works are unchanged. `register` is private in the Host's
- * types; if a later host drops it, the failure is logged, never swallowed.
+ * types; if a later host drops it, registerRpc warns on the console and the plugin keeps running without the channel.
  */
-export declare function openChannel(owner: unknown, connection: ConnectionRegistrar, handler: Handler, report?: (message: string) => void): () => Promise<void>;
+export declare function openChannel(owner: unknown, connection: ConnectionRegistrar, handler: Handler): () => Promise<void>;
+/** The one console line for a channel that could not be mounted (exported for the test). */
+export declare function channelFailureMessage(error: unknown): string;
 /** Register the channel when the Host has the transport; the effect unregisters it with the plugin. */
 export declare function registerRpc(ctx: Context, services: RpcServices): void;
 export {};
