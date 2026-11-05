@@ -38,6 +38,7 @@ import { ACTIONS, findAction, flatToolName } from './actions/registry.ts'
 import { automationModeOf, resolveWebCall, webCallDecision } from './actions/approval.ts'
 import { registerRpc } from './rpc.ts'
 import { OverlayStore, overlayFileFor } from './overlay.ts'
+import { liveFiberConfig } from './fiber-config.ts'
 import { pendingRestart, restartValues } from './restart.ts'
 
 export const name = 'web-search-pro'
@@ -77,17 +78,15 @@ export function apply(ctx: Context, config: Config): void {
 
   // 3. Hot-reloadable config source. The plugin's Config schema marks live
   //    fields `volatile()` (schemastery), so the Host re-resolves this entry's
-  //    config in place on every profile-patch edit and the fiber's `config`
-  //    object reflects the new values without a remount. Every operation
+  //    config in place on every profile-patch edit and the fiber's resolved config
+  //    (`effectiveConfig` on cordis 4.1, `config` on 4.0.x; see fiber-config.ts) reflects the new values without a remount. Every operation
   //    therefore reads through the SAME stable `dynamic` closure that
   //    dereferences the live config per call — hot-reloaded sections reach
   //    every consumer.
-  //    `fiber.config` is only an object when the entry actually carries a
-  //    config: cordis 4.0.x resolved the schema even for an entry with none,
-  //    while cordis 4.1.x (dsh 0.2.2-rc.1) leaves it `undefined`. Seeding with
-  //    an empty object keeps an unconfigured entry working on both lines --
-  //    `resolveConfig` then takes its own default branch for every field.
-  const baseline = (): ResolvedConfig => resolveConfig((ctx.fiber.config ?? {}) as Config)
+  //    Cordis 4.1 (dsh 0.2.2) keeps the RAW input in `fiber.config` (undefined for an unconfigured entry, no schema
+  //    defaults, no hooks) and publishes the resolved object as `fiber.effectiveConfig`; 4.0.x has only `config`, and it
+  //    is already resolved. Hence effectiveConfig first, then config, then {} (see fiber-config.ts).
+  const baseline = (): ResolvedConfig => resolveConfig(liveFiberConfig<Config>(ctx.fiber))
   //    The agent overlay: run-time settings an agent may change (config.* actions), merged over the profile configuration on
   //    every read, so each consumer of `dynamic` sees them at once. It lives beside the database; whether an id is a registered
   //    source is the router's registry (built below, so it is read through `routerRef`; until then every id passes).
