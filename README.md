@@ -21,7 +21,7 @@
 | 可选配套 `@anweat/dsh-browser` | `^0.2.0`（0.2.1 及 0.2.2 线宿主上必须是 `0.2.2` 起） |
 | DSH 0.1.x 宿主或 dsh-browser 0.1.x | 固定使用 `dsh-web-search-pro@0.1.15`，不再更新 |
 
-**0.2.2 线的设置卡片通道**：宿主 0.2.2-rc.1 的 `connection.rpc.handle()` 在 cordis 4.1 下对外部插件抛错（根因在宿主 `dsh-client-connection` 的 `register()` 读 `owner.webServer`），插件先试 `handle`，失败再回退到宿主的 `register(owner, …)`；这条回退依赖宿主的一个私有方法，宿主去掉它时，插件在控制台打一行警告并照常运行（卡片的实时状态、agent 修改面板、CLI 试运行不可用）。详见 [CHANGELOG](./CHANGELOG.md) 与 [验证记录](docs/validation/2026-11-05-dsh-0.2.2.md)。
+**0.2.2 线的设置卡片通道**：宿主 0.2.2-rc.1 的 `connection.rpc.handle()` 在 cordis 4.1 下对外部插件抛错（根因在宿主 `dsh-client-connection` 的 `register()` 读 `owner.webServer`，而 cordis 4.1 按服务的定义处检查 `inject`）。插件经一个自带 `webServer` 的派生上下文调用 `handle`（`ctx.extend({ webServer: ctx.get('webServer') })`），只用公开的 Context API，不依赖宿主的私有方法；三条宿主线（0.2.0-rc.2、0.2.1-rc.5、0.2.2-rc.1）用同一写法。做法来自 [anweat/dsh-browser#49](https://github.com/anweat/dsh-browser/issues/49)（@shuaigekda）。挂载失败时插件在控制台打一行警告并照常运行（卡片的实时状态、agent 修改面板、CLI 试运行不可用）。详见 [CHANGELOG](./CHANGELOG.md) 与 [验证记录](docs/validation/2026-11-05-dsh-0.2.2.md)。
 
 历史版本的兼容表见 [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史)，peer 范围的写法见 [兼容范围](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md)。
 
