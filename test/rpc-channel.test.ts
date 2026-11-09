@@ -1,41 +1,51 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { channelFailureMessage, openChannel, type ConnectionRegistrar } from '../src/rpc.ts'
+import { channelFailureMessage, openChannel, type ChannelContext, type ConnectionRegistrar } from '../src/rpc.ts'
 import { RPC_CHANNEL } from '../src/rpc-types.ts'
 
 const handler = async () => ({ ok: true as const, value: null })
 const dispose = async (): Promise<void> => {}
-const cordis41 = (): never => { throw new Error('cannot get property "webServer" without inject') }
 
-test('rpc.handle works: it is used and register is never touched', () => {
-  const calls: string[] = []
-  const connection: ConnectionRegistrar = {
-    rpc: { handle: (channel) => { calls.push('handle ' + channel); return dispose } },
-    register: () => { calls.push('register'); return dispose },
+/** A context like cordis': `extend` makes a child that inherits from it and gets the given properties as its own. */
+function fakeContext(connectionOf: (child: object) => ConnectionRegistrar, webServer: unknown) {
+  const children: object[] = []
+  const root: Record<string, unknown> = {
+    get: (name: string) => (name === 'webServer' ? webServer : undefined),
+    extend(meta: Record<string, unknown>) {
+      const child = Object.create(root)
+      for (const key of Reflect.ownKeys(meta)) Object.defineProperty(child, key, Reflect.getOwnPropertyDescriptor(meta, key)!)
+      Object.defineProperty(child, 'connection', { get: () => connectionOf(child) })
+      children.push(child)
+      return child
+    },
   }
-  assert.equal(openChannel({}, connection, handler), dispose)
-  assert.deepEqual(calls, ['handle ' + RPC_CHANNEL])
+  return { ctx: root as unknown as ChannelContext, children }
+}
+
+test('handle is called on a derived context that owns the injected webServer, with the channel and the handler', () => {
+  const webServer = { name: 'webServer' }
+  const calls: unknown[][] = []
+  let owner: any
+  const { ctx, children } = fakeContext(child => ({
+    rpc: { handle: (channel, h) => { owner = child; calls.push([channel, h]); return dispose } },
+  }), webServer)
+  assert.equal(openChannel(ctx, handler), dispose)
+  assert.equal(children.length, 1)
+  assert.equal(owner, children[0])
+  assert.ok(Object.hasOwn(owner, 'webServer'), 'webServer is an own property of the owner the host captures')
+  assert.equal(owner.webServer, webServer)
+  assert.deepEqual(calls, [[RPC_CHANNEL, handler]])
 })
 
-test('rpc.handle throws and register exists: register gets the injecting owner, channel and handler', () => {
-  const owner = { name: 'connectionCtx' }
-  const seen: unknown[] = []
-  const connection: ConnectionRegistrar = {
-    rpc: { handle: cordis41 },
-    register: (o, channel, h) => { seen.push(o, channel, h); return dispose },
-  }
-  assert.equal(openChannel(owner, connection, handler), dispose)
-  assert.deepEqual(seen, [owner, RPC_CHANNEL, handler])
+test('the connection context itself is not given the property (the parent is not mutated)', () => {
+  const { ctx } = fakeContext(() => ({ rpc: { handle: () => dispose } }), {})
+  openChannel(ctx, handler)
+  assert.ok(!Object.hasOwn(ctx as object, 'webServer'))
 })
 
-test('rpc.handle throws and register is missing: the original error propagates', () => {
-  const connection: ConnectionRegistrar = { rpc: { handle: cordis41 } }
-  assert.throws(() => openChannel({}, connection, handler), /without inject/)
-})
-
-test('register itself throws: its error propagates', () => {
-  const connection: ConnectionRegistrar = { rpc: { handle: cordis41 }, register: () => { throw new Error('route already registered') } }
-  assert.throws(() => openChannel({}, connection, handler), /route already registered/)
+test('a throw from handle propagates, so registerRpc can warn and keep the plugin running', () => {
+  const { ctx } = fakeContext(() => ({ rpc: { handle: () => { throw new Error('route already registered') } } }), {})
+  assert.throws(() => openChannel(ctx, handler), /route already registered/)
 })
 
 test('the failure line names the channel and the reason, says what stops working, and carries no ANSI', () => {
