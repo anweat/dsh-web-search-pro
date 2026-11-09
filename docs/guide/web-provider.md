@@ -1,6 +1,6 @@
 # 内置 web 工具路由（ctx.web provider）
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 ## 两种用法
 

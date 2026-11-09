@@ -1,6 +1,6 @@
 # 工具与动作
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 常驻上下文只有两个工具，所有能力（当前共 27 个动作，分 7 组）都经 `web_call` 调用。常驻文本（系统提示 + 工具名、描述、参数）约 800 字符（原 11 个工具约 9300 字符）：
 

@@ -1,6 +1,6 @@
 # Jev 评分与评分模型 provider
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 块评分默认用本地词法规则。可选的博查 Jev 评分（付费，需环境变量或凭据引用 `BOCHA_JEV_API_KEY`）由 `evidence` 配置控制：`jevMode: off`（默认，不调用）、`shadow`（规则决定，Jev 评分只记录到存储 `evidence_runs.pack_json` 供对照）、`control`（且 `scorer: jev` 时由 Jev 决定；任何 Jev 失败都回退到规则并在 `notes` 里说明）、`hybrid`（规则评分全部块，Jev 只重评需求语言与块语言不一致的 (需求, 块) 对；`hybridBorderline: true` 时再加规则评分为 1 的边界对；Jev 失败保留规则评分；与 `scorer` 无关）；`maxJevQuestions`（默认 64）限制每次搜索发送的 (需求, 块) 问题数。规则评分本身对中文需求与英文块做了跨语言对齐（query / 需求 / 约束里的英文词和标识符并入匹配词），默认即生效。发给 Jev 的只有一句话目标、需求文字和页面块文本。
 

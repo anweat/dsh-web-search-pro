@@ -1,6 +1,6 @@
 # 平台登录态
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 本文由原仓库根目录的 `LOGIN.md` 整理而来（`LOGIN.md` 已移到这里），并按当前行为核对过：
 

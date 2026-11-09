@@ -2,6 +2,18 @@
 
 ## 未发布
 
+## 0.2.4（2026-11-09）
+
+**用户能得到什么：** 插件现在能在 DSH 0.2.2 线（`0.2.2-rc.1` 起）上正常安装和运行，同时继续支持 0.2.0-rc.2 与 0.2.1-rc.2 ~ rc.5。设置卡片在 0.2.2 线上不再 405；含 `!!js` 表达式的配置不再启动失败，也不再误报“待重启”。没有 Config schema 变化，没有破坏性变更。
+
+**谁应该升级：** 所有在 DSH `0.2.2-rc.1`（含 DSH Desktop）上的用户——0.2.3 的 peer 把这条线挡在外面，Desktop 会直接拒绝安装。仍在 0.2.0 / 0.2.1 线的用户可升可不升（运行时没有针对这两条线的改动）。0.2.2 线宿主上的配套浏览器插件请用 `@anweat/dsh-browser@0.2.3` 或更新。
+
+**致谢：** @snailium 的 PR #44（0.2.2 线 peer 与 cordis 4.1 的起点）；设置卡片通道的做法来自 @shuaigekda 的 [anweat/dsh-browser#49](https://github.com/anweat/dsh-browser/issues/49)。
+
+**已知限制：** `0.2.2` 正式版靠 `0.2.2-rc.1` 的验证放行，没有对正式版另做验证；没有在 Electron 版 DSH Desktop 上实测，也没有带模型会话的端到端测试（验证用宿主自己的 `ctx.tools.execute` 调 `web_call`）。
+
+升级命令见下面“从旧版本升级”。
+
 - 兼容 DSH 0.2.2 线（`0.2.2-rc.1` 起；贡献者 @snailium 的 PR #44 为起点，本条在其基础上核实并修正）。0.2.2 线把 cordis 从 4.0.x 升到 4.1.x，`Fiber.config` 的含义随之改变，因此除 peer 之外有两处必须改的代码：
   - **修复：读取插件配置的位置。** cordis 4.0.x 的 `ctx.fiber.config` 是**解析后**的对象（schema 默认值、`internal/config` 钩子都已应用），没有 `effectiveConfig`；cordis 4.1.x 的 `fiber.config` 是**原始输入**（没写配置的 entry 上是 `undefined`，`!!js` 表达式不求值），解析后的对象在 `fiber.effectiveConfig`。插件的 `baseline()` 以前直接把 `fiber.config` 交给 `resolveConfig()`，现在读 `fiber.effectiveConfig ?? fiber.config ?? {}`（`src/fiber-config.ts`，单元测试固定三种情形：只有 `effectiveConfig`、只有 `config`、都没有）。
     - 只加 `?? {}` 的修法（PR #44 原样）只挡住了“没写配置的 entry 无法激活”这一种崩溃。在真实 0.2.2-rc.1 宿主上，配置里含表达式的 entry（例如 `dbPath: !!js dshHomePath(...)`）仍然启动失败，`timeoutMs: !!js 45000` 则让 `config.inspect` / `sources.status` 误报“待重启：timeoutMs（当前生效 45000，配置为 [object Object]）”。改读 `effectiveConfig` 后两者都正常。写成普通值的部分配置，原样的代码与 `?? {}` 版本在 0.2.2-rc.1 上表现一致（`resolveConfig` 自己会补缺省值）。
@@ -18,10 +30,10 @@
 
 适用于 0.2.x 各版本之间的升级（0.1.x 宿主或 dsh-browser 0.1.x 请不要升级，停留在 `dsh-web-search-pro@0.1.15`，见[兼容与发布通道（历史）](#兼容与发布通道历史)）。DSH Desktop 用户在插件页卸载后重新 Add plugin，写法见 [安装与首次使用](docs/guide/install.md#用-dsh-desktop-安装)。
 
-先确认宿主是 `dsh-v0.2.0-rc.2`、`dsh-v0.2.1-rc.2` ~ `rc.5` 或 `dsh-v0.2.2-rc.1` 起，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
+先确认宿主是 `dsh-v0.2.0-rc.2`、`dsh-v0.2.1-rc.2` ~ `rc.5` 或 `dsh-v0.2.2-rc.1` 起，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.3`（0.2.1 线宿主上 0.2.2 起即可；0.2.2 线宿主上请用 0.2.3 或更新；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+dsh plugin --profile web add @anweat/dsh-browser@0.2.3 dsh-web-search-pro@0.2.4
 ```
 
 > **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。

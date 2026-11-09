@@ -1,6 +1,6 @@
 # 外部依赖（按需）
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 多数后端需要系统额外安装的工具；插件提供 `sources.deps` / `sources.install` 动作检测与安装：
 
