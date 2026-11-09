@@ -2,16 +2,38 @@
 
 ## 未发布
 
+## 0.2.4（2026-11-09）
+
+**用户能得到什么：** 插件现在能在 DSH 0.2.2 线（`0.2.2-rc.1` 起）上正常安装和运行，同时继续支持 0.2.0-rc.2 与 0.2.1-rc.2 ~ rc.5。设置卡片在 0.2.2 线上不再 405；含 `!!js` 表达式的配置不再启动失败，也不再误报“待重启”。没有 Config schema 变化，没有破坏性变更。
+
+**谁应该升级：** 所有在 DSH `0.2.2-rc.1`（含 DSH Desktop）上的用户——0.2.3 的 peer 把这条线挡在外面，Desktop 会直接拒绝安装。仍在 0.2.0 / 0.2.1 线的用户可升可不升（运行时没有针对这两条线的改动）。0.2.2 线宿主上的配套浏览器插件请用 `@anweat/dsh-browser@0.2.3` 或更新。
+
+**致谢：** @snailium 的 PR #44（0.2.2 线 peer 与 cordis 4.1 的起点）；设置卡片通道的做法来自 @shuaigekda 的 [anweat/dsh-browser#49](https://github.com/anweat/dsh-browser/issues/49)。
+
+**已知限制：** `0.2.2` 正式版靠 `0.2.2-rc.1` 的验证放行，没有对正式版另做验证；没有在 Electron 版 DSH Desktop 上实测，也没有带模型会话的端到端测试（验证用宿主自己的 `ctx.tools.execute` 调 `web_call`）。
+
+升级命令见下面“从旧版本升级”。
+
+- 兼容 DSH 0.2.2 线（`0.2.2-rc.1` 起；贡献者 @snailium 的 PR #44 为起点，本条在其基础上核实并修正）。0.2.2 线把 cordis 从 4.0.x 升到 4.1.x，`Fiber.config` 的含义随之改变，因此除 peer 之外有两处必须改的代码：
+  - **修复：读取插件配置的位置。** cordis 4.0.x 的 `ctx.fiber.config` 是**解析后**的对象（schema 默认值、`internal/config` 钩子都已应用），没有 `effectiveConfig`；cordis 4.1.x 的 `fiber.config` 是**原始输入**（没写配置的 entry 上是 `undefined`，`!!js` 表达式不求值），解析后的对象在 `fiber.effectiveConfig`。插件的 `baseline()` 以前直接把 `fiber.config` 交给 `resolveConfig()`，现在读 `fiber.effectiveConfig ?? fiber.config ?? {}`（`src/fiber-config.ts`，单元测试固定三种情形：只有 `effectiveConfig`、只有 `config`、都没有）。
+    - 只加 `?? {}` 的修法（PR #44 原样）只挡住了“没写配置的 entry 无法激活”这一种崩溃。在真实 0.2.2-rc.1 宿主上，配置里含表达式的 entry（例如 `dbPath: !!js dshHomePath(...)`）仍然启动失败，`timeoutMs: !!js 45000` 则让 `config.inspect` / `sources.status` 误报“待重启：timeoutMs（当前生效 45000，配置为 [object Object]）”。改读 `effectiveConfig` 后两者都正常。写成普通值的部分配置，原样的代码与 `?? {}` 版本在 0.2.2-rc.1 上表现一致（`resolveConfig` 自己会补缺省值）。
+    - 没有配置的 entry 在 cordis 4.1 上无法挂载的原始现象：宿主只报一行 `warning: 1 entry did not activate`，所有工具缺席。
+  - **peer：** 每个受管 `@deepseek-ai/dsh-*` 增加第三段 `>=0.2.2-rc.1 <0.2.3-0`，即 `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`。每段都显式写出该线的预发布元组，否则 Host 在组合期会跳过（`semver` 的默认预发布规则）。0.2.3 及更早的宿主线行为不变。
+  - **cordis peer** 从 `~4.0.4` 改为 `~4.0.4 || ~4.1.0`：0.2.0-rc.2 宿主依赖 `~4.0.4`、0.2.1-rc.x 依赖 `~4.0.5`、0.2.2-rc.1 依赖 `~4.1.0`。没有用 `^4.0.4`，它会把没验证过的 4.2、4.3 一并放进来。
+  - **测试：** `config-actions.test.ts` 里“宿主审批缝”的钉死测试改为在 `dsh-tools/lib` 的所有文件里找（0.2.2 把 `serviceAsk` 与 `tools/pre-execute` 闸门从 `lib/index.js` 移到了 `lib/pipeline.js`，行为不变）。
+  - **修复：设置卡片的私有 RPC 通道在 0.2.2-rc.1 上挂不上。** `connection.rpc.handle()` 在 cordis 4.1 的新服务解析规则（按方法**定义处**检查 `inject`）下对外部插件抛 `cannot get property "webServer" without inject`：根因在宿主 `packages/client/connection/src/rpc-host.ts` 的 `register()` 里读 `owner.webServer`，而 Connection 插件自己没有声明该注入；抛错发生在 inject 回调里，原先没有任何报告，现象是卡片的实时状态、“agent 修改”面板、自定义 CLI 试运行全部 405。现在经派生上下文 `connectionCtx.extend({ webServer: connectionCtx.get('webServer') })` 读取 `connection` 并调 `rpc.handle`：`rpc` getter 捕获的 `owner` 是这个派生上下文，`webServer` 在它上面是自有属性，同一条路由、同一套认证。**只用公开的 Context API，不依赖宿主的 TypeScript-private `register` 方法**；三条宿主线（0.2.0-rc.2、0.2.1-rc.5、0.2.2-rc.1）都走这一种写法，没有“先试 handle、失败再回退”的分支。做法来自 [anweat/dsh-browser#49](https://github.com/anweat/dsh-browser/issues/49)（@shuaigekda，当时只在 dsh-browser 的 0.2.2-rc.1 上验证；这里补验了 0.2.0-rc.2 与 0.2.1-rc.5）。挂载失败时（例如某个未来宿主又改了规则），在 effect 里捕获，用 `console.warn` 打一行（频道名、原因、卡片仍渲染但实时状态 / agent 修改面板 / CLI 试运行不可用），返回空的卸载函数，插件照常运行；不用 `ctx.logger`，因为宿主默认级别会丢掉这类 warn，也不报告 inject 回调里的抛错。单元测试 `test/rpc-channel.test.ts` 固定：派生上下文自有 `webServer`、`handle` 在它上面被调用、抛错向上传、告警行含频道名与原因且无 ANSI。三个真实宿主的 Web profile 上无 405、状态摘要、停用时通道卸载都正常；0.2.2-rc.1 上另验证覆盖层读取、采纳与撤销、自定义 CLI 试运行、设置保存与恢复，以及 headless 的 `web_index` + `web_call config.inspect`（[验证记录](docs/validation/2026-11-05-dsh-0.2.2.md) 的 2026-11-09 一节）。
+  - 真实宿主验证（隔离 `DSH_HOME`，tgz 以 `file:` 安装，走安装闸门；无模型探针用宿主自己的 `ctx.tools.execute` 调 `web_call`，判定标准是完成的工具调用结果）：`0.2.0-rc.2`、`0.2.1-rc.5`、`0.2.2-rc.1` 三个宿主上，无配置与有配置的 entry 都通过，包括不联网的 `search.run`（本地 SearXNG 形状的夹具）、不重启改 `searchMaxResults`、审批闸门、skill。`0.2.2` 正式版靠 `0.2.2-rc.1` 的这轮验证放行，没有对正式版另做验证。
+- 兼容：新增实测 `dsh-v0.2.1-rc.5`（npm `@deepseek-ai/dsh@0.2.1-rc.5`，dist-tag `next`，2026-10-30 验证）。**插件源码与 peer 范围没有改动**：rc.5 与 rc.4 的依赖版本相同，源码差异只在客户端对话的推理块渲染，不涉及插件用到的宿主接口。npm 上已发布的 `0.2.3`（搭配 `@anweat/dsh-browser@0.2.2`）在 rc.5 宿主上干净安装（pnpm 11.7.0 与 12.4.2 都退出码 0、无警告）、headless 下 `web_index` / `web_call` 可用、Web 设置卡片渲染并保存一项都通过。`test:peers` 的受支持基线加了 `0.2.1-rc.5`。验证记录见 [docs/validation/2026-10-30-dsh-rc5.md](docs/validation/2026-10-30-dsh-rc5.md)。
 - 文档整理：README 精简为中文入口并新增英文版 `README.en.md`；其余内容按主题拆到 `docs/guide/`，设计与调研记录移到 `docs/dev/`；`LOGIN.md` 并入 `docs/guide/platform-login.md` 并按当前的 opencli 优先做法改写（登录由用户自己完成，插件没有登录窗口）；README 里的兼容表与升级说明移到本文件；新增 `scripts/check-docs-links.mjs`（`pnpm run check:docs`，已并入 `verify`）检查文档链接、锚点和中英文 README 的标题数量。没有改动运行时行为。
 
 ## 从旧版本升级
 
 适用于 0.2.x 各版本之间的升级（0.1.x 宿主或 dsh-browser 0.1.x 请不要升级，停留在 `dsh-web-search-pro@0.1.15`，见[兼容与发布通道（历史）](#兼容与发布通道历史)）。DSH Desktop 用户在插件页卸载后重新 Add plugin，写法见 [安装与首次使用](docs/guide/install.md#用-dsh-desktop-安装)。
 
-先确认宿主是 `dsh-v0.2.0-rc.2` 或 `dsh-v0.2.1-rc.2` ~ `rc.4`，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.2`（或更新的 0.2.x；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
+先确认宿主是 `dsh-v0.2.0-rc.2`、`dsh-v0.2.1-rc.2` ~ `rc.5` 或 `dsh-v0.2.2-rc.1` 起，浏览器插件（如果装了）是 `@anweat/dsh-browser@0.2.3`（0.2.1 线宿主上 0.2.2 起即可；0.2.2 线宿主上请用 0.2.3 或更新；0.2.0-rc.2 宿主上 0.2.0 / 0.2.1 也可以）；两者都需要作为 profile 的直接依赖。
 
 ```bash
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+dsh plugin --profile web add @anweat/dsh-browser@0.2.3 dsh-web-search-pro@0.2.4
 ```
 
 > **不再支持旧线**：宿主仍是 DSH 0.1.x，或浏览器插件仍是 `@anweat/dsh-browser` 0.1.x，请不要升级。只升级本插件、保留旧浏览器插件时，本插件照常工作，但所有浏览器相关能力都会返回 `CAPABILITY_UNAVAILABLE`，`sources.status` 显示 `browser: legacy (unsupported)`。

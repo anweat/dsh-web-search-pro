@@ -58,7 +58,7 @@ export function bootPlugin(extra: Record<string, unknown> = {}, before?: (dir: s
     systemPrompt: { section: () => {} },
     on: (event: string, handler: any) => { listeners.push({ event, handler }); return () => {} },
     // The Host injects when the services exist; the harness has the connection transport, so run the callback with a context that carries it.
-    inject: (names: string[], callback: (ctx: any) => void) => { if (names.includes('connection')) callback({ root: { connection }, effect: (fn: () => () => void) => { disposers.push(fn()) } }) },
+    inject: (names: string[], callback: (ctx: any) => void) => { if (names.includes('connection')) callback({ get: (name: string) => (name === 'webServer' ? {} : undefined), extend: (meta: object) => Object.assign(Object.create(null), meta, { connection }), effect: (fn: () => () => void) => { disposers.push(fn()) } }) },
   }
   // The plugin resolves a missing dbPath to $DSH_HOME/data/web-search-pro: never the real home in a test.
   if (typeof config.dbPath !== 'string') throw new Error('bootPlugin: dbPath must stay a temp path; a missing dbPath would open the real home')

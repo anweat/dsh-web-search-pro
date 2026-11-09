@@ -87,10 +87,56 @@ export function createHandler(services: RpcServices): Handler {
   }
 }
 
+/** The part of the Host's `connection` service used here. */
+export interface ConnectionRegistrar {
+  rpc: { handle(channel: string, handler: Handler): () => Promise<void> }
+}
+
+/** The part of a cordis Context used to reach the Host's connection transport. */
+export interface ChannelContext {
+  get(name: 'webServer'): unknown
+  extend(meta: { webServer: unknown }): { connection: ConnectionRegistrar }
+}
+
+/**
+ * Mount the channel and return its disposer.
+ *
+ * `connection.rpc.handle` mounts the Web route with `owner.webServer`, where `owner` is the Context the `rpc` getter captured
+ * (`this.ctx`; packages/client/connection/src/rpc-host.ts:274 in the Host). Under cordis 4.1 (DSH 0.2.2) a service property read is
+ * checked against the `inject` list of the Context that DEFINED the service, i.e. the Connection plugin, which does not list `webServer`,
+ * so the call throws `cannot get property "webServer" without inject` for every external plugin (cordis 4.0.x did not check). The throw
+ * happened inside an inject callback and was never reported: the channel stayed unmounted and the settings card got HTTP 405.
+ *
+ * The public-API way around it (found by @shuaigekda in anweat/dsh-browser#49): read the service through a derived context that carries
+ * the dependency this plugin did inject as its own property, `ctx.extend({ webServer: ctx.get('webServer') })`. `Context.extend` defines
+ * those properties directly on the child, so the `rpc` getter captures the child as `owner` and `owner.webServer` resolves as an own
+ * property, without the inject check. Same route, same transport and authentication; no private Host method. It is used on every Host
+ * (on cordis 4.0.x the own property is simply redundant). Reading `connection` from `ctx.root` or from `ctx` itself does not help.
+ */
+export function openChannel(connectionCtx: ChannelContext, handler: Handler): () => Promise<void> {
+  const owner = connectionCtx.extend({ webServer: connectionCtx.get('webServer') })
+  return owner.connection.rpc.handle(RPC_CHANNEL, handler)
+}
+
+const stripAnsi = (text: string): string => text.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
+
+/** The one console line for a channel that could not be mounted (exported for the test). */
+export function channelFailureMessage(error: unknown): string {
+  return 'web-search-pro: settings-card RPC channel ' + RPC_CHANNEL + ' was not mounted (' + stripAnsi(String(error instanceof Error ? error.message : error)) + "); the card still renders, but its live status, agent-edits panel and custom-CLI dry-run will not work"
+}
+
 /** Register the channel when the Host has the transport; the effect unregisters it with the plugin. */
 export function registerRpc(ctx: Context, services: RpcServices): void {
   ctx.inject(['connection', 'webServer'], (connectionCtx) => {
-    const connection = (connectionCtx.root as unknown as { connection: { rpc: { handle(channel: string, handler: Handler): () => Promise<void> } } }).connection
-    connectionCtx.effect(() => connection.rpc.handle(RPC_CHANNEL, createHandler(services)), 'web-search-pro: settings card RPC channel')
+    connectionCtx.effect(() => {
+      try {
+        return openChannel(connectionCtx as unknown as ChannelContext, createHandler(services))
+      } catch (error) {
+        // The Host reports nothing for a throw inside an inject callback (this is how the cordis 4.1 failure stayed invisible), and
+        // ctx.logger was observed dropping this at its default level, so say it on the console and keep the plugin running.
+        console.warn(channelFailureMessage(error))
+        return () => {}
+      }
+    }, 'web-search-pro: settings card RPC channel')
   })
 }

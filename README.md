@@ -15,11 +15,13 @@
 
 | 项 | 范围 |
 |---|---|
-| dsh-web-search-pro | `0.2.3` |
-| DSH 宿主（peer） | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0`；实测 `0.2.0-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.4` |
-| cordis（peer） | `~4.0.4` |
-| 可选配套 `@anweat/dsh-browser` | `^0.2.0`（0.2.1 线宿主上必须是 `0.2.2` 起） |
+| dsh-web-search-pro | `0.2.4` |
+| DSH 宿主（peer） | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0 \|\| >=0.2.2-rc.1 <0.2.3-0`；实测 `0.2.0-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.4`、`0.2.1-rc.5`、`0.2.2-rc.1` |
+| cordis（peer） | `~4.0.4 \|\| ~4.1.0`（0.2.2 线宿主带 4.1.x） |
+| 可选配套 `@anweat/dsh-browser` | `^0.2.0`（0.2.1 线宿主上必须是 `0.2.2` 起；0.2.2 线宿主上请用 `0.2.3` 或更新） |
 | DSH 0.1.x 宿主或 dsh-browser 0.1.x | 固定使用 `dsh-web-search-pro@0.1.15`，不再更新 |
+
+**0.2.2 线的设置卡片通道**：宿主 0.2.2-rc.1 的 `connection.rpc.handle()` 在 cordis 4.1 下对外部插件抛错（根因在宿主 `dsh-client-connection` 的 `register()` 读 `owner.webServer`，而 cordis 4.1 按服务的定义处检查 `inject`）。插件经一个自带 `webServer` 的派生上下文调用 `handle`（`ctx.extend({ webServer: ctx.get('webServer') })`），只用公开的 Context API，不依赖宿主的私有方法；三条宿主线（0.2.0-rc.2、0.2.1-rc.5、0.2.2-rc.1）用同一写法。做法来自 [anweat/dsh-browser#49](https://github.com/anweat/dsh-browser/issues/49)（@shuaigekda）。挂载失败时插件在控制台打一行警告并照常运行（卡片的实时状态、agent 修改面板、CLI 试运行不可用）。详见 [CHANGELOG](./CHANGELOG.md) 与 [验证记录](docs/validation/2026-11-05-dsh-0.2.2.md)。
 
 历史版本的兼容表见 [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史)，peer 范围的写法见 [兼容范围](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md)。
 
@@ -29,13 +31,13 @@
 
 ```bash
 # 只要搜索：
-dsh plugin --profile web add dsh-web-search-pro@0.2.3
+dsh plugin --profile web add dsh-web-search-pro@0.2.4
 # 还要读取渲染页 / 浏览器平台：连同可选的浏览器插件一起装（两者都必须是 profile 的直接依赖）
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+dsh plugin --profile web add @anweat/dsh-browser@0.2.3 dsh-web-search-pro@0.2.4
 dsh --profile web
 ```
 
-**DSH Desktop**：Desktop 的 profile 由应用管理，CLI 不能操作它。打开**插件**页 → **Add plugin**，填包名（可带版本，如 `dsh-web-search-pro@0.2.3`，写法同上面 `add` 后面那段）→ Install；对话框里还能选 **Registry**。非官方插件升级 = 先卸载再重装；国内镜像（如 npmmirror）可能晚同步，装不到新版本时把 Registry 换成 `https://registry.npmjs.org`。
+**DSH Desktop**：Desktop 的 profile 由应用管理，CLI 不能操作它。打开**插件**页 → **Add plugin**，填包名（可带版本，如 `dsh-web-search-pro@0.2.4`，写法同上面 `add` 后面那段）→ Install；对话框里还能选 **Registry**。非官方插件升级 = 先卸载再重装；国内镜像（如 npmmirror）可能晚同步，装不到新版本时把 Registry 换成 `https://registry.npmjs.org`。
 
 **本地目录 / tarball（开发用）**：`dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro`。
 

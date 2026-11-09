@@ -1,16 +1,16 @@
 # 安装与首次使用
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 本插件是 DSH 的 bundle 插件。兼容的宿主与 Browser 版本见 [兼容范围](./compatibility.md)，从旧版本升级见 [CHANGELOG](../../CHANGELOG.md#从旧版本升级)。
 
 ## 用 DSH CLI 安装
 
 ```bash
-# 默认安装（面向 dsh-v0.2.0-rc.2 与 dsh-v0.2.1-rc.2 ~ rc.4 宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+# 默认安装（面向 dsh-v0.2.0-rc.2、dsh-v0.2.1-rc.2 ~ rc.5 与 dsh-v0.2.2-rc.1 起宿主；浏览器插件可选，需要读取渲染页 / 浏览器平台时一起装）：
+dsh plugin --profile web add @anweat/dsh-browser@0.2.3 dsh-web-search-pro@0.2.4
 # 不需要浏览器能力时，只装本插件即可：
-dsh plugin --profile web add dsh-web-search-pro@0.2.3
+dsh plugin --profile web add dsh-web-search-pro@0.2.4
 # 重启（web profile 关闭了 HMR）：
 dsh --profile web
 ```
@@ -22,7 +22,7 @@ dsh --profile web
 DSH Desktop 的 profile 由应用自己管理，CLI 不能操作 `desktop` profile（`dsh plugin --profile desktop …` 会报 `profile "desktop" is managed exclusively by the Electron application`）。请在应用里装：
 
 1. 打开**插件**页，点 **Add plugin**。
-2. 填包名，可以带版本，写法同 CLI 里 `dsh plugin add` 后面那段，例如 `dsh-web-search-pro@0.2.3`；要浏览器能力就再装一次 `@anweat/dsh-browser@0.2.2`（以 Desktop 0.2.1-rc.3 的界面为准）。
+2. 填包名，可以带版本，写法同 CLI 里 `dsh plugin add` 后面那段，例如 `dsh-web-search-pro@0.2.4`；要浏览器能力就再装一次 `@anweat/dsh-browser@0.2.3`（以 Desktop 0.2.1-rc.3 的界面为准）。
 3. 对话框里可以选 **Registry**，然后点 Install。
 4. 装完如果插件没有出现或设置卡片没有加载，重新启动应用。
 

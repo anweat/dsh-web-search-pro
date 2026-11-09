@@ -83,11 +83,19 @@ test('the handler is registered on the Host transport under the plugin\'s own ch
   const channels: string[] = []
   const injected: string[][] = []
   let effectName = ''
-  const connectionCtx = { root: { connection: { rpc: { handle: (channel: string) => { channels.push(channel); return async () => {} } } } }, effect: (fn: () => unknown, name: string) => { effectName = name; fn() } }
+  const webServer = { name: 'webServer' }
+  let ownerHasWebServer = false
+  const connection = { rpc: { handle: (channel: string) => { channels.push(channel); return async () => {} } } }
+  const connectionCtx = {
+    get: (name: string) => (name === 'webServer' ? webServer : undefined),
+    extend: (meta: Record<string, unknown>) => { const owner = Object.assign(Object.create(null), meta, { connection }); ownerHasWebServer = Object.hasOwn(owner, 'webServer') && owner.webServer === webServer; return owner },
+    effect: (fn: () => unknown, name: string) => { effectName = name; fn() },
+  }
   const ctx = { inject: (services: string[], callback: (ctx: unknown) => void) => { injected.push(services); callback(connectionCtx) } }
   registerRpc(ctx as never, { router: {} as never, dynamic: () => ({}) as never })
   assert.deepEqual(injected, [['connection', 'webServer']])
   assert.deepEqual(channels, [RPC_CHANNEL])
+  assert.ok(ownerHasWebServer, 'the channel is mounted through a derived context that owns webServer')
   assert.equal(RPC_CHANNEL, '/dsh-web-search-pro')
   assert.match(effectName, /RPC channel/)
 })

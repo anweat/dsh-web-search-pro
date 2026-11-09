@@ -1,6 +1,6 @@
 # 浏览器脚本与自动化分层
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 这些能力由可选的配套插件 `@anweat/dsh-browser ^0.2.0` 提供，经它的 `browser_call` 工具调用（动作名见下）；本插件只负责搜索、读取与平台后端。本文原先分散在 README 的“浏览器脚本与自动化分层”和 `LOGIN.md` 里，现已合并。
 

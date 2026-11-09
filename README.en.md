@@ -17,11 +17,13 @@ An enhanced web search plugin for [DeepSeek Harness](https://github.com/deepseek
 
 | Item | Range |
 |---|---|
-| dsh-web-search-pro | `0.2.3` |
-| DSH host (peer) | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0`; verified on `0.2.0-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4` |
-| cordis (peer) | `~4.0.4` |
-| Optional companion `@anweat/dsh-browser` | `^0.2.0` (on 0.2.1-line hosts it must be `0.2.2` or later) |
+| dsh-web-search-pro | `0.2.4` |
+| DSH host (peer) | `>=0.2.0-rc.2 <0.2.1-0 \|\| >=0.2.1-rc.2 <0.2.2-0 \|\| >=0.2.2-rc.1 <0.2.3-0`; verified on `0.2.0-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, `0.2.1-rc.5`, `0.2.2-rc.1` |
+| cordis (peer) | `~4.0.4 \|\| ~4.1.0` (0.2.2-line hosts ship 4.1.x) |
+| Optional companion `@anweat/dsh-browser` | `^0.2.0` (on 0.2.1-line hosts it must be `0.2.2` or later; on 0.2.2-line hosts use `0.2.3` or later) |
 | DSH 0.1.x hosts or dsh-browser 0.1.x | Stay on `dsh-web-search-pro@0.1.15`; it is no longer updated |
+
+**Settings card channel on the 0.2.2 line**: the host's `connection.rpc.handle()` throws for external plugins under cordis 4.1 (root cause: the host's `dsh-client-connection` `register()` reads `owner.webServer`, and cordis 4.1 checks `inject` at the service's definition site). The plugin calls `handle` through a derived context that owns `webServer` (`ctx.extend({ webServer: ctx.get('webServer') })`): public Context API only, no private host method, the same code on all three host lines (0.2.0-rc.2, 0.2.1-rc.5, 0.2.2-rc.1). The approach comes from [anweat/dsh-browser#49](https://github.com/anweat/dsh-browser/issues/49) (@shuaigekda). If mounting fails the plugin prints one console warning and keeps running (live status, agent-edits panel and CLI dry-run unavailable). See the [CHANGELOG](./CHANGELOG.md) and the [validation record](docs/validation/2026-11-05-dsh-0.2.2.md) (Chinese).
 
 The compatibility table of earlier versions is in the [CHANGELOG](./CHANGELOG.md#兼容与发布通道历史); how the peer range is written is explained in [Compatibility](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/compatibility.md) (Chinese).
 
@@ -31,13 +33,13 @@ The compatibility table of earlier versions is in the [CHANGELOG](./CHANGELOG.md
 
 ```bash
 # Search only:
-dsh plugin --profile web add dsh-web-search-pro@0.2.3
+dsh plugin --profile web add dsh-web-search-pro@0.2.4
 # Plus rendered pages / browser platforms: install the optional browser plugin together (both must be direct dependencies of the profile)
-dsh plugin --profile web add @anweat/dsh-browser@0.2.2 dsh-web-search-pro@0.2.3
+dsh plugin --profile web add @anweat/dsh-browser@0.2.3 dsh-web-search-pro@0.2.4
 dsh --profile web
 ```
 
-**DSH Desktop**: Desktop manages its profile itself and the CLI cannot operate it. Open the **Plugins** page, click **Add plugin**, enter the package name (a version may be appended, for example `dsh-web-search-pro@0.2.3`, the same text as after `add` above), then Install. The dialog also lets you pick a **Registry**. Upgrading a non-official plugin means uninstalling and reinstalling it. Mirrors such as npmmirror can lag the official registry by minutes to hours; if a new version cannot be installed, switch the Registry to `https://registry.npmjs.org`.
+**DSH Desktop**: Desktop manages its profile itself and the CLI cannot operate it. Open the **Plugins** page, click **Add plugin**, enter the package name (a version may be appended, for example `dsh-web-search-pro@0.2.4`, the same text as after `add` above), then Install. The dialog also lets you pick a **Registry**. Upgrading a non-official plugin means uninstalling and reinstalling it. Mirrors such as npmmirror can lag the official registry by minutes to hours; if a new version cannot be installed, switch the Registry to `https://registry.npmjs.org`.
 
 **Local directory / tarball (development)**: `dsh plugin --profile web add ../dsh-browser ./dsh-web-search-pro`.
 

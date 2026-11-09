@@ -1,6 +1,6 @@
 # 开发
 
-> 适用版本：dsh-web-search-pro 0.2.3 · [返回 README](../../README.md) · [文档索引](../README.md)
+> 适用版本：dsh-web-search-pro 0.2.4 · [返回 README](../../README.md) · [文档索引](../README.md)
 
 ```bash
 pnpm install
