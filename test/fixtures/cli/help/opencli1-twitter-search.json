@@ -1,0 +1,167 @@
+{
+  "site": "twitter",
+  "name": "search",
+  "command": "opencli twitter search",
+  "usage": "opencli twitter search <query> [options]",
+  "access": "read",
+  "description": "Search Twitter/X for tweets, with optional --from / --has / --exclude / --product filters mapped to X's search operators",
+  "browser": true,
+  "domain": "x.com",
+  "positionals": [
+    {
+      "name": "query",
+      "positional": true,
+      "required": true,
+      "help": "Search query. Raw X operators (e.g. \"exact phrase\", #tag, OR, lang:en, since:YYYY-MM-DD, from:, since:) are passed through unchanged."
+    }
+  ],
+  "command_options": [
+    {
+      "name": "filter",
+      "default": "top",
+      "choices": [
+        "top",
+        "live"
+      ],
+      "help": "Legacy alias for --product. Kept for backwards compatibility; if --product is set it wins."
+    },
+    {
+      "name": "product",
+      "choices": [
+        "top",
+        "live",
+        "photos",
+        "videos"
+      ],
+      "help": "Which X search tab to read: top (default), live (Latest), photos, videos. Maps to the f= URL param."
+    },
+    {
+      "name": "from",
+      "help": "Restrict to tweets authored by <user>. Leading @ is stripped. Equivalent to appending `from:<user>` to the query."
+    },
+    {
+      "name": "has",
+      "choices": [
+        "media",
+        "images",
+        "videos",
+        "links",
+        "replies"
+      ],
+      "help": "Restrict to tweets that have media|images|videos|links|replies. Maps to X's `filter:<has>` operator."
+    },
+    {
+      "name": "exclude",
+      "choices": [
+        "replies",
+        "retweets",
+        "media",
+        "links"
+      ],
+      "help": "Exclude tweets matching <type>: replies|retweets|media|links. Maps to X's `-filter:<x>` operator (retweets → -filter:nativeretweets)."
+    },
+    {
+      "name": "limit",
+      "type": "int",
+      "default": 15,
+      "help": "Maximum number of tweets to return (default 15). Result count after server-side filtering."
+    },
+    {
+      "name": "top-by-engagement",
+      "type": "int",
+      "default": 0,
+      "help": "When set to N>0, re-rank the results by weighted engagement (likes×1 + retweets×3 + replies×2 + bookmarks×5 + log10(views+1)×0.5) and return the top N. Default 0 keeps X's native ordering."
+    }
+  ],
+  "browser_common_options": [
+    {
+      "name": "window",
+      "flags": "--window <mode>",
+      "help": "Browser window mode: foreground or background",
+      "choices": [
+        "foreground",
+        "background"
+      ]
+    },
+    {
+      "name": "site-session",
+      "flags": "--site-session <mode>",
+      "help": "Adapter site session lifecycle: ephemeral or persistent",
+      "choices": [
+        "ephemeral",
+        "persistent"
+      ]
+    },
+    {
+      "name": "keep-tab",
+      "flags": "--keep-tab <bool>",
+      "help": "Keep the browser tab lease after the command finishes",
+      "choices": [
+        "true",
+        "false"
+      ]
+    }
+  ],
+  "example": "opencli twitter search <query> -f yaml",
+  "columns": [
+    "id",
+    "author",
+    "bio",
+    "text",
+    "created_at",
+    "likes",
+    "views",
+    "url",
+    "has_media",
+    "media_urls",
+    "media_posters",
+    "card",
+    "quoted_tweet"
+  ],
+  "common_options": [
+    {
+      "name": "format",
+      "flags": "-f, --format <fmt>",
+      "help": "Output format: table, plain, json, yaml, md, csv",
+      "default": "table",
+      "choices": [
+        "table",
+        "plain",
+        "json",
+        "yaml",
+        "md",
+        "csv"
+      ]
+    },
+    {
+      "name": "trace",
+      "flags": "--trace <mode>",
+      "help": "Trace capture: off, on, retain-on-failure",
+      "default": "off",
+      "choices": [
+        "off",
+        "on",
+        "retain-on-failure"
+      ]
+    },
+    {
+      "name": "verbose",
+      "flags": "-v, --verbose",
+      "help": "Debug output",
+      "default": false
+    },
+    {
+      "name": "help",
+      "flags": "-h, --help",
+      "help": "display help for command"
+    }
+  ],
+  "output_formats": [
+    "table",
+    "plain",
+    "yaml",
+    "json",
+    "md",
+    "csv"
+  ]
+}

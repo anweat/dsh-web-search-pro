@@ -136,3 +136,21 @@ test('version helpers and platformBackends shape', () => {
   assert.match(platformBackendProblems({ a: ['x', 'x'] })[0]!, /twice/)
   assert.match(platformBackendProblems({ 'a b': ['x'] })[0]!, /not a platform id/)
 })
+
+test('probe.maxVersion: an exclusive upper bound, validated like minVersion (a user spec may set it, nothing else loosened)', () => {
+  const probe = (over: Record<string, unknown>): Record<string, unknown> => ({ ...baseSpec().probe, ...over })
+  assert.equal(errorsOf({ probe: probe({ minVersion: '1.0.0', maxVersion: '2.0.0', maxVersionHint: 'npm i -g demo-cli@1.8.8' }) }), '')
+  assert.match(errorsOf({ probe: probe({ maxVersion: 'two' }) }), /probe\.maxVersion must look like/)
+  assert.match(errorsOf({ probe: probe({ minVersion: '2.0.0', maxVersion: '2.0.0' }) }), /maxVersion must be above minVersion/)
+  assert.match(errorsOf({ probe: probe({ maxVersionHint: 5 }) }), /probe\.maxVersionHint must be a short string/)
+  assert.match(errorsOf({ probe: probe({ maxVersion: '2.0.0', surprise: 1 }) }), /probe\.surprise/)
+})
+
+test('errorCodes: usagePrefixes, riskControl and usageExit are validated in the same strict style', () => {
+  const search = (codes: Record<string, unknown>) => ({ ...baseSpec().search, errorCodes: { codePath: 'error.code', ...codes } })
+  assert.equal(errorsOf({ search: search({ usagePrefixes: ['commander.'], riskControl: ['SECURITY_BLOCK'], usageExit: [2] }) }), '')
+  assert.match(errorsOf({ search: search({ usagePrefixes: 'commander.' }) }), /usagePrefixes must be a list of short strings/)
+  assert.match(errorsOf({ search: search({ riskControl: [5] }) }), /riskControl must be a list of short strings/)
+  assert.match(errorsOf({ search: search({ usageExit: [0] }) }), /usageExit must be exit codes 1\.\.255/)
+  assert.match(errorsOf({ search: search({ surprise: [] }) }), /errorCodes\.surprise/)
+})

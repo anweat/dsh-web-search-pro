@@ -14,6 +14,11 @@ import { platformBackendProblems, resolveCliAdapters } from './spec.ts'
  * that need a login (xiaohongshu, reddit, twitter, zhihu) try the standalone OpenCLI first: it reads the login of the user's
  * own day-to-day Chrome through the OpenCLI Browser Bridge, so nothing is logged in by the plugin. The standalone CLIs
  * (xhs, rdt, twitter, zhihu) stay as the optional fallback for users who logged them in themselves.
+ *
+ * weibo, tieba and douyin follow the same shape: `opencli <site> search` first, the rendered search page of dsh-browser second.
+ * douban does NOT: `opencli douban search` searches movies, books and music only (its `type` option defaults to `movie`), so
+ * a keyword that is a post or a topic would answer with films; its chain stays the rendered search page alone. kuaishou has no
+ * OpenCLI site at all.
  */
 export const DEFAULT_CHAINS: Readonly<Record<string, readonly string[]>> = {
   xiaohongshu: ['opencli', 'xhs', 'browser-opencli'],
@@ -30,10 +35,10 @@ export const DEFAULT_CHAINS: Readonly<Record<string, readonly string[]>> = {
   tanso: ['tanso'],
   instagram: ['browser-opencli'],
   facebook: ['browser-opencli'],
-  weibo: ['browser-search'],
+  weibo: ['opencli', 'browser-search'],
   douban: ['browser-search'],
-  tieba: ['browser-search'],
-  douyin: ['browser-search'],
+  tieba: ['opencli', 'browser-search'],
+  douyin: ['opencli', 'browser-search'],
   kuaishou: ['browser-search'],
 }
 

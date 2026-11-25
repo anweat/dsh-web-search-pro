@@ -53,6 +53,12 @@ export declare function evaluateBiliCli(versionOutput: string, searchHelpOutput:
  * called `twitter` must not pass: require a successful `search --help` that actually describes a search command.
  */
 export declare function evaluateTwitterCli(searchHelpOutput: string, exitCode: number): ProbeResult;
+/**
+ * The opencli row, when dsh-browser reports an opencli of its own with another version than the one this plugin resolved: both
+ * versions are said, with why that matters (every CLI of one version stops the background daemon of another version, so two copies
+ * keep killing each other's daemon; one install serves both plugins). Pure; other rows and equal versions are returned as they are.
+ */
+export declare function withBrowserOpencli(rows: DepInfo[], browserVersion: string | undefined): DepInfo[];
 export declare const DEP_IDS: readonly string[];
 /** Detect every dependency: the spec-backed CLIs through their cached contract probes, the rest by presence on PATH. */
 export declare function detectDeps(options?: {

@@ -46,6 +46,7 @@ export async function trialCli(id: string, rawSpec: unknown, query: string, opti
   try {
     const { sources } = await runCliSearchDetailed(spec, { query: text, count: SHOWN, ...options.signal ? { signal: options.signal } : {} }, {
       bin: probe.path ?? spec.bins[0]!,
+      ...probe.pathPrefix ? { pathPrefix: probe.pathPrefix } : {},
       ...options.run ? { run: options.run } : {},
       ...options.env ? { env: options.env } : {},
       observe: result => { raw = (result.stdout.trim() ? result.stdout : result.stderr || result.stdout).trim() },

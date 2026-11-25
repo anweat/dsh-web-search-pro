@@ -19,3 +19,18 @@ export class SourceUnavailableError extends Error {
     this.missing = missing
   }
 }
+
+/**
+ * A platform that ran and failed (login wall, captcha, drift, block, network, timeout). Unlike {@link SourceUnavailableError}
+ * it did not fail its local readiness check: the search itself went wrong, and the message carries the reason and the remedy.
+ * The action layer keeps ACTION_FAILED and tells the model not to repeat the same platform search.
+ */
+export class PlatformFailedError extends Error {
+  /** Route id(s) of the platform(s) that failed. */
+  readonly platforms: readonly string[]
+  constructor(message: string, platforms: readonly string[]) {
+    super(message)
+    this.name = 'PlatformFailedError'
+    this.platforms = platforms
+  }
+}

@@ -182,6 +182,11 @@ export interface PipelineResult {
         }[];
     };
 }
+/** Every provider the run asked failed (errors, not empty answers). `failedIds` are the providers that did. */
+export declare class AllProvidersFailedError extends Error {
+    readonly failedIds: readonly string[];
+    constructor(message: string, failedIds: readonly string[]);
+}
 export declare function runPipeline(task: TaskSpec, deps: PipelineDeps, options?: PipelineOptions): Promise<PipelineResult>;
 /** What a follow-up search round needs: the gap needs and the request budget of the whole task. */
 export interface RefineRequest {

@@ -1,5 +1,62 @@
 [
  {
+  "command": "douban/search",
+  "site": "douban",
+  "name": "search",
+  "aliases": [],
+  "description": "搜索豆瓣电影、图书或音乐",
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "type",
+    "type": "str",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "movie",
+     "book",
+     "music"
+    ],
+    "default": "movie",
+    "help": "搜索类型（movie=电影, book=图书, music=音乐）"
+   },
+   {
+    "name": "keyword",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "搜索关键词"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "返回结果数量"
+   }
+  ],
+  "columns": [
+   "rank",
+   "title",
+   "rating",
+   "abstract",
+   "url"
+  ],
+  "domain": "search.douban.com",
+  "example": "opencli douban search <keyword> -f yaml",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
   "command": "douyin/login",
   "site": "douyin",
   "name": "login",
@@ -344,6 +401,63 @@
    "value"
   ],
   "domain": "reddit.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "tieba/search",
+  "site": "tieba",
+  "name": "search",
+  "aliases": [],
+  "description": "Search posts across tieba",
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "keyword",
+    "type": "string",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Search keyword"
+   },
+   {
+    "name": "page",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [
+     "1"
+    ],
+    "default": 1,
+    "help": "Page number (currently only 1 is supported)"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 20,
+    "help": "Number of items to return"
+   }
+  ],
+  "columns": [
+   "rank",
+   "id",
+   "title",
+   "forum",
+   "author",
+   "time",
+   "url"
+  ],
+  "domain": "tieba.baidu.com",
+  "example": "opencli tieba search <keyword> -f yaml",
   "defaultFormat": null,
   "siteSession": null
  },
@@ -713,6 +827,50 @@
    "url"
   ],
   "domain": "www.v2ex.com",
+  "defaultFormat": null,
+  "siteSession": null
+ },
+ {
+  "command": "weibo/search",
+  "site": "weibo",
+  "name": "search",
+  "aliases": [],
+  "description": "搜索微博",
+  "access": "read",
+  "strategy": "cookie",
+  "browser": true,
+  "args": [
+   {
+    "name": "keyword",
+    "type": "str",
+    "required": true,
+    "valueRequired": false,
+    "positional": true,
+    "choices": [],
+    "default": null,
+    "help": "Search keyword"
+   },
+   {
+    "name": "limit",
+    "type": "int",
+    "required": false,
+    "valueRequired": false,
+    "positional": false,
+    "choices": [],
+    "default": 10,
+    "help": "Number of results (max 50)"
+   }
+  ],
+  "columns": [
+   "rank",
+   "id",
+   "title",
+   "author",
+   "time",
+   "url"
+  ],
+  "domain": "weibo.com",
+  "example": "opencli weibo search <keyword> -f yaml",
   "defaultFormat": null,
   "siteSession": null
  },

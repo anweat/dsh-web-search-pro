@@ -1,0 +1,562 @@
+{
+  "site": "v2ex",
+  "command_count": 13,
+  "commands": [
+    {
+      "name": "daily",
+      "command": "opencli v2ex daily",
+      "usage": "opencli v2ex daily [options]",
+      "access": "write",
+      "description": "V2EX 每日签到并领取铜币",
+      "browser": true,
+      "domain": "www.v2ex.com",
+      "positionals": [],
+      "command_options": [],
+      "browser_common_options": [
+        {
+          "name": "window",
+          "flags": "--window <mode>",
+          "help": "Browser window mode: foreground or background",
+          "choices": [
+            "foreground",
+            "background"
+          ]
+        },
+        {
+          "name": "site-session",
+          "flags": "--site-session <mode>",
+          "help": "Adapter site session lifecycle: ephemeral or persistent",
+          "choices": [
+            "ephemeral",
+            "persistent"
+          ]
+        },
+        {
+          "name": "keep-tab",
+          "flags": "--keep-tab <bool>",
+          "help": "Keep the browser tab lease after the command finishes",
+          "choices": [
+            "true",
+            "false"
+          ]
+        }
+      ],
+      "example": "opencli v2ex daily -f yaml",
+      "columns": [
+        "status",
+        "message"
+      ]
+    },
+    {
+      "name": "hot",
+      "command": "opencli v2ex hot",
+      "usage": "opencli v2ex hot [options]",
+      "access": "read",
+      "description": "V2EX 热门话题",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [],
+      "command_options": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": 20,
+          "help": "Number of topics"
+        }
+      ],
+      "example": "opencli v2ex hot -f yaml",
+      "columns": [
+        "id",
+        "rank",
+        "title",
+        "node",
+        "replies",
+        "url"
+      ]
+    },
+    {
+      "name": "latest",
+      "command": "opencli v2ex latest",
+      "usage": "opencli v2ex latest [options]",
+      "access": "read",
+      "description": "V2EX 最新话题",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [],
+      "command_options": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": 20,
+          "help": "Number of topics"
+        }
+      ],
+      "example": "opencli v2ex latest -f yaml",
+      "columns": [
+        "id",
+        "rank",
+        "title",
+        "node",
+        "replies",
+        "url"
+      ]
+    },
+    {
+      "name": "login",
+      "command": "opencli v2ex login",
+      "usage": "opencli v2ex login [options]",
+      "access": "write",
+      "description": "Open v2ex login and wait until the browser session is authenticated",
+      "browser": true,
+      "domain": "v2ex.com",
+      "positionals": [],
+      "command_options": [
+        {
+          "name": "timeout",
+          "type": "int",
+          "default": 300,
+          "help": "Maximum seconds to wait for the user to finish login"
+        }
+      ],
+      "browser_common_options": [
+        {
+          "name": "window",
+          "flags": "--window <mode>",
+          "help": "Browser window mode: foreground or background",
+          "choices": [
+            "foreground",
+            "background"
+          ]
+        },
+        {
+          "name": "site-session",
+          "flags": "--site-session <mode>",
+          "help": "Adapter site session lifecycle: ephemeral or persistent",
+          "choices": [
+            "ephemeral",
+            "persistent"
+          ]
+        },
+        {
+          "name": "keep-tab",
+          "flags": "--keep-tab <bool>",
+          "help": "Keep the browser tab lease after the command finishes",
+          "choices": [
+            "true",
+            "false"
+          ]
+        }
+      ],
+      "example": "opencli v2ex login -f yaml",
+      "siteSession": "persistent",
+      "columns": [
+        "status",
+        "logged_in",
+        "site",
+        "username"
+      ]
+    },
+    {
+      "name": "me",
+      "command": "opencli v2ex me",
+      "usage": "opencli v2ex me [options]",
+      "access": "read",
+      "description": "V2EX 获取个人资料 (余额/未读提醒)",
+      "browser": true,
+      "domain": "www.v2ex.com",
+      "positionals": [],
+      "command_options": [],
+      "browser_common_options": [
+        {
+          "name": "window",
+          "flags": "--window <mode>",
+          "help": "Browser window mode: foreground or background",
+          "choices": [
+            "foreground",
+            "background"
+          ]
+        },
+        {
+          "name": "site-session",
+          "flags": "--site-session <mode>",
+          "help": "Adapter site session lifecycle: ephemeral or persistent",
+          "choices": [
+            "ephemeral",
+            "persistent"
+          ]
+        },
+        {
+          "name": "keep-tab",
+          "flags": "--keep-tab <bool>",
+          "help": "Keep the browser tab lease after the command finishes",
+          "choices": [
+            "true",
+            "false"
+          ]
+        }
+      ],
+      "example": "opencli v2ex me -f yaml",
+      "columns": [
+        "username",
+        "balance",
+        "unread_notifications",
+        "daily_reward_ready"
+      ]
+    },
+    {
+      "name": "member",
+      "command": "opencli v2ex member",
+      "usage": "opencli v2ex member <username> [options]",
+      "access": "read",
+      "description": "V2EX 用户资料",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [
+        {
+          "name": "username",
+          "type": "str",
+          "positional": true,
+          "required": true,
+          "help": "Username"
+        }
+      ],
+      "command_options": [],
+      "example": "opencli v2ex member <username> -f yaml",
+      "columns": [
+        "username",
+        "tagline",
+        "website",
+        "github",
+        "twitter",
+        "location"
+      ]
+    },
+    {
+      "name": "node",
+      "command": "opencli v2ex node",
+      "usage": "opencli v2ex node <name> [options]",
+      "access": "read",
+      "description": "V2EX 节点话题列表",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [
+        {
+          "name": "name",
+          "type": "str",
+          "positional": true,
+          "required": true,
+          "help": "Node name (e.g. python, javascript, apple)"
+        }
+      ],
+      "command_options": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": 10,
+          "help": "Number of topics (API returns max 20)"
+        }
+      ],
+      "example": "opencli v2ex node <name> -f yaml",
+      "columns": [
+        "rank",
+        "title",
+        "author",
+        "replies",
+        "url"
+      ]
+    },
+    {
+      "name": "nodes",
+      "command": "opencli v2ex nodes",
+      "usage": "opencli v2ex nodes [options]",
+      "access": "read",
+      "description": "V2EX 所有节点列表",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [],
+      "command_options": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": 30,
+          "help": "Number of nodes"
+        }
+      ],
+      "example": "opencli v2ex nodes -f yaml",
+      "columns": [
+        "rank",
+        "name",
+        "title",
+        "topics",
+        "stars"
+      ]
+    },
+    {
+      "name": "notifications",
+      "command": "opencli v2ex notifications",
+      "usage": "opencli v2ex notifications [options]",
+      "access": "read",
+      "description": "V2EX 获取提醒 (回复/由于)",
+      "browser": true,
+      "domain": "www.v2ex.com",
+      "positionals": [],
+      "command_options": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": 20,
+          "help": "Number of notifications"
+        }
+      ],
+      "browser_common_options": [
+        {
+          "name": "window",
+          "flags": "--window <mode>",
+          "help": "Browser window mode: foreground or background",
+          "choices": [
+            "foreground",
+            "background"
+          ]
+        },
+        {
+          "name": "site-session",
+          "flags": "--site-session <mode>",
+          "help": "Adapter site session lifecycle: ephemeral or persistent",
+          "choices": [
+            "ephemeral",
+            "persistent"
+          ]
+        },
+        {
+          "name": "keep-tab",
+          "flags": "--keep-tab <bool>",
+          "help": "Keep the browser tab lease after the command finishes",
+          "choices": [
+            "true",
+            "false"
+          ]
+        }
+      ],
+      "example": "opencli v2ex notifications -f yaml",
+      "columns": [
+        "type",
+        "content",
+        "time"
+      ]
+    },
+    {
+      "name": "replies",
+      "command": "opencli v2ex replies",
+      "usage": "opencli v2ex replies <id> [options]",
+      "access": "read",
+      "description": "V2EX 主题回复列表",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [
+        {
+          "name": "id",
+          "type": "str",
+          "positional": true,
+          "required": true,
+          "help": "Topic ID"
+        }
+      ],
+      "command_options": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": 20,
+          "help": "Number of replies"
+        }
+      ],
+      "example": "opencli v2ex replies <id> -f yaml",
+      "columns": [
+        "floor",
+        "author",
+        "content"
+      ]
+    },
+    {
+      "name": "topic",
+      "command": "opencli v2ex topic",
+      "usage": "opencli v2ex topic <id> [options]",
+      "access": "read",
+      "description": "V2EX 主题详情和回复",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [
+        {
+          "name": "id",
+          "type": "str",
+          "positional": true,
+          "required": true,
+          "help": "Topic ID"
+        }
+      ],
+      "command_options": [],
+      "example": "opencli v2ex topic <id> -f yaml",
+      "columns": [
+        "id",
+        "title",
+        "content",
+        "member",
+        "created",
+        "node",
+        "replies",
+        "url"
+      ]
+    },
+    {
+      "name": "user",
+      "command": "opencli v2ex user",
+      "usage": "opencli v2ex user <username> [options]",
+      "access": "read",
+      "description": "V2EX 用户发帖列表",
+      "browser": false,
+      "domain": "www.v2ex.com",
+      "positionals": [
+        {
+          "name": "username",
+          "type": "str",
+          "positional": true,
+          "required": true,
+          "help": "Username"
+        }
+      ],
+      "command_options": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": 10,
+          "help": "Number of topics (API returns max 20)"
+        }
+      ],
+      "example": "opencli v2ex user <username> -f yaml",
+      "columns": [
+        "rank",
+        "title",
+        "node",
+        "replies",
+        "url"
+      ]
+    },
+    {
+      "name": "whoami",
+      "command": "opencli v2ex whoami",
+      "usage": "opencli v2ex whoami [options]",
+      "access": "read",
+      "description": "Show the current logged-in v2ex account",
+      "browser": true,
+      "domain": "v2ex.com",
+      "positionals": [],
+      "command_options": [],
+      "browser_common_options": [
+        {
+          "name": "window",
+          "flags": "--window <mode>",
+          "help": "Browser window mode: foreground or background",
+          "choices": [
+            "foreground",
+            "background"
+          ]
+        },
+        {
+          "name": "site-session",
+          "flags": "--site-session <mode>",
+          "help": "Adapter site session lifecycle: ephemeral or persistent",
+          "choices": [
+            "ephemeral",
+            "persistent"
+          ]
+        },
+        {
+          "name": "keep-tab",
+          "flags": "--keep-tab <bool>",
+          "help": "Keep the browser tab lease after the command finishes",
+          "choices": [
+            "true",
+            "false"
+          ]
+        }
+      ],
+      "example": "opencli v2ex whoami -f yaml",
+      "siteSession": "persistent",
+      "columns": [
+        "logged_in",
+        "site",
+        "username"
+      ]
+    }
+  ],
+  "common_options": [
+    {
+      "name": "format",
+      "flags": "-f, --format <fmt>",
+      "help": "Output format: table, plain, json, yaml, md, csv",
+      "default": "table",
+      "choices": [
+        "table",
+        "plain",
+        "json",
+        "yaml",
+        "md",
+        "csv"
+      ]
+    },
+    {
+      "name": "trace",
+      "flags": "--trace <mode>",
+      "help": "Trace capture: off, on, retain-on-failure",
+      "default": "off",
+      "choices": [
+        "off",
+        "on",
+        "retain-on-failure"
+      ]
+    },
+    {
+      "name": "verbose",
+      "flags": "-v, --verbose",
+      "help": "Debug output",
+      "default": false
+    },
+    {
+      "name": "help",
+      "flags": "-h, --help",
+      "help": "display help for command"
+    }
+  ],
+  "browser_common_options": [
+    {
+      "name": "window",
+      "flags": "--window <mode>",
+      "help": "Browser window mode: foreground or background",
+      "choices": [
+        "foreground",
+        "background"
+      ]
+    },
+    {
+      "name": "site-session",
+      "flags": "--site-session <mode>",
+      "help": "Adapter site session lifecycle: ephemeral or persistent",
+      "choices": [
+        "ephemeral",
+        "persistent"
+      ]
+    },
+    {
+      "name": "keep-tab",
+      "flags": "--keep-tab <bool>",
+      "help": "Keep the browser tab lease after the command finishes",
+      "choices": [
+        "true",
+        "false"
+      ]
+    }
+  ],
+  "next": [
+    "opencli v2ex <command> --help -f yaml",
+    "opencli v2ex <command> -f yaml"
+  ]
+}

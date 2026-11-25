@@ -1,0 +1,1 @@
+{"ok":false,"error":{"code":"unknown_command","message":"Unknown command: nosuchsite","exitCode":2,"hint":"Use opencli list <query> to find a capability."}}

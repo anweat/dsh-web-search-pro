@@ -119,18 +119,28 @@ export interface CliErrorCodesSpec {
   notLoggedIn?: readonly string[]
   /** Exit codes that mean "not logged in" when the output carries no readable code. */
   notLoggedInExit?: readonly number[]
+  /** Exit codes that mean "the arguments were not accepted" when the output carries no readable code (OpenCLI 1.8's argument parser prints plain text and exits 2). */
+  usageExit?: readonly number[]
   /** Codes that mean "no results" (ENGINE_EMPTY). */
   empty?: readonly string[]
+  /** Codes of an empty answer whose cause the tool cannot tell: nothing found, or no login, or a changed page (ENGINE_EMPTY, outcome `empty_unconfirmed`, said so). Matched before `empty`. */
+  emptyUnconfirmed?: readonly string[]
   /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
   blocked?: readonly string[]
   /** Case-insensitive fragments of the tool's message that mean the same (a JSON parse error on an HTML page: `Unexpected token '<'`). */
   blockedPatterns?: readonly string[]
   /** Codes that mean the tool cannot reach its browser (CLI_FAILED, not retryable). */
   unavailable?: readonly string[]
+  /** Codes that mean another process of the tool holds the resource the command needs (OpenCLI's SESSION_BUSY, exit 75 like its TIMEOUT): retryable, and said not to be a login problem (CLI_FAILED). Matched by code only, never by exit code. */
+  busy?: readonly string[]
   /** Codes that mean a timeout (ENGINE_TIMEOUT). */
   timeout?: readonly string[]
   /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
   usage?: readonly string[]
+  /** Code prefixes of the same kind (OpenCLI 2.x reports every argument parser failure as `commander.<reason>`). */
+  usagePrefixes?: readonly string[]
+  /** Codes that mean the site's risk control blocked the request (CLI_FAILED, not retryable at once, said not to be an expired login). Matched before `blocked`. */
+  riskControl?: readonly string[]
 }
 
 export interface CliSearchSpec {
@@ -160,6 +170,10 @@ export interface CliProbeSpec {
   versionArgs: readonly string[]
   /** `X.Y.Z` the detected version must reach. */
   minVersion?: string
+  /** `X.Y.Z` the detected version must stay BELOW (exclusive): a major version the adapter was never checked against is `incompatible`, not guessed at. */
+  maxVersion?: string
+  /** Appended to the reason of a version above `maxVersion`: the command that installs the version the adapter was checked with. */
+  maxVersionHint?: string
   helpArgs: readonly string[]
   /** Fragments the help output must contain: the subcommands and flags that prove this is the tool the spec describes. */
   mustContain: readonly string[]
@@ -277,9 +291,9 @@ const MAX_TIMEOUT_MS = 180_000
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
 const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'engine', 'confidence', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
-const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
+const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'maxVersion', 'maxVersionHint', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
-const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'])
+const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'usageExit', 'empty', 'emptyUnconfirmed', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage', 'usagePrefixes', 'riskControl'])
 const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'skipWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
 const ENV_KEYS = new Set(['required', 'passthrough', 'set'])
@@ -405,7 +419,8 @@ function checkErrorCodes(value: unknown, where: string, errors: string[]): void 
   closed(value, ERROR_CODES_KEYS, where, errors)
   if (!(typeof value.codePath === 'string' && PATH_RE.test(value.codePath))) errors.push(where + '.codePath must be a dotted path')
   if (value.messagePath !== undefined && !(typeof value.messagePath === 'string' && PATH_RE.test(value.messagePath))) errors.push(where + '.messagePath must be a dotted path')
-  for (const key of ['notLoggedIn', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
+  for (const key of ['notLoggedIn', 'empty', 'emptyUnconfirmed', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage', 'usagePrefixes', 'riskControl'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
+  if (value.usageExit !== undefined && !(Array.isArray(value.usageExit) && value.usageExit.length <= 8 && value.usageExit.every(c => Number.isInteger(c) && (c as number) > 0 && (c as number) < 256))) errors.push(where + '.usageExit must be exit codes 1..255')
   if (value.notLoggedInExit !== undefined && !(Array.isArray(value.notLoggedInExit) && value.notLoggedInExit.length <= 8 && value.notLoggedInExit.every(c => Number.isInteger(c) && (c as number) > 0 && (c as number) < 256))) errors.push(where + '.notLoggedInExit must be exit codes 1..255')
 }
 
@@ -452,6 +467,9 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
     }
     if (!(Array.isArray(p.helpArgs) && p.helpArgs.length)) errors.push(at + '.probe.helpArgs must not be empty')
     if (p.minVersion !== undefined && !(typeof p.minVersion === 'string' && VERSION_RE.test(p.minVersion))) errors.push(at + '.probe.minVersion must look like 1.2.3')
+    if (p.maxVersion !== undefined && !(typeof p.maxVersion === 'string' && VERSION_RE.test(p.maxVersion))) errors.push(at + '.probe.maxVersion must look like 2.0.0')
+    else if (typeof p.maxVersion === 'string' && typeof p.minVersion === 'string' && VERSION_RE.test(p.minVersion) && compareVersions(p.minVersion, p.maxVersion) >= 0) errors.push(at + '.probe.maxVersion must be above minVersion')
+    if (p.maxVersionHint !== undefined && !isStr(p.maxVersionHint, 200)) errors.push(at + '.probe.maxVersionHint must be a short string')
     if (!strList(p.mustContain, 12, 80)) errors.push(at + '.probe.mustContain must be a list of short strings (the subcommands / flags that prove the contract)')
     if (p.contractHint !== undefined && !isStr(p.contractHint, 200)) errors.push(at + '.probe.contractHint must be a short string')
   }

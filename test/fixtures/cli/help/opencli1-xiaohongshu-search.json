@@ -1,0 +1,165 @@
+{
+  "site": "xiaohongshu",
+  "name": "search",
+  "command": "opencli xiaohongshu search",
+  "usage": "opencli xiaohongshu search <query> [options]",
+  "access": "read",
+  "description": "搜索小红书笔记",
+  "browser": true,
+  "domain": "www.xiaohongshu.com",
+  "positionals": [
+    {
+      "name": "query",
+      "type": "str",
+      "positional": true,
+      "required": true,
+      "help": "Search keyword"
+    }
+  ],
+  "command_options": [
+    {
+      "name": "limit",
+      "type": "int",
+      "default": 20,
+      "help": "Number of results"
+    },
+    {
+      "name": "sort",
+      "default": "comprehensive",
+      "choices": [
+        "comprehensive",
+        "latest",
+        "most-liked",
+        "most-commented",
+        "most-collected"
+      ],
+      "help": "Sort order"
+    },
+    {
+      "name": "note-type",
+      "default": "all",
+      "choices": [
+        "all",
+        "video",
+        "image"
+      ],
+      "help": "Note type"
+    },
+    {
+      "name": "publish-time",
+      "default": "anytime",
+      "choices": [
+        "anytime",
+        "day",
+        "week",
+        "half-year"
+      ],
+      "help": "Publish time range"
+    },
+    {
+      "name": "scope",
+      "default": "all",
+      "choices": [
+        "all",
+        "seen",
+        "unseen",
+        "following"
+      ],
+      "help": "Search scope"
+    },
+    {
+      "name": "location",
+      "default": "all",
+      "choices": [
+        "all",
+        "same-city",
+        "nearby"
+      ],
+      "help": "Location distance"
+    }
+  ],
+  "browser_common_options": [
+    {
+      "name": "window",
+      "flags": "--window <mode>",
+      "help": "Browser window mode: foreground or background",
+      "choices": [
+        "foreground",
+        "background"
+      ]
+    },
+    {
+      "name": "site-session",
+      "flags": "--site-session <mode>",
+      "help": "Adapter site session lifecycle: ephemeral or persistent",
+      "choices": [
+        "ephemeral",
+        "persistent"
+      ]
+    },
+    {
+      "name": "keep-tab",
+      "flags": "--keep-tab <bool>",
+      "help": "Keep the browser tab lease after the command finishes",
+      "choices": [
+        "true",
+        "false"
+      ]
+    }
+  ],
+  "example": "opencli xiaohongshu search <query> -f yaml",
+  "columns": [
+    "rank",
+    "title",
+    "author",
+    "likes",
+    "published_at",
+    "url"
+  ],
+  "common_options": [
+    {
+      "name": "format",
+      "flags": "-f, --format <fmt>",
+      "help": "Output format: table, plain, json, yaml, md, csv",
+      "default": "table",
+      "choices": [
+        "table",
+        "plain",
+        "json",
+        "yaml",
+        "md",
+        "csv"
+      ]
+    },
+    {
+      "name": "trace",
+      "flags": "--trace <mode>",
+      "help": "Trace capture: off, on, retain-on-failure",
+      "default": "off",
+      "choices": [
+        "off",
+        "on",
+        "retain-on-failure"
+      ]
+    },
+    {
+      "name": "verbose",
+      "flags": "-v, --verbose",
+      "help": "Debug output",
+      "default": false
+    },
+    {
+      "name": "help",
+      "flags": "-h, --help",
+      "help": "display help for command"
+    }
+  ],
+  "output_formats": [
+    "table",
+    "plain",
+    "yaml",
+    "json",
+    "md",
+    "csv"
+  ]
+}

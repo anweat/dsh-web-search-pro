@@ -111,3 +111,16 @@ export async function browserLaunchReadiness(browser: BrowserService | undefined
     }
   } catch { return undefined }
 }
+
+/**
+ * The version of the OpenCLI dsh-browser itself found (`status().opencliVersion`, reported since dsh-browser's session P0), or undefined:
+ * an older dsh-browser, no OpenCLI, a failing call. Optional and never throws; it is only used to say that two copies are installed.
+ */
+export async function browserOpencliVersion(browser: BrowserService | undefined): Promise<string | undefined> {
+  const status = (browser as { status?: unknown } | undefined)?.status
+  if (typeof status !== 'function') return undefined
+  try {
+    const version = (await (status as () => Promise<{ opencliVersion?: unknown }>).call(browser))?.opencliVersion
+    return typeof version === 'string' && /^\d+\.\d+/.test(version) ? version : undefined
+  } catch { return undefined }
+}

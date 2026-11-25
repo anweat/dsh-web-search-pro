@@ -24,7 +24,7 @@
 | `xhs`（xiaohongshu，可选后备） | `xhs` | 0.6.4 | **live**（2026-10-27：用你自己保存的登录实测；一次返回 22 项，其中 `hot_query` 建议卡片被跳过，发布时间取 `note_card.corner_tag_info` 里的 `publish_time`，`MM-DD` / `YYYY-MM-DD` / `N小时前` 等保守解析，认不出的不填） |
 | `zhihu`（可选后备） | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
 | `rdt`（reddit，可选后备） | `rdt` | 0.4.2 | contract-only（同上） |
-| 独立 `opencli`（按站点，登录类平台的**首选**后端） | `opencli` | 1.8.8 | 只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json`。**twitter、zhihu：live**（2026-10-27 用你日常 Chrome 实测；twitter 的 `created_at` 转成 ISO，标题 / 摘要照 twitter 后端：作者 · likes · views · 时间；zhihu 只有标题 / 类型 / 作者 / 赞同数 / 链接，没有摘要和时间）。**xiaohongshu、reddit：contract-only（未实测）**——那次 Chrome 里没有小红书登录（`AUTH_REQUIRED`），Reddit 在代理出口下回了网页（见下）；字段取自 opencli 1.8.8 适配器源码里的输出列。其余站点：contract-only |
+| 独立 `opencli`（按站点，登录类平台的**首选**后端） | `opencli` | 1.8.8 | 只用有只读 `search` 命令的站点，输出用 `-f json`；站点能力不再靠 `list`（2.x 的 `list` 是分页对象、没有参数细节），而是对该站点跑一次 `opencli <site> search --help -f json`（1.8.8 与 2.0.3 字段相同：access、browser、domain、位置参数、`--limit`、三个静默参数），缓存 5 分钟、并发合并、同时最多 3 个进程；这条输出不是 JSON 的老 1.8.x 才回退到 `list` 和文本 `--help`。**twitter、zhihu：live**（2026-10-27 用你日常 Chrome 实测；twitter 的 `created_at` 转成 ISO，标题 / 摘要照 twitter 后端：作者 · likes · views · 时间；zhihu 只有标题 / 类型 / 作者 / 赞同数 / 链接，没有摘要和时间）。**xiaohongshu、reddit：contract-only（未实测）**——那次 Chrome 里没有小红书登录（`AUTH_REQUIRED`），Reddit 在代理出口下回了网页（见下）；字段取自 opencli 1.8.8 适配器源码里的输出列。**weibo、tieba、douyin：contract-only（未对站点实测）**——输出列取自 1.8.8 源码里的 `clis/<site>/search.js`（weibo `rank,id,title,author,time,url`；tieba `rank,id,title,forum,author,time,url`；douyin `rank,desc,author,url,plays,likes,comments,shares`，其中 plays / comments / shares 恒为 0，不当事实显示）；三个命令自己的 `--limit` 上限（50 / 20 / 30）都不低于适配的 `maxCount` 20。其余站点：contract-only。**版本范围：`>=1.8.0 <3.0.0`，1.8 与 2.x 都支持**（核对过的是 1.8.8 和 2.0.3；2.0.3 只对 `--version`、`list`、`<站点> search --help -f json` 和浏览器之前就失败的命令跑过真实输出，站点搜索没跑过，成功和登录失败的信封按它的源码构造夹具；3.x 没看过，探测为 `incompatible`，原因里写明找到的版本和 `npm i -g @jackwener/opencli@2`，链顺势跳到下一条后端）。找不到时除了 PATH，还会看常见的全局安装位置（见下“找不到 opencli 时”） |
 | `wx-search-cli`（wechat 第二后端） | `wx-search-cli` | 0.1.0 | **live**（2026-10-26：中英文与无结果查询实测；一页固定 10 条，适配层按 count 截取；搜狗反爬时它输出 `[]` 且退出码 0，与“无结果”无法区分） |
 | `tanso` | `tanso` | 2.0.2 | docs-only：按上游 README，未安装；只选 `bocha_web` 与 `zhihu_search` |
 
@@ -45,13 +45,33 @@
 | wechat（公众号，新） | `omnireach` → `wx-search-cli` |
 | omnireach（多源，不自动选入；只用五个免 Key 源） | `omnireach` |
 | tanso | `tanso` |
-| instagram / facebook | `browser-opencli`；weibo、douban、tieba、douyin、kuaishou：`browser-search` |
+| weibo、tieba、douyin | `opencli` → `browser-search` |
+| douban、kuaishou | `browser-search`（单独一条） |
+| instagram / facebook | `browser-opencli` |
+
+douban **不**把 `opencli` 放在前面：`opencli douban search` 只搜电影 / 图书 / 音乐（`type` 默认 `movie`），拿帖子或话题去搜只会得到电影，所以它的链保持原样（想用的话自己写 `platformBackends`）。kuaishou 在 opencli 里没有这个站点。weibo 的 `opencli weibo search` 没有卡片时报 `NOT_FOUND`，没登录也是这样（2026-11-25：未登录 4/4 是它，登录后立刻有结果），所以按“没有返回，也说不清原因”处理（`empty_unconfirmed`，附登录提示，链继续），`EMPTY_RESULT` / `EMPTY_RESPONSE` 同；`SESSION_BUSY`（别的 opencli 进程占着这个站点的浏览器会话，退出码 75，和 `TIMEOUT` 同码，按错误码区分）按可重试的繁忙错误报告，明确写“不是登录问题”。
 
 链上缺失、不兼容、未登录、被风控或出错的后端被跳过并记下原因（结果的 `notes` 里写 `skipped backends: opencli: …`，历史里记下最终回答的后端）；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。你显式配置的 `platformBackends` 原样优先，不会被新的默认顺序改写。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
 
+## OpenCLI 1.8 与 2.x 的差别（插件已兼容）
+
+| 面 | 1.8.8 | 2.0.3 |
+|---|---|---|
+| 站点能力 | `list -f json` 数组（有参数细节）；也有 `<site> search --help -f json` | `list` 是分页对象、没有参数细节；`<site> search --help -f json` 字段与 1.8.8 相同，**插件用它** |
+| 失败输出 | YAML，在 stderr | 一行 JSON，在 stdout（`ok: false` 的信封即使退出码是 0 也按失败处理） |
+| 成功输出 `-f json` | 裸数组 | `{ok:true,data:[…]}`；`data: null` 按“没有结果” |
+| 参数类错误 | `ARGUMENT`（退出码 2）；解析器本身的错误是纯文本、退出码 2 | `usage_error`、`unknown_command`、`commander.*`：都按“适配与该版本不符”报告，不可重试 |
+| 风控 | `SECURITY_BLOCK` 或网页 | `SECURITY_BLOCK`（Reddit 的拦截有了单独的错误，文案写明不是登录过期）：单独说明“站点拦截了请求，不是登录过期”，不立刻重试 |
+
+## 找不到 opencli 时
+
+桌面版宿主的 PATH 常常只有 `/usr/bin:/bin`，或是一个会消失的 fnm 单 shell 目录，而你的 opencli 装在版本管理器下。PATH 里找不到时，插件按 dsh-browser 找 opencli 的同一批全局安装位置再找一遍（只找，不执行 `npm root -g`）：`DSH_BROWSER_OPENCLI`（可填 `opencli` 启动器、全局安装的包目录或 `main.js`；填了就只认它，不会悄悄换成别的副本）、`npm_config_prefix` 的 `bin`、Homebrew（`/opt/homebrew/bin`、`/usr/local/bin`）、`~/.npm-global/bin`、`~/.local/bin`、nvm、fnm（含 macOS 的 `Library/Application Support/fnm`）、Volta、Bun；Windows 看 `%APPDATA%\npm` 的 `opencli.cmd`。
+
+`opencli` 启动器是 `#!/usr/bin/env node` 脚本，所以在 PATH 之外找到它时，子进程的 PATH 前面会加上启动器所在的目录（版本管理器把 `node` 放在同一个目录），那里没有 `node` 时再加上正在运行的 node 或能找到的 node 所在目录。其余环境变量仍按“干净环境”规则只传白名单，不放宽。探测、`opencli list` 和搜索用的是同一个启动器和同一个 PATH。找不到时，`sources.deps` 和链的原因里会写“not found on PATH or in the usual global install folders”。
+
 ## 登录类平台怎么用
 
-**登录类平台（小红书、知乎、Reddit、X）怎么用——登录完全交给你**：推荐的做法是在你**日常使用的 Chrome** 里登录这些站点，再装好 [OpenCLI](https://github.com/jackwener/opencli)（`npm i -g @jackwener/opencli`）和它的 **OpenCLI Browser Bridge** 扩展（`opencli doctor` 全 OK 即连通）。独立 `opencli` 是这四个平台的首选后端，直接使用那个 Chrome 的登录态：插件不提供任何登录流程、不运行任何登录命令、不读浏览器 Cookie，登录态过期时报“在你的 Chrome 里登录 <站点> 后重试”。调用时插件给站点命令带上 `--window background --site-session ephemeral --keep-tab false`（opencli 1.8.8 的浏览器命令都支持，也是它的默认值）：在后台窗口里跑、不抢你的焦点、用完关标签页；只对 `opencli <site> search --help` 里列出这三个参数的命令传（本地探测，不搜索），老版本或不开浏览器的命令不传。独立 CLI（`xhs`、`rdt`、`zhihu`、`twitter`）只是**可选后备**：想用就按它们自己的方式登录（下面），仍由你自己运行，插件只检查登录文件是否存在，没有就跳过。
+**登录类平台（小红书、知乎、Reddit、X）怎么用——登录完全交给你**：推荐的做法是在你**日常使用的 Chrome** 里登录这些站点，再装好 [OpenCLI](https://github.com/jackwener/opencli)（`npm i -g @jackwener/opencli@2`）和它的 **OpenCLI Browser Bridge** 扩展（`opencli doctor` 全 OK 即连通）。独立 `opencli` 是这四个平台的首选后端，直接使用那个 Chrome 的登录态：插件不提供任何登录流程、不运行任何登录命令、不读浏览器 Cookie，登录态过期时报“在你的 Chrome 里登录 <站点> 后重试”。调用时插件给站点命令带上 `--window background --site-session ephemeral --keep-tab false`（opencli 1.8.8 的浏览器命令都支持，也是它的默认值）：在后台窗口里跑、不抢你的焦点、用完关标签页；只对 `opencli <site> search --help` 里列出这三个参数的命令传（本地探测，不搜索），老版本或不开浏览器的命令不传。独立 CLI（`xhs`、`rdt`、`zhihu`、`twitter`）只是**可选后备**：想用就按它们自己的方式登录（下面），仍由你自己运行，插件只检查登录文件是否存在，没有就跳过。
 
 **2026-10-27 的实测结论**（opencli 1.8.8，用户在场）：`opencli twitter search` 与 `zhihu search` 成功并已适配；`opencli xiaohongshu search` 退出码 77 `AUTH_REQUIRED`（那个 Chrome 里没有小红书登录），已映射为未登录；`opencli reddit search` 退出码 1，Reddit 返回的是网页（`Unexpected token '<'`）——这台机器的网络是代理出口，Reddit 的登录页也显示“网络安全部门已屏蔽你的请求”，所以 **Reddit 在代理 IP 下会被拦**，换网络出口后才能验证它；`xhs search` 用用户保存的登录成功。
 

@@ -15,7 +15,7 @@
 
 import { runCli } from './util.ts'
 import { BILI_CLI_INSTALLS, BILI_CLI_REVISION, BILI_CLI_SOURCE, BILI_CLI_VERSION, BUILTIN_CLI_SPECS, TWITTER_CLI_INSTALLS, builtinSpecById } from './cli/builtin-specs.ts'
-import { OPENCLI_PROBE } from './cli/opencli.ts'
+import { OPENCLI_PROBE, OPENCLI_SUPPORTED_INSTALL } from './cli/opencli.ts'
 import { evaluateCliContract, findOnPath, probeAll, type CliInstallation, type ProbeSubject } from './cli/probe.ts'
 import { resolveCliAdapters, type CliAdapterSpec } from './cli/spec.ts'
 
@@ -65,7 +65,7 @@ const SPEC_INSTALLS: Readonly<Record<string, Install[]>> = {
   gh: [{ installer: 'brew', command: 'brew install gh' }, { installer: 'winget', command: 'winget install GitHub.cli' }],
   'wx-search-cli': [{ installer: 'npm', command: 'npm i -g wx-search-cli' }],
   tanso: [{ installer: 'npm', command: 'npm i -g @geekjourneyx/tanso' }],
-  opencli: [{ installer: 'npm', command: 'npm i -g @jackwener/opencli' }],
+  opencli: [{ installer: 'npm', command: 'npm i -g @jackwener/opencli@2' }],
 }
 
 const USED_BY: Readonly<Record<string, string>> = {
@@ -79,7 +79,7 @@ const USED_BY: Readonly<Record<string, string>> = {
   gh: 'github / github-issues / github-code 的 gh 回退后端（只读 `gh search`；需用户自行 `gh auth login`）',
   'wx-search-cli': 'wechat 平台第二后端（只读 `wx-search-cli search`；按上游文档，未实测）',
   tanso: 'tanso 平台后端（只读；按上游文档，未实测）',
-  opencli: '独立 OpenCLI：xiaohongshu / reddit / twitter 等站点的搜索后端（按 `opencli list` 的 search 命令，使用用户自己的 Chrome）',
+  opencli: '独立 OpenCLI：xiaohongshu / zhihu / weibo / reddit / twitter 等站点的搜索后端（按该站点自己的只读 search 命令，使用用户自己的 Chrome）',
 }
 
 const LABELS: Readonly<Record<string, string>> = {
@@ -136,10 +136,24 @@ const infoOf = (subject: ProbeSubject, spec: CliAdapterSpec | undefined, usedBy:
   label,
   usedBy,
   source: subject.packageNote,
-  ...subject.probe.minVersion ? { requiredVersion: '>=' + subject.probe.minVersion } : {},
+  ...subject.probe.minVersion ? { requiredVersion: '>=' + subject.probe.minVersion + (subject.probe.maxVersion ? ' <' + subject.probe.maxVersion : '') } : {},
   ...spec?.verification ? { verification: spec.verification.status } : {},
   installs,
 })
+
+/**
+ * The opencli row, when dsh-browser reports an opencli of its own with another version than the one this plugin resolved: both
+ * versions are said, with why that matters (every CLI of one version stops the background daemon of another version, so two copies
+ * keep killing each other's daemon; one install serves both plugins). Pure; other rows and equal versions are returned as they are.
+ */
+export function withBrowserOpencli(rows: DepInfo[], browserVersion: string | undefined): DepInfo[] {
+  if (!browserVersion) return rows
+  return rows.map(row => {
+    if (row.id !== 'opencli' || !row.version || row.version === browserVersion) return row
+    const note = 'two OpenCLI copies: this plugin uses ' + row.version + (row.path ? ' (' + row.path + ')' : '') + ', dsh-browser uses ' + browserVersion + '. A CLI stops the background daemon of another version, so the two keep stopping each other\'s daemon: install only one copy (' + OPENCLI_SUPPORTED_INSTALL + ') and let both use it.'
+    return { ...row, diagnostic: row.diagnostic ? row.diagnostic + ' | ' + note : note }
+  })
+}
 
 /** The built-in specs (one entry per CLI; a CLI serving several platforms is one entry) and the standalone opencli. */
 function builtinDeps(): { subject: ProbeSubject; info: Omit<DepInfo, 'available' | 'path' | 'version' | 'diagnostic' | 'installation'> }[] {

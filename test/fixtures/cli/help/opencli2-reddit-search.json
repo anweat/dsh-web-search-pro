@@ -1,0 +1,132 @@
+{
+  "site": "reddit",
+  "name": "search",
+  "command": "opencli reddit search",
+  "usage": "opencli reddit search <query> [options]",
+  "access": "read",
+  "description": "Search Reddit Posts",
+  "browser": true,
+  "domain": "www.reddit.com",
+  "positionals": [
+    {
+      "name": "query",
+      "positional": true,
+      "required": true,
+      "help": "Reddit search query"
+    }
+  ],
+  "command_options": [
+    {
+      "name": "subreddit",
+      "default": "",
+      "help": "Search within a specific subreddit"
+    },
+    {
+      "name": "sort",
+      "default": "relevance",
+      "help": "Sort order: relevance, hot, top, new, comments"
+    },
+    {
+      "name": "time",
+      "default": "all",
+      "help": "Time filter: hour, day, week, month, year, all"
+    },
+    {
+      "name": "limit",
+      "type": "int",
+      "default": 15
+    }
+  ],
+  "browser_common_options": [
+    {
+      "name": "window",
+      "flags": "--window <mode>",
+      "help": "Browser window mode: foreground or background",
+      "choices": [
+        "foreground",
+        "background"
+      ]
+    },
+    {
+      "name": "site-session",
+      "flags": "--site-session <mode>",
+      "help": "Adapter site session lifecycle: ephemeral or persistent",
+      "choices": [
+        "ephemeral",
+        "persistent"
+      ]
+    },
+    {
+      "name": "keep-tab",
+      "flags": "--keep-tab <bool>",
+      "help": "Keep the browser tab lease after the command finishes",
+      "choices": [
+        "true",
+        "false"
+      ]
+    }
+  ],
+  "example": "opencli reddit search <query>",
+  "defaultFormat": "json",
+  "columns": [
+    "id",
+    "title",
+    "subreddit",
+    "author",
+    "score",
+    "comments",
+    "url",
+    "created_utc",
+    "selftext",
+    "post_hint",
+    "url_overridden_by_dest",
+    "preview_image_url",
+    "gallery_urls"
+  ],
+  "common_options": [
+    {
+      "name": "format",
+      "flags": "-f, --format <fmt>",
+      "help": "Output format: table, plain, json, yaml, md, csv",
+      "default": "json",
+      "choices": [
+        "table",
+        "plain",
+        "json",
+        "yaml",
+        "md",
+        "csv"
+      ]
+    },
+    {
+      "name": "trace",
+      "flags": "--trace <mode>",
+      "help": "Trace capture: off, on, retain-on-failure",
+      "default": "off",
+      "choices": [
+        "off",
+        "on",
+        "retain-on-failure"
+      ]
+    },
+    {
+      "name": "verbose",
+      "flags": "-v, --verbose",
+      "help": "Debug output",
+      "default": false
+    },
+    {
+      "name": "help",
+      "flags": "-h, --help",
+      "help": "display help for command"
+    }
+  ],
+  "output_formats": [
+    "table",
+    "plain",
+    "yaml",
+    "json",
+    "md",
+    "csv"
+  ]
+}

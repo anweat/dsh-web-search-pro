@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
+import fs, { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { resolveConfig } from '../src/config.ts'
@@ -9,11 +9,12 @@ import { SearchRouter } from '../src/router.ts'
 import { Store } from '../src/store.ts'
 import { clearProbeCache } from '../src/cli/probe.ts'
 import { clearOpencliCache } from '../src/cli/opencli.ts'
-import { resolveChain } from '../src/cli/chain.ts'
+import { chainReport, resolveChain } from '../src/cli/chain.ts'
 import { BROWSER_020 } from './browser-stub.ts'
 import { fakeOpencli, OPENCLI_SILENT_HELP, posix, withCommands } from './cli-helpers.ts'
 
 const FIXTURES = new URL('./fixtures/cli/', import.meta.url).pathname
+const FIXTURES_URL = new URL('./fixtures/cli/', import.meta.url)
 
 const AUTH_REQUIRED = [
   'ok: false', 'error:', '  code: AUTH_REQUIRED', '  message: Zhihu search results are blocked behind a login wall',
@@ -123,6 +124,58 @@ test('OpenCLI is asked to stay out of the way: background window, ephemeral sess
     try {
       await h.search('rust', 'zhihu')
       assert.equal(fs.readFileSync(path.join(dir, 'argv.log'), 'utf8').trim(), 'zhihu search rust --limit 3 -f json')
+    } finally { h.cleanup() }
+  })
+})
+
+test('an installed OpenCLI 3.x (never looked at) is incompatible with the install command; 1.8 and 2.x are inside the range; the chain falls through', { skip: !posix }, async () => {
+  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '3.1.0', generation: 2 }), zhihu: ZHIHU_CLI }, async dir => {
+    await withHome(['.zhihu-cli/cookies.json'], async () => {
+      const h = harness()
+      try {
+        const report = await chainReport('zhihu', { deps: h.deps(), config: h.config })
+        const first = report.entries[0]!
+        assert.equal(first.id, 'opencli')
+        assert.equal(first.state, 'skipped')
+        assert.equal(first.installation, 'incompatible')
+        assert.match(first.reason!, /opencli 3\.1\.0 is newer than this adapter supports \(below 3\.0\.0 only\).*npm i -g @jackwener\/opencli@2/)
+        assert.equal(first.version, '3.1.0')
+        const out = await h.search('rust', 'zhihu')
+        assert.ok(out.sources.length > 0)
+        assert.equal(h.history().engine, 'zhihu', 'the next backend answered')
+        assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli: opencli is installed but does not match this adapter: opencli 3\.1\.0 is newer/)
+        assert.equal(fs.existsSync(path.join(dir, 'argv.log')), false, 'no search was run against the 3.x')
+      } finally { h.cleanup() }
+    })
+  })
+  // The bound is exclusive: 3.0.0 itself is out; 2.0.3 and 1.99.3 are in.
+  for (const [version, available] of [['3.0.0', false], ['2.0.3', true], ['2.9.9', true], ['1.99.3', true], ['1.7.9', false]] as const) {
+    await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version }) }, async () => {
+      const h = harness({ platformBackends: { zhihu: ['opencli'] } })
+      try { assert.equal((await chainReport('zhihu', { deps: h.deps(), config: h.config })).available, available, version) } finally { h.cleanup() }
+    })
+  }
+})
+
+const NOT_FOUND = ['ok: false', 'error:', '  code: NOT_FOUND', '  message: No Weibo search results found', '  exitCode: 1'].join('\n')
+const SESSION_BUSY = ['ok: false', 'error:', '  code: SESSION_BUSY', '  message: Another command holds the weibo session', '  exitCode: 75'].join('\n')
+const WEIBO_ROWS = readFileSync(new URL('constructed-opencli-weibo-search.json', FIXTURES_URL), 'utf8')
+
+test('weibo, tieba, douyin: the standalone OpenCLI answers first; zero results or a busy session fall through to the search page, each said as such', { skip: !posix }, async () => {
+  await withCommands({ opencli: fakeOpencli({ weibo: { stdout: WEIBO_ROWS }, tieba: { code: 1, stderr: NOT_FOUND }, douyin: { code: 75, stderr: SESSION_BUSY } }) }, async () => {
+    const h = harness()
+    try {
+      const ok = await h.search('露营', 'weibo')
+      assert.equal(h.history().engine, 'opencli', 'the standalone OpenCLI answered')
+      assert.equal(ok.sources[0]!.url, 'https://weibo.com/1234567890/Nabc123')
+      assert.match(ok.sources[0]!.title!, /露营装备/)
+      const tieba = await h.search('露营', 'tieba')
+      assert.equal(tieba.sources[0]!.title, 'Browser page hit', 'zero results at opencli: the search page answered')
+      assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli \[empty_unconfirmed\]: opencli returned nothing and cannot say why .*在你的 Chrome 里登录/)
+      const douyin = await h.search('露营', 'douyin')
+      assert.equal(douyin.sources[0]!.title, 'Browser page hit')
+      assert.match(JSON.stringify(h.history().detail), /opencli: opencli is busy: another opencli process holds the browser session.*not a login problem/)
+      assert.doesNotMatch(JSON.stringify(h.history().detail), /not logged in/)
     } finally { h.cleanup() }
   })
 })

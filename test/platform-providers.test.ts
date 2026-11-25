@@ -16,6 +16,8 @@ import { withCommands } from './cli-helpers.ts'
 const PLATFORMS = ['github', 'github-code', 'github-issues', 'bilibili', 'youtube', 'v2ex', 'xiaohongshu', 'twitter', 'reddit', 'instagram', 'facebook', 'rss', 'zhihu', 'weibo', 'douban', 'tieba', 'douyin', 'kuaishou', 'wechat', 'omnireach', 'tanso', 'arxiv', 'pubmed']
 // Backends since M12: chains. Browser-only platforms have one dsh-browser leg; instagram / facebook only the dsh-browser OpenCLI.
 const BROWSER_ONLY = ['weibo', 'douban', 'tieba', 'douyin', 'kuaishou']
+// weibo, tieba and douyin put the standalone OpenCLI in front of the search page (douban does not: its opencli search covers movies, books and music only).
+const OPENCLI_FIRST = ['weibo', 'tieba', 'douyin']
 const OPENCLI = ['instagram', 'facebook']
 // Platforms with a standalone CLI in front of (or instead of) the dsh-browser legs.
 const CLI_CHAINS = ['xiaohongshu', 'reddit', 'twitter', 'zhihu']
@@ -87,7 +89,7 @@ test('local probes by dimension: browser platforms say dsh-browser is missing, a
     const none = await registry.resolve(id)!.probeLocal(env()) as any
     assert.equal(none.available, false, id)
     assert.equal(none.installation, 'missing', id)
-    assert.equal(none.diagnosticCode, 'browser_missing', id)
+    assert.equal(none.diagnosticCode, OPENCLI_FIRST.includes(id) ? 'cli_missing' : 'browser_missing', id + ': the first skipped leg names the code')
     assert.match(none.reason, new RegExp('platform ' + id + ' requires the optional dsh-browser plugin'), id)
     const ready = await registry.resolve(id)!.probeLocal(env({ browser: fakeBrowser() })) as any
     assert.equal(ready.available, true, id)

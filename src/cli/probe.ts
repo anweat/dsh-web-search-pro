@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { runCli } from '../util.ts'
 import { buildCliEnv } from './runner.ts'
+import { locateOpencliBin, realMachine, withPathPrefix } from './opencli-locate.ts'
 import { compareVersions, parseVersion, type CliAdapterSpec } from './spec.ts'
 
 export type CliInstallation = 'missing' | 'detected' | 'incompatible'
@@ -20,6 +21,8 @@ export interface CliProbeResult {
   bin?: string
   /** Where it was found. */
   path?: string
+  /** Directories to put in front of the PATH of every run of it (a launcher found outside PATH needs a node): the version and help runs, `opencli list` and the search all use them. */
+  pathPrefix?: string[]
   version?: string
   /** Why it is incompatible or missing. */
   reason?: string
@@ -65,7 +68,20 @@ export function findOnPath(cmd: string, env: NodeJS.ProcessEnv = process.env): s
   return undefined
 }
 
-const keyOf = (spec: ProbeSubject): string => [spec.id, spec.bins.join(','), JSON.stringify(spec.probe), process.env.PATH ?? ''].join('\u0000')
+/**
+ * Where a command is: on PATH, and for the standalone `opencli` also in the usual global install places (see opencli-locate.ts),
+ * with the PATH directories its runs need. `problem` is set for an unusable `DSH_BROWSER_OPENCLI`.
+ */
+export function resolveBin(bin: string, env: NodeJS.ProcessEnv = process.env): { path: string; pathPrefix: string[]; problem?: string } | { path?: undefined; pathPrefix?: undefined; problem?: string } {
+  if (bin === 'opencli') {
+    const { location, problem } = locateOpencliBin(realMachine(env))
+    return location ? { path: location.path, pathPrefix: location.pathPrefix } : { ...problem ? { problem } : {} }
+  }
+  const found = findOnPath(bin, env)
+  return found ? { path: found, pathPrefix: [] } : {}
+}
+
+const keyOf = (spec: ProbeSubject): string => [spec.id, spec.bins.join(','), JSON.stringify(spec.probe), process.env.PATH ?? '', process.env.DSH_BROWSER_OPENCLI ?? ''].join('\u0000')
 
 /** The cached probe of a spec, when one is fresh (no spawn: `Engine.available()` is synchronous). */
 export function cachedProbe(spec: ProbeSubject, ttlMs = DEFAULT_TTL_MS, now: () => number = Date.now): CliProbeResult | undefined {
@@ -88,10 +104,14 @@ export function evaluateCliContract(
   const { probe } = spec
   const versionCmd = [bin, ...probe.versionArgs].join(' ')
   const detected = version.code === 0 ? parseVersion(version.output) : undefined
-  if (probe.minVersion !== undefined) {
+  if (probe.minVersion !== undefined || probe.maxVersion !== undefined) {
     if (version.code !== 0) return { state: 'incompatible', reason: versionCmd + ' failed with exit ' + version.code }
     if (!detected) return { state: 'incompatible', reason: versionCmd + ' returned no semantic version' }
-    if (compareVersions(detected, probe.minVersion) < 0) return { state: 'incompatible', version: detected, reason: bin + ' ' + detected + ' is older than required ' + probe.minVersion }
+    if (probe.minVersion !== undefined && compareVersions(detected, probe.minVersion) < 0) return { state: 'incompatible', version: detected, reason: bin + ' ' + detected + ' is older than required ' + probe.minVersion }
+    // The upper bound is exclusive: a newer major was never checked against this adapter, so it is reported, not adapted to.
+    if (probe.maxVersion !== undefined && compareVersions(detected, probe.maxVersion) >= 0) {
+      return { state: 'incompatible', version: detected, reason: bin + ' ' + detected + ' is newer than this adapter supports (below ' + probe.maxVersion + ' only)' + (probe.maxVersionHint ? ': install the tested version with `' + probe.maxVersionHint + '`' : '') }
+    }
   }
   const withVersion = detected ? { version: detected } : {}
   const helpCmd = [bin, ...probe.helpArgs].join(' ')
@@ -108,23 +128,26 @@ export function evaluateCliContract(
 async function probeUncached(spec: ProbeSubject, options: CliProbeOptions): Promise<CliProbeResult> {
   const run = options.run ?? runCli
   const now = options.now ?? Date.now
-  const env = buildCliEnv(spec)
-  const call = async (bin: string, args: readonly string[]): Promise<ContractInput> => {
-    const res = await run(bin, [...args], { timeoutMs: PROBE_TIMEOUT_MS, signal: undefined, env, cleanEnv: true, maxOutput: 128 * 1024, outputEncoding: 'utf-8' })
+  const call = async (bin: string, args: readonly string[], prefix: string[]): Promise<ContractInput> => {
+    const res = await run(bin, [...args], { timeoutMs: PROBE_TIMEOUT_MS, signal: undefined, env: withPathPrefix(buildCliEnv(spec), prefix), cleanEnv: true, maxOutput: 128 * 1024, outputEncoding: 'utf-8' })
     return { code: res.timedOut || res.spawnFailed ? -1 : res.code, output: res.stdout + '\n' + res.stderr }
   }
   let firstBad: CliProbeResult | undefined
+  let problem: string | undefined
   for (const bin of spec.bins) {
-    const found = findOnPath(bin)
-    if (!found) continue
-    const version = await call(found, spec.probe.versionArgs)
-    const help = await call(found, spec.probe.helpArgs)
+    const resolved = resolveBin(bin)
+    problem ??= resolved.problem
+    if (!resolved.path) continue
+    const found = resolved.path
+    const version = await call(found, spec.probe.versionArgs, resolved.pathPrefix)
+    const help = await call(found, spec.probe.helpArgs, resolved.pathPrefix)
     const verdict = evaluateCliContract(spec, bin, version, help)
-    const result: CliProbeResult = { state: verdict.state, bin, path: found, ...verdict.version ? { version: verdict.version } : {}, ...verdict.reason ? { reason: verdict.reason } : {}, checkedAt: now() }
+    const result: CliProbeResult = { state: verdict.state, bin, path: found, ...resolved.pathPrefix.length ? { pathPrefix: resolved.pathPrefix } : {}, ...verdict.version ? { version: verdict.version } : {}, ...verdict.reason ? { reason: verdict.reason } : {}, checkedAt: now() }
     if (verdict.state === 'detected') return result
     firstBad ??= result
   }
-  return firstBad ?? { state: 'missing', reason: spec.bins.join(' / ') + ' not found on PATH (' + spec.packageNote + ')', checkedAt: now() }
+  const places = spec.bins.includes('opencli') ? ' or in the usual global install folders (Homebrew, ~/.npm-global, nvm, fnm, Volta; DSH_BROWSER_OPENCLI names it explicitly)' : ''
+  return firstBad ?? { state: 'missing', reason: (problem ? problem + '; ' : '') + spec.bins.join(' / ') + ' not found on PATH' + places + ' (' + spec.packageNote + ')', checkedAt: now() }
 }
 
 /** Probe one spec (cached; concurrent calls for the same spec share one run). */

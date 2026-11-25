@@ -28,7 +28,8 @@ export interface EvidenceRequest extends TaskInput {
     } | undefined;
     /**
      * An explicit platform source that cannot run (missing browser / login / CLI / token, cooling down) is an error naming
-     * what is missing. With `allowFallback` the profile's web engines are searched instead and the pack says so.
+     * what is missing. With `allowFallback` the profile's web engines are searched instead and the pack says so; the same when the
+     * platform ran and every explicit provider failed (not for an empty answer, an abort, or a spent deadline).
      */
     allowFallback?: boolean | undefined;
     /** `sources` entries to return. */

@@ -13,9 +13,11 @@ import { PLATFORM_SEARCH_SPECS, parseCookieString, type PlatformSearchSpec } fro
 import type { CustomPlatformSpec } from './config.ts'
 import { ExaClient, type ExaSearchRequest } from './exa-client.ts'
 import { EngineError } from './engine-error.ts'
+import { sourcesOfSearchPage } from './search-page.ts'
 import { cliSpecEngine, specEnv } from './cli/engine.ts'
 import { builtinSpecById } from './cli/builtin-specs.ts'
 import { buildArgv, missingEnv, parseCliOutput } from './cli/runner.ts'
+import { SAVE_LOGIN_COMMAND } from './login-script.ts'
 
 /**
  * A source row as an engine returns it: the host's `WebSearchSource` plus the provider's own quality signals, when it has any
@@ -711,6 +713,11 @@ export function customPlatformEngine(id: string, spec: CustomPlatformSpec, deps:
       const browser = requireBrowser(deps.browser, 'searchResults', 'custom platform search')
       const url = spec.url.replace(/{query}/g, encodeURIComponent(query))
       const cookies = spec.cookie ? parseCookieString(spec.cookie, url) : undefined
+      // A browser that can say what the page was (`searchPage`) is asked for that verdict; an older one is driven through `searchResults`, whose empty list cannot tell the states apart.
+      if (typeof browser.searchPage === 'function') {
+        const res = await browser.searchPage(url, searchSpec, { signal, count, cookies, ...options?.browser })
+        return { sources: sourcesOfSearchPage(res, { label: spec.name + ' (自定义)', platform: id, custom: true, boundProfile: options?.browser?.authProfile, hasCookie: !!spec.cookie }) }
+      }
       const sources = await browser.searchResults(url, searchSpec, { signal, count, cookies, ...options?.browser })
       if (!sources.length) throw new EngineError('自定义平台 ' + spec.name + ' 未取到结果：检查 url 的 {query} 占位、item/title/link 选择器，或补充 cookie。', 'ENGINE_EMPTY', false)
       return { sources }
@@ -732,10 +739,14 @@ export function playwrightPlatformEngine(platform: string, deps: EngineDeps): En
       const browser = requireBrowser(deps.browser, 'searchResults', builtin.label + ' search')
       const override = deps.platformRules?.[platform]
       const spec = { ...builtin, ...override ?? {} } as typeof builtin
+      if (typeof browser.searchPage === 'function') {
+        const res = await browser.searchPage(spec.url(query), spec, { signal, count, ...options?.browser })
+        return { sources: sourcesOfSearchPage(res, { label: builtin.label, platform, boundProfile: options?.browser?.authProfile }) }
+      }
       const sources = await browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
       if (!sources.length) {
         throw new EngineError(
-          builtin.label + ' 未取到结果：该平台需要浏览器登录态。运行 node scripts/save-login.mjs 登录一次，在 dsh-browser 中声明按域名授权的 AuthProfile，并通过 browserBindings.' + platform + ' 绑定；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
+          builtin.label + ' 未取到结果：该平台需要浏览器登录态。运行 ' + SAVE_LOGIN_COMMAND + ' 登录一次，在 dsh-browser 中声明按域名授权的 AuthProfile，并通过 browserBindings.' + platform + ' 绑定；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
           'ENGINE_EMPTY',
           false,
         )

@@ -1,0 +1,120 @@
+{
+  "site": "tieba",
+  "name": "search",
+  "command": "opencli tieba search",
+  "usage": "opencli tieba search <keyword> [options]",
+  "access": "read",
+  "description": "Search posts across tieba",
+  "browser": true,
+  "domain": "tieba.baidu.com",
+  "positionals": [
+    {
+      "name": "keyword",
+      "positional": true,
+      "required": true,
+      "help": "Search keyword"
+    }
+  ],
+  "command_options": [
+    {
+      "name": "page",
+      "type": "int",
+      "default": 1,
+      "choices": [
+        "1"
+      ],
+      "help": "Page number (currently only 1 is supported)"
+    },
+    {
+      "name": "limit",
+      "type": "int",
+      "default": 20,
+      "help": "Number of items to return"
+    }
+  ],
+  "browser_common_options": [
+    {
+      "name": "window",
+      "flags": "--window <mode>",
+      "help": "Browser window mode: foreground or background",
+      "choices": [
+        "foreground",
+        "background"
+      ]
+    },
+    {
+      "name": "site-session",
+      "flags": "--site-session <mode>",
+      "help": "Adapter site session lifecycle: ephemeral or persistent",
+      "choices": [
+        "ephemeral",
+        "persistent"
+      ]
+    },
+    {
+      "name": "keep-tab",
+      "flags": "--keep-tab <bool>",
+      "help": "Keep the browser tab lease after the command finishes",
+      "choices": [
+        "true",
+        "false"
+      ]
+    }
+  ],
+  "example": "opencli tieba search <keyword> -f yaml",
+  "columns": [
+    "rank",
+    "id",
+    "title",
+    "forum",
+    "author",
+    "time",
+    "url"
+  ],
+  "common_options": [
+    {
+      "name": "format",
+      "flags": "-f, --format <fmt>",
+      "help": "Output format: table, plain, json, yaml, md, csv",
+      "default": "table",
+      "choices": [
+        "table",
+        "plain",
+        "json",
+        "yaml",
+        "md",
+        "csv"
+      ]
+    },
+    {
+      "name": "trace",
+      "flags": "--trace <mode>",
+      "help": "Trace capture: off, on, retain-on-failure",
+      "default": "off",
+      "choices": [
+        "off",
+        "on",
+        "retain-on-failure"
+      ]
+    },
+    {
+      "name": "verbose",
+      "flags": "-v, --verbose",
+      "help": "Debug output",
+      "default": false
+    },
+    {
+      "name": "help",
+      "flags": "-h, --help",
+      "help": "display help for command"
+    }
+  ],
+  "output_formats": [
+    "table",
+    "plain",
+    "yaml",
+    "json",
+    "md",
+    "csv"
+  ]
+}

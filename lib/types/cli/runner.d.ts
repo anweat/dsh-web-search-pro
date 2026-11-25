@@ -44,6 +44,8 @@ export declare function structuredKind(text: string): 'JSON' | 'YAML' | undefine
  * what the spec says); a payload that says it failed (`expect` not met) is CLI_FAILED with the tool's own message.
  */
 export declare function parseCliItems(spec: Pick<CliAdapterSpec, 'bins'>, output: CliOutputSpec, stdout: string): unknown[];
+/** Whether stdout is a failure envelope (`{ "ok": false, "error": {...} }`), whatever the exit code says. */
+export declare function failureEnvelope(stdout: string): boolean;
 /** The failure payload (`ok: false`, `error: { code, message }`) a tool prints on stderr or stdout: JSON, or a YAML document after any notices. */
 export declare function parseFailurePayload(text: string): unknown;
 /**
@@ -97,6 +99,8 @@ export interface CliRunOptions {
     operation?: 'search' | 'read';
     /** Resolved command (a path or the bin name); default `spec.bins[0]`. */
     bin?: string;
+    /** Directories put in front of the child's PATH (the probe's `pathPrefix`: a launcher found outside PATH needs a node). The rest of the clean environment is unchanged. */
+    pathPrefix?: readonly string[];
     /** Test seams. */
     run?: typeof runCli;
     env?: NodeJS.ProcessEnv;

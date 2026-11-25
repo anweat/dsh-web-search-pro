@@ -240,7 +240,7 @@ test('wx-search-cli (README fixture) and tanso (docs-only fixture): drop captcha
 
 test('standalone opencli: only sites whose own list shows a read search command; per-site argv and output', () => {
   const sites = parseOpencliList(read('opencli-list.json'))
-  assert.deepEqual([...sites.keys()].sort(), ['douyin', 'hackernews', 'reddit', 'twitter', 'weixin', 'xiaohongshu', 'zhihu'], 'v2ex and xiaoyuzhou have no search command')
+  assert.deepEqual([...sites.keys()].sort(), ['douban', 'douyin', 'hackernews', 'reddit', 'tieba', 'twitter', 'weibo', 'weixin', 'xiaohongshu', 'zhihu'], 'v2ex and xiaoyuzhou have no search command')
   assert.equal(sites.get('hackernews')!.strategy, 'public')
   assert.equal(sites.get('xiaohongshu')!.domain, 'www.xiaohongshu.com')
   assert.deepEqual([sites.get('xiaohongshu')!.browser, sites.get('hackernews')!.browser], [true, false])
@@ -341,6 +341,11 @@ test('default chains: the order the plan fixes', () => {
   for (const p of ['github', 'github-issues', 'github-code']) assert.deepEqual(DEFAULT_CHAINS[p], ['rest', 'gh'])
   assert.deepEqual(DEFAULT_CHAINS.wechat, ['omnireach', 'wx-search-cli'])
   assert.deepEqual(DEFAULT_CHAINS.omnireach, ['omnireach'])
+  // weibo, tieba and douyin: the standalone OpenCLI first, the rendered search page second.
+  for (const p of ['weibo', 'tieba', 'douyin']) assert.deepEqual(DEFAULT_CHAINS[p], ['opencli', 'browser-search'], p)
+  // douban stays on the search page alone (`opencli douban search` only searches movies, books and music); kuaishou has no OpenCLI site.
+  assert.deepEqual(DEFAULT_CHAINS.douban, ['browser-search'])
+  assert.deepEqual(DEFAULT_CHAINS.kuaishou, ['browser-search'])
 })
 
 test('docs do not drift: the CLI guide and the skill name every built-in spec, every default chain platform and the verification of each', () => {

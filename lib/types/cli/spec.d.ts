@@ -141,18 +141,28 @@ export interface CliErrorCodesSpec {
     notLoggedIn?: readonly string[];
     /** Exit codes that mean "not logged in" when the output carries no readable code. */
     notLoggedInExit?: readonly number[];
+    /** Exit codes that mean "the arguments were not accepted" when the output carries no readable code (OpenCLI 1.8's argument parser prints plain text and exits 2). */
+    usageExit?: readonly number[];
     /** Codes that mean "no results" (ENGINE_EMPTY). */
     empty?: readonly string[];
+    /** Codes of an empty answer whose cause the tool cannot tell: nothing found, or no login, or a changed page (ENGINE_EMPTY, outcome `empty_unconfirmed`, said so). Matched before `empty`. */
+    emptyUnconfirmed?: readonly string[];
     /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
     blocked?: readonly string[];
     /** Case-insensitive fragments of the tool's message that mean the same (a JSON parse error on an HTML page: `Unexpected token '<'`). */
     blockedPatterns?: readonly string[];
     /** Codes that mean the tool cannot reach its browser (CLI_FAILED, not retryable). */
     unavailable?: readonly string[];
+    /** Codes that mean another process of the tool holds the resource the command needs (OpenCLI's SESSION_BUSY, exit 75 like its TIMEOUT): retryable, and said not to be a login problem (CLI_FAILED). Matched by code only, never by exit code. */
+    busy?: readonly string[];
     /** Codes that mean a timeout (ENGINE_TIMEOUT). */
     timeout?: readonly string[];
     /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
     usage?: readonly string[];
+    /** Code prefixes of the same kind (OpenCLI 2.x reports every argument parser failure as `commander.<reason>`). */
+    usagePrefixes?: readonly string[];
+    /** Codes that mean the site's risk control blocked the request (CLI_FAILED, not retryable at once, said not to be an expired login). Matched before `blocked`. */
+    riskControl?: readonly string[];
 }
 export interface CliSearchSpec {
     /**
@@ -180,6 +190,10 @@ export interface CliProbeSpec {
     versionArgs: readonly string[];
     /** `X.Y.Z` the detected version must reach. */
     minVersion?: string;
+    /** `X.Y.Z` the detected version must stay BELOW (exclusive): a major version the adapter was never checked against is `incompatible`, not guessed at. */
+    maxVersion?: string;
+    /** Appended to the reason of a version above `maxVersion`: the command that installs the version the adapter was checked with. */
+    maxVersionHint?: string;
     helpArgs: readonly string[];
     /** Fragments the help output must contain: the subcommands and flags that prove this is the tool the spec describes. */
     mustContain: readonly string[];

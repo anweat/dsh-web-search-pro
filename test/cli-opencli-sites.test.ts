@@ -47,13 +47,13 @@ test('opencli reddit and xiaohongshu mappings follow the 1.8.8 adapters\' column
   assert.equal(reddit[1]!.snippet, 'r/samples · score 3 · 0 comments', 'an empty selftext adds nothing')
 })
 
-test('verification per OpenCLI site: twitter and zhihu searches were run, xiaohongshu and reddit were not, others are contract-only', () => {
+test('verification per OpenCLI site: twitter and zhihu are live; weibo, tieba, douyin, xiaohongshu were run by hand only, reddit is blocked, others are contract-only', () => {
   assert.deepEqual(['twitter', 'zhihu', 'xiaohongshu', 'reddit', 'hackernews'].map(site => opencliSiteVerification(site).status), ['live', 'live', 'contract-only', 'contract-only', 'contract-only'])
   for (const site of ['twitter', 'zhihu', 'xiaohongshu', 'reddit', 'hackernews']) {
     const spec = specOf(site)
     assert.equal(spec.verification!.status, opencliSiteVerification(site).status)
     assert.equal(validateCliAdapterSpec(spec, 'builtin').ok, true, site)
   }
-  assert.match(opencliSiteVerification('xiaohongshu').note!, /not measured.*AUTH_REQUIRED/)
-  assert.match(opencliSiteVerification('reddit').note!, /not measured.*HTML/)
+  assert.match(opencliSiteVerification('xiaohongshu').note!, /calling opencli directly.*not parsed through this adapter.*AUTH_REQUIRED/)
+  assert.match(opencliSiteVerification('reddit').note!, /search blocked on this network.*HTML.*SECURITY_BLOCK/)
 })

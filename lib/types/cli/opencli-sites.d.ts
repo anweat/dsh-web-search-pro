@@ -18,6 +18,11 @@ export declare const GENERIC_OUTPUT: CliOutputSpec;
  *    documented columns of clis/xiaohongshu/search.js (`rank, title, author, likes, published_at (date from the note id), url`,
  *    the url is a signed search_result link) and clis/reddit/search.js (`id, title, subreddit (r/x), author, score, comments, url,
  *    created_utc (epoch seconds), selftext, ...`), read from the source of 1.8.8.
+ *  - weibo, tieba, douyin: NOT MEASURED, columns read from clis/<site>/search.js of 1.8.8 (2026-11-25): weibo `rank, id, title (the post
+ *    text), author, time (the page's text, `3分钟前` or a date), url`; tieba `rank, id, title, forum, author, time, url` (its rows also
+ *    carry a `snippet` of up to 200 characters, which is read when present); douyin `rank, desc, author, url (https://www.douyin.com/video/<id>),
+ *    plays, likes, comments, shares` where plays, comments and shares are always 0 (the search page does not show them) - a value of 0 is
+ *    not shown as a fact. Each command's own --limit maximum (weibo 50, tieba 20, douyin 30) is at or above the adapter's maxCount of 20.
  */
 export declare const SITE_OUTPUT: Readonly<Record<string, CliOutputSpec>>;
 /** How far the search of one OpenCLI site was checked (`live`, `contract-only`). */

@@ -8,7 +8,7 @@
 import { ActionArgError, ActionConflictError, ActionNotFoundError, ActionUnavailableError, type ActionErrorBody, type ErrorCode } from './types.ts'
 import { BrowserUnavailableError } from '../browser-access.ts'
 import { NoBackendError } from '../backend-registry.ts'
-import { SourceUnavailableError } from '../providers/unavailable.ts'
+import { PlatformFailedError, SourceUnavailableError } from '../providers/unavailable.ts'
 import { DeepSeekFetchError } from '../providers/deepseek.ts'
 import { loadCatalog } from '../catalog/load.ts'
 
@@ -63,7 +63,10 @@ export function mapError(error: unknown, opts: { signal?: AbortSignal } = {}): A
   if (error instanceof BrowserUnavailableError) return result('CAPABILITY_UNAVAILABLE')
   if (error instanceof SourceUnavailableError) {
     const setup = setupTextFor(error.source)
-    return result('CAPABILITY_UNAVAILABLE', 'Tell the user what is missing' + (setup ? ' (setup: ' + setup + ')' : '') + '; do not read this as "no results". Pass allowFallback=true in evidence mode to search the web engines instead.')
+    return result('CAPABILITY_UNAVAILABLE', 'Tell the user what is missing' + (setup ? ' (setup: ' + setup + ')' : '') + '; do not read this as "no results". Pass allowFallback=true in evidence mode to search the web engines instead (it also covers a platform that ran and failed).')
+  }
+  if (error instanceof PlatformFailedError && !abortedByDeadline(opts.signal) && !opts.signal?.aborted) {
+    return result('ACTION_FAILED', 'The platform itself failed; tell the user the reason and the remedy in the message. Do not repeat the same platform search in this turn. To get results anyway, search without platform, or pass allowFallback=true in evidence mode (task or profile): it also covers a platform that ran and failed.')
   }
   if (error instanceof DeepSeekFetchError) return result('ACTION_FAILED', 'DeepSeek Fetch declined or failed: that is DeepSeek\'s answer, not the page\'s own status. Try read.fetch with mode http or playwright, or another URL.')
   if (abortedByDeadline(opts.signal)) return result('DEADLINE')

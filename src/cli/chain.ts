@@ -17,7 +17,7 @@ import type { ResolvedConfig } from '../config.ts'
 import { BUILTIN_CLI_SPECS } from './builtin-specs.ts'
 import { backendServes, CHAIN_PLATFORMS, DEFAULT_CHAINS, OPENCLI_SITE_OF } from './chains-spec.ts'
 import { cliSpecEngine, disabledBySettings, probeError, specReadiness, type SpecReadiness } from './engine.ts'
-import { listOpencliSites, OPENCLI_PROBE, opencliSiteVerification, planOpencliSearch } from './opencli.ts'
+import { discoverOpencliSite, OPENCLI_PROBE, opencliSiteVerification, planOpencliSearch } from './opencli.ts'
 import { cachedProbe, probeCli } from './probe.ts'
 import { CliAdapterError, runCliSearchDetailed } from './runner.ts'
 import { resolveCliAdapters, USER_DEFINED, type CliAdapterSpec } from './spec.ts'
@@ -97,10 +97,10 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
       const probe = await probeCli(OPENCLI_PROBE)
       const failure = probe.state === 'detected' ? undefined : probeError(OPENCLI_PROBE, probe)
       if (failure) throw failure
-      const plan = await planOpencliSearch(platform, site)
+      const plan = await planOpencliSearch(platform, site, probe.version)
       if (!plan.spec) throw new CliAdapterError(plan.problem ?? 'opencli site ' + site + ' cannot be used by this adapter', 'CLI_CONTRACT_MISMATCH', plan.hint)
       const spec = plan.spec
-      const { sources, skipped } = await runCliSearchDetailed(spec, { query, count, signal }, { platform, bin: probe.path ?? 'opencli' })
+      const { sources, skipped } = await runCliSearchDetailed(spec, { query, count, signal }, { platform, bin: probe.path ?? 'opencli', ...probe.pathPrefix ? { pathPrefix: probe.pathPrefix } : {} })
       return { sources, via: 'opencli', backend: 'opencli', ...skipped ? { notes: [skipped + ' result' + (skipped === 1 ? '' : 's') + ' without a link skipped'] } : {} }
     },
   }
@@ -111,9 +111,9 @@ function opencliLeg(platform: string, ctx: ChainContext): ChainLeg {
       if (off) return { ready: false, installation: 'missing', reason: 'opencli: ' + off, code: 'disabled' }
       const probe = await probeCli(OPENCLI_PROBE)
       if (probe.state !== 'detected') return { ready: false, installation: probe.state, ...probe.version ? { version: probe.version } : {}, reason: 'opencli: ' + (probe.reason ?? 'not installed') + (probe.state === 'missing' ? '' : ''), code: probe.state === 'missing' ? 'cli_missing' : 'cli_incompatible' }
-      const listed = await listOpencliSites()
-      const entry = listed.sites?.get(site)
-      if (!entry) return { ready: false, installation: 'detected', ...probe.version ? { version: probe.version } : {}, reason: 'opencli: ' + (listed.problem ?? 'no read `search` command for the site ' + site + ' in `opencli list`'), code: 'unsupported' }
+      const found = await discoverOpencliSite(site, { version: probe.version })
+      const entry = found.entry
+      if (!entry) return { ready: false, installation: 'detected', ...probe.version ? { version: probe.version } : {}, reason: 'opencli: ' + (found.problem ?? 'no read `search` command for the site ' + site), code: 'unsupported' }
       return { ready: true, installation: 'detected', ...probe.version ? { version: probe.version } : {}, ...entry.strategy === 'public' ? { credential: 'not_required' as const } : {} }
     },
   }

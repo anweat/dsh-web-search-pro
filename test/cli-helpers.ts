@@ -49,8 +49,10 @@ export interface FakeSite {
   code?: number
   stdout?: string
   stderr?: string
-  /** What `opencli <site> search --help` prints (default: the three browser flags a real 1.8.8 lists). */
+  /** What `opencli <site> search --help` prints as TEXT (default: the three browser flags a real 1.8.8 lists). A site with its own text help gets no JSON help: an older 1.8.x. */
   help?: string
+  /** `overview`: the site has no search command, so `search --help -f json` prints the site overview (the real v2ex output). */
+  overview?: boolean
 }
 
 export const OPENCLI_SILENT_HELP = [
@@ -66,26 +68,38 @@ export const OPENCLI_SILENT_HELP = [
  * fixtures/cli/opencli-list.json), `<site> search --help`, and `<site> search ...`, which prints the given stdout / stderr and
  * exits with the given code. Every real search call is appended to `argv.log` next to the command, one line per call.
  */
-export function fakeOpencli(sites: Record<string, FakeSite>): string {
+export function fakeOpencli(sites: Record<string, FakeSite>, options: { version?: string; generation?: 1 | 2 } = {}): string {
+  const version = options.version ?? '1.8.8'
+  const generation = options.generation ?? (version.startsWith('1.') ? 1 : 2)
   const heredoc = (tag: string, text: string): string => 'cat <<\'' + tag + '\'\n' + text + '\n' + tag + '\n'
+  // The real `search --help -f json` of the generation, captured from 1.8.8 and 2.0.3 (fixtures/cli/help/opencli<N>-<site>-search.json).
+  const jsonHelpOf = (site: string, s: FakeSite): string | undefined => {
+    if (s.help !== undefined) return undefined
+    const file = FIXTURES + 'help/opencli' + generation + '-' + (s.overview ? 'v2ex' : site) + '-search.json'
+    return fs.existsSync(file) ? file : undefined
+  }
   const cases = Object.entries(sites).map(([site, s]) => [
     site + ')',
     '  if [ "$3" = "--help" ]; then',
-    heredoc('HELP_' + site.toUpperCase(), (s.help ?? OPENCLI_SILENT_HELP).replace('SITE', site)),
+    jsonHelpOf(site, s) ? '    if [ "$4" = "-f" ]; then cat \'' + jsonHelpOf(site, s) + '\'; exit 0; fi' : '',
+    heredoc('HELP_' + site.toUpperCase().replace(/[^A-Z]/g, ''), (s.help ?? OPENCLI_SILENT_HELP).replace('SITE', site)),
     '    exit 0',
     '  fi',
     '  printf \'%s\\n\' "$*" >> "$(dirname "$0")/argv.log"',
-    s.stdout ? heredoc('OUT_' + site.toUpperCase(), s.stdout) : '',
-    s.stderr ? heredoc('ERR_' + site.toUpperCase(), s.stderr).replace(/^cat </, 'cat >&2 <') : '',
+    s.stdout ? heredoc('OUT_' + site.toUpperCase().replace(/[^A-Z]/g, ''), s.stdout) : '',
+    s.stderr ? heredoc('ERR_' + site.toUpperCase().replace(/[^A-Z]/g, ''), s.stderr).replace(/^cat </, 'cat >&2 <') : '',
     '  exit ' + (s.code ?? 0),
     '  ;;',
   ].join('\n')).join('\n')
+  const unknown = generation === 1
+    ? '*) echo "error: unknown command \'$1\'" >&2; exit 2;;'
+    : '*) cat \'' + FIXTURES + 'live-opencli2-unknown-command.json\'; exit 2;;'
   return [
     'case "$1" in',
-    '--version) echo "1.8.8";;',
-    'list) if [ "$2" = "--help" ]; then cat \'' + FIXTURES + 'help/opencli-list.txt\'; else cat \'' + FIXTURES + 'opencli-list.json\'; fi;;',
+    '--version) echo "' + version + '";;',
+    'list) if [ "$2" = "--help" ]; then cat \'' + FIXTURES + 'help/opencli-list.txt\'; elif [ "$2" = "-f" ]; then cat \'' + FIXTURES + (generation === 1 ? 'opencli-list.json' : 'live-opencli2-list-page.json') + '\'; fi;;',
     cases,
-    '*) echo "unknown command" >&2; exit 2;;',
+    unknown,
     'esac',
   ].join('\n')
 }

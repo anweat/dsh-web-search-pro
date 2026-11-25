@@ -23,6 +23,21 @@ test('evaluateCliContract: version floor and the subcommands / flags that prove 
   assert.equal(evaluateCliContract(lenient, 'demo-cli', { code: 1, output: '' }, { code: 0, output: '--JSON' }).state, 'detected', 'matching is case-insensitive')
 })
 
+test('evaluateCliContract: an exclusive upper version bound with the command that installs the tested version', () => {
+  const bounded = baseSpec({ probe: { versionArgs: ['--version'], minVersion: '1.8.0', maxVersion: '2.0.0', maxVersionHint: 'npm i -g demo-cli@1.8.8', helpArgs: ['--help'], mustContain: ['ok'] } })
+  const help = { code: 0, output: 'ok' }
+  assert.equal(evaluateCliContract(bounded, 'demo-cli', { code: 0, output: '1.99.9' }, help).state, 'detected')
+  for (const found of ['2.0.0', '2.3.1', '10.0.0']) {
+    const verdict = evaluateCliContract(bounded, 'demo-cli', { code: 0, output: found }, help)
+    assert.equal(verdict.state, 'incompatible', found)
+    assert.equal(verdict.version, found)
+    assert.match(verdict.reason!, new RegExp('demo-cli ' + found.replace(/\./g, '\\.') + ' is newer than this adapter supports \\(below 2\\.0\\.0 only\\): install the tested version with `npm i -g demo-cli@1\\.8\\.8`'))
+  }
+  assert.match(evaluateCliContract(bounded, 'demo-cli', { code: 1, output: '' }, help).reason!, /failed with exit 1/, 'an unreadable version cannot be shown to be inside the bound')
+  const bare = baseSpec({ probe: { versionArgs: ['--version'], maxVersion: '2.0.0', helpArgs: ['--help'], mustContain: ['ok'] } })
+  assert.doesNotMatch(evaluateCliContract(bare, 'demo-cli', { code: 0, output: '3.0.0' }, help).reason!, /install the tested version/, 'the hint is optional')
+})
+
 test('probe: missing, a same-named program with another contract, too old, ok', { skip: !posix }, async () => {
   clearProbeCache()
   const none = await withCommands({}, () => probeCli(spec))

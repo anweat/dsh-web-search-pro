@@ -1,0 +1,10 @@
+{
+  "_note": "Constructed: the failure envelope of OpenCLI 2.0.3 (one JSON line on stdout) for the failures that need a browser, which were never run. Shapes follow dist/src/errors.js and command-output.js; codes and exit codes as in 1.8.8.",
+  "AUTH_REQUIRED": { "exit": 77, "line": "{\"ok\":false,\"error\":{\"code\":\"AUTH_REQUIRED\",\"message\":\"Not logged in to www.weibo.com\",\"exitCode\":77,\"hint\":\"Please open Chrome or Chromium and log in to https://www.weibo.com\"}}" },
+  "SECURITY_BLOCK": { "exit": 1, "line": "{\"ok\":false,\"error\":{\"code\":\"SECURITY_BLOCK\",\"message\":\"Reddit blocked the request: this is not an expired login\",\"exitCode\":1}}" },
+  "EMPTY_RESULT": { "exit": 66, "line": "{\"ok\":false,\"error\":{\"code\":\"EMPTY_RESULT\",\"message\":\"tieba search returned no data\",\"exitCode\":66}}" },
+  "BROWSER_CONNECT": { "exit": 69, "line": "{\"ok\":false,\"error\":{\"code\":\"BROWSER_CONNECT\",\"message\":\"Browser Bridge extension not connected\",\"exitCode\":69}}" },
+  "SESSION_BUSY": { "exit": 75, "line": "{\"ok\":false,\"error\":{\"code\":\"SESSION_BUSY\",\"message\":\"Another command holds the weibo session\",\"exitCode\":75}}" },
+  "success": "{\"ok\":true,\"data\":[{\"rank\":1,\"id\":\"N1\",\"title\":\"露营装备\",\"author\":\"甲\",\"time\":\"3分钟前\",\"url\":\"https://weibo.com/1/N1\"}]}",
+  "successNull": "{\"ok\":true,\"data\":null}"
+}
