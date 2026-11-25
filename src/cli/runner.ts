@@ -235,16 +235,26 @@ export function parseCliItems(spec: Pick<CliAdapterSpec, 'bins'>, output: CliOut
     }
   }
   const items = output.itemsPath !== undefined ? getPath(parsed, output.itemsPath) : firstArray(parsed)
+  // The success envelope of OpenCLI 2.x with nothing in it (`{ ok: true, data: null }`) is an empty answer, not a broken payload.
+  if (items === undefined && isObject(parsed) && parsed.ok === true && parsed.data === null) return []
   if (!Array.isArray(items)) throw new CliAdapterError(label + ' output has no result list' + (output.itemsPath ? ' at ' + output.itemsPath : ''), 'CLI_CONTRACT_MISMATCH', 'the installed ' + label + ' does not match this adapter: check `sources.deps`')
   return items
 }
 
 const BLOCKED_TEXT = 'the site returned a web page instead of data, or blocked the request (站点返回了网页而不是数据，可能是风控、IP 被拦或需要登录)'
+const RISK_HINT = 'do not retry at once: wait a while, or search again from another network exit; logging in again does not help. The next backend of the chain (platformBackends) may still answer'
 const BLOCKED_HINT = 'open the site in your own Chrome and check that it loads and you are logged in, without a verification page; a proxied or shared IP address is often blocked: try another network exit or retry later, or use the next backend of the chain (platformBackends)'
 
 /** The failure for a web page or a block where data was expected: said as such, with what the user can check. */
 function blockedPageError(label: string, detail: string): CliAdapterError {
   return new CliAdapterError(label + ': ' + BLOCKED_TEXT + '; ' + detail, 'CLI_FAILED', BLOCKED_HINT, true)
+}
+
+/** Whether stdout is a failure envelope (`{ "ok": false, "error": {...} }`), whatever the exit code says. */
+export function failureEnvelope(stdout: string): boolean {
+  const text = stdout.trim()
+  if (!text.startsWith('{') || !text.includes('"ok"')) return false
+  try { const value: unknown = JSON.parse(text); return isObject(value) && value.ok === false && isObject(value.error) } catch { return false }
 }
 
 /** The failure payload (`ok: false`, `error: { code, message }`) a tool prints on stderr or stdout: JSON, or a YAML document after any notices. */
@@ -274,12 +284,15 @@ export function mapToolFailure(codes: CliErrorCodesSpec | undefined, result: Pic
   const notLoggedIn = (): CliAdapterError => new CliAdapterError(label + ' is not logged in' + (shown ? ': ' + shown : ''), 'CLI_NOT_LOGGED_IN', loginHint(spec))
   if (has(codes.notLoggedIn)) return notLoggedIn()
   if (has(codes.empty)) return new EngineError(label + ' returned no results', 'ENGINE_EMPTY', false)
+  // The site's risk control: said as such, and NOT as an expired login (the login is fine; the request was refused).
+  if (has(codes.riskControl)) return new CliAdapterError(label + ': the site blocked the request (' + (code ? code + ': ' : '') + (shown ?? 'no message') + '); this is risk control, not an expired login', 'CLI_FAILED', RISK_HINT, false)
   if (has(codes.blocked) || (message !== undefined && includesAny(message, codes.blockedPatterns))) return blockedPageError(label, (code ? code + ': ' : '') + (shown ?? 'no message'))
   if (has(codes.unavailable)) return new CliAdapterError(label + ' could not reach its browser: ' + (shown ?? code), 'CLI_FAILED', 'check that the browser the tool drives is running and its bridge / extension is connected (opencli: OpenCLI Browser Bridge in your own Chrome; `opencli doctor` checks it)', false)
   if (has(codes.busy)) return new CliAdapterError(label + ' is busy: another ' + label + ' process holds the browser session of this site' + (shown ? ' (' + shown + ')' : '') + '; this is not a login problem', 'CLI_FAILED', 'wait until the other ' + label + ' command has finished, then search again (a retry in a few seconds is enough)', true)
   if (has(codes.timeout)) return new EngineError(label + ' timed out' + (shown ? ': ' + shown : ''), 'ENGINE_TIMEOUT', true)
-  if (has(codes.usage)) return new CliAdapterError(label + ' rejected the command arguments of this adapter: ' + (shown ?? code), 'CLI_CONTRACT_MISMATCH', 'the installed ' + label + ' does not match this adapter: check `sources.deps`')
+  if (has(codes.usage) || (code !== undefined && codes.usagePrefixes?.some(prefix => code.startsWith(prefix)))) return new CliAdapterError(label + ' rejected the command arguments of this adapter: ' + (shown ?? code), 'CLI_CONTRACT_MISMATCH', 'the installed ' + label + ' does not match this adapter: check `sources.deps`')
   if (code === undefined && codes.notLoggedInExit?.includes(result.code)) return notLoggedIn()
+  if (code === undefined && codes.usageExit?.includes(result.code)) return new CliAdapterError(label + ' rejected the command arguments of this adapter' + (result.stderr.trim() ? ': ' + redact(capText(result.stderr.trim().split(/\r?\n/)[0]!, 160)) : ''), 'CLI_CONTRACT_MISMATCH', 'the installed ' + label + ' does not match this adapter: check `sources.deps`')
   if (code !== undefined || shown !== undefined) return new CliAdapterError(label + ' search failed: ' + (code ? '[' + code + '] ' : '') + (shown ?? 'no message'), 'CLI_FAILED', undefined, true)
   return undefined
 }
@@ -482,7 +495,8 @@ export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunIn
 
   const combined = result.stderr + '\n' + result.stdout
   const notLoggedIn = (): CliAdapterError => new CliAdapterError(label + ' is not logged in', 'CLI_NOT_LOGGED_IN', loginHint(spec))
-  if (result.code !== 0) {
+  // OpenCLI 2.x prints a failure as one JSON line on STDOUT (1.8.x: YAML on stderr). An `{ ok: false, error }` envelope is a failure even with exit code 0.
+  if (result.code !== 0 || failureEnvelope(result.stdout)) {
     // The tool's own error code, when the spec knows its failure format.
     const mapped = mapToolFailure(search.errorCodes, result, spec, redact)
     if (mapped) throw mapped

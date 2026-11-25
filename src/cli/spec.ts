@@ -119,6 +119,8 @@ export interface CliErrorCodesSpec {
   notLoggedIn?: readonly string[]
   /** Exit codes that mean "not logged in" when the output carries no readable code. */
   notLoggedInExit?: readonly number[]
+  /** Exit codes that mean "the arguments were not accepted" when the output carries no readable code (OpenCLI 1.8's argument parser prints plain text and exits 2). */
+  usageExit?: readonly number[]
   /** Codes that mean "no results" (ENGINE_EMPTY). */
   empty?: readonly string[]
   /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
@@ -133,6 +135,10 @@ export interface CliErrorCodesSpec {
   timeout?: readonly string[]
   /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
   usage?: readonly string[]
+  /** Code prefixes of the same kind (OpenCLI 2.x reports every argument parser failure as `commander.<reason>`). */
+  usagePrefixes?: readonly string[]
+  /** Codes that mean the site's risk control blocked the request (CLI_FAILED, not retryable at once, said not to be an expired login). Matched before `blocked`. */
+  riskControl?: readonly string[]
 }
 
 export interface CliSearchSpec {
@@ -285,7 +291,7 @@ const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'engine', 'confidence', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
 const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'maxVersion', 'maxVersionHint', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
-const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage'])
+const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'usageExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage', 'usagePrefixes', 'riskControl'])
 const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'skipWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
 const ENV_KEYS = new Set(['required', 'passthrough', 'set'])
@@ -411,7 +417,8 @@ function checkErrorCodes(value: unknown, where: string, errors: string[]): void 
   closed(value, ERROR_CODES_KEYS, where, errors)
   if (!(typeof value.codePath === 'string' && PATH_RE.test(value.codePath))) errors.push(where + '.codePath must be a dotted path')
   if (value.messagePath !== undefined && !(typeof value.messagePath === 'string' && PATH_RE.test(value.messagePath))) errors.push(where + '.messagePath must be a dotted path')
-  for (const key of ['notLoggedIn', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
+  for (const key of ['notLoggedIn', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage', 'usagePrefixes', 'riskControl'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
+  if (value.usageExit !== undefined && !(Array.isArray(value.usageExit) && value.usageExit.length <= 8 && value.usageExit.every(c => Number.isInteger(c) && (c as number) > 0 && (c as number) < 256))) errors.push(where + '.usageExit must be exit codes 1..255')
   if (value.notLoggedInExit !== undefined && !(Array.isArray(value.notLoggedInExit) && value.notLoggedInExit.length <= 8 && value.notLoggedInExit.every(c => Number.isInteger(c) && (c as number) > 0 && (c as number) < 256))) errors.push(where + '.notLoggedInExit must be exit codes 1..255')
 }
 

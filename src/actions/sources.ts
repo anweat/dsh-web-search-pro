@@ -4,8 +4,8 @@
  * @module web-search-pro/actions/sources
  */
 
-import { browserLaunchReadiness, browserState } from '../browser-access.ts'
-import { defaultInstaller, detectDeps, installDep } from '../deps.ts'
+import { browserLaunchReadiness, browserOpencliVersion, browserState } from '../browser-access.ts'
+import { defaultInstaller, detectDeps, installDep, withBrowserOpencli } from '../deps.ts'
 import { verificationTag } from '../cli/spec.ts'
 import { judgeStatus, type JudgeStatus } from '../pipeline/judge-status.ts'
 import { resolveAllRubrics } from '../pipeline/rubrics.ts'
@@ -258,7 +258,7 @@ export const SOURCES_ACTIONS: ActionDef[] = [
     examples: [{ args: {} }],
     async execute(_args, ctx) {
       // An explicit check re-probes (sources.status and search.recommend reuse the cached probes of the last minute).
-      const backends = await detectDeps({ config: ctx.dynamic(), force: true })
+      const backends = withBrowserOpencli(await detectDeps({ config: ctx.dynamic(), force: true }), await browserOpencliVersion(ctx.browser()))
       const allOk = backends.every(b => b.available || b.optional)
       return {
         backends: backends.map(b => ({ ...b, installs: b.installs })),

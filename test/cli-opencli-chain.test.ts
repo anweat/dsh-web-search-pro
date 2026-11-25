@@ -128,8 +128,8 @@ test('OpenCLI is asked to stay out of the way: background window, ephemeral sess
   })
 })
 
-test('an installed OpenCLI 2.x is incompatible (upper bound), named with the install command, and the chain falls through to the next backend', { skip: !posix }, async () => {
-  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '2.1.0' }), zhihu: ZHIHU_CLI }, async dir => {
+test('an installed OpenCLI 3.x (never looked at) is incompatible with the install command; 1.8 and 2.x are inside the range; the chain falls through', { skip: !posix }, async () => {
+  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '3.1.0', generation: 2 }), zhihu: ZHIHU_CLI }, async dir => {
     await withHome(['.zhihu-cli/cookies.json'], async () => {
       const h = harness()
       try {
@@ -138,31 +138,23 @@ test('an installed OpenCLI 2.x is incompatible (upper bound), named with the ins
         assert.equal(first.id, 'opencli')
         assert.equal(first.state, 'skipped')
         assert.equal(first.installation, 'incompatible')
-        assert.match(first.reason!, /opencli 2\.1\.0 is newer than this adapter supports \(below 2\.0\.0 only\).*npm i -g @jackwener\/opencli@1\.8\.8/)
-        assert.equal(first.version, '2.1.0')
+        assert.match(first.reason!, /opencli 3\.1\.0 is newer than this adapter supports \(below 3\.0\.0 only\).*npm i -g @jackwener\/opencli@2/)
+        assert.equal(first.version, '3.1.0')
         const out = await h.search('rust', 'zhihu')
         assert.ok(out.sources.length > 0)
         assert.equal(h.history().engine, 'zhihu', 'the next backend answered')
-        assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli: opencli is installed but does not match this adapter: opencli 2\.1\.0 is newer/)
-        assert.equal(fs.existsSync(path.join(dir, 'argv.log')), false, 'no search was run against the 2.x')
+        assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli: opencli is installed but does not match this adapter: opencli 3\.1\.0 is newer/)
+        assert.equal(fs.existsSync(path.join(dir, 'argv.log')), false, 'no search was run against the 3.x')
       } finally { h.cleanup() }
     })
   })
-  // Alone in its chain, the reason reaches the unavailable report of the chain (sources.status).
-  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '2.0.0' }) }, async () => {
-    const h = harness({ platformBackends: { zhihu: ['opencli'] } })
-    try {
-      const report = await chainReport('zhihu', { deps: h.deps(), config: h.config })
-      assert.equal(report.available, false)
-      assert.equal(report.state, 'unavailable')
-      assert.match(report.reason!, /opencli 2\.0\.0 is newer.*npm i -g @jackwener\/opencli@1\.8\.8/, 'the bound is exclusive: 2.0.0 itself is out')
-    } finally { h.cleanup() }
-  })
-  // 1.9.x stays inside the bound.
-  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '1.99.3' }) }, async () => {
-    const h = harness({ platformBackends: { zhihu: ['opencli'] } })
-    try { assert.equal((await chainReport('zhihu', { deps: h.deps(), config: h.config })).available, true) } finally { h.cleanup() }
-  })
+  // The bound is exclusive: 3.0.0 itself is out; 2.0.3 and 1.99.3 are in.
+  for (const [version, available] of [['3.0.0', false], ['2.0.3', true], ['2.9.9', true], ['1.99.3', true], ['1.7.9', false]] as const) {
+    await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version }) }, async () => {
+      const h = harness({ platformBackends: { zhihu: ['opencli'] } })
+      try { assert.equal((await chainReport('zhihu', { deps: h.deps(), config: h.config })).available, available, version) } finally { h.cleanup() }
+    })
+  }
 })
 
 const NOT_FOUND = ['ok: false', 'error:', '  code: NOT_FOUND', '  message: No Weibo search results found', '  exitCode: 1'].join('\n')

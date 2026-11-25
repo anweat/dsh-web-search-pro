@@ -1,0 +1,118 @@
+{
+  "site": "weixin",
+  "name": "search",
+  "command": "opencli weixin search",
+  "usage": "opencli weixin search <query> [options]",
+  "access": "read",
+  "description": "使用搜狗微信搜索公众号文章；如需导出正文 Markdown，请使用 weixin download 处理公众号文章链接",
+  "browser": true,
+  "domain": "weixin.sogou.com",
+  "positionals": [
+    {
+      "name": "query",
+      "type": "str",
+      "positional": true,
+      "required": true,
+      "help": "搜索关键词；如需正文 Markdown，请使用 weixin download 处理公众号文章链接"
+    }
+  ],
+  "command_options": [
+    {
+      "name": "page",
+      "type": "int",
+      "default": 1,
+      "help": "结果页码，从 1 开始"
+    },
+    {
+      "name": "limit",
+      "type": "int",
+      "default": 10,
+      "help": "返回条数，最大 10"
+    }
+  ],
+  "browser_common_options": [
+    {
+      "name": "window",
+      "flags": "--window <mode>",
+      "help": "Browser window mode: foreground or background",
+      "choices": [
+        "foreground",
+        "background"
+      ]
+    },
+    {
+      "name": "site-session",
+      "flags": "--site-session <mode>",
+      "help": "Adapter site session lifecycle: ephemeral or persistent",
+      "choices": [
+        "ephemeral",
+        "persistent"
+      ]
+    },
+    {
+      "name": "keep-tab",
+      "flags": "--keep-tab <bool>",
+      "help": "Keep the browser tab lease after the command finishes",
+      "choices": [
+        "true",
+        "false"
+      ]
+    }
+  ],
+  "example": "opencli weixin search <query>",
+  "defaultFormat": "json",
+  "columns": [
+    "rank",
+    "page",
+    "title",
+    "url",
+    "summary",
+    "publish_time"
+  ],
+  "common_options": [
+    {
+      "name": "format",
+      "flags": "-f, --format <fmt>",
+      "help": "Output format: table, plain, json, yaml, md, csv",
+      "default": "json",
+      "choices": [
+        "table",
+        "plain",
+        "json",
+        "yaml",
+        "md",
+        "csv"
+      ]
+    },
+    {
+      "name": "trace",
+      "flags": "--trace <mode>",
+      "help": "Trace capture: off, on, retain-on-failure",
+      "default": "off",
+      "choices": [
+        "off",
+        "on",
+        "retain-on-failure"
+      ]
+    },
+    {
+      "name": "verbose",
+      "flags": "-v, --verbose",
+      "help": "Debug output",
+      "default": false
+    },
+    {
+      "name": "help",
+      "flags": "-h, --help",
+      "help": "display help for command"
+    }
+  ],
+  "output_formats": [
+    "table",
+    "plain",
+    "yaml",
+    "json",
+    "md",
+    "csv"
+  ]
+}

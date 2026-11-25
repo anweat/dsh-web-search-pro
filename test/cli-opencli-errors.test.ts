@@ -130,3 +130,54 @@ test('NOT_FOUND (weibo search with zero results) is an empty answer, not a failu
   assert.equal(bare.error.code, 'CLI_FAILED')
   assert.doesNotMatch(bare.error.message, /busy|logged in/)
 })
+
+test('OpenCLI 2.x prints a failure as one JSON line on stdout: the same mapping as the 1.8 YAML on stderr, for every code, with real and constructed envelopes', async () => {
+  const line = (name: string): { exit: number; line: string } => (JSON.parse(read('constructed-opencli2-failures.json')) as Record<string, { exit: number; line: string }>)[name]!
+  const on = (name: string) => failing(line(name).exit, '', line(name).line)
+  assert.equal((await outcome('weibo', on('AUTH_REQUIRED'))).error.code, 'CLI_NOT_LOGGED_IN')
+  assert.deepEqual([(await outcome('tieba', on('EMPTY_RESULT'))).error.code, (await outcome('tieba', on('EMPTY_RESULT'))).error.retryable], ['ENGINE_EMPTY', false])
+  const bridge = (await outcome('weibo', on('BROWSER_CONNECT'))).error
+  assert.match(bridge.message, /could not reach its browser/)
+  const busy = (await outcome('weibo', on('SESSION_BUSY'))).error
+  assert.deepEqual([busy.code, busy.retryable], ['CLI_FAILED', true])
+  assert.match(busy.message, /is busy.*not a login problem/)
+  // SECURITY_BLOCK is the site's risk control: its own words, not an expired login, not retryable at once - and apart from LOGIN_WALL.
+  const risk = (await outcome('reddit', on('SECURITY_BLOCK'))).error
+  assert.deepEqual([risk.code, risk.retryable], ['CLI_FAILED', false])
+  assert.equal(risk.message, 'opencli: the site blocked the request (SECURITY_BLOCK: Reddit blocked the request: this is not an expired login); this is risk control, not an expired login')
+  assert.match(risk.hint, /do not retry at once/)
+  const wall = (await outcome('reddit', failing(77, '', JSON.stringify({ ok: false, error: { code: 'LOGIN_WALL', message: 'Server returned HTML', exitCode: 77 } })))).error
+  assert.match(wall.message, /web page instead of data/)
+  assert.notEqual(wall.message.replace(/LOGIN_WALL.*/, ''), risk.message)
+  assert.equal(wall.retryable, true, 'a login wall stays what it was')
+})
+
+test('usage errors are a contract mismatch, never a retry: the codes of 2.x (usage_error, unknown_command, commander.*), the argument codes of 1.8, and the plain exit 2 of its argument parser', async () => {
+  const env2 = (code: string): string => JSON.stringify({ ok: false, error: { code, message: 'x', exitCode: 2 } })
+  for (const code of ['usage_error', 'unknown_command', 'commander.missingArgument', 'commander.unknownOption', 'commander.invalidArgument', 'ARGUMENT']) {
+    const r = await outcome('weibo', failing(2, '', env2(code)))
+    assert.deepEqual([r.error.code, r.error.retryable], ['CLI_CONTRACT_MISMATCH', false], code)
+  }
+  // Real runs of both copies, failing before any browser work.
+  const real2 = await outcome('weibo', failing(2, '', read('live-opencli2-unknown-command.json')))
+  assert.equal(real2.error.code, 'CLI_CONTRACT_MISMATCH')
+  assert.equal((await outcome('weibo', failing(2, '', read('live-opencli2-missing-argument.json')))).error.code, 'CLI_CONTRACT_MISMATCH')
+  const real1 = await outcome('weibo', failing(2, read('live-opencli1-unknown-command.stderr.txt')))
+  assert.equal(real1.error.code, 'CLI_CONTRACT_MISMATCH')
+  assert.match(real1.error.message, /rejected the command arguments of this adapter: error: unknown command 'nosuchsite'/)
+  // A code that merely starts like a prefix but is not one stays a plain failure.
+  assert.equal((await outcome('weibo', failing(1, '', env2('commanderish')))).error.code, 'CLI_FAILED')
+})
+
+test('a failure envelope on stdout with exit 0 is a failure; the success envelope and null data: rows, and an empty answer', async () => {
+  const wall = JSON.stringify({ ok: false, error: { code: 'AUTH_REQUIRED', message: 'Not logged in to weibo.com', exitCode: 77 } })
+  const zero = await outcome('weibo', failing(0, '', wall))
+  assert.equal(zero.error.code, 'CLI_NOT_LOGGED_IN')
+  const rows = await outcome('weibo', failing(0, '', JSON.stringify({ ok: true, data: [{ rank: 1, id: 'N1', title: 't', author: 'a', time: '', url: 'https://weibo.com/1/N1' }] })))
+  assert.equal(rows.sources[0].url, 'https://weibo.com/1/N1')
+  const nothing = await outcome('weibo', failing(0, '', '{"ok":true,"data":null}'))
+  assert.deepEqual([nothing.error.code, nothing.error.retryable], ['ENGINE_EMPTY', false])
+  assert.equal((await outcome('weibo', failing(0, '', '{"ok":true,"data":[]}'))).error.code, 'ENGINE_EMPTY')
+  // Anything that is not an envelope is not mistaken for one.
+  assert.equal((await outcome('weibo', failing(0, '', '[{"ok":false}]'))).error.code, 'ENGINE_EMPTY')
+})
