@@ -15,8 +15,8 @@ test('the default place is dsh-browser\'s auth directory under DSH_HOME or ~/.ds
   assert.equal(defaultAuthDir({}, '/home/me'), path.join('/home/me', '.dsh', 'data', 'browser', 'auth'))
   assert.equal(defaultAuthDir({ DSH_HOME: '  ' }, '/home/me'), path.join('/home/me', '.dsh', 'data', 'browser', 'auth'), 'a blank DSH_HOME is not a home')
   assert.deepEqual(resolveOutput(undefined, { env: {}, home: '/home/me', cwd: '/work' }), { file: path.join('/home/me', '.dsh', 'data', 'browser', 'auth', 'login-state.json'), explicit: false })
-  assert.deepEqual(resolveOutput('out/state.json', { env: { DSH_HOME: '/x' }, home: '/h', cwd: '/work' }), { file: path.join('/work', 'out', 'state.json'), explicit: true })
-  assert.equal(resolveOutput('/abs/s.json', { env: {}, home: '/h', cwd: '/work' }).file, '/abs/s.json')
+  assert.deepEqual(resolveOutput('out/state.json', { env: { DSH_HOME: '/x' }, home: '/h', cwd: '/work' }), { file: path.resolve('/work', 'out', 'state.json'), explicit: true })
+  assert.equal(resolveOutput('/abs/s.json', { env: {}, home: '/h', cwd: '/work' }).file, path.resolve('/abs/s.json'))
 })
 
 test('arguments: platform, optional output, --force; anything else is refused', () => {
@@ -30,10 +30,12 @@ test('arguments: platform, optional output, --force; anything else is refused', 
 
 test('a git work tree is recognised by the nearest .git (directory or worktree file); nothing is spawned', () => {
   const has = (set: string[]) => (p: string) => set.includes(p)
-  assert.equal(gitWorkTreeOf('/repo/sub/deep/login-state.json', has([path.join('/repo', '.git')])), '/repo')
-  assert.equal(gitWorkTreeOf('/repo/login-state.json', has([path.join('/repo', '.git')])), '/repo', 'a worktree\'s .git file counts the same')
-  assert.equal(gitWorkTreeOf('/home/me/.dsh/data/browser/auth/login-state.json', has([])), undefined)
-  assert.equal(gitWorkTreeOf('/home/me/.dsh/x.json', has([path.join('/home/me', '.git')])), '/home/me', 'a dotfiles repo in the home counts too')
+  const repo = path.resolve('/repo')
+  const home = path.resolve('/home/me')
+  assert.equal(gitWorkTreeOf(path.resolve('/repo/sub/deep/login-state.json'), has([path.join(repo, '.git')])), repo)
+  assert.equal(gitWorkTreeOf(path.resolve('/repo/login-state.json'), has([path.join(repo, '.git')])), repo, 'a worktree\'s .git file counts the same')
+  assert.equal(gitWorkTreeOf(path.resolve('/home/me/.dsh/data/browser/auth/login-state.json'), has([])), undefined)
+  assert.equal(gitWorkTreeOf(path.resolve('/home/me/.dsh/x.json'), has([path.join(home, '.git')])), home, 'a dotfiles repo in the home counts too')
 })
 
 test('Playwright 1.51 is the first version that can export IndexedDB', () => {
@@ -116,6 +118,67 @@ test('writing: an existing file that is not a storage state is kept as .bak and 
     assert.equal(fs.readFileSync(file + '.bak', 'utf8'), 'this is not json')
     assert.equal(mode(dir), 0o755, 'a directory that already existed and is not ours keeps its mode')
     assert.equal(mode(file), 0o600)
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+const errno = (code: string) => Object.assign(new Error(code + ': rename'), { code })
+const freshState = { cookies: [cookie('SUB', '.weibo.com', 'new')], origins: [] }
+
+test('the final rename is retried on EPERM / EBUSY / EACCES with a short backoff, and then works', () => {
+  for (const code of ['EPERM', 'EBUSY', 'EACCES']) {
+    const root = tmp()
+    try {
+      const file = path.join(root, 'login-state.json')
+      let calls = 0
+      const slept: number[] = []
+      const rename = (from: string, to: string) => { if (++calls <= 3) throw errno(code); fs.renameSync(from, to) }
+      const r = saveLoginState({ file, fresh: freshState, domains: SITES.weibo.domains, ownDir: false, rename, sleep: (ms: number) => { slept.push(ms) } })
+      assert.equal(calls, 4, code)
+      assert.equal(slept.length, 3, code)
+      assert.equal(r.cookies, 1)
+      assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).cookies[0].value, 'new')
+      assert.deepEqual(fs.readdirSync(root), ['login-state.json'], 'no temporary file is left after a success')
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  }
+})
+
+test('a rename that never works: bounded wait (about 2 s), the temporary file stays with the login, old file and .bak intact, the message names both paths', () => {
+  const root = tmp()
+  try {
+    const file = path.join(root, 'login-state.json')
+    const old = { cookies: [cookie('sid', '.zhihu.com', 'old')], origins: [] }
+    fs.writeFileSync(file, JSON.stringify(old))
+    const slept: number[] = []
+    let calls = 0
+    let error: any
+    try { saveLoginState({ file, fresh: freshState, domains: SITES.weibo.domains, ownDir: false, rename: () => { calls++; throw errno('EBUSY') }, sleep: (ms: number) => { slept.push(ms) } }) } catch (e) { error = e }
+    assert.ok(error, 'the failure is not swallowed')
+    const total = slept.reduce((a, b) => a + b, 0)
+    assert.ok(total >= 1500 && total <= 2500, 'total wait ' + total)
+    assert.equal(calls, slept.length + 1)
+    assert.equal(error.code, 'EBUSY')
+    const tmpFile = fs.readdirSync(root).find(n => n.includes('.tmp-'))
+    assert.ok(tmpFile, 'the temporary file is kept')
+    assert.equal(error.tmp, path.join(root, tmpFile))
+    assert.equal(JSON.parse(fs.readFileSync(path.join(root, tmpFile), 'utf8')).cookies.some((c: any) => c.name === 'SUB'), true, 'it holds the new login')
+    if (posix) assert.equal(mode(path.join(root, tmpFile)), 0o600)
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), old, 'the old file is untouched')
+    assert.deepEqual(JSON.parse(fs.readFileSync(file + '.bak', 'utf8')), old)
+    assert.ok(error.message.includes(file) && error.message.includes(path.join(root, tmpFile)), 'both paths are named')
+    assert.match(error.message, /关掉占用它的程序/)
+    assert.match(error.message, /改名|重新运行/)
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('ENOSPC and other codes are not retried; the temporary file is kept there too', () => {
+  const root = tmp()
+  try {
+    const file = path.join(root, 'login-state.json')
+    let calls = 0
+    const slept: number[] = []
+    assert.throws(() => saveLoginState({ file, fresh: freshState, domains: SITES.weibo.domains, ownDir: false, rename: () => { calls++; throw errno('ENOSPC') }, sleep: (ms: number) => { slept.push(ms) } }), (e: any) => e.code === 'ENOSPC' && e.message.includes('ENOSPC') && e.message.includes(file) && fs.existsSync(e.tmp))
+    assert.equal(calls, 1)
+    assert.deepEqual(slept, [])
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
 

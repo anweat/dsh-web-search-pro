@@ -112,12 +112,43 @@ export function withoutSites(fresh, domains) {
 /** A file mode (`0o600`) on platforms that have modes; Windows ACLs ignore it. */
 function tighten(target, mode) { try { fs.chmodSync(target, mode) } catch { /* not supported here */ } }
 
+/** The rename codes that mean "another process has the target open" (antivirus, indexer; mostly Windows) and may pass in a moment. */
+const BUSY_CODES = new Set(['EPERM', 'EBUSY', 'EACCES'])
+/** Pauses between the attempts of the final rename, in ms: seven attempts, about 2 s in all. */
+export const RENAME_RETRY_DELAYS = [50, 100, 200, 400, 600, 650]
+
+const sleepSync = ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) }
+
+/**
+ * Move the finished temporary file over the target. Busy-file codes are retried with a short backoff (the function stays sync: it
+ * is a one-shot script); anything else fails at once. When it still fails the temporary file is KEPT (it holds the login the user
+ * just made, mode 0600, same directory) and the error says, in Chinese, where it is and what to do.
+ */
+function renameWithRetry(tmp, file, rename, sleep) {
+  for (let attempt = 0; ; attempt++) {
+    try { rename(tmp, file); return } catch (e) {
+      const code = e && e.code
+      if (BUSY_CODES.has(code) && attempt < RENAME_RETRY_DELAYS.length) { sleep(RENAME_RETRY_DELAYS[attempt]); continue }
+      const error = new Error(
+        '登录态已取得，但没能写入 ' + file + '（' + (code || String(e)) + '）。'
+        + '登录态完整地保存在临时文件 ' + tmp + '（权限 0600，保留未删）。'
+        + (BUSY_CODES.has(code) ? '多半是别的程序（杀毒软件、索引服务、编辑器等）正占着目标文件：先关掉占用它的程序，' : '请先排除上面的错误，')
+        + '再把临时文件改名为 ' + file + '，或重新运行本脚本。' + (fs.existsSync(file + '.bak') ? '旧文件的备份在 ' + file + '.bak。' : ''))
+      error.code = code
+      error.tmp = tmp
+      error.file = file
+      error.cause = e
+      throw error
+    }
+  }
+}
+
 /**
  * Write the state: create the directory with mode 0700 (and tighten dsh-browser's own auth directory if it exists), merge into an
  * existing file after keeping ONE `.bak` of it, write the file with mode 0600 through a temporary file in the same directory.
  * Returns what was done. The caller has checked the git rule.
  */
-export function saveLoginState({ file, fresh, domains, ownDir }) {
+export function saveLoginState({ file, fresh, domains, ownDir, rename = fs.renameSync, sleep = sleepSync }) {
   const dir = path.dirname(file)
   const created = !fs.existsSync(dir)
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
@@ -135,7 +166,7 @@ export function saveLoginState({ file, fresh, domains, ownDir }) {
   const tmp = file + '.tmp-' + process.pid
   fs.writeFileSync(tmp, JSON.stringify(merged, null, 2), { encoding: 'utf8', mode: 0o600 })
   tighten(tmp, 0o600)
-  fs.renameSync(tmp, file)
+  renameWithRetry(tmp, file, rename, sleep)
   tighten(file, 0o600)
   return { file, note, backup: note === 'created' ? undefined : file + '.bak', cookies: merged.cookies.length, origins: merged.origins.length }
 }
