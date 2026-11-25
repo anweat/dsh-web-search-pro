@@ -55,7 +55,7 @@ Platforms are sources like any other (`sources.status` lists them with `kind: pl
 ```
 
 - Evidence mode with `platform` reads the top result pages and scores them like web results. Pages that need a login may stay navigation-only.
-- `platform` that cannot run (no dsh-browser, login or CLI missing, cooling down) is an error (`CAPABILITY_UNAVAILABLE`) whose hint carries the setup text. Report it to the user; do not read it as "no results". `allowFallback:true` searches the web engines instead and the pack notes it.
+- `platform` that cannot run (no dsh-browser, login or CLI missing, cooling down) is an error (`CAPABILITY_UNAVAILABLE`) whose hint carries the setup text. Report it to the user; do not read it as "no results". `allowFallback:true` searches the web engines instead and the pack notes it. It also covers a platform that ran and every explicit platform failed (login wall, captcha, drift, block, network, timeout); the pack notes carry the platform's message with its remedy. It does not cover an empty answer, a cancel, or a spent deadline. Without it a failed platform is `ACTION_FAILED`: tell the user the message and do not repeat the same platform search in the turn.
 - A platform that ran but found nothing returns an empty list with a note (often "needs a login": see `browserBindings`); nothing is cooled down for that.
 - `url` (rss only), `authProfile` and `rulePack` go with `platform`; `browserBindings` fill the last two per platform.
 - The user's own `customPlatforms` appear here as platforms too, under their key.

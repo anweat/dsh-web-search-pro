@@ -21,3 +21,13 @@ export class EngineError extends Error {
     this.name = 'EngineError'
   }
 }
+
+/**
+ * What a failure tells the caller: its message, plus the remedy (`hint`, e.g. a CliAdapterError's login hint) when it has
+ * one the message does not already contain. The one place a failure becomes text for a backend attempt or a chain note.
+ */
+export function describeFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  const hint = (error as { hint?: unknown } | null)?.hint
+  return typeof hint === 'string' && hint.trim() && !message.includes(hint) ? message + '（' + hint + '）' : message
+}

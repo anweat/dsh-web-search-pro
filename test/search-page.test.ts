@@ -37,12 +37,12 @@ test('every state has its own error: code, retryability, the outcome on the erro
 
   const withProfile = catchErr(page('needs_login', { authProfile: 'weibo-main' }))
   assert.deepEqual([withProfile.code, withProfile.retryable, withProfile.outcome], ['ENGINE_AUTH', false, 'needs_login'])
-  assert.match(withProfile.message, /要求登录：使用的 AuthProfile「weibo-main」里保存的登录已经失效。重新运行 node scripts\/save-login\.mjs/)
+  assert.match(withProfile.message, /要求登录：使用的 AuthProfile「weibo-main」里保存的登录已经失效。重新运行 node "[^"]*save-login\.mjs"/)
   assert.equal(catchErr(page('needs_login'), { boundProfile: 'bound-one' }).code, 'ENGINE_AUTH', 'the bound profile counts when the result does not name one')
 
   const noProfile = catchErr(page('needs_login'))
   assert.deepEqual([noProfile.code, noProfile.retryable, noProfile.outcome], ['CLI_NOT_LOGGED_IN', false, 'needs_login'])
-  assert.match(noProfile.message, /要求登录，而这次没有绑定任何 AuthProfile。运行 node scripts\/save-login\.mjs 登录一次.*browserBindings\.weibo 绑定。（该平台的后端链里有 opencli，它直接使用你日常 Chrome 的登录态/)
+  assert.match(noProfile.message, /要求登录，而这次没有绑定任何 AuthProfile。运行 node "[^"]*save-login\.mjs" 登录一次.*browserBindings\.weibo 绑定。（该平台的后端链里有 opencli，它直接使用你日常 Chrome 的登录态/)
   assert.doesNotMatch(catchErr(page('needs_login'), { platform: 'kuaishou', label: '快手' }).message, /opencli/, 'a platform without an opencli site does not mention it')
 
   for (const state of ['captcha', 'blocked'] as const) {
@@ -113,7 +113,7 @@ test('an older dsh-browser without searchPage: searchResults exactly as before, 
   try {
     const out = await h.search('rust', { id: 'weibo' })
     assert.deepEqual(out.sources, [])
-    assert.match(out.fallbackNote!, /^no results: 微博 未取到结果：该平台需要浏览器登录态。运行 node scripts\/save-login\.mjs.*platformRules\.weibo 微调结果选择器/)
+    assert.match(out.fallbackNote!, /^no results: 微博 未取到结果：该平台需要浏览器登录态。运行 node "[^"]*save-login\.mjs".*platformRules\.weibo 微调结果选择器/)
     assert.equal(h.calls.searchResults, 1)
     assert.equal(h.calls.searchPage.length, 0)
   } finally { h.cleanup() }

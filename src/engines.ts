@@ -17,6 +17,7 @@ import { sourcesOfSearchPage } from './search-page.ts'
 import { cliSpecEngine, specEnv } from './cli/engine.ts'
 import { builtinSpecById } from './cli/builtin-specs.ts'
 import { buildArgv, missingEnv, parseCliOutput } from './cli/runner.ts'
+import { SAVE_LOGIN_COMMAND } from './login-script.ts'
 
 /**
  * A source row as an engine returns it: the host's `WebSearchSource` plus the provider's own quality signals, when it has any
@@ -745,7 +746,7 @@ export function playwrightPlatformEngine(platform: string, deps: EngineDeps): En
       const sources = await browser.searchResults(spec.url(query), spec, { signal, count, ...options?.browser })
       if (!sources.length) {
         throw new EngineError(
-          builtin.label + ' 未取到结果：该平台需要浏览器登录态。运行 node scripts/save-login.mjs 登录一次，在 dsh-browser 中声明按域名授权的 AuthProfile，并通过 browserBindings.' + platform + ' 绑定；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
+          builtin.label + ' 未取到结果：该平台需要浏览器登录态。运行 ' + SAVE_LOGIN_COMMAND + ' 登录一次，在 dsh-browser 中声明按域名授权的 AuthProfile，并通过 browserBindings.' + platform + ' 绑定；或到 $DSH_HOME/settings.yaml 的 platformRules.' + platform + ' 微调结果选择器。',
           'ENGINE_EMPTY',
           false,
         )

@@ -1,3 +1,5 @@
+import { describeFailure } from './engine-error.ts'
+
 export interface BackendProbe { available: boolean; reason?: string }
 /** Quality verdict for a successful run: ok, low-quality (usable but thin), or error. */
 export interface BackendRunResult { ok: boolean; lowQuality?: boolean; detail?: string }
@@ -123,7 +125,7 @@ export class BackendRegistry<I, O> {
       } catch (error) {
         // A cancelled caller is not an engine fault: never cool down, never fall through.
         if (signal?.aborted) throw error
-        const message = error instanceof Error ? error.message : String(error)
+        const message = describeFailure(error)
         errors.push(id + ': ' + message)
         if (isEmptyError(error)) {
           // The engine answered (with nothing): try the next one, keep this one hot.

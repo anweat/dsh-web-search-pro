@@ -19,6 +19,10 @@
 - 测试：测试进程的 `HOME` 改为一次性空目录并清掉 `npm_config_prefix` / `FNM_DIR` 等变量，测试不会碰到所在机器上真实的 opencli。
 - 文档：[平台登录态](docs/guide/platform-login.md)（opencli 路线、搜索页状态表、`save-login.mjs` 新行为）、[CLI 适配](docs/guide/cli-adapters.md)（默认链、版本范围、找不到 opencli 时）、`sources` 技能参考与 README 同步。
 - **安装提示。** `sources.deps`、缺失原因和文档里的 opencli 安装命令是 `npm i -g @jackwener/opencli@2`，`sources.deps` 的版本要求显示为 `>=1.8.0 <3.0.0`。验证码的提示不再让人去别的浏览器通过验证（通行证不共享）。
+- **平台失败的原因和补救办法不再丢。** 后端链和后端注册表原来只留错误的 `message`，opencli 的登录提示（`CliAdapterError.hint`，例如“在你的 Chrome 里登录 www.zhihu.com 后重试”）到不了模型，模型因此建议了错误的补救（建 AuthProfile、贴 cookie）。现在每个带 `hint` 的错误，提示恰好一次地并入平台失败的消息（普通平台搜索的 `platform X unavailable (tried: …)` 与证据模式的 `all providers failed: …` 两条路径）；设置卡片“试一下”仍把消息和提示分开显示，不会重复。密钥脱敏不变。
+- **`allowFallback` 也覆盖运行时失败。** 证据模式下显式平台（或全是平台的 `engines`）运行了、而且每一个都失败（登录墙、验证码、改版、拦截、网络、超时）时，传了 `allowFallback=true` 就改搜该 profile 的网页引擎，平台的完整失败消息（含补救办法）写进 `notes`。不适用于空结果（那是答案）、调用方取消、整体期限已用完（第二次只拿剩下的时间，不足 2 秒则抛原错误）；网页引擎也失败时错误同时写两边的原因。刚失败的平台不会被 profile 自己的计划再搜一次。不传 `allowFallback` 行为不变。`search.run` 的参数说明、错误提示和技能参考同步。
+- **平台失败有自己的错误类型和提示。** 平台已运行但失败时（两条路径）抛 `PlatformFailedError`，错误码仍是 `ACTION_FAILED`，消息原文不变；提示改为“平台本身失败：把原因和补救办法告诉用户，本轮不要重复同一个平台搜索；要结果就不带 platform 搜，或在证据模式传 `allowFallback=true`”，不再用泛用的“调整参数或换个来源”，避免模型把同一个被验证码拦住的搜索重复三次。
+- **`save-login.mjs` 用绝对路径。** 搜索页和引擎的提示原来写相对包的 `node scripts/save-login.mjs`，装 npm 包的用户找不到；现在写脚本的绝对路径（带引号，Windows 和含空格的路径都能用），由模块自己的位置算出，`src` 与构建后的 `lib` 一致。
 
 ## 0.2.4（2026-11-09）
 

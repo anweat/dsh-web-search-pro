@@ -13,7 +13,7 @@ import crypto from 'node:crypto'
 import {
   EngineError, customPlatformEngine, rssEngine, type Engine, type EngineDeps,
 } from '../engines.ts'
-import type { SearchPageOutcome } from '../engine-error.ts'
+import { describeFailure, type SearchPageOutcome } from '../engine-error.ts'
 import { browserGap, type BrowserMethod } from '../browser-access.ts'
 import type { CustomPlatformSpec } from '../config.ts'
 import { chainReport, resolveChain } from '../cli/chain.ts'
@@ -42,7 +42,7 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
           errors.push(error)
           // A leg that could say what its page was (captcha, login wall, ...) is named with that outcome, so a skip is never just "failed".
           const outcome = fieldOf(error, 'outcome')
-          notes.push(engine.id + (typeof outcome === 'string' ? ' [' + outcome + ']' : '') + ': ' + (error instanceof Error ? error.message : String(error)))
+          notes.push(engine.id + (typeof outcome === 'string' ? ' [' + outcome + ']' : '') + ': ' + describeFailure(error))
         }
       }
       if (!errors.length) throw new EngineError(label + ' unavailable' + (notes.length ? ': ' + notes.join('; ') : ''), 'ENGINE_UNAVAILABLE', false)

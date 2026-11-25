@@ -13,7 +13,7 @@ import type { SearchRouter } from '../router.ts'
 import type { Store } from '../store.ts'
 import { normQuery, shapeSources } from '../util.ts'
 import { buildTaskSpec, type TaskInput } from './task.ts'
-import { runPipeline, type PipelineDeps, type PipelineOptions, type PipelineResult } from './run.ts'
+import { AllProvidersFailedError, runPipeline, type PipelineDeps, type PipelineOptions, type PipelineResult } from './run.ts'
 import { COVERAGE_RUBRIC_ID, resolveCoverageSettings, resolveThresholds, type CoverageStage } from './coverage.ts'
 import { createCoverageJudge, createModelScorer, selectProvider } from './judges/providers.ts'
 import { resolveBudget, UsageLedger, type SearchBudget } from './ledger.ts'
@@ -22,7 +22,7 @@ import { HybridScorer, RuleScorer, type Scorer } from './score.ts'
 import type { EvidencePack } from './types.ts'
 import { compileQuery } from './compile.ts'
 import type { ProviderRegistry } from '../providers/registry.ts'
-import { SourceUnavailableError } from '../providers/unavailable.ts'
+import { PlatformFailedError, SourceUnavailableError } from '../providers/unavailable.ts'
 
 export interface EvidenceRequest extends TaskInput {
   /** Explicit engine ids (tool `engines`). */
@@ -34,7 +34,8 @@ export interface EvidenceRequest extends TaskInput {
   platform?: { id: string; url?: string | undefined; authProfile?: string | undefined; rulePack?: string | undefined } | undefined
   /**
    * An explicit platform source that cannot run (missing browser / login / CLI / token, cooling down) is an error naming
-   * what is missing. With `allowFallback` the profile's web engines are searched instead and the pack says so.
+   * what is missing. With `allowFallback` the profile's web engines are searched instead and the pack says so; the same when the
+   * platform ran and every explicit provider failed (not for an empty answer, an abort, or a spent deadline).
    */
   allowFallback?: boolean | undefined
   /** `sources` entries to return. */
@@ -65,6 +66,8 @@ export const PAGE_MAX_CHARS = 60_000
 const SEAM_ROUTE_ID = 'seam'
 /** HTTP attempts the coverage judge may make in one search (one request normally answers every need). */
 const COVERAGE_REQUEST_CAP = 4
+/** Least deadline worth a second (fallback) run after a platform failure; below it the platform error is reported. */
+const MIN_FALLBACK_MS = 2_000
 
 
 export class EvidenceService {
@@ -203,17 +206,42 @@ export class EvidenceService {
     const callOptions = request.platform && platformId !== undefined
       ? { ...request.platform.url ? { url: request.platform.url } : {}, ...request.platform.authProfile || request.platform.rulePack ? { browser: { ...request.platform.authProfile ? { authProfile: request.platform.authProfile } : {}, ...request.platform.rulePack ? { rulePack: request.platform.rulePack } : {} } } : {} }
       : undefined
-    const options: PipelineOptions = {
+    const startedAt = Date.now()
+    const deadlineMs = request.deadlineMs ?? cfg.timeoutMs + 30_000
+    const optionsFor = (engines: readonly string[] | undefined, budgetMs: number): PipelineOptions => ({
       signal: request.signal,
-      deadlineMs: request.deadlineMs ?? cfg.timeoutMs + 30_000,
-      ...explicit?.length ? { engines: explicit } : {},
-      ...callOptions && Object.keys(callOptions).length && platformId !== undefined && explicit?.length ? { providerOptions: { [platformId]: callOptions } } : {},
+      deadlineMs: budgetMs,
+      ...engines?.length ? { engines: [...engines] } : {},
+      ...callOptions && Object.keys(callOptions).length && platformId !== undefined && engines?.length ? { providerOptions: { [platformId]: callOptions } } : {},
       sourcesCount: request.count,
       maxScoreQuestions: cfg.evidence.maxJevQuestions,
       maxRounds: cfg.evidence.maxRounds,
       maxQueries: cfg.evidence.maxQueries,
+    })
+    let result: PipelineResult
+    try {
+      result = await runPipeline(spec, deps, optionsFor(explicit, deadlineMs))
+    } catch (error) {
+      // The explicit platform(s) ran and every one of them FAILED: that is a platform failure, with its own type.
+      if (!(error instanceof AllProvidersFailedError) || !explicit?.length || !registry || !explicit.every(id => registry.resolve(id)?.descriptor.kind === 'platform' && error.failedIds.includes(id))) throw error
+      const failure = new PlatformFailedError(error.message, explicit)
+      // allowFallback covers a failed run too: the profile's web engines get what is left of the one overall deadline.
+      const left = deadlineMs - (Date.now() - startedAt)
+      if (!request.allowFallback || request.signal?.aborted || left < MIN_FALLBACK_MS) throw failure
+      try {
+        // The platforms that just failed are not asked again by the profile's own plan (v2ex is in the `experience` one).
+        const failed = new Set(explicit)
+        const again: PipelineDeps = {
+          ...deps,
+          providerStatus: async ids => new Map([...await router.providerStatuses(ids)].map(([id, status]) => [id, failed.has(id) ? { ...status, state: 'unavailable' as const, reason: 'failed in this search' } : status])),
+        }
+        result = await runPipeline(spec, again, optionsFor(undefined, left))
+      } catch (second) {
+        if (request.signal?.aborted) throw second
+        throw new PlatformFailedError(failure.message + '; the web engines searched instead failed too: ' + (second instanceof Error ? second.message : String(second)), explicit)
+      }
+      platformNotes.push(failure.message + ' (allowFallback: the platform ran and failed, the profile\'s web engines were searched instead)')
     }
-    const result = await runPipeline(spec, deps, options)
     result.pack.notes.unshift(...specNotes, ...scorerNotes, ...platformNotes)
     this.persist(result, request)
     const { sources, ...rest } = result.pack

@@ -19,3 +19,8 @@ export declare class EngineError extends Error {
      */
     constructor(message: string, code: string, retryable?: boolean, retryAfterMs?: number | undefined, outcome?: SearchPageOutcome | undefined);
 }
+/**
+ * What a failure tells the caller: its message, plus the remedy (`hint`, e.g. a CliAdapterError's login hint) when it has
+ * one the message does not already contain. The one place a failure becomes text for a backend attempt or a chain note.
+ */
+export declare function describeFailure(error: unknown): string;

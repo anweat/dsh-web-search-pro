@@ -18,7 +18,7 @@ import { customCliAdapter, customCliProviderId, customKeyProblem, customPlatform
 import type { ChainEntryReport, ChainReport } from './cli/chain.ts'
 import { customCliPlatformIssues, isBackendId, platformBackendIssues } from './cli/chains-spec.ts'
 import { DEFAULT_CUSTOM_CONFIDENCE, resolveCliAdapters } from './cli/spec.ts'
-import { SourceUnavailableError } from './providers/unavailable.ts'
+import { PlatformFailedError, SourceUnavailableError } from './providers/unavailable.ts'
 import { defaultProviderRegistry, costTierOf, routeIdOf, type CostTier, type ProbeEnv, type ProviderDescriptor, type Readiness, type ProviderRegistry } from './providers/index.ts'
 import { BOCHA_FALLBACK_KEY_ENV, BOCHA_KEY_ENV } from './providers/bocha.ts'
 import { OPENALEX_KEY_ENV } from './providers/openalex.ts'
@@ -988,7 +988,7 @@ export class SearchRouter {
     const message = 'platform ' + id + ' unavailable (tried: ' + error.attempts.map(a => a.id).join(', ') + ')' + (last?.detail ? ': ' + last.detail : '')
     // Never ran (failed its local probe, cooling down): a structured "not available", with what is missing.
     if (error.attempts.length && error.attempts.every(a => a.outcome === 'skipped')) throw new SourceUnavailableError(message, id, error.attempts.map(a => a.detail ?? 'unavailable'))
-    throw new Error(message)
+    throw new PlatformFailedError(message, [id])
   }
 
   /**

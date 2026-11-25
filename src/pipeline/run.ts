@@ -196,6 +196,14 @@ export interface PipelineResult {
   shadow?: { scorer: string; model: string; rubric?: string; judge?: string; rows: { needId: string; blockId: string; shadow: number; control: number }[] }
 }
 
+/** Every provider the run asked failed (errors, not empty answers). `failedIds` are the providers that did. */
+export class AllProvidersFailedError extends Error {
+  constructor(message: string, readonly failedIds: readonly string[]) {
+    super(message)
+    this.name = 'AllProvidersFailedError'
+  }
+}
+
 export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: PipelineOptions = {}): Promise<PipelineResult> {
   const deadlineMs = options.deadlineMs ?? task.budget.deadlineMs ?? DEFAULT_DEADLINE_MS
   const deadlineAt = Date.now() + deadlineMs
@@ -226,6 +234,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   // S2: one provider with one compiled query (and its broader fallbacks while the answer is empty). The provider call
   // counts as ONE query however many fallback variants it needs. `take` meters the queries of a follow-up round.
   const failures: string[] = []
+  const failedIds = new Set<string>()
   let cut = false
   let queries = 0
   const emptyDetails = new Map<string, string>()
@@ -242,6 +251,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
         if (options.signal?.aborted) throw error
         if (deadlineSignal.aborted) { cut = true; return undefined }
         sink.push(id + ': ' + (error instanceof Error ? error.message : String(error)))
+        failedIds.add(id)
         return undefined
       }
       if (outcome.state === 'ok') for (const n of outcome.notes ?? []) if (!notes.includes(n)) notes.push(n)
@@ -251,7 +261,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
         if (outcome.state === 'empty' && outcome.detail) emptyDetails.set(id, outcome.detail)
         continue // a broader fallback query may still answer
       }
-      if (outcome.state === 'error') sink.push(id + ': ' + outcome.message)
+      if (outcome.state === 'error') { sink.push(id + ': ' + outcome.message); failedIds.add(id) }
       else notes.push('provider ' + id + ' skipped: ' + outcome.reason)
       return undefined
     }
@@ -275,7 +285,7 @@ export async function runPipeline(task: TaskSpec, deps: PipelineDeps, options: P
   outputs.sort((a, b) => planned.indexOf(a.providerId) - planned.indexOf(b.providerId))
   if (failures.length) notes.push('provider failures: ' + failures.join('; '))
   for (const [id, detail] of emptyDetails) notes.push('provider ' + id + ' returned no results: ' + detail.slice(0, 300))
-  if (!outputs.length && failures.length && !cut && !deadlineSignal.aborted) throw new Error('all providers failed: ' + failures.join('; '))
+  if (!outputs.length && failures.length && !cut && !deadlineSignal.aborted) throw new AllProvidersFailedError('all providers failed: ' + failures.join('; '), [...failedIds])
   if (cut) notes.push('deadline reached while searching')
 
   // S8 follow-up round (dev-plan M4): a query per gap need, compiled per provider, on providers not used yet first.

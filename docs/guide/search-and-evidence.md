@@ -34,7 +34,7 @@
 
 - `search.run platform=zhihu query=…` 只搜这个平台，历史类型仍为 `platform`；`engines=zhihu` 在经典搜索里同样可用。`url`（RSS）、`authProfile`、`rulePack` 随 `platform` 传，`browserBindings` 补全后两者。
 - **证据模式**：`platform` 可与 `task` / `profile` / `needs` / `constraints` 同用——该平台成为 S1 / S2 的显式来源，之后门限、读取前几页（有 Browser 时自动升级）、评分、证据包照常。
-- **平台不可用**（缺浏览器 / 登录 / CLI / Token、被设置关闭、冷却中）时返回 `CAPABILITY_UNAVAILABLE`，写明缺什么，并附目录里的安装说明；**不会**悄悄改搜网页引擎。传 `allowFallback=true` 才改搜该 profile 的网页引擎，证据包的 `notes` 会写明。平台已运行但没有结果时返回空列表和平台自己的提示（多半是缺登录），不冷却。
+- **平台不可用**（缺浏览器 / 登录 / CLI / Token、被设置关闭、冷却中）时返回 `CAPABILITY_UNAVAILABLE`，写明缺什么，并附目录里的安装说明；**不会**悄悄改搜网页引擎。传 `allowFallback=true` 才改搜该 profile 的网页引擎，证据包的 `notes` 会写明。平台已运行但失败（登录墙、验证码、改版、拦截、网络、超时）时，每个显式平台都失败，同样返回 `ACTION_FAILED`，消息里有原因和补救办法；传 `allowFallback=true` 也会改搜网页引擎（只用整体期限里剩下的时间，取消、空结果不算；网页引擎也失败时错误里两边的原因都写）。平台已运行但没有结果时返回空列表和平台自己的提示（多半是缺登录），不冷却。
 - **自动规划**：平台从不被自动选入第一轮；只有任务带硬 `site` 约束且命中某平台域名（如 `zhihu.com`）并且该平台就绪时，它才排第一，并保留一个网页引擎做回退（同一上游家族只取一个，其余留给第二轮）。平台没就绪就沿用网页计划并在 `notes` 说明。`search.recommend` 对 `experience` 类任务可以推荐已就绪的平台（仍至多 3 个）。
 - **自定义平台**随设置热更新：新增、修改、删除都会同步注册表；与已有 provider 同名的键不会覆盖内置来源，`sources.status` 的 `notes` 会列出被拒绝的键。
 
