@@ -4,9 +4,19 @@
  * @module web-search-pro/engine-error
  */
 
+/**
+ * What a rendered search page turned out to be, as dsh-browser's `searchPage` reports it (docs/session-p0-contract.md). It rides
+ * on the error as `outcome`, so a chain's notes and `sources.status` can say what happened beyond the error code.
+ */
+export type SearchPageOutcome =
+  | 'ok' | 'empty' | 'empty_unconfirmed' | 'needs_login' | 'captcha' | 'blocked' | 'rate_limited' | 'site_error' | 'network' | 'timeout' | 'contract_drift'
+
 export class EngineError extends Error {
-  /** `retryAfterMs`: the service's own wait hint (Retry-After); the router uses it as the cooldown. */
-  constructor(message: string, readonly code: string, readonly retryable = true, readonly retryAfterMs?: number) {
+  /**
+   * `retryAfterMs`: the service's own wait hint (Retry-After); the router uses it as the cooldown.
+   * `outcome`: the state of the search page that led to this error, when a `searchPage` verdict did.
+   */
+  constructor(message: string, readonly code: string, readonly retryable = true, readonly retryAfterMs?: number, readonly outcome?: SearchPageOutcome) {
     super(message)
     this.name = 'EngineError'
   }

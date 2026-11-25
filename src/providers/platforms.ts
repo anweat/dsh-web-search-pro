@@ -13,6 +13,7 @@ import crypto from 'node:crypto'
 import {
   EngineError, customPlatformEngine, rssEngine, type Engine, type EngineDeps,
 } from '../engines.ts'
+import type { SearchPageOutcome } from '../engine-error.ts'
 import { browserGap, type BrowserMethod } from '../browser-access.ts'
 import type { CustomPlatformSpec } from '../config.ts'
 import { chainReport, resolveChain } from '../cli/chain.ts'
@@ -22,6 +23,7 @@ import type { ProbeEnv, ProviderAdapter, ProviderDescriptor, Readiness, Requirem
 
 /** Chain `engines` into one provider: the first available leg that answers wins; empty and failing legs fall through in order. */
 export function chainEngine(id: string, label: string, chain: readonly Engine[]): Engine {
+  const fieldOf = (error: unknown, key: 'code' | 'outcome' | 'retryable'): unknown => (error as Record<string, unknown> | null)?.[key]
   return {
     id, label,
     available: () => chain.some(engine => engine.available()),
@@ -38,15 +40,20 @@ export function chainEngine(id: string, label: string, chain: readonly Engine[])
         } catch (error) {
           if (signal?.aborted) throw error
           errors.push(error)
-          notes.push(engine.id + ': ' + (error instanceof Error ? error.message : String(error)))
+          // A leg that could say what its page was (captcha, login wall, ...) is named with that outcome, so a skip is never just "failed".
+          const outcome = fieldOf(error, 'outcome')
+          notes.push(engine.id + (typeof outcome === 'string' ? ' [' + outcome + ']' : '') + ': ' + (error instanceof Error ? error.message : String(error)))
         }
       }
       if (!errors.length) throw new EngineError(label + ' unavailable' + (notes.length ? ': ' + notes.join('; ') : ''), 'ENGINE_UNAVAILABLE', false)
       // One backend failed and nothing else ran: its own error. Backends that were passed over before or after it are named too.
       if (errors.length === 1 && notes.length === 1) throw errors[0]
-      const code = (error: unknown): unknown => (error as { code?: unknown } | null)?.code
-      if (errors.every(error => code(error) === 'ENGINE_EMPTY')) throw new EngineError(notes.join('; '), 'ENGINE_EMPTY', false)
-      throw new EngineError(notes.join('; '), 'ENGINE_ERROR', errors.some(error => (error as { retryable?: unknown } | null)?.retryable !== false))
+      const code = (error: unknown): unknown => fieldOf(error, 'code')
+      const outcomes = new Set(errors.map(error => fieldOf(error, 'outcome')).filter((o): o is SearchPageOutcome => typeof o === 'string'))
+      const outcome = outcomes.size === 1 ? [...outcomes][0] : undefined
+      if (errors.every(error => code(error) === 'ENGINE_EMPTY')) throw new EngineError(notes.join('; '), 'ENGINE_EMPTY', false, undefined, outcome)
+      // A rejected login of any leg stays visible as ENGINE_AUTH (sources.status shows the credential as rejected); retryability is the OR of the legs: a captcha or a login wall (not retryable) adds nothing to it, so it never starts a cooldown by itself.
+      throw new EngineError(notes.join('; '), errors.some(error => code(error) === 'ENGINE_AUTH') ? 'ENGINE_AUTH' : 'ENGINE_ERROR', errors.some(error => fieldOf(error, 'retryable') !== false), undefined, outcome)
     }
   }
 }
