@@ -88,10 +88,14 @@ export function evaluateCliContract(
   const { probe } = spec
   const versionCmd = [bin, ...probe.versionArgs].join(' ')
   const detected = version.code === 0 ? parseVersion(version.output) : undefined
-  if (probe.minVersion !== undefined) {
+  if (probe.minVersion !== undefined || probe.maxVersion !== undefined) {
     if (version.code !== 0) return { state: 'incompatible', reason: versionCmd + ' failed with exit ' + version.code }
     if (!detected) return { state: 'incompatible', reason: versionCmd + ' returned no semantic version' }
-    if (compareVersions(detected, probe.minVersion) < 0) return { state: 'incompatible', version: detected, reason: bin + ' ' + detected + ' is older than required ' + probe.minVersion }
+    if (probe.minVersion !== undefined && compareVersions(detected, probe.minVersion) < 0) return { state: 'incompatible', version: detected, reason: bin + ' ' + detected + ' is older than required ' + probe.minVersion }
+    // The upper bound is exclusive: a newer major was never checked against this adapter, so it is reported, not adapted to.
+    if (probe.maxVersion !== undefined && compareVersions(detected, probe.maxVersion) >= 0) {
+      return { state: 'incompatible', version: detected, reason: bin + ' ' + detected + ' is newer than this adapter supports (below ' + probe.maxVersion + ' only)' + (probe.maxVersionHint ? ': install the tested version with `' + probe.maxVersionHint + '`' : '') }
+    }
   }
   const withVersion = detected ? { version: detected } : {}
   const helpCmd = [bin, ...probe.helpArgs].join(' ')

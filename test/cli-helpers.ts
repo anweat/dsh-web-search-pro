@@ -66,7 +66,7 @@ export const OPENCLI_SILENT_HELP = [
  * fixtures/cli/opencli-list.json), `<site> search --help`, and `<site> search ...`, which prints the given stdout / stderr and
  * exits with the given code. Every real search call is appended to `argv.log` next to the command, one line per call.
  */
-export function fakeOpencli(sites: Record<string, FakeSite>): string {
+export function fakeOpencli(sites: Record<string, FakeSite>, options: { version?: string } = {}): string {
   const heredoc = (tag: string, text: string): string => 'cat <<\'' + tag + '\'\n' + text + '\n' + tag + '\n'
   const cases = Object.entries(sites).map(([site, s]) => [
     site + ')',
@@ -82,7 +82,7 @@ export function fakeOpencli(sites: Record<string, FakeSite>): string {
   ].join('\n')).join('\n')
   return [
     'case "$1" in',
-    '--version) echo "1.8.8";;',
+    '--version) echo "' + (options.version ?? '1.8.8') + '";;',
     'list) if [ "$2" = "--help" ]; then cat \'' + FIXTURES + 'help/opencli-list.txt\'; else cat \'' + FIXTURES + 'opencli-list.json\'; fi;;',
     cases,
     '*) echo "unknown command" >&2; exit 2;;',

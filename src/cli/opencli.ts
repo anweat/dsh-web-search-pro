@@ -15,12 +15,21 @@ import { GENERIC_OUTPUT, opencliSiteVerification, SITE_OUTPUT } from './opencli-
 export { OPENCLI_SITE_OF } from './chains-spec.ts'
 export { opencliSiteVerification }
 
+/**
+ * The OpenCLI versions this adapter was checked against: 1.8.0 up to, not including, 2.0.0. Verified on 1.8.8. A 2.x changes the
+ * command surface, so it is reported `incompatible` (with the command that installs the tested version) and the chain falls
+ * through to its next backend; the adapter is not adapted to it.
+ */
+export const OPENCLI_MIN_VERSION = '1.8.0'
+export const OPENCLI_MAX_VERSION = '2.0.0'
+export const OPENCLI_TESTED_INSTALL = 'npm i -g @jackwener/opencli@1.8.8'
+
 /** The command that proves this is the OpenCLI whose `list` output the adapter understands. Verified on 1.8.8. */
 export const OPENCLI_PROBE: ProbeSubject = {
   id: 'opencli',
   bins: ['opencli'],
   packageNote: 'OpenCLI (npm i -g @jackwener/opencli; needs its Browser Bridge extension in your own Chrome)',
-  probe: { versionArgs: ['--version'], minVersion: '1.8.0', helpArgs: ['list', '--help'], mustContain: ['--format', 'json'] },
+  probe: { versionArgs: ['--version'], minVersion: OPENCLI_MIN_VERSION, maxVersion: OPENCLI_MAX_VERSION, maxVersionHint: OPENCLI_TESTED_INSTALL, helpArgs: ['list', '--help'], mustContain: ['--format', 'json'] },
   env: {},
 }
 
@@ -40,7 +49,7 @@ export function opencliSiteProbe(site: string): ProbeSubject {
     id: 'opencli:' + site,
     bins: ['opencli'],
     packageNote: OPENCLI_PROBE.packageNote,
-    probe: { versionArgs: ['--version'], minVersion: '1.8.0', helpArgs: [site, 'search', '--help'], mustContain: [...SILENT_OPTIONS] },
+    probe: { versionArgs: ['--version'], minVersion: OPENCLI_MIN_VERSION, maxVersion: OPENCLI_MAX_VERSION, maxVersionHint: OPENCLI_TESTED_INSTALL, helpArgs: [site, 'search', '--help'], mustContain: [...SILENT_OPTIONS] },
     env: {},
   }
 }

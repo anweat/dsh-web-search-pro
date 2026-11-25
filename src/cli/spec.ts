@@ -160,6 +160,10 @@ export interface CliProbeSpec {
   versionArgs: readonly string[]
   /** `X.Y.Z` the detected version must reach. */
   minVersion?: string
+  /** `X.Y.Z` the detected version must stay BELOW (exclusive): a major version the adapter was never checked against is `incompatible`, not guessed at. */
+  maxVersion?: string
+  /** Appended to the reason of a version above `maxVersion`: the command that installs the version the adapter was checked with. */
+  maxVersionHint?: string
   helpArgs: readonly string[]
   /** Fragments the help output must contain: the subcommands and flags that prove this is the tool the spec describes. */
   mustContain: readonly string[]
@@ -277,7 +281,7 @@ const MAX_TIMEOUT_MS = 180_000
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
 const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'engine', 'confidence', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
-const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'helpArgs', 'mustContain', 'contractHint'])
+const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'maxVersion', 'maxVersionHint', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
 const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'])
 const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'skipWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
@@ -452,6 +456,9 @@ export function validateCliAdapterSpec(raw: unknown, origin: 'builtin' | 'user' 
     }
     if (!(Array.isArray(p.helpArgs) && p.helpArgs.length)) errors.push(at + '.probe.helpArgs must not be empty')
     if (p.minVersion !== undefined && !(typeof p.minVersion === 'string' && VERSION_RE.test(p.minVersion))) errors.push(at + '.probe.minVersion must look like 1.2.3')
+    if (p.maxVersion !== undefined && !(typeof p.maxVersion === 'string' && VERSION_RE.test(p.maxVersion))) errors.push(at + '.probe.maxVersion must look like 2.0.0')
+    else if (typeof p.maxVersion === 'string' && typeof p.minVersion === 'string' && VERSION_RE.test(p.minVersion) && compareVersions(p.minVersion, p.maxVersion) >= 0) errors.push(at + '.probe.maxVersion must be above minVersion')
+    if (p.maxVersionHint !== undefined && !isStr(p.maxVersionHint, 200)) errors.push(at + '.probe.maxVersionHint must be a short string')
     if (!strList(p.mustContain, 12, 80)) errors.push(at + '.probe.mustContain must be a list of short strings (the subcommands / flags that prove the contract)')
     if (p.contractHint !== undefined && !isStr(p.contractHint, 200)) errors.push(at + '.probe.contractHint must be a short string')
   }

@@ -136,3 +136,12 @@ test('version helpers and platformBackends shape', () => {
   assert.match(platformBackendProblems({ a: ['x', 'x'] })[0]!, /twice/)
   assert.match(platformBackendProblems({ 'a b': ['x'] })[0]!, /not a platform id/)
 })
+
+test('probe.maxVersion: an exclusive upper bound, validated like minVersion (a user spec may set it, nothing else loosened)', () => {
+  const probe = (over: Record<string, unknown>): Record<string, unknown> => ({ ...baseSpec().probe, ...over })
+  assert.equal(errorsOf({ probe: probe({ minVersion: '1.0.0', maxVersion: '2.0.0', maxVersionHint: 'npm i -g demo-cli@1.8.8' }) }), '')
+  assert.match(errorsOf({ probe: probe({ maxVersion: 'two' }) }), /probe\.maxVersion must look like/)
+  assert.match(errorsOf({ probe: probe({ minVersion: '2.0.0', maxVersion: '2.0.0' }) }), /maxVersion must be above minVersion/)
+  assert.match(errorsOf({ probe: probe({ maxVersionHint: 5 }) }), /probe\.maxVersionHint must be a short string/)
+  assert.match(errorsOf({ probe: probe({ maxVersion: '2.0.0', surprise: 1 }) }), /probe\.surprise/)
+})

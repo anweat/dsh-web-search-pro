@@ -9,7 +9,7 @@ import { SearchRouter } from '../src/router.ts'
 import { Store } from '../src/store.ts'
 import { clearProbeCache } from '../src/cli/probe.ts'
 import { clearOpencliCache } from '../src/cli/opencli.ts'
-import { resolveChain } from '../src/cli/chain.ts'
+import { chainReport, resolveChain } from '../src/cli/chain.ts'
 import { BROWSER_020 } from './browser-stub.ts'
 import { fakeOpencli, OPENCLI_SILENT_HELP, posix, withCommands } from './cli-helpers.ts'
 
@@ -124,5 +124,42 @@ test('OpenCLI is asked to stay out of the way: background window, ephemeral sess
       await h.search('rust', 'zhihu')
       assert.equal(fs.readFileSync(path.join(dir, 'argv.log'), 'utf8').trim(), 'zhihu search rust --limit 3 -f json')
     } finally { h.cleanup() }
+  })
+})
+
+test('an installed OpenCLI 2.x is incompatible (upper bound), named with the install command, and the chain falls through to the next backend', { skip: !posix }, async () => {
+  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '2.1.0' }), zhihu: ZHIHU_CLI }, async dir => {
+    await withHome(['.zhihu-cli/cookies.json'], async () => {
+      const h = harness()
+      try {
+        const report = await chainReport('zhihu', { deps: h.deps(), config: h.config })
+        const first = report.entries[0]!
+        assert.equal(first.id, 'opencli')
+        assert.equal(first.state, 'skipped')
+        assert.equal(first.installation, 'incompatible')
+        assert.match(first.reason!, /opencli 2\.1\.0 is newer than this adapter supports \(below 2\.0\.0 only\).*npm i -g @jackwener\/opencli@1\.8\.8/)
+        assert.equal(first.version, '2.1.0')
+        const out = await h.search('rust', 'zhihu')
+        assert.ok(out.sources.length > 0)
+        assert.equal(h.history().engine, 'zhihu', 'the next backend answered')
+        assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli: opencli is installed but does not match this adapter: opencli 2\.1\.0 is newer/)
+        assert.equal(fs.existsSync(path.join(dir, 'argv.log')), false, 'no search was run against the 2.x')
+      } finally { h.cleanup() }
+    })
+  })
+  // Alone in its chain, the reason reaches the unavailable report of the chain (sources.status).
+  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '2.0.0' }) }, async () => {
+    const h = harness({ platformBackends: { zhihu: ['opencli'] } })
+    try {
+      const report = await chainReport('zhihu', { deps: h.deps(), config: h.config })
+      assert.equal(report.available, false)
+      assert.equal(report.state, 'unavailable')
+      assert.match(report.reason!, /opencli 2\.0\.0 is newer.*npm i -g @jackwener\/opencli@1\.8\.8/, 'the bound is exclusive: 2.0.0 itself is out')
+    } finally { h.cleanup() }
+  })
+  // 1.9.x stays inside the bound.
+  await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '1.99.3' }) }, async () => {
+    const h = harness({ platformBackends: { zhihu: ['opencli'] } })
+    try { assert.equal((await chainReport('zhihu', { deps: h.deps(), config: h.config })).available, true) } finally { h.cleanup() }
   })
 })
