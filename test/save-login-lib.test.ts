@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 // @ts-expect-error a plain .mjs module without declarations
-import { belongsTo, defaultAuthDir, gitWorkTreeOf, mergeStorageState, parseArgs, resolveOutput, saveLoginState, SITES, supportsIndexedDb } from '../scripts/lib/login-state.mjs'
+import { belongsTo, defaultAuthDir, gitWorkTreeOf, mergeStorageState, parseArgs, resolveOutput, saveLoginState, SITES, supportsIndexedDb, withoutSites } from '../scripts/lib/login-state.mjs'
 import { posix } from './cli-helpers.ts'
 
 const cookie = (name: string, domain: string, value = 'v', p = '/') => ({ name, value, domain, path: p, expires: -1, httpOnly: false, secure: true, sameSite: 'Lax' })
@@ -66,6 +66,17 @@ test('merge: the sites logged in now are replaced, the others kept, a fresh cook
 
 function tmp(): string { return fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-save-login-')) }
 const mode = (p: string): number => fs.statSync(p).mode & 0o777
+
+test('a skipped site keeps its saved login: the visitor cookies of its login page are dropped before the merge', () => {
+  const old = { cookies: [cookie('z_c0', '.zhihu.com', 'saved'), cookie('SUB', '.weibo.com', 'saved')], origins: [origin('https://www.zhihu.com')] }
+  const fresh = { cookies: [cookie('z_c0', '.zhihu.com', 'visitor'), cookie('d_c0', '.zhihu.com'), cookie('SUB', '.weibo.com', 'new'), cookie('SSO', '.sina.com.cn')], origins: [origin('https://www.zhihu.com', [{ name: 'k', value: 'visitor' }])] }
+  const kept = withoutSites(fresh, SITES.zhihu.domains)
+  assert.deepEqual(kept.cookies.map((c: { name: string }) => c.name), ['SUB', 'SSO'], 'a third domain of the sign-on stays')
+  const merged = mergeStorageState(old, kept, SITES.weibo.domains)
+  assert.deepEqual(merged.cookies.map((c: { name: string; value: string }) => c.name + '=' + c.value).sort(), ['SSO=v', 'SUB=new', 'z_c0=saved'])
+  assert.equal(merged.origins[0].localStorage[0].value, 'v')
+  assert.equal(withoutSites(fresh, []), fresh)
+})
 
 test('writing: directory 0700, file 0600, merged into what is there with ONE .bak', { skip: !posix }, () => {
   const root = tmp()

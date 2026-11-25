@@ -103,6 +103,12 @@ export function mergeStorageState(existing, fresh, domains) {
   return { ...old, ...next, cookies: [...cookies.values()], origins: [...origins.values()] }
 }
 
+/** A fresh state without the sites the user skipped: the visitor cookies their login page left must not replace a saved login. */
+export function withoutSites(fresh, domains) {
+  if (!domains.length) return fresh
+  return { ...fresh, cookies: (fresh.cookies ?? []).filter(c => !belongsTo(c?.domain, domains)), origins: (fresh.origins ?? []).filter(o => !belongsTo(hostOfOrigin(o?.origin), domains)) }
+}
+
 /** A file mode (`0o600`) on platforms that have modes; Windows ACLs ignore it. */
 function tighten(target, mode) { try { fs.chmodSync(target, mode) } catch { /* not supported here */ } }
 

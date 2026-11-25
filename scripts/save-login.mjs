@@ -19,7 +19,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import readline from 'node:readline'
 import {
-  gitWorkTreeOf, parseArgs, resolveOutput, saveLoginState, SITES, supportsIndexedDb,
+  gitWorkTreeOf, parseArgs, resolveOutput, saveLoginState, SITES, supportsIndexedDb, withoutSites,
 } from './lib/login-state.mjs'
 
 
@@ -55,7 +55,7 @@ function resolvePlaywright() {
 function waitForEnter(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
   return new Promise((resolve) => {
-    rl.question(question + ' ', () => { rl.close(); resolve() })
+    rl.question(question + ' ', (answer) => { rl.close(); resolve(answer.trim().toLowerCase()) })
   })
 }
 
@@ -81,16 +81,19 @@ async function main() {
   if (configuredChannel && configuredChannel !== 'chromium') launchOptions.channel = configuredChannel
   const browser = await playwright.chromium.launch(launchOptions)
   const context = await browser.newContext()
+  const done = []
   for (const p of platforms) {
     const page = await context.newPage()
     await page.goto(SITES[p].page, { waitUntil: 'domcontentloaded', timeout: 60000 })
     console.log('请在浏览器里完成「' + p + '」登录，登录成功后回到终端……')
-    await waitForEnter('按回车继续下一个平台：')
+    if (await waitForEnter('登录好了按回车；不登录这个平台就输入 s 再按回车：') !== 's') done.push(p)
     await page.close()
   }
+  if (!done.length) { console.log('没有登录任何平台，没有写文件。'); await browser.close(); return }
+  const skipped = platforms.filter(p => !done.includes(p)).flatMap(p => SITES[p].domains)
   // IndexedDB holds the login of some sites; only Playwright 1.51+ can export it.
-  const fresh = await context.storageState(supportsIndexedDb(version) ? { indexedDB: true } : undefined)
-  const saved = saveLoginState({ file: target.file, fresh, domains: platforms.flatMap(p => SITES[p].domains), ownDir: !target.explicit })
+  const fresh = withoutSites(await context.storageState(supportsIndexedDb(version) ? { indexedDB: true } : undefined), skipped)
+  const saved = saveLoginState({ file: target.file, fresh, domains: done.flatMap(p => SITES[p].domains), ownDir: !target.explicit })
   console.log('已保存登录态到 ' + saved.file + '（' + saved.note + '；' + saved.cookies + ' 个 cookie，' + saved.origins + ' 个 origin' + (supportsIndexedDb(version) ? '，含 IndexedDB' : '，当前 Playwright 不支持导出 IndexedDB') + '）')
   if (saved.backup) console.log('旧文件备份在 ' + saved.backup)
   console.log('请在 dsh-browser 的 authProfiles 中引用该绝对路径：')
