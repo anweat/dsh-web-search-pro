@@ -97,6 +97,8 @@ export interface CliRunOptions {
     operation?: 'search' | 'read';
     /** Resolved command (a path or the bin name); default `spec.bins[0]`. */
     bin?: string;
+    /** Directories put in front of the child's PATH (the probe's `pathPrefix`: a launcher found outside PATH needs a node). The rest of the clean environment is unchanged. */
+    pathPrefix?: readonly string[];
     /** Test seams. */
     run?: typeof runCli;
     env?: NodeJS.ProcessEnv;

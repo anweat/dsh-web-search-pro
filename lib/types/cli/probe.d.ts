@@ -14,6 +14,8 @@ export interface CliProbeResult {
     bin?: string;
     /** Where it was found. */
     path?: string;
+    /** Directories to put in front of the PATH of every run of it (a launcher found outside PATH needs a node): the version and help runs, `opencli list` and the search all use them. */
+    pathPrefix?: string[];
     version?: string;
     /** Why it is incompatible or missing. */
     reason?: string;
@@ -32,6 +34,19 @@ export interface CliProbeOptions {
 export declare function clearProbeCache(): void;
 /** The executable `cmd` resolves to on PATH (no process is spawned; Windows tries PATHEXT). */
 export declare function findOnPath(cmd: string, env?: NodeJS.ProcessEnv): string | undefined;
+/**
+ * Where a command is: on PATH, and for the standalone `opencli` also in the usual global install places (see opencli-locate.ts),
+ * with the PATH directories its runs need. `problem` is set for an unusable `DSH_BROWSER_OPENCLI`.
+ */
+export declare function resolveBin(bin: string, env?: NodeJS.ProcessEnv): {
+    path: string;
+    pathPrefix: string[];
+    problem?: string;
+} | {
+    path?: undefined;
+    pathPrefix?: undefined;
+    problem?: string;
+};
 /** The cached probe of a spec, when one is fresh (no spawn: `Engine.available()` is synchronous). */
 export declare function cachedProbe(spec: ProbeSubject, ttlMs?: number, now?: () => number): CliProbeResult | undefined;
 export interface ContractInput {

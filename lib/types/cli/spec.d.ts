@@ -149,6 +149,8 @@ export interface CliErrorCodesSpec {
     blockedPatterns?: readonly string[];
     /** Codes that mean the tool cannot reach its browser (CLI_FAILED, not retryable). */
     unavailable?: readonly string[];
+    /** Codes that mean another process of the tool holds the resource the command needs (OpenCLI's SESSION_BUSY, exit 75 like its TIMEOUT): retryable, and said not to be a login problem (CLI_FAILED). Matched by code only, never by exit code. */
+    busy?: readonly string[];
     /** Codes that mean a timeout (ENGINE_TIMEOUT). */
     timeout?: readonly string[];
     /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
@@ -180,6 +182,10 @@ export interface CliProbeSpec {
     versionArgs: readonly string[];
     /** `X.Y.Z` the detected version must reach. */
     minVersion?: string;
+    /** `X.Y.Z` the detected version must stay BELOW (exclusive): a major version the adapter was never checked against is `incompatible`, not guessed at. */
+    maxVersion?: string;
+    /** Appended to the reason of a version above `maxVersion`: the command that installs the version the adapter was checked with. */
+    maxVersionHint?: string;
     helpArgs: readonly string[];
     /** Fragments the help output must contain: the subcommands and flags that prove this is the tool the spec describes. */
     mustContain: readonly string[];

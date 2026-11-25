@@ -12,6 +12,14 @@ import { type CliAdapterSpec, type CliErrorCodesSpec } from './spec.ts';
 import { opencliSiteVerification } from './opencli-sites.ts';
 export { OPENCLI_SITE_OF } from './chains-spec.ts';
 export { opencliSiteVerification };
+/**
+ * The OpenCLI versions this adapter was checked against: 1.8.0 up to, not including, 2.0.0. Verified on 1.8.8. A 2.x changes the
+ * command surface, so it is reported `incompatible` (with the command that installs the tested version) and the chain falls
+ * through to its next backend; the adapter is not adapted to it.
+ */
+export declare const OPENCLI_MIN_VERSION = "1.8.0";
+export declare const OPENCLI_MAX_VERSION = "2.0.0";
+export declare const OPENCLI_TESTED_INSTALL = "npm i -g @jackwener/opencli@1.8.8";
 /** The command that proves this is the OpenCLI whose `list` output the adapter understands. Verified on 1.8.8. */
 export declare const OPENCLI_PROBE: ProbeSubject;
 /**
@@ -54,7 +62,10 @@ export declare function listOpencliSites(options?: {
  *  - LOGIN_WALL (77), SECURITY_BLOCK, RATE_LIMITED, FORBIDDEN: an HTML page where JSON was expected, a risk-control block -> blocked;
  *    UNKNOWN with a JSON parse error on an HTML body (`Unexpected token '<'`) is the same thing from an adapter that does not
  *    check (measured on reddit through a proxy);
- *  - EMPTY_RESULT (66), NO_DATA, EMPTY_RESPONSE: nothing found; BROWSER_CONNECT (69): no Chrome / bridge; TIMEOUT (75);
+ *  - EMPTY_RESULT (66), NO_DATA, EMPTY_RESPONSE: nothing found; NOT_FOUND: the same from adapters that throw it for zero results (weibo
+ *    search; read from the 1.8.8 source, so an unlogged weibo page, which shows no cards either, reads as empty too); BROWSER_CONNECT (69): no
+ *    Chrome / bridge; TIMEOUT (75); SESSION_BUSY (also 75, errors.js `SessionBusyError`): another opencli process holds the site's browser
+ *    session. The two share an exit code, so they are told apart by their code only: a busy session is retryable and says it is not a login problem;
  *  - ARGUMENT, INVALID_ARGUMENT, ...: the arguments of this adapter are not accepted by that version.
  * Anything else (COMMAND_EXEC, FETCH_ERROR, HTTP_ERROR, ...) keeps OpenCLI's own message.
  */
