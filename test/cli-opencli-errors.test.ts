@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { opencliSearchSpec, parseOpencliList } from '../src/cli/opencli.ts'
-import { parseFailurePayload, runCliSearch, type CliRunOptions } from '../src/cli/runner.ts'
+import { parseCliOutput, parseFailurePayload, runCliSearch, type CliRunOptions } from '../src/cli/runner.ts'
 import { validateCliAdapterSpec } from '../src/cli/spec.ts'
 import type { CliResult } from '../src/util.ts'
 
@@ -90,4 +90,43 @@ test('parseFailurePayload: JSON or a YAML document, after or before notices, nev
   assert.equal(parseFailurePayload('ok: true\ndata: []'), undefined)
   assert.equal(parseFailurePayload(''), undefined)
   assert.equal(parseFailurePayload('{broken'), undefined)
+})
+
+test('weibo, tieba, douyin (columns read from the 1.8.8 sources): exact mappings, the times only in exact formats, zero counters not shown as facts', () => {
+  const now = Date.parse('2026-11-25T12:00:00+08:00')
+  const rows = (site: string, file: string) => { const s = spec(site); return parseCliOutput(s, s.search, read(file), 20, now) }
+  assert.deepEqual(rows('weibo', 'constructed-opencli-weibo-search.json'), [
+    { url: 'https://weibo.com/1234567890/Nabc123', title: '露营装备到底怎么选？新手清单来了', snippet: '@户外小王 · 3分钟前', publishedAt: '2026-11-25T03:57:00Z' },
+    { url: 'https://weibo.com/2345678901/Ndef456', title: '今天去了山里，空气真好', snippet: '@山人 · 昨天 08:30', publishedAt: '2026-11-24T08:30:00+08:00' },
+  ])
+  assert.deepEqual(rows('tieba', 'constructed-opencli-tieba-search.json'), [
+    { url: 'https://tieba.baidu.com/p/9100000001', title: '新手露营求推荐帐篷', snippet: '露营吧 · 吧友甲 · 2026-11-20 · 预算八百以内，三人使用', publishedAt: '2026-11-20' },
+    { url: 'https://tieba.baidu.com/p/9100000002', title: '有人用过这个炉头吗', snippet: '户外吧 · 吧友乙 · 11-21', publishedAt: '2026-11-21' },
+  ])
+  assert.deepEqual(rows('douyin', 'constructed-opencli-douyin-search.json'), [
+    { url: 'https://www.douyin.com/video/7300000000000000001', title: '露营第一晚的帐篷搭建全过程', snippet: '@山野日记 · 赞 12000' },
+    { url: 'https://www.douyin.com/video/7300000000000000002', title: '三分钟看懂炉头怎么选', snippet: '@装备君' },
+  ])
+  // The three marked what they are: read from the sources, never run.
+  for (const site of ['weibo', 'tieba', 'douyin']) assert.match(`${spec(site).verification!.status} ${spec(site).verification!.note}`, /^contract-only .*not run against the site/, site)
+  // Each command's own --limit maximum is at or above the adapter's cap of 20 (weibo 50, tieba 20, douyin 30), so --limit {count} is always accepted.
+  for (const site of ['weibo', 'tieba', 'douyin']) assert.ok(spec(site).search.maxCount! <= 30 && spec(site).search.argv.includes('{count}'), site)
+})
+
+test('NOT_FOUND (weibo search with zero results) is an empty answer, not a failure; SESSION_BUSY (exit 75, like TIMEOUT) is retryable and not a login problem', async () => {
+  const payload = (code: string, message: string, exitCode: number): string => ['ok: false', 'error:', '  code: ' + code, '  message: ' + message, '  exitCode: ' + exitCode].join('\n')
+  const none = await outcome('weibo', failing(1, payload('NOT_FOUND', 'No Weibo search results found', 1)))
+  assert.deepEqual([none.error.code, none.error.retryable], ['ENGINE_EMPTY', false])
+  const busy = await outcome('weibo', failing(75, payload('SESSION_BUSY', 'Another command holds the weibo session', 75)))
+  assert.equal(busy.error.code, 'CLI_FAILED')
+  assert.equal(busy.error.retryable, true)
+  assert.match(busy.error.message, /^opencli is busy: another opencli process holds the browser session of this site \(Another command holds the weibo session\); this is not a login problem$/)
+  assert.match(busy.error.hint, /wait until the other opencli command has finished/)
+  assert.doesNotMatch(busy.error.message + busy.error.hint, /logged in|log in|登录/)
+  // Same exit code, different code: TIMEOUT is still ENGINE_TIMEOUT, and exit 75 without a readable code is a plain failure (not busy, not a timeout, not a login).
+  const slow = await outcome('weibo', failing(75, payload('TIMEOUT', 'weibo search timed out after 30s', 75)))
+  assert.equal(slow.error.code, 'ENGINE_TIMEOUT')
+  const bare = await outcome('weibo', failing(75, 'something'))
+  assert.equal(bare.error.code, 'CLI_FAILED')
+  assert.doesNotMatch(bare.error.message, /busy|logged in/)
 })

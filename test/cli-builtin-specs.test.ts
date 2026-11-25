@@ -341,6 +341,11 @@ test('default chains: the order the plan fixes', () => {
   for (const p of ['github', 'github-issues', 'github-code']) assert.deepEqual(DEFAULT_CHAINS[p], ['rest', 'gh'])
   assert.deepEqual(DEFAULT_CHAINS.wechat, ['omnireach', 'wx-search-cli'])
   assert.deepEqual(DEFAULT_CHAINS.omnireach, ['omnireach'])
+  // weibo, tieba and douyin: the standalone OpenCLI first, the rendered search page second.
+  for (const p of ['weibo', 'tieba', 'douyin']) assert.deepEqual(DEFAULT_CHAINS[p], ['opencli', 'browser-search'], p)
+  // douban stays on the search page alone (`opencli douban search` only searches movies, books and music); kuaishou has no OpenCLI site.
+  assert.deepEqual(DEFAULT_CHAINS.douban, ['browser-search'])
+  assert.deepEqual(DEFAULT_CHAINS.kuaishou, ['browser-search'])
 })
 
 test('docs do not drift: the CLI guide and the skill name every built-in spec, every default chain platform and the verification of each', () => {

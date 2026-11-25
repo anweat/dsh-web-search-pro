@@ -165,7 +165,7 @@ test('platforms: one row each with its chain, the built-in default shown as such
   const addable = xhs.querySelectorAll('[data-wsp-add="backend"] option').map(option => option.getAttribute('value')).filter(Boolean)
   assert.ok(addable.includes('browser-opencli') && !addable.includes('xhs') && !addable.includes('rdt'))
   const weibo = formsRoot.querySelector('[data-form="platform"][data-id="weibo"]')!
-  assert.deepEqual(items(weibo, '[data-wsp-order-item]'), ['browser-search'], 'a platform without an override lists its default chain')
+  assert.deepEqual(items(weibo, '[data-wsp-order-item]'), ['opencli', 'browser-search'], 'a platform without an override lists its default chain')
   assert.ok(weibo.querySelector('[data-wsp-action="platform-restore"]')!.hasAttribute('disabled'), 'and has nothing to restore')
   assert.ok(weibo.querySelector('.wsp-order-default'), 'the default chain is drawn muted')
   assert.ok(weibo.querySelectorAll('[data-wsp-add="backend"] option').map(option => option.getAttribute('value')).includes('custom-cli:mine'), 'a custom CLI that declares weibo can be added')

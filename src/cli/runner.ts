@@ -276,6 +276,7 @@ export function mapToolFailure(codes: CliErrorCodesSpec | undefined, result: Pic
   if (has(codes.empty)) return new EngineError(label + ' returned no results', 'ENGINE_EMPTY', false)
   if (has(codes.blocked) || (message !== undefined && includesAny(message, codes.blockedPatterns))) return blockedPageError(label, (code ? code + ': ' : '') + (shown ?? 'no message'))
   if (has(codes.unavailable)) return new CliAdapterError(label + ' could not reach its browser: ' + (shown ?? code), 'CLI_FAILED', 'check that the browser the tool drives is running and its bridge / extension is connected (opencli: OpenCLI Browser Bridge in your own Chrome; `opencli doctor` checks it)', false)
+  if (has(codes.busy)) return new CliAdapterError(label + ' is busy: another ' + label + ' process holds the browser session of this site' + (shown ? ' (' + shown + ')' : '') + '; this is not a login problem', 'CLI_FAILED', 'wait until the other ' + label + ' command has finished, then search again (a retry in a few seconds is enough)', true)
   if (has(codes.timeout)) return new EngineError(label + ' timed out' + (shown ? ': ' + shown : ''), 'ENGINE_TIMEOUT', true)
   if (has(codes.usage)) return new CliAdapterError(label + ' rejected the command arguments of this adapter: ' + (shown ?? code), 'CLI_CONTRACT_MISMATCH', 'the installed ' + label + ' does not match this adapter: check `sources.deps`')
   if (code === undefined && codes.notLoggedInExit?.includes(result.code)) return notLoggedIn()

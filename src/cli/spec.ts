@@ -127,6 +127,8 @@ export interface CliErrorCodesSpec {
   blockedPatterns?: readonly string[]
   /** Codes that mean the tool cannot reach its browser (CLI_FAILED, not retryable). */
   unavailable?: readonly string[]
+  /** Codes that mean another process of the tool holds the resource the command needs (OpenCLI's SESSION_BUSY, exit 75 like its TIMEOUT): retryable, and said not to be a login problem (CLI_FAILED). Matched by code only, never by exit code. */
+  busy?: readonly string[]
   /** Codes that mean a timeout (ENGINE_TIMEOUT). */
   timeout?: readonly string[]
   /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
@@ -283,7 +285,7 @@ const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 const SPEC_KEYS = new Set(['id', 'bins', 'packageNote', 'platforms', 'engine', 'confidence', 'probe', 'allowedSubcommands', 'search', 'searches', 'read', 'env', 'needsLogin', 'login', 'timeoutMs', 'maxOutputBytes', 'verification'])
 const PROBE_KEYS = new Set(['versionArgs', 'minVersion', 'maxVersion', 'maxVersionHint', 'helpArgs', 'mustContain', 'contractHint'])
 const SEARCH_KEYS = new Set(['argv', 'maxCount', 'overfetch', 'output', 'emptyWhen', 'notLoggedInPatterns', 'errorCodes'])
-const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'])
+const ERROR_CODES_KEYS = new Set(['codePath', 'messagePath', 'notLoggedIn', 'notLoggedInExit', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage'])
 const OUTPUT_KEYS = new Set(['format', 'itemsPath', 'expect', 'errorPaths', 'skipWhen', 'lines', 'fields', 'stripTags', 'emptyValues', 'snippetMax', 'titleMax', 'requireTitle'])
 const FIELD_KEYS = new Set(['url', 'title', 'snippet', 'publishedAt'])
 const ENV_KEYS = new Set(['required', 'passthrough', 'set'])
@@ -409,7 +411,7 @@ function checkErrorCodes(value: unknown, where: string, errors: string[]): void 
   closed(value, ERROR_CODES_KEYS, where, errors)
   if (!(typeof value.codePath === 'string' && PATH_RE.test(value.codePath))) errors.push(where + '.codePath must be a dotted path')
   if (value.messagePath !== undefined && !(typeof value.messagePath === 'string' && PATH_RE.test(value.messagePath))) errors.push(where + '.messagePath must be a dotted path')
-  for (const key of ['notLoggedIn', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'timeout', 'usage'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
+  for (const key of ['notLoggedIn', 'empty', 'blocked', 'blockedPatterns', 'unavailable', 'busy', 'timeout', 'usage'] as const) if (value[key] !== undefined && !strList(value[key], 16, 80)) errors.push(where + '.' + key + ' must be a list of short strings')
   if (value.notLoggedInExit !== undefined && !(Array.isArray(value.notLoggedInExit) && value.notLoggedInExit.length <= 8 && value.notLoggedInExit.every(c => Number.isInteger(c) && (c as number) > 0 && (c as number) < 256))) errors.push(where + '.notLoggedInExit must be exit codes 1..255')
 }
 

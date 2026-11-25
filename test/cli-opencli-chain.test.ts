@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
+import fs, { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { resolveConfig } from '../src/config.ts'
@@ -14,6 +14,7 @@ import { BROWSER_020 } from './browser-stub.ts'
 import { fakeOpencli, OPENCLI_SILENT_HELP, posix, withCommands } from './cli-helpers.ts'
 
 const FIXTURES = new URL('./fixtures/cli/', import.meta.url).pathname
+const FIXTURES_URL = new URL('./fixtures/cli/', import.meta.url)
 
 const AUTH_REQUIRED = [
   'ok: false', 'error:', '  code: AUTH_REQUIRED', '  message: Zhihu search results are blocked behind a login wall',
@@ -161,5 +162,28 @@ test('an installed OpenCLI 2.x is incompatible (upper bound), named with the ins
   await withCommands({ opencli: fakeOpencli({ zhihu: { stdout: ZHIHU_ROWS } }, { version: '1.99.3' }) }, async () => {
     const h = harness({ platformBackends: { zhihu: ['opencli'] } })
     try { assert.equal((await chainReport('zhihu', { deps: h.deps(), config: h.config })).available, true) } finally { h.cleanup() }
+  })
+})
+
+const NOT_FOUND = ['ok: false', 'error:', '  code: NOT_FOUND', '  message: No Weibo search results found', '  exitCode: 1'].join('\n')
+const SESSION_BUSY = ['ok: false', 'error:', '  code: SESSION_BUSY', '  message: Another command holds the weibo session', '  exitCode: 75'].join('\n')
+const WEIBO_ROWS = readFileSync(new URL('constructed-opencli-weibo-search.json', FIXTURES_URL), 'utf8')
+
+test('weibo, tieba, douyin: the standalone OpenCLI answers first; zero results or a busy session fall through to the search page, each said as such', { skip: !posix }, async () => {
+  await withCommands({ opencli: fakeOpencli({ weibo: { stdout: WEIBO_ROWS }, tieba: { code: 1, stderr: NOT_FOUND }, douyin: { code: 75, stderr: SESSION_BUSY } }) }, async () => {
+    const h = harness()
+    try {
+      const ok = await h.search('露营', 'weibo')
+      assert.equal(h.history().engine, 'opencli', 'the standalone OpenCLI answered')
+      assert.equal(ok.sources[0]!.url, 'https://weibo.com/1234567890/Nabc123')
+      assert.match(ok.sources[0]!.title!, /露营装备/)
+      const tieba = await h.search('露营', 'tieba')
+      assert.equal(tieba.sources[0]!.title, 'Browser page hit', 'zero results at opencli: the search page answered')
+      assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli: opencli returned no results/)
+      const douyin = await h.search('露营', 'douyin')
+      assert.equal(douyin.sources[0]!.title, 'Browser page hit')
+      assert.match(JSON.stringify(h.history().detail), /opencli: opencli is busy: another opencli process holds the browser session.*not a login problem/)
+      assert.doesNotMatch(JSON.stringify(h.history().detail), /not logged in/)
+    } finally { h.cleanup() }
   })
 })

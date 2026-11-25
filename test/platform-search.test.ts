@@ -74,7 +74,8 @@ test('an unavailable platform is an error that says what is missing; it never co
 
 test('M0 cooldown rules hold for platforms: empty and cancelled calls do not cool down, a transient fault does', async () => {
   let mode: 'empty' | 'boom' | 'ok' = 'empty'
-  const h = harness({}, { results: () => { if (mode === 'boom') throw new Error('browser crashed'); return mode === 'ok' ? [{ url: 'https://zh.test/ok', title: 'ok' }] : [] } })
+  // The chain is pinned to the search page: the default one starts with the standalone OpenCLI, whose skip notes would prefix every message here.
+  const h = harness({ platformBackends: { weibo: ['browser-search'] } }, { results: () => { if (mode === 'boom') throw new Error('browser crashed'); return mode === 'ok' ? [{ url: 'https://zh.test/ok', title: 'ok' }] : [] } })
   try {
     // Empty: a result that carries the platform's own hint (login, selectors), not an error.
     const empty = await h.search('x', { id: 'weibo' })

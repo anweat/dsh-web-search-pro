@@ -113,6 +113,16 @@ function browserPlatform(id: string, label: string, over: Partial<ProviderDescri
   }))
 }
 
+/** A rendered-search-page platform whose first backend is the standalone OpenCLI (its columns were read from the 1.8.8 sources, never run against the site). */
+function opencliFirstBrowserPlatform(id: string, label: string, over: Partial<ProviderDescriptor>): ProviderAdapter {
+  return browserPlatform(id, label, {
+    requirements: [cliReq('opencli', 'first backend: standalone OpenCLI; it uses the login of your own Chrome through the OpenCLI Browser Bridge (the plugin never logs in)'), BROWSER_REQ],
+    costModel: { kind: 'free', note: 'uses your logged-in session' },
+    verification: { live: false, note: 'OpenCLI ' + id + ' search: columns read from the 1.8.8 sources, not run against the site (contract-only); the rendered search page is best-effort selectors that need a login state; neither is verified live' },
+    ...over,
+  })
+}
+
 /** A platform served by standalone CLIs (and optionally dsh-browser legs): `legs` name the CLI requirements shown in the descriptor. */
 function cliPlatform(id: string, label: string, over: Partial<ProviderDescriptor>): ProviderAdapter {
   return chainProvider(id, descriptor({ id: 'platform:' + id, aliases: [id], label, kind: 'platform', ...over }))
@@ -182,10 +192,12 @@ export const platformAdapters: readonly ProviderAdapter[] = [
     costModel: { kind: 'free', note: 'uses your logged-in session' }, costTier: 'free-quota',
     verification: { live: true, note: 'OpenCLI zhihu search measured live on 2026-10-27 (needs a zhihu.com login in your own Chrome; no excerpt or time in its output); zhihu-cli is contract-only' },
   }),
-  browserPlatform('weibo', '微博', { resultKinds: ['social'], taskProfiles: ['experience', 'news_fact'], domains: ['weibo.com', 'weibo.cn'] }),
+  // weibo, tieba, douyin: the standalone OpenCLI first (your Chrome's login), then the rendered search page. douban is NOT in this
+  // group: `opencli douban search` only searches movies, books and music; kuaishou has no OpenCLI site.
+  opencliFirstBrowserPlatform('weibo', '微博', { resultKinds: ['social'], taskProfiles: ['experience', 'news_fact'], domains: ['weibo.com', 'weibo.cn'] }),
   browserPlatform('douban', '豆瓣', { taskProfiles: ['experience', 'compare'], domains: ['douban.com'] }),
-  browserPlatform('tieba', '百度贴吧', { domains: ['tieba.baidu.com'] }),
-  browserPlatform('douyin', '抖音', { resultKinds: ['video'], domains: ['douyin.com'] }),
+  opencliFirstBrowserPlatform('tieba', '百度贴吧', { domains: ['tieba.baidu.com'] }),
+  opencliFirstBrowserPlatform('douyin', '抖音', { resultKinds: ['video'], domains: ['douyin.com'] }),
   browserPlatform('kuaishou', '快手', { resultKinds: ['video'], domains: ['kuaishou.com'] }),
 
   // WeChat official accounts (dev-plan M12): OmniReach's wechat source (Sogou, no key, no login), then wx-search-cli.

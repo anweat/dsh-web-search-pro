@@ -120,7 +120,10 @@ export async function listOpencliSites(options: { run?: typeof runCli; ttlMs?: n
  *  - LOGIN_WALL (77), SECURITY_BLOCK, RATE_LIMITED, FORBIDDEN: an HTML page where JSON was expected, a risk-control block -> blocked;
  *    UNKNOWN with a JSON parse error on an HTML body (`Unexpected token '<'`) is the same thing from an adapter that does not
  *    check (measured on reddit through a proxy);
- *  - EMPTY_RESULT (66), NO_DATA, EMPTY_RESPONSE: nothing found; BROWSER_CONNECT (69): no Chrome / bridge; TIMEOUT (75);
+ *  - EMPTY_RESULT (66), NO_DATA, EMPTY_RESPONSE: nothing found; NOT_FOUND: the same from adapters that throw it for zero results (weibo
+ *    search; read from the 1.8.8 source, so an unlogged weibo page, which shows no cards either, reads as empty too); BROWSER_CONNECT (69): no
+ *    Chrome / bridge; TIMEOUT (75); SESSION_BUSY (also 75, errors.js `SessionBusyError`): another opencli process holds the site's browser
+ *    session. The two share an exit code, so they are told apart by their code only: a busy session is retryable and says it is not a login problem;
  *  - ARGUMENT, INVALID_ARGUMENT, ...: the arguments of this adapter are not accepted by that version.
  * Anything else (COMMAND_EXEC, FETCH_ERROR, HTTP_ERROR, ...) keeps OpenCLI's own message.
  */
@@ -131,8 +134,9 @@ export const OPENCLI_ERROR_CODES: CliErrorCodesSpec = {
   notLoggedInExit: [77],
   blocked: ['LOGIN_WALL', 'SECURITY_BLOCK', 'RATE_LIMITED', 'FORBIDDEN'],
   blockedPatterns: ["unexpected token '<'", 'is not valid json', '<!doctype', '<html', '<body'],
-  empty: ['EMPTY_RESULT', 'NO_DATA', 'EMPTY_RESPONSE'],
+  empty: ['EMPTY_RESULT', 'NO_DATA', 'EMPTY_RESPONSE', 'NOT_FOUND'],
   unavailable: ['BROWSER_CONNECT'],
+  busy: ['SESSION_BUSY'],
   timeout: ['TIMEOUT'],
   usage: ['ARGUMENT', 'INVALID_ARGUMENT', 'INVALID_ARG', 'INVALID_ARGS', 'INVALID_INPUT'],
 }
