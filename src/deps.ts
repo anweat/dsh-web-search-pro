@@ -65,7 +65,7 @@ const SPEC_INSTALLS: Readonly<Record<string, Install[]>> = {
   gh: [{ installer: 'brew', command: 'brew install gh' }, { installer: 'winget', command: 'winget install GitHub.cli' }],
   'wx-search-cli': [{ installer: 'npm', command: 'npm i -g wx-search-cli' }],
   tanso: [{ installer: 'npm', command: 'npm i -g @geekjourneyx/tanso' }],
-  opencli: [{ installer: 'npm', command: 'npm i -g @jackwener/opencli' }],
+  opencli: [{ installer: 'npm', command: 'npm i -g @jackwener/opencli@1.8.8' }],
 }
 
 const USED_BY: Readonly<Record<string, string>> = {
@@ -136,7 +136,7 @@ const infoOf = (subject: ProbeSubject, spec: CliAdapterSpec | undefined, usedBy:
   label,
   usedBy,
   source: subject.packageNote,
-  ...subject.probe.minVersion ? { requiredVersion: '>=' + subject.probe.minVersion } : {},
+  ...subject.probe.minVersion ? { requiredVersion: '>=' + subject.probe.minVersion + (subject.probe.maxVersion ? ' <' + subject.probe.maxVersion : '') } : {},
   ...spec?.verification ? { verification: spec.verification.status } : {},
   installs,
 })

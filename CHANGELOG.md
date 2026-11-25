@@ -13,6 +13,7 @@
 - **`save-login.mjs`。** 默认输出改为 `<DSH_HOME 或 ~/.dsh>/data/browser/auth/login-state.json`（目录 0700、文件 0600，结束时打印路径），显式给出路径时以它为准；输出位置在 git 工作区里时拒绝写入（`--force` 才写）；目标文件已存在时合并（只替换这次登录的站点的 cookie / origin，其余保留）并留一份 `.bak`；某个平台不登录就输入 `s` 跳过，它原来的登录保持不动；Playwright 1.51+ 时一并导出 IndexedDB。纯函数部分在 `scripts/lib/login-state.mjs`，有单元测试。
 - 测试：测试进程的 `HOME` 改为一次性空目录并清掉 `npm_config_prefix` / `FNM_DIR` 等变量，测试不会碰到所在机器上真实的 opencli。
 - 文档：[平台登录态](docs/guide/platform-login.md)（opencli 路线、搜索页状态表、`save-login.mjs` 新行为）、[CLI 适配](docs/guide/cli-adapters.md)（默认链、版本范围、找不到 opencli 时）、`sources` 技能参考与 README 同步。
+- **安装提示固定版本。** `sources.deps`、缺失原因和文档里的 opencli 安装命令改为 `npm i -g @jackwener/opencli@1.8.8`（不带版本会装到还不支持的 2.x），`sources.deps` 的版本要求显示为 `>=1.8.0 <2.0.0`。验证码的提示不再让人去别的浏览器通过验证（通行证不共享）。
 
 ## 0.2.4（2026-11-09）
 

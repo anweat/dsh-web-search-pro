@@ -61,7 +61,7 @@ douban **不**把 `opencli` 放在前面：`opencli douban search` 只搜电影 
 
 ## 登录类平台怎么用
 
-**登录类平台（小红书、知乎、Reddit、X）怎么用——登录完全交给你**：推荐的做法是在你**日常使用的 Chrome** 里登录这些站点，再装好 [OpenCLI](https://github.com/jackwener/opencli)（`npm i -g @jackwener/opencli`）和它的 **OpenCLI Browser Bridge** 扩展（`opencli doctor` 全 OK 即连通）。独立 `opencli` 是这四个平台的首选后端，直接使用那个 Chrome 的登录态：插件不提供任何登录流程、不运行任何登录命令、不读浏览器 Cookie，登录态过期时报“在你的 Chrome 里登录 <站点> 后重试”。调用时插件给站点命令带上 `--window background --site-session ephemeral --keep-tab false`（opencli 1.8.8 的浏览器命令都支持，也是它的默认值）：在后台窗口里跑、不抢你的焦点、用完关标签页；只对 `opencli <site> search --help` 里列出这三个参数的命令传（本地探测，不搜索），老版本或不开浏览器的命令不传。独立 CLI（`xhs`、`rdt`、`zhihu`、`twitter`）只是**可选后备**：想用就按它们自己的方式登录（下面），仍由你自己运行，插件只检查登录文件是否存在，没有就跳过。
+**登录类平台（小红书、知乎、Reddit、X）怎么用——登录完全交给你**：推荐的做法是在你**日常使用的 Chrome** 里登录这些站点，再装好 [OpenCLI](https://github.com/jackwener/opencli)（`npm i -g @jackwener/opencli@1.8.8`）和它的 **OpenCLI Browser Bridge** 扩展（`opencli doctor` 全 OK 即连通）。独立 `opencli` 是这四个平台的首选后端，直接使用那个 Chrome 的登录态：插件不提供任何登录流程、不运行任何登录命令、不读浏览器 Cookie，登录态过期时报“在你的 Chrome 里登录 <站点> 后重试”。调用时插件给站点命令带上 `--window background --site-session ephemeral --keep-tab false`（opencli 1.8.8 的浏览器命令都支持，也是它的默认值）：在后台窗口里跑、不抢你的焦点、用完关标签页；只对 `opencli <site> search --help` 里列出这三个参数的命令传（本地探测，不搜索），老版本或不开浏览器的命令不传。独立 CLI（`xhs`、`rdt`、`zhihu`、`twitter`）只是**可选后备**：想用就按它们自己的方式登录（下面），仍由你自己运行，插件只检查登录文件是否存在，没有就跳过。
 
 **2026-10-27 的实测结论**（opencli 1.8.8，用户在场）：`opencli twitter search` 与 `zhihu search` 成功并已适配；`opencli xiaohongshu search` 退出码 77 `AUTH_REQUIRED`（那个 Chrome 里没有小红书登录），已映射为未登录；`opencli reddit search` 退出码 1，Reddit 返回的是网页（`Unexpected token '<'`）——这台机器的网络是代理出口，Reddit 的登录页也显示“网络安全部门已屏蔽你的请求”，所以 **Reddit 在代理 IP 下会被拦**，换网络出口后才能验证它；`xhs search` 用用户保存的登录成功。
 

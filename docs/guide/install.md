@@ -51,7 +51,7 @@ dsh --profile web
 1. **网页搜索、证据管线、CLI 平台不需要浏览器**，装完即用。先让模型调一次 `web_call` 的 `sources.status`，看各后端是否 ready。
 2. **设置卡片**：打开 `设置 → 插件 → 插件配置 → Web Search Pro`。顶部是状态摘要（实际尝试顺序的默认引擎链、已配置 Key 的来源数、DeepSeek 是否就绪、评分模型、待重启项等），详见 [设置面板](./settings-panel.md)。
 3. **`read.snapshot`、`read.fetch mode=playwright`、搜索页类平台需要浏览器插件**，且**有 Google Chrome / Microsoft Edge 就直接用**（不用下载 Playwright 的 Chromium）。都没有时 `sources.status` 的 `browser:dsh-browser` 一行会写 `loaded, no browser to launch` 和 dsh-browser 给的可照做的步骤（装 Chrome / Edge，或 `runtime.install`，或终端命令）。
-4. **小红书 / 知乎 / Reddit / X** 要用你日常 Chrome 的登录态：`npm i -g @jackwener/opencli` 并装它的 Browser Bridge 扩展（`opencli doctor` 全 OK），本插件优先用 PATH 上的独立 `opencli`；没有它这几个平台会往后落到独立 CLI 或 dsh-browser 的后端，`sources.status` 写明原因。登录由你自己完成，见 [平台登录态](./platform-login.md)。OpenCLI 与浏览器的装法细节见 [dsh-browser 的 README](https://github.com/anweat/dsh-browser#readme)。
+4. **小红书 / 知乎 / Reddit / X** 要用你日常 Chrome 的登录态：`npm i -g @jackwener/opencli@1.8.8` 并装它的 Browser Bridge 扩展（`opencli doctor` 全 OK），本插件优先用 PATH 上的独立 `opencli`；没有它这几个平台会往后落到独立 CLI 或 dsh-browser 的后端，`sources.status` 写明原因。登录由你自己完成，见 [平台登录态](./platform-login.md)。OpenCLI 与浏览器的装法细节见 [dsh-browser 的 README](https://github.com/anweat/dsh-browser#readme)。
 5. 有 `DEEPSEEK_API_KEY`（环境变量、DSH 凭据或设置里的密钥字段）时，默认搜索会先用**按请求计费**的 DeepSeek 搜索，见 [来源与引擎](./sources.md#deepseek-搜索--抓取常用)。不想用就在 `sources.disabled` 里写 `deepseek`。
 
 ## 排障

@@ -93,5 +93,5 @@ OpenCLI 用于已有站点 adapter 或复用 Chrome 登录会话（不读取或�
 - `opencli.run` 接受 argv 数组而非 shell 字符串（例：`["browser", "research", "state"]`），可覆盖 adapter、显式 session 的 `browser state/find/get/click/fill/type/select/keys/wait/extract/network` 等命令。
 - 每个 `opencli browser` 子命令都必须显式给出 session 名（上例为 `research`），同名会话复用标签页状态。没有 adapter 时优先 `network` / `extract`，最后再用 `state` / `find` / `click` / `fill` 等 DOM 操作。
 - 这个通用入口可能触发发帖、删除等站点 adapter，所以除隔离测试用的 `unrestricted` 外都要求一次性审批。
-- OpenCLI 是可选依赖，dsh-browser 0.2.2 起**不再内置**：用 `npm i -g @jackwener/opencli` 安装，扩展未连接时用 `opencli doctor` 诊断。若 `doctor` 显示 daemon 正常但 extension disconnected，请显式启动装有 OpenCLI Browser Bridge 的 Chrome；不要把 Quark 或禁用扩展的 Playwright 临时 profile 当作替代。
+- OpenCLI 是可选依赖，dsh-browser 0.2.2 起**不再内置**：用 `npm i -g @jackwener/opencli@1.8.8` 安装，扩展未连接时用 `opencli doctor` 诊断。若 `doctor` 显示 daemon 正常但 extension disconnected，请显式启动装有 OpenCLI Browser Bridge 的 Chrome；不要把 Quark 或禁用扩展的 Playwright 临时 profile 当作替代。
 - 本插件的登录类平台（小红书 / 知乎 / Reddit / X）直接用独立 `opencli` 做后端，不经过 `opencli.run`，见 [平台登录态](./platform-login.md)。

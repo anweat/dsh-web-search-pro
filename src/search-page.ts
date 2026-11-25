@@ -69,7 +69,7 @@ export function sourcesOfSearchPage(res: SearchPageResult, ctx: SearchPageContex
       throw error(label + ' 要求登录，而这次没有绑定任何 AuthProfile' + detail + '。' + way + '。' + viaChrome, 'CLI_NOT_LOGGED_IN', false, 'needs_login')
     }
     case 'captcha':
-      throw error(label + ' 弹出了验证码：这是站点的风控，不是登录或选择器问题' + detail + '。不要马上重试；先在你自己的浏览器里手动通过验证，隔一段时间再搜。', 'ENGINE_ERROR', false, 'captcha')
+      throw error(label + ' 弹出了验证码：这是站点的风控，不是登录或选择器问题' + detail + '。不要马上重试（在别的浏览器里通过验证对这里无效，通行证不共享）；隔一段时间再搜，或换一个来源。', 'ENGINE_ERROR', false, 'captcha')
     case 'blocked':
       throw error(label + ' 拒绝了这次访问（被拦截' + (res.status ? '，HTTP ' + res.status : '') + '）：这是站点的风控，不是登录或选择器问题' + detail + '。不要马上重试；换个网络出口，或隔一段时间再搜。', 'ENGINE_ERROR', false, 'blocked')
     case 'rate_limited':
