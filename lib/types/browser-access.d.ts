@@ -59,3 +59,8 @@ export interface BrowserLaunchReadiness {
  * is `undefined`, which callers treat as unknown and say nothing about.
  */
 export declare function browserLaunchReadiness(browser: BrowserService | undefined): Promise<BrowserLaunchReadiness | undefined>;
+/**
+ * The version of the OpenCLI dsh-browser itself found (`status().opencliVersion`, reported since dsh-browser's session P0), or undefined:
+ * an older dsh-browser, no OpenCLI, a failing call. Optional and never throws; it is only used to say that two copies are installed.
+ */
+export declare function browserOpencliVersion(browser: BrowserService | undefined): Promise<string | undefined>;

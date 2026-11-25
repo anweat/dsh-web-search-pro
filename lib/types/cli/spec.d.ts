@@ -141,6 +141,8 @@ export interface CliErrorCodesSpec {
     notLoggedIn?: readonly string[];
     /** Exit codes that mean "not logged in" when the output carries no readable code. */
     notLoggedInExit?: readonly number[];
+    /** Exit codes that mean "the arguments were not accepted" when the output carries no readable code (OpenCLI 1.8's argument parser prints plain text and exits 2). */
+    usageExit?: readonly number[];
     /** Codes that mean "no results" (ENGINE_EMPTY). */
     empty?: readonly string[];
     /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
@@ -155,6 +157,10 @@ export interface CliErrorCodesSpec {
     timeout?: readonly string[];
     /** Codes that mean the tool rejected its arguments (CLI_CONTRACT_MISMATCH: the adapter does not match this version). */
     usage?: readonly string[];
+    /** Code prefixes of the same kind (OpenCLI 2.x reports every argument parser failure as `commander.<reason>`). */
+    usagePrefixes?: readonly string[];
+    /** Codes that mean the site's risk control blocked the request (CLI_FAILED, not retryable at once, said not to be an expired login). Matched before `blocked`. */
+    riskControl?: readonly string[];
 }
 export interface CliSearchSpec {
     /**
