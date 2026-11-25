@@ -233,6 +233,27 @@ test('discovery is cached per (launcher, version, site), shares one run between 
   })
 })
 
+test('a help call that did not work (time, start, size) is no verdict on the site: not `unsupported`, not cached, no list fallback', { skip: !posix }, async () => {
+  await withCommands({ opencli: fakeOpencli({}) }, async () => {
+    for (const broken of [{ timedOut: true }, { spawnFailed: true }, { truncated: true }]) {
+      clearOpencliCache()
+      const asked: string[][] = []
+      let fail = true
+      const run = async (_bin: string, args: string[]): Promise<any> => {
+        asked.push(args)
+        return { code: fail ? -1 : 0, stdout: fail ? '' : read('help/opencli2-weibo-search.json'), stderr: '', timedOut: false, truncated: false, spawnFailed: false, ...fail ? broken : {} }
+      }
+      const first = await discoverOpencliSite('weibo', { run, version: '2.0.3' })
+      assert.equal(first.entry, undefined)
+      assert.equal(first.unsupported, undefined)
+      assert.match(first.problem!, /opencli weibo search --help (timed out|printed too much|could not be started)/)
+      assert.equal(asked.some(args => args[0] === 'list'), false)
+      fail = false
+      assert.equal((await discoverOpencliSite('weibo', { run, version: '2.0.3' })).entry?.site, 'weibo', 'asked again at once')
+    }
+  })
+})
+
 test('one copy: dsh-browser\'s own OpenCLI version is compared with the one this plugin resolved, and the deps row says both', async () => {
   const row = (over: Partial<DepInfo> = {}): DepInfo => ({ id: 'opencli', label: 'OpenCLI', usedBy: 'x', available: true, version: '2.0.3', path: '/usr/local/bin/opencli', installs: [], ...over })
   const other = { id: 'bili', label: 'bili', usedBy: 'y', available: true, installs: [] } as DepInfo

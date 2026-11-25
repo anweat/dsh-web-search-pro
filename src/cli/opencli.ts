@@ -143,6 +143,8 @@ export interface SiteDiscovery {
   problem?: string
   /** `unsupported`: the OpenCLI answered and has no usable search command for the site (as opposed to not being runnable at all). */
   unsupported?: boolean
+  /** The help call itself failed (it did not start, timed out, printed too much): asked again next time instead of being cached. */
+  transient?: boolean
   hint?: string
 }
 
@@ -216,7 +218,9 @@ export async function discoverOpencliSite(site: string, options: DiscoverOptions
   const env = withPathPrefix(buildCliEnv({ env: {} }), resolved.pathPrefix)
   const flight = boundedDiscovery(async (): Promise<SiteDiscovery> => {
     const res = await run(launcher, [site, 'search', '--help', '-f', 'json'], { timeoutMs: 20_000, signal: undefined, env, cleanEnv: true, maxOutput: 2 * 1024 * 1024, outputEncoding: 'utf-8' })
-    const parsed = res.spawnFailed || res.timedOut || res.truncated ? { notJson: true as const } : parseSiteSearchHelp(res.stdout, site)
+    // The call itself did not work (start, time, size): that says nothing about the site. Not a verdict, not cached, and no `list` fallback (a 2.x list names no site).
+    if (res.spawnFailed || res.timedOut || res.truncated) return { problem: 'opencli ' + site + ' search --help ' + (res.timedOut ? 'timed out' : res.truncated ? 'printed too much' : 'could not be started'), transient: true }
+    const parsed = parseSiteSearchHelp(res.stdout, site)
     if (!parsed.notJson) return parsed
     // Not JSON: an older 1.8.x. Its `list` table has what the JSON help would say; the silent options come from the text help.
     const listed = await listOpencliSites({ run, force: options.force })
@@ -224,7 +228,7 @@ export async function discoverOpencliSite(site: string, options: DiscoverOptions
     if (!entry) return { unsupported: !!listed.sites, problem: listed.problem ?? 'opencli has no read `search` command for the site ' + site + ' (opencli list)', hint: 'run `opencli list` to see the sites your version supports' }
     const silent = entry.browser && (await probeCli(opencliSiteProbe(site), { ...options.run ? { run: options.run } : {} })).state === 'detected'
     return { entry: { ...entry, silent } }
-  }).then(result => { siteCache.set(key, { at: now(), result }); return result }).finally(() => { if (siteFlights.get(key) === flight) siteFlights.delete(key) })
+  }).then(result => { if (!result.transient) siteCache.set(key, { at: now(), result }); return result }).finally(() => { if (siteFlights.get(key) === flight) siteFlights.delete(key) })
   siteFlights.set(key, flight)
   return flight
 }

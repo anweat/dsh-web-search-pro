@@ -82,6 +82,8 @@ export interface SiteDiscovery {
     problem?: string;
     /** `unsupported`: the OpenCLI answered and has no usable search command for the site (as opposed to not being runnable at all). */
     unsupported?: boolean;
+    /** The help call itself failed (it did not start, timed out, printed too much): asked again next time instead of being cached. */
+    transient?: boolean;
     hint?: string;
 }
 /**
