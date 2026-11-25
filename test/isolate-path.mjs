@@ -9,11 +9,24 @@ if (process.platform !== 'win32') {
   process.env.PATH = '/usr/bin:/bin'
 }
 
-// The plugin puts its database and the agent overlay under $DSH_HOME when a test does not give a dbPath. A test must never
-// open the real home of the person running it, so point the suite at a throw-away one (the live tests may still set their own).
+// The standalone `opencli` is also looked for in the usual global install places under the home directory (Homebrew, nvm, fnm, ...),
+// so a test must not see the real home of the machine either: point HOME at an empty throw-away one (tests that need a home set
+// their own and restore it). DSH_BROWSER_OPENCLI, the explicit override, is cleared for the same reason.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+{
+  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-test-userhome-'))
+  process.env.HOME = fakeHome
+  process.env.USERPROFILE = fakeHome
+  delete process.env.DSH_BROWSER_OPENCLI
+  process.env.WSP_OPENCLI_SYSTEM_BINS = ''
+  for (const name of ['npm_config_prefix', 'NPM_CONFIG_PREFIX', 'NVM_DIR', 'FNM_DIR', 'VOLTA_HOME', 'BUN_INSTALL']) delete process.env[name]
+  process.on('exit', () => { try { fs.rmSync(fakeHome, { recursive: true, force: true }) } catch { /* best effort */ } })
+}
+
+// The plugin puts its database and the agent overlay under $DSH_HOME when a test does not give a dbPath. A test must never
+// open the real home of the person running it, so point the suite at a throw-away one (the live tests may still set their own).
 if (!process.env.WSP_TEST_KEEP_HOME) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-test-home-'))
   process.env.DSH_HOME = home

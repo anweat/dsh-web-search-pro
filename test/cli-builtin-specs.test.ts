@@ -240,7 +240,7 @@ test('wx-search-cli (README fixture) and tanso (docs-only fixture): drop captcha
 
 test('standalone opencli: only sites whose own list shows a read search command; per-site argv and output', () => {
   const sites = parseOpencliList(read('opencli-list.json'))
-  assert.deepEqual([...sites.keys()].sort(), ['douyin', 'hackernews', 'reddit', 'twitter', 'weixin', 'xiaohongshu', 'zhihu'], 'v2ex and xiaoyuzhou have no search command')
+  assert.deepEqual([...sites.keys()].sort(), ['douban', 'douyin', 'hackernews', 'reddit', 'tieba', 'twitter', 'weibo', 'weixin', 'xiaohongshu', 'zhihu'], 'v2ex and xiaoyuzhou have no search command')
   assert.equal(sites.get('hackernews')!.strategy, 'public')
   assert.equal(sites.get('xiaohongshu')!.domain, 'www.xiaohongshu.com')
   assert.deepEqual([sites.get('xiaohongshu')!.browser, sites.get('hackernews')!.browser], [true, false])

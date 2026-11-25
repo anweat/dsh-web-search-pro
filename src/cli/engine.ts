@@ -72,14 +72,17 @@ export function cliSpecEngine(spec: CliAdapterSpec, platform: string, deps: Pick
       const why = disabledBySettings(spec, deps)
       if (why) throw new CliAdapterError(why, 'CLI_NOT_FOUND', undefined, false)
       let bin = spec.bins[0]!
+      let pathPrefix: string[] | undefined
       if (!options.run) {
         const probe = await probeCli(spec)
         const failure = probeError(spec, probe)
         if (failure) throw failure
         bin = probe.path ?? bin
+        pathPrefix = probe.pathPrefix
       }
       const runOptions: CliRunOptions = {
         platform, bin,
+        ...pathPrefix ? { pathPrefix } : {},
         ...options.run ? { run: options.run } : {},
         ...(options.env ?? specEnv(deps)) ? { env: (options.env ?? specEnv(deps))! } : {},
         ...options.home ? { home: options.home } : {},

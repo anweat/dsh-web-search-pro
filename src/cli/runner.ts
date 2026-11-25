@@ -12,6 +12,7 @@ import type { WebSearchSource } from '@deepseek-ai/dsh-web'
 import { capText, htmlDecode, jsYaml, runCli, stripTags, type CliResult } from '../util.ts'
 import { EngineError } from '../engine-error.ts'
 import { normalizeTimeText } from './time-text.ts'
+import { withPathPrefix } from './opencli-locate.ts'
 import {
   searchSpecFor, WHOLE_OUTPUT_DEFAULT_CHARS, WHOLE_OUTPUT_SCHEME, type CliAdapterSpec, type CliErrorCode, type CliErrorCodesSpec, type CliOutputSpec, type CliSearchSpec, type FieldSource, type JoinPart, type TemplateSource,
 } from './spec.ts'
@@ -408,6 +409,8 @@ export interface CliRunOptions {
   operation?: 'search' | 'read'
   /** Resolved command (a path or the bin name); default `spec.bins[0]`. */
   bin?: string
+  /** Directories put in front of the child's PATH (the probe's `pathPrefix`: a launcher found outside PATH needs a node). The rest of the clean environment is unchanged. */
+  pathPrefix?: readonly string[]
   /** Test seams. */
   run?: typeof runCli
   env?: NodeJS.ProcessEnv
@@ -462,7 +465,7 @@ export async function runCliSearchDetailed(spec: CliAdapterSpec, input: CliRunIn
   const result: CliResult = await run(options.bin ?? spec.bins[0]!, argv, {
     timeoutMs: spec.timeoutMs,
     signal: input.signal,
-    env: buildCliEnv(spec, source),
+    env: withPathPrefix(buildCliEnv(spec, source), options.pathPrefix),
     cleanEnv: true,
     maxOutput: spec.maxOutputBytes,
     outputEncoding: 'utf-8',

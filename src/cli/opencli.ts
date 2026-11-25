@@ -9,7 +9,8 @@
 
 import { runCli } from '../util.ts'
 import { buildCliEnv } from './runner.ts'
-import { findOnPath, probeCli, type ProbeSubject } from './probe.ts'
+import { probeCli, resolveBin, type ProbeSubject } from './probe.ts'
+import { withPathPrefix } from './opencli-locate.ts'
 import { validateCliAdapterSpec, type CliAdapterSpec, type CliErrorCodesSpec } from './spec.ts'
 import { GENERIC_OUTPUT, opencliSiteVerification, SITE_OUTPUT } from './opencli-sites.ts'
 export { OPENCLI_SITE_OF } from './chains-spec.ts'
@@ -92,14 +93,16 @@ export function clearOpencliCache(): void { cache.clear() }
 
 /** The searchable sites of the installed OpenCLI (cached 5 minutes); `undefined` when the command cannot be listed. */
 export async function listOpencliSites(options: { run?: typeof runCli; ttlMs?: number; now?: () => number; force?: boolean } = {}): Promise<{ sites?: Map<string, OpencliSite>; problem?: string }> {
-  const found = findOnPath('opencli')
-  if (!found) return { problem: 'opencli not found on PATH' }
+  // The same resolution as the probe and the search: PATH, then the usual global install places.
+  const resolved = resolveBin('opencli')
+  const found = resolved.path
+  if (!found) return { problem: resolved.problem ?? 'opencli not found on PATH or in the usual global install folders' }
   const now = options.now ?? Date.now
   const key = found + '\u0000' + (process.env.PATH ?? '')
   const hit = cache.get(key)
   if (!options.force && hit && now() - hit.at <= (options.ttlMs ?? 300_000)) return { sites: hit.sites }
   const run = options.run ?? runCli
-  const res = await run(found, ['list', '-f', 'json'], { timeoutMs: 20_000, signal: undefined, env: buildCliEnv({ env: {} }), cleanEnv: true, maxOutput: 16 * 1024 * 1024, outputEncoding: 'utf-8' })
+  const res = await run(found, ['list', '-f', 'json'], { timeoutMs: 20_000, signal: undefined, env: withPathPrefix(buildCliEnv({ env: {} }), resolved.pathPrefix), cleanEnv: true, maxOutput: 16 * 1024 * 1024, outputEncoding: 'utf-8' })
   if (res.code !== 0 || res.truncated) return { problem: res.truncated ? 'opencli list output exceeded the size cap' : 'opencli list failed with exit ' + res.code }
   try {
     const sites = parseOpencliList(res.stdout)
