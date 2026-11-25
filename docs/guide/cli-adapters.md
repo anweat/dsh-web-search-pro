@@ -49,7 +49,7 @@
 | douban、kuaishou | `browser-search`（单独一条） |
 | instagram / facebook | `browser-opencli` |
 
-douban **不**把 `opencli` 放在前面：`opencli douban search` 只搜电影 / 图书 / 音乐（`type` 默认 `movie`），拿帖子或话题去搜只会得到电影，所以它的链保持原样（想用的话自己写 `platformBackends`）。kuaishou 在 opencli 里没有这个站点。weibo 的 `opencli weibo search` 零结果时报 `NOT_FOUND`，按“没有结果”处理（没登录的页面同样没有卡片，所以也读成没有结果：登录问题要看下面的状态说明）；`SESSION_BUSY`（别的 opencli 进程占着这个站点的浏览器会话，退出码 75，和 `TIMEOUT` 同码，按错误码区分）按可重试的繁忙错误报告，明确写“不是登录问题”。
+douban **不**把 `opencli` 放在前面：`opencli douban search` 只搜电影 / 图书 / 音乐（`type` 默认 `movie`），拿帖子或话题去搜只会得到电影，所以它的链保持原样（想用的话自己写 `platformBackends`）。kuaishou 在 opencli 里没有这个站点。weibo 的 `opencli weibo search` 没有卡片时报 `NOT_FOUND`，没登录也是这样（2026-11-25：未登录 4/4 是它，登录后立刻有结果），所以按“没有返回，也说不清原因”处理（`empty_unconfirmed`，附登录提示，链继续），`EMPTY_RESULT` / `EMPTY_RESPONSE` 同；`SESSION_BUSY`（别的 opencli 进程占着这个站点的浏览器会话，退出码 75，和 `TIMEOUT` 同码，按错误码区分）按可重试的繁忙错误报告，明确写“不是登录问题”。
 
 链上缺失、不兼容、未登录、被风控或出错的后端被跳过并记下原因（结果的 `notes` 里写 `skipped backends: opencli: …`，历史里记下最终回答的后端）；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。你显式配置的 `platformBackends` 原样优先，不会被新的默认顺序改写。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
 

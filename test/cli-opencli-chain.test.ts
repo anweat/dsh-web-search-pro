@@ -171,7 +171,7 @@ test('weibo, tieba, douyin: the standalone OpenCLI answers first; zero results o
       assert.match(ok.sources[0]!.title!, /露营装备/)
       const tieba = await h.search('露营', 'tieba')
       assert.equal(tieba.sources[0]!.title, 'Browser page hit', 'zero results at opencli: the search page answered')
-      assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli: opencli returned no results/)
+      assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli \[empty_unconfirmed\]: opencli returned nothing and cannot say why .*在你的 Chrome 里登录/)
       const douyin = await h.search('露营', 'douyin')
       assert.equal(douyin.sources[0]!.title, 'Browser page hit')
       assert.match(JSON.stringify(h.history().detail), /opencli: opencli is busy: another opencli process holds the browser session.*not a login problem/)

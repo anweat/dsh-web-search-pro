@@ -117,7 +117,7 @@ for (const g of GENERATIONS) {
         // empty: opencli passes, the search page answers, and the pass is named.
         const empty = await h.search('露营', 'tieba')
         assert.equal(empty.sources[0]!.title, 'Browser page hit')
-        assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli: opencli returned no results/)
+        assert.match(JSON.stringify(h.history().detail), /skipped backends: opencli \[empty_unconfirmed\]: opencli returned nothing and cannot say why/)
 
         // not logged in
         await h.search('露营', 'douyin')

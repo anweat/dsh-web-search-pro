@@ -283,6 +283,8 @@ export function mapToolFailure(codes: CliErrorCodesSpec | undefined, result: Pic
   const has = (list: readonly string[] | undefined): boolean => code !== undefined && !!list?.includes(code)
   const notLoggedIn = (): CliAdapterError => new CliAdapterError(label + ' is not logged in' + (shown ? ': ' + shown : ''), 'CLI_NOT_LOGGED_IN', loginHint(spec))
   if (has(codes.notLoggedIn)) return notLoggedIn()
+  // The tool answered with nothing and cannot say why (its own hint is often "or you may need to log in"): never reported as a plain "no results".
+  if (has(codes.emptyUnconfirmed)) return new EngineError(label + ' returned nothing and cannot say why' + (shown ? ' (' + code + ': ' + shown + ')' : ' (' + code + ')') + ': there may be no results, the login may be missing or expired, or the page may have changed' + (spec.login?.hint ? '; ' + spec.login.hint : ''), 'ENGINE_EMPTY', false, undefined, 'empty_unconfirmed')
   if (has(codes.empty)) return new EngineError(label + ' returned no results', 'ENGINE_EMPTY', false)
   // The site's risk control: said as such, and NOT as an expired login (the login is fine; the request was refused).
   if (has(codes.riskControl)) return new CliAdapterError(label + ': the site blocked the request (' + (code ? code + ': ' : '') + (shown ?? 'no message') + '); this is risk control, not an expired login', 'CLI_FAILED', RISK_HINT, false)

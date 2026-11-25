@@ -107,16 +107,20 @@ test('weibo, tieba, douyin (columns read from the 1.8.8 sources): exact mappings
     { url: 'https://www.douyin.com/video/7300000000000000001', title: '露营第一晚的帐篷搭建全过程', snippet: '@山野日记 · 赞 12000' },
     { url: 'https://www.douyin.com/video/7300000000000000002', title: '三分钟看懂炉头怎么选', snippet: '@装备君' },
   ])
-  // The three marked what they are: read from the sources, never run.
-  for (const site of ['weibo', 'tieba', 'douyin']) assert.match(`${spec(site).verification!.status} ${spec(site).verification!.note}`, /^contract-only .*not run against the site/, site)
+  // The three marked what they are: the command was run by hand, its rows were not parsed through this adapter.
+  for (const site of ['weibo', 'tieba', 'douyin']) assert.match(`${spec(site).verification!.status} ${spec(site).verification!.note}`, /^contract-only .*run on the user's own logged-in Chrome by calling opencli directly.*not parsed through this adapter/, site)
   // Each command's own --limit maximum is at or above the adapter's cap of 20 (weibo 50, tieba 20, douyin 30), so --limit {count} is always accepted.
   for (const site of ['weibo', 'tieba', 'douyin']) assert.ok(spec(site).search.maxCount! <= 30 && spec(site).search.argv.includes('{count}'), site)
 })
 
-test('NOT_FOUND (weibo search with zero results) is an empty answer, not a failure; SESSION_BUSY (exit 75, like TIMEOUT) is retryable and not a login problem', async () => {
+test('NOT_FOUND / EMPTY_RESULT are an empty answer whose cause is not known (never a plain "no results"), not a failure; SESSION_BUSY (exit 75, like TIMEOUT) is retryable and not a login problem', async () => {
   const payload = (code: string, message: string, exitCode: number): string => ['ok: false', 'error:', '  code: ' + code, '  message: ' + message, '  exitCode: ' + exitCode].join('\n')
   const none = await outcome('weibo', failing(1, payload('NOT_FOUND', 'No Weibo search results found', 1)))
-  assert.deepEqual([none.error.code, none.error.retryable], ['ENGINE_EMPTY', false])
+  assert.deepEqual([none.error.code, none.error.retryable, none.error.outcome], ['ENGINE_EMPTY', false, 'empty_unconfirmed'])
+  assert.match(none.error.message, /^opencli returned nothing and cannot say why \(NOT_FOUND: No Weibo search results found\): there may be no results, the login may be missing or expired, or the page may have changed; 在你的 Chrome 里登录 weibo\.com/)
+  assert.equal((await outcome('tieba', failing(66, payload('EMPTY_RESULT', 'tieba search returned no data', 66)))).error.outcome, 'empty_unconfirmed')
+  const sure = await outcome('weibo', failing(66, payload('NO_DATA', 'nothing', 66)))
+  assert.deepEqual([sure.error.code, sure.error.outcome, sure.error.message], ['ENGINE_EMPTY', undefined, 'opencli returned no results'], 'a code that does say "no results" stays plain')
   const busy = await outcome('weibo', failing(75, payload('SESSION_BUSY', 'Another command holds the weibo session', 75)))
   assert.equal(busy.error.code, 'CLI_FAILED')
   assert.equal(busy.error.retryable, true)

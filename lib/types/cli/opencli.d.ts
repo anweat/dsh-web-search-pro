@@ -118,8 +118,10 @@ export declare function discoverOpencliSite(site: string, options?: DiscoverOpti
  *  - LOGIN_WALL (77), RATE_LIMITED, FORBIDDEN: an HTML page where JSON was expected, a block -> blocked;
  *    UNKNOWN with a JSON parse error on an HTML body (`Unexpected token '<'`) is the same thing from an adapter that does not
  *    check (measured on reddit through a proxy);
- *  - EMPTY_RESULT (66), NO_DATA, EMPTY_RESPONSE: nothing found; NOT_FOUND: the same from adapters that throw it for zero results (weibo
- *    search; read from the 1.8.8 source, so an unlogged weibo page, which shows no cards either, reads as empty too); BROWSER_CONNECT (69): no
+ *  - EMPTY_RESULT (66), EMPTY_RESPONSE, NOT_FOUND: an empty answer whose cause is not known. OpenCLI's own hint for EMPTY_RESULT is "the page structure
+ *    may have changed, or you may need to log in", and weibo search throws NOT_FOUND for a page without cards: measured 2026-11-25, 4 of 4 NOT_FOUND
+ *    without a login and 2 of 2 results right after logging in. Reported as `empty_unconfirmed`, never as a plain "no results". NO_DATA: nothing found;
+ *    BROWSER_CONNECT (69): no
  *    Chrome / bridge; TIMEOUT (75); SESSION_BUSY (also 75, errors.js `SessionBusyError`): another opencli process holds the site's browser
  *    session. The two share an exit code, so they are told apart by their code only: a busy session is retryable and says it is not a login problem;
  *  - ARGUMENT, INVALID_ARGUMENT, ... and, in 2.x, `usage_error`, `unknown_command` and every `commander.*` (the argument parser's own failures):

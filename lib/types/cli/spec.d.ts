@@ -145,6 +145,8 @@ export interface CliErrorCodesSpec {
     usageExit?: readonly number[];
     /** Codes that mean "no results" (ENGINE_EMPTY). */
     empty?: readonly string[];
+    /** Codes of an empty answer whose cause the tool cannot tell: nothing found, or no login, or a changed page (ENGINE_EMPTY, outcome `empty_unconfirmed`, said so). Matched before `empty`. */
+    emptyUnconfirmed?: readonly string[];
     /** Codes that mean the site answered with a web page or blocked the request: risk control, IP block, login wall (CLI_FAILED, said so). */
     blocked?: readonly string[];
     /** Case-insensitive fragments of the tool's message that mean the same (a JSON parse error on an HTML page: `Unexpected token '<'`). */
