@@ -79,7 +79,7 @@ const USED_BY: Readonly<Record<string, string>> = {
   gh: 'github / github-issues / github-code 的 gh 回退后端（只读 `gh search`；需用户自行 `gh auth login`）',
   'wx-search-cli': 'wechat 平台第二后端（只读 `wx-search-cli search`；按上游文档，未实测）',
   tanso: 'tanso 平台后端（只读；按上游文档，未实测）',
-  opencli: '独立 OpenCLI：xiaohongshu / reddit / twitter 等站点的搜索后端（按 `opencli list` 的 search 命令，使用用户自己的 Chrome）',
+  opencli: '独立 OpenCLI：xiaohongshu / zhihu / weibo / reddit / twitter 等站点的搜索后端（按该站点自己的只读 search 命令，使用用户自己的 Chrome）',
 }
 
 const LABELS: Readonly<Record<string, string>> = {
