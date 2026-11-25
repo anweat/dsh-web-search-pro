@@ -49,7 +49,7 @@ dsh --profile web
 - **查看后端**：让模型调用 `web_call` 的 `sources.status`，每个来源 / 平台的就绪状态和被跳过的原因都在里面。
 - **来源与密钥**：网页搜索和证据管线装完即用（ddg / bing 免 Key）。有 `DEEPSEEK_API_KEY` 时，默认搜索会先用**按请求计费**的 DeepSeek 搜索；不想用就在 `sources.disabled` 里写 `deepseek`。Exa、Jina、博查、GitHub 等 Key 在设置卡片的“来源”分组里写入（存进 DSH Credentials，不读回明文）。
 - **开箱默认值**：默认关闭 Jev（`evidence.jevMode: off`，证据评分用本地规则，不调用任何模型，也不需要任何模型 Key）；只有配置了博查 Key 才会使用博查。
-- **可选依赖**：浏览器插件 `@anweat/dsh-browser`（`read.snapshot`、`read.fetch mode=playwright`、搜索页类平台；有 Chrome / Edge 就直接用，不用下载 Chromium）；`npm i -g @jackwener/opencli@1.8.8`（1.8.x，2.x 会被报告为不兼容）加它的 Browser Bridge 扩展（小红书 / 知乎 / Reddit / X / 微博 / 贴吧 / 抖音，用你日常 Chrome 的登录态，见 [平台登录态](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/platform-login.md)）；bili、yt-dlp、gh 等 CLI 由 `sources.deps` 检测。
+- **可选依赖**：浏览器插件 `@anweat/dsh-browser`（`read.snapshot`、`read.fetch mode=playwright`、搜索页类平台；有 Chrome / Edge 就直接用，不用下载 Chromium）；`npm i -g @jackwener/opencli@2`（支持 1.8 与 2.x；只装一份，浏览器插件与本插件共用）加它的 Browser Bridge 扩展（小红书 / 知乎 / Reddit / X / 微博 / 贴吧 / 抖音，用你日常 Chrome 的登录态，见 [平台登录态](https://github.com/anweat/dsh-web-search-pro/blob/master/docs/guide/platform-login.md)）；bili、yt-dlp、gh 等 CLI 由 `sources.deps` 检测。
 
 ## 快速示例
 

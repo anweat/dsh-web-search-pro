@@ -29,11 +29,13 @@
 2. 安装 OpenCLI 和它的 Browser Bridge 扩展：
 
    ```bash
-   npm i -g @jackwener/opencli@1.8.8
+   npm i -g @jackwener/opencli@2
    opencli doctor   # 全部 OK 即连通
    ```
 
-   适配核对过的版本是 1.8.x（1.8.0 起、2.0.0 以下）。装了 2.x 会被报告为 `incompatible`，原因里写着找到的版本和上面这条安装命令，链顺势用下一条后端；插件不去适配 2.x。
+   支持的范围是 `>=1.8.0 <3.0.0`，即 1.8.x 和 2.x 都可以：核对过的是 1.8.8（用你的 Chrome 实测过 twitter、知乎）和 2.0.3（只跑了 `--version`、`list`、`<站点> search --help -f json` 和浏览器之前就失败的命令，没有跑任何站点的真实搜索）。3.x 没有看过，会被报告为 `incompatible`，原因里写着找到的版本和上面这条安装命令，链顺势用下一条后端。
+   **只装一份。** 1.8 的 CLI 要求后台 daemon 的版本与自己完全相同，否则会把它停掉；2.x 只替换比自己旧的 daemon。所以桌面版 DSH（dsh-browser 的 opencli）和终端里的 opencli 必须是同一份，装两份会互相停对方的 daemon；`sources.deps` 在两边版本不同时会点出来。
+   **从 1.8 升到 2.x：** 先升级本插件，再 `npm i -g @jackwener/opencli@2`；浏览器扩展 1.0.27 不用换（2.0.3 随包的就是 1.0.27）；不要让两个版本同时装在机器上。
 
 3. 就这样。插件优先用 PATH 上的独立 `opencli`；PATH 里没有时（桌面版宿主的 PATH 常常很短）再找常见的全局安装位置，见 [CLI 适配](./cli-adapters.md#找不到-opencli-时)。它直接使用那个 Chrome 的登录态；登录态过期时提示“在你的 Chrome 里登录 <站点> 后重试”。
 

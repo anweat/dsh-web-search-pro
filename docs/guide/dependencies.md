@@ -8,8 +8,8 @@
 |---|---|---|
 | bili-cli `0.6.2` | B站后端 | `uv tool install --force git+https://github.com/public-clis/bilibili-cli@489607468f967e0e11f3cdff6efc022d011e982a` |
 | yt-dlp | YouTube 后端 | `uv tool install yt-dlp` / `pip install yt-dlp` |
-| opencli（经 dsh-browser） | 小红书/Twitter/Reddit/IG/FB 的 `browser-opencli` 后备后端 | dsh-browser 0.2.2 起**不再内置**，在 PATH、全局 npm 目录等位置找同一份 `opencli`（`npm i -g @jackwener/opencli@1.8.8`，见 dsh-browser 的说明）；扩展未连接时用 `opencli doctor` 诊断 |
-| 独立 `opencli` | 小红书 / 知乎 / Reddit / Twitter / 微博 / 贴吧 / 抖音的首选后端，用你日常 Chrome 的登录态（需 OpenCLI Browser Bridge 扩展） | `npm i -g @jackwener/opencli@1.8.8`（1.8.x；2.x 被报告为不兼容）；站点登录由你在 Chrome 里完成 |
+| opencli（经 dsh-browser） | 小红书/Twitter/Reddit/IG/FB 的 `browser-opencli` 后备后端 | dsh-browser 0.2.2 起**不再内置**，在 PATH、全局 npm 目录等位置找同一份 `opencli`（`npm i -g @jackwener/opencli@2`，见 dsh-browser 的说明）；扩展未连接时用 `opencli doctor` 诊断 |
+| 独立 `opencli` | 小红书 / 知乎 / Reddit / Twitter / 微博 / 贴吧 / 抖音的首选后端，用你日常 Chrome 的登录态（需 OpenCLI Browser Bridge 扩展） | `npm i -g @jackwener/opencli@2`（支持 1.8 与 2.x，3.x 被报告为不兼容；机器上只装一份，dsh-browser 与本插件共用）；站点登录由你在 Chrome 里完成 |
 | 其余适配 CLI（`xhs`、`zhihu`、`rdt`、`omnireach`、`gh`、`wx-search-cli`、`tanso`） | 见 [CLI 适配](./cli-adapters.md) | `sources.deps` 列出安装命令；登录由你自己完成 |
 | twitter-cli（命令 `twitter`） | Twitter 平台的可选后备（排在独立 OpenCLI 之后；执行 `twitter search … --json`，需要 0.8.5 或更新；另需 `TWITTER_AUTH_TOKEN` 与 `TWITTER_CT0`，见上） | `uv tool install twitter-cli` / `pipx install twitter-cli` / `pip install twitter-cli` |
 | agent-reach（可选） | 仅作安装助手，本插件不直接执行它；装了它**不代表** Twitter 搜索可用 | `uv tool install agent-reach` / `pip install agent-reach` |
