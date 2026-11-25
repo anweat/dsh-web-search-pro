@@ -24,7 +24,7 @@
 | `xhs`（xiaohongshu，可选后备） | `xhs` | 0.6.4 | **live**（2026-10-27：用你自己保存的登录实测；一次返回 22 项，其中 `hot_query` 建议卡片被跳过，发布时间取 `note_card.corner_tag_info` 里的 `publish_time`，`MM-DD` / `YYYY-MM-DD` / `N小时前` 等保守解析，认不出的不填） |
 | `zhihu`（可选后备） | `zhihu`（PyPI `pyzhihu-cli`） | 0.2.4 | contract-only（同上） |
 | `rdt`（reddit，可选后备） | `rdt` | 0.4.2 | contract-only（同上） |
-| 独立 `opencli`（按站点，登录类平台的**首选**后端） | `opencli` | 1.8.8 | 只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json`。**twitter、zhihu：live**（2026-10-27 用你日常 Chrome 实测；twitter 的 `created_at` 转成 ISO，标题 / 摘要照 twitter 后端：作者 · likes · views · 时间；zhihu 只有标题 / 类型 / 作者 / 赞同数 / 链接，没有摘要和时间）。**xiaohongshu、reddit：contract-only（未实测）**——那次 Chrome 里没有小红书登录（`AUTH_REQUIRED`），Reddit 在代理出口下回了网页（见下）；字段取自 opencli 1.8.8 适配器源码里的输出列。其余站点：contract-only |
+| 独立 `opencli`（按站点，登录类平台的**首选**后端） | `opencli` | 1.8.8 | 只用 `opencli list -f json` 里有只读 `search` 命令的站点，输出用 `-f json`。**twitter、zhihu：live**（2026-10-27 用你日常 Chrome 实测；twitter 的 `created_at` 转成 ISO，标题 / 摘要照 twitter 后端：作者 · likes · views · 时间；zhihu 只有标题 / 类型 / 作者 / 赞同数 / 链接，没有摘要和时间）。**xiaohongshu、reddit：contract-only（未实测）**——那次 Chrome 里没有小红书登录（`AUTH_REQUIRED`），Reddit 在代理出口下回了网页（见下）；字段取自 opencli 1.8.8 适配器源码里的输出列。**weibo、tieba、douyin：contract-only（未对站点实测）**——输出列取自 1.8.8 源码里的 `clis/<site>/search.js`（weibo `rank,id,title,author,time,url`；tieba `rank,id,title,forum,author,time,url`；douyin `rank,desc,author,url,plays,likes,comments,shares`，其中 plays / comments / shares 恒为 0，不当事实显示）；三个命令自己的 `--limit` 上限（50 / 20 / 30）都不低于适配的 `maxCount` 20。其余站点：contract-only。**版本范围：1.8.0 起、2.0.0 以下**（2.x 的命令面没验证过，探测为 `incompatible`，原因里写明找到的版本和 `npm i -g @jackwener/opencli@1.8.8`，链顺势跳到下一条后端，不去适配 2.x）。找不到时除了 PATH，还会看常见的全局安装位置（见下“找不到 opencli 时”） |
 | `wx-search-cli`（wechat 第二后端） | `wx-search-cli` | 0.1.0 | **live**（2026-10-26：中英文与无结果查询实测；一页固定 10 条，适配层按 count 截取；搜狗反爬时它输出 `[]` 且退出码 0，与“无结果”无法区分） |
 | `tanso` | `tanso` | 2.0.2 | docs-only：按上游 README，未安装；只选 `bocha_web` 与 `zhihu_search` |
 
@@ -45,9 +45,19 @@
 | wechat（公众号，新） | `omnireach` → `wx-search-cli` |
 | omnireach（多源，不自动选入；只用五个免 Key 源） | `omnireach` |
 | tanso | `tanso` |
-| instagram / facebook | `browser-opencli`；weibo、douban、tieba、douyin、kuaishou：`browser-search` |
+| weibo、tieba、douyin | `opencli` → `browser-search` |
+| douban、kuaishou | `browser-search`（单独一条） |
+| instagram / facebook | `browser-opencli` |
+
+douban **不**把 `opencli` 放在前面：`opencli douban search` 只搜电影 / 图书 / 音乐（`type` 默认 `movie`），拿帖子或话题去搜只会得到电影，所以它的链保持原样（想用的话自己写 `platformBackends`）。kuaishou 在 opencli 里没有这个站点。weibo 的 `opencli weibo search` 零结果时报 `NOT_FOUND`，按“没有结果”处理（没登录的页面同样没有卡片，所以也读成没有结果：登录问题要看下面的状态说明）；`SESSION_BUSY`（别的 opencli 进程占着这个站点的浏览器会话，退出码 75，和 `TIMEOUT` 同码，按错误码区分）按可重试的繁忙错误报告，明确写“不是登录问题”。
 
 链上缺失、不兼容、未登录、被风控或出错的后端被跳过并记下原因（结果的 `notes` 里写 `skipped backends: opencli: …`，历史里记下最终回答的后端）；只有整条链都不可用时平台才不可用，错误会列出每条后端缺什么、该安装或运行什么。你显式配置的 `platformBackends` 原样优先，不会被新的默认顺序改写。M0 冷却、并发合并、输出整形、证据模式与显式 `platform` 的语义不变。
+
+## 找不到 opencli 时
+
+桌面版宿主的 PATH 常常只有 `/usr/bin:/bin`，或是一个会消失的 fnm 单 shell 目录，而你的 opencli 装在版本管理器下。PATH 里找不到时，插件按 dsh-browser 找 opencli 的同一批全局安装位置再找一遍（只找，不执行 `npm root -g`）：`DSH_BROWSER_OPENCLI`（可填 `opencli` 启动器、全局安装的包目录或 `main.js`；填了就只认它，不会悄悄换成别的副本）、`npm_config_prefix` 的 `bin`、Homebrew（`/opt/homebrew/bin`、`/usr/local/bin`）、`~/.npm-global/bin`、`~/.local/bin`、nvm、fnm（含 macOS 的 `Library/Application Support/fnm`）、Volta、Bun；Windows 看 `%APPDATA%\npm` 的 `opencli.cmd`。
+
+`opencli` 启动器是 `#!/usr/bin/env node` 脚本，所以在 PATH 之外找到它时，子进程的 PATH 前面会加上启动器所在的目录（版本管理器把 `node` 放在同一个目录），那里没有 `node` 时再加上正在运行的 node 或能找到的 node 所在目录。其余环境变量仍按“干净环境”规则只传白名单，不放宽。探测、`opencli list` 和搜索用的是同一个启动器和同一个 PATH。找不到时，`sources.deps` 和链的原因里会写“not found on PATH or in the usual global install folders”。
 
 ## 登录类平台怎么用
 
